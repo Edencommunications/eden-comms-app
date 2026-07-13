@@ -60,29 +60,22 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
 };
 
 // ─── LIFESTYLE OF EDEN LOGO — uploaded brand mark ────────────────────────────
-import logoSrc from "@assets/Artboard_5_1783962742092.jpg";
-
 const EdenLogo = ({ size = 44 }) => (
-  // Image is 1920×1095. The Eden mark (black swoosh) sits at roughly
-  // x≈500–950 px, y≈170–660 px → centre ~725 px (37.8%), 415 px (37.9%).
-  // backgroundSize "21%" → scaled image ≈403×230 px.
-  // backgroundPosition pushes the mark centre to the container centre.
-  <div
-    aria-label="Lifestyle of Eden"
-    role="img"
-    style={{
-      width: size,
-      height: size,
-      borderRadius: "50%",
-      border: "2px solid #ffa600",
-      flexShrink: 0,
-      backgroundColor: "#ffffff",
-      backgroundImage: `url(${logoSrc})`,
-      backgroundRepeat: "no-repeat",
-      backgroundSize: "365%",
-      backgroundPosition: "49% 51%",
-    }}
-  />
+  <div style={{
+    width: size,
+    height: size,
+    borderRadius: "50%",
+    border: "2px solid #ffa600",
+    overflow: "hidden",
+    flexShrink: 0,
+    backgroundColor: "#ffffff",
+  }}>
+    <img
+      src="/eden-logo.jpg"
+      alt="Lifestyle of Eden"
+      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+    />
+  </div>
 );
 
 // Alias so existing references to HoneycombLogo still work
