@@ -63,32 +63,26 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
 import logoSrc from "@assets/Artboard_5_1783962742092.jpg";
 
 const EdenLogo = ({ size = 44 }) => (
-  <div style={{
-    width: size,
-    height: size,
-    borderRadius: "50%",
-    background: "#ffffff",
-    border: "2px solid #ffa600",
-    overflow: "hidden",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  }}>
-    <img
-      src={logoSrc}
-      alt="Lifestyle of Eden"
-      style={{
-        // The logo mark sits roughly in the center-left of the image.
-        // Scale up and shift so only the mark fills the circle.
-        width: "200%",
-        height: "200%",
-        objectFit: "cover",
-        objectPosition: "40% 50%",
-        display: "block",
-      }}
-    />
-  </div>
+  // Image is 1920×1095. The Eden mark (black swoosh) sits at roughly
+  // x≈500–950 px, y≈170–660 px → centre ~725 px (37.8%), 415 px (37.9%).
+  // backgroundSize "21%" → scaled image ≈403×230 px.
+  // backgroundPosition pushes the mark centre to the container centre.
+  <div
+    aria-label="Lifestyle of Eden"
+    role="img"
+    style={{
+      width: size,
+      height: size,
+      borderRadius: "50%",
+      border: "2px solid #ffa600",
+      flexShrink: 0,
+      backgroundColor: "#ffffff",
+      backgroundImage: `url(${logoSrc})`,
+      backgroundRepeat: "no-repeat",
+      backgroundSize: "365%",
+      backgroundPosition: "49% 51%",
+    }}
+  />
 );
 
 // Alias so existing references to HoneycombLogo still work
