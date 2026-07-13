@@ -59,69 +59,36 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
   return <svg width={sz} height={sz} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{d[n]}</svg>;
 };
 
-// ─── LIFESTYLE OF EDEN LOGO — Eagle with gold crescent ───────────────────────
-// Faithful SVG recreation of the actual LOE brand mark:
-// circular swoosh strokes on the left (dark), eagle/bird silhouette center,
-// gold crescent/body shape on the right.
+// ─── LIFESTYLE OF EDEN LOGO — uploaded brand mark ────────────────────────────
+import logoSrc from "@assets/Artboard_5_1783962742092.jpg";
+
 const EdenLogo = ({ size = 44 }) => (
-  <svg width={size} height={size} viewBox="0 0 200 200">
-    {/* Background circle */}
-    <circle cx="100" cy="100" r="98" fill="#000000"/>
-
-    {/* ── Outer circular swoosh arcs (dark, left side) ── */}
-    <path d="M 55 30 Q 5 70 10 120 Q 14 155 45 175"
-      fill="none" stroke="#1a1a1a" strokeWidth="6" strokeLinecap="round"/>
-    <path d="M 62 22 Q 4 65 8 125 Q 12 165 50 185"
-      fill="none" stroke="#222222" strokeWidth="5" strokeLinecap="round"/>
-    <path d="M 72 18 Q 15 60 18 118 Q 22 162 58 182"
-      fill="none" stroke="#2a2a2a" strokeWidth="4" strokeLinecap="round"/>
-
-    {/* ── Inner wing feather strokes ── */}
-    <path d="M 78 55 Q 55 80 60 110 Q 63 130 78 148"
-      fill="none" stroke="#111111" strokeWidth="7" strokeLinecap="round"/>
-    <path d="M 84 60 Q 64 82 68 112 Q 71 132 84 150"
-      fill="none" stroke="#0d0d0d" strokeWidth="6" strokeLinecap="round"/>
-    <path d="M 90 65 Q 72 86 75 114 Q 78 133 90 151"
-      fill="none" stroke="#111111" strokeWidth="5" strokeLinecap="round"/>
-    <path d="M 96 68 Q 80 90 82 116 Q 84 135 95 152"
-      fill="none" stroke="#0d0d0d" strokeWidth="5" strokeLinecap="round"/>
-    <path d="M 102 70 Q 88 93 89 118 Q 91 136 100 152"
-      fill="none" stroke="#111111" strokeWidth="4" strokeLinecap="round"/>
-
-    {/* ── Gold crescent / eagle body (right side) ── */}
-    {/* Main gold shape — beak pointing upper-left, body curving down-right */}
-    <path d="
-      M 108 38
-      Q 132 28 148 42
-      Q 168 58 165 85
-      Q 162 112 145 130
-      Q 130 147 112 152
-      Q 100 156 95 148
-      Q 90 140 98 128
-      Q 108 114 114 100
-      Q 122 84 118 68
-      Q 114 52 108 38 Z
-    " fill="#ffa600"/>
-
-    {/* Beak / head tip — sharp point upper left of gold shape */}
-    <path d="M 108 38 Q 98 30 90 38 Q 100 42 108 38 Z"
-      fill="#ffa600"/>
-
-    {/* Dark shadow/wing overlay on gold to create the bird silhouette depth */}
-    <path d="
-      M 110 55
-      Q 105 70 108 88
-      Q 110 102 106 118
-      Q 102 132 98 140
-      Q 108 145 118 135
-      Q 135 118 138 98
-      Q 142 76 132 58
-      Q 124 44 110 55 Z
-    " fill="#000000" opacity="0.35"/>
-
-    {/* Border ring */}
-    <circle cx="100" cy="100" r="96" fill="none" stroke="#ffa600" strokeWidth="1.5" opacity="0.6"/>
-  </svg>
+  <div style={{
+    width: size,
+    height: size,
+    borderRadius: "50%",
+    background: "#ffffff",
+    border: "2px solid #ffa600",
+    overflow: "hidden",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  }}>
+    <img
+      src={logoSrc}
+      alt="Lifestyle of Eden"
+      style={{
+        // The logo mark sits roughly in the center-left of the image.
+        // Scale up and shift so only the mark fills the circle.
+        width: "200%",
+        height: "200%",
+        objectFit: "cover",
+        objectPosition: "40% 50%",
+        display: "block",
+      }}
+    />
+  </div>
 );
 
 // Alias so existing references to HoneycombLogo still work
