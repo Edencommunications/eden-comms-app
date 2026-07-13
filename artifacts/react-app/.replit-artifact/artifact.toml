@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "React App"
+version = "1.0.0"
+id = "artifacts/react-app"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23965
+
+[services.development]
+run = "pnpm --filter @workspace/react-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/react-app", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/react-app/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23965"
+BASE_PATH = "/"
