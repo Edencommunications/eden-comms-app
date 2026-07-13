@@ -31,7 +31,9 @@ const DEMO_USERS = {
 };
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
-const Ic = ({ n, s = 20, c = B.muted }) => {
+// @ts-nocheck
+const Ic = ({ n, size = 20, s, c = B.muted }) => {
+  const sz = size ?? s ?? 20;
   const d = {
     msg:      <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none" stroke={c} strokeWidth="1.8"/></>,
     diet:     <><path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3" fill="none" stroke={c} strokeWidth="1.8"/></>,
@@ -54,7 +56,7 @@ const Ic = ({ n, s = 20, c = B.muted }) => {
     upload:   <><polyline points="16,16 12,12 8,16" fill="none" stroke={c} strokeWidth="1.8"/><line x1="12" y1="12" x2="12" y2="21" stroke={c} strokeWidth="1.8"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" fill="none" stroke={c} strokeWidth="1.8"/></>,
     shop:     <><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" fill="none" stroke={c} strokeWidth="1.8"/><line x1="3" y1="6" x2="21" y2="6" stroke={c} strokeWidth="1.8"/><path d="M16 10a4 4 0 0 1-8 0" fill="none" stroke={c} strokeWidth="1.8"/></>,
   };
-  return <svg width={s} height={s} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{d[n]}</svg>;
+  return <svg width={sz} height={sz} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{d[n]}</svg>;
 };
 
 // ─── LIFESTYLE OF EDEN LOGO — Eagle with gold crescent ───────────────────────
