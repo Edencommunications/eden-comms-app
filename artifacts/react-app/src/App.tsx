@@ -71,7 +71,7 @@ const EdenLogo = ({ size = 44 }) => (
     backgroundColor: "#ffffff",
   }}>
     <img
-      src="/eden-logo.jpg"
+      src="/eden-logo-new.jpg"
       alt="Lifestyle of Eden"
       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
     />
