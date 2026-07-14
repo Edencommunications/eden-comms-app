@@ -864,7 +864,7 @@ const AppShell = ({ user, onLogout }) => {
       if (tab === "home") return <CoachDashboard user={user}/>;
     }
     if (tab === "home")    return <HomeScreen user={user}/>;
-    if (tab === "msgs")    return <Messaging currentUser={{ id: user.email, full_name: user.name, role: user.role, org_id: user.org }}/>;
+    if (tab === "msgs")    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "diet")    return <DietScreen/>;
     if (tab === "labs")    return <LabsScreen/>;
     if (tab === "checkin") return <CheckInScreen/>;
