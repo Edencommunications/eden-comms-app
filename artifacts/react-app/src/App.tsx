@@ -1,4 +1,15 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, createContext, useContext, useCallback } from "react";
+
+// ─── RESPONSIVE HOOK ──────────────────────────────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [breakpoint]);
+  return isMobile;
+}
 import Messaging from "./components/Messaging";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
@@ -175,28 +186,38 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
     }, 800);
   };
 
-  return (
-    <div style={{ minHeight:"100vh", width:"100%", background:"#000000", display:"flex" }}>
-      {/* Left panel — branding */}
-      <div style={{ flex:1, background:`linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, borderRight:`1px solid #1a1a1a`, minWidth:0 }}>
-        <EdenLogo size={110}/>
-        <h1 style={{ fontSize:32, fontWeight:800, color:"#ffffff", margin:"24px 0 8px", textAlign:"center", lineHeight:1.2 }}>
-          Eden<br/>Communications
-        </h1>
-        <p style={{ fontSize:14, color:"#888888", margin:"0 0 32px", textAlign:"center", lineHeight:1.6 }}>
-          The private platform for<br/>Lifestyle of Eden coaches and clients
-        </p>
-        <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
-          {["🔒 HIPAA-grade encryption","🛡 End-to-end secure messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
-            <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:"#ffa60011", borderRadius:8, border:"1px solid #ffa60022" }}>
-              <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+  const isMobile = useIsMobile();
 
-      {/* Right panel — login form */}
-      <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, minWidth:0 }}>
+  return (
+    <div style={{ minHeight:"100vh", width:"100%", background:"#000000", display:"flex", flexDirection: isMobile ? "column" : "row" }}>
+      {/* Branding panel — full left on desktop, compact top on mobile */}
+      {isMobile ? (
+        <div style={{ background:`linear-gradient(160deg, #1a1200 0%, #000000 100%)`, padding:"32px 20px 24px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid #1a1a1a` }}>
+          <EdenLogo size={72}/>
+          <h1 style={{ fontSize:22, fontWeight:800, color:"#ffffff", margin:"16px 0 4px", textAlign:"center" }}>Eden Communications</h1>
+          <p style={{ fontSize:12, color:"#888888", margin:0, textAlign:"center" }}>The private platform for Lifestyle of Eden coaches and clients</p>
+        </div>
+      ) : (
+        <div style={{ flex:1, background:`linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, borderRight:`1px solid #1a1a1a`, minWidth:0 }}>
+          <EdenLogo size={110}/>
+          <h1 style={{ fontSize:32, fontWeight:800, color:"#ffffff", margin:"24px 0 8px", textAlign:"center", lineHeight:1.2 }}>
+            Eden<br/>Communications
+          </h1>
+          <p style={{ fontSize:14, color:"#888888", margin:"0 0 32px", textAlign:"center", lineHeight:1.6 }}>
+            The private platform for<br/>Lifestyle of Eden coaches and clients
+          </p>
+          <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
+            {["🔒 HIPAA-grade encryption","🛡 End-to-end secure messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
+              <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:"#ffa60011", borderRadius:8, border:"1px solid #ffa60022" }}>
+                <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Login form */}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding: isMobile ? "24px 20px 40px" : 40, minWidth:0 }}>
         <div style={{ width:"100%", maxWidth:400 }}>
           <h2 style={{ fontSize:24, fontWeight:700, color:"#ffffff", margin:"0 0 6px" }}>Sign In</h2>
           <p style={{ fontSize:13, color:"#888888", margin:"0 0 28px" }}>Welcome back. Enter your credentials below.</p>
@@ -321,6 +342,7 @@ const SignupScreen = ({ onBack }) => {
 // ─── DASHBOARD SCREENS ────────────────────────────────────────────────────────
 
 const HomeScreen = ({ user }) => {
+  const isMobile = useIsMobile();
   const quickLinks = [
     { icon:"msg", label:"Messages", color:B.gold },
     { icon:"diet", label:"Diet Plan", color:"#4FD89A" },
@@ -358,7 +380,7 @@ const HomeScreen = ({ user }) => {
       {/* Quick access grid */}
       <div style={{ padding:"20px 20px 0" }}>
         <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Quick Access</p>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:10 }}>
           {quickLinks.map(({ icon, label, color }) => (
             <button key={label} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12, padding:"14px 8px", display:"flex", flexDirection:"column", alignItems:"center", gap:8, cursor:"pointer" }}>
               <Ic n={icon} size={22} c={color}/>
@@ -444,6 +466,7 @@ const MessagesScreen = () => {
 };
 
 const DietScreen = () => {
+  const isMobile = useIsMobile();
   const meals = [
     { name:"Meal 1", foods:[{name:"Organic Egg Whites (184g)",cal:80,pro:18,fat:0,carb:0,fib:0},{name:"Oatmeal dry (40g)",cal:150,pro:5,fat:3,carb:27,fib:4},{name:"Mixed Berries (100g)",cal:55,pro:0.8,fat:0.3,carb:12,fib:2.5}]},
     { name:"Meal 2", foods:[{name:"Chicken Breast (4oz)",cal:120,pro:21,fat:4,carb:0,fib:0},{name:"Brown Rice (195g)",cal:218,pro:4.5,fat:1.6,carb:45,fib:3.5},{name:"Green Beans (100g)",cal:31,pro:2.1,fat:0.4,carb:3.1,fib:2.7}]},
@@ -459,7 +482,7 @@ const DietScreen = () => {
         {/* Macro summary */}
         <Card style={{ marginBottom:16 }}>
           <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 14px" }}>Daily Totals</p>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr", gap:8 }}>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr 1fr 1fr 1fr 1fr", gap:8 }}>
             {[
               {label:"Calories",val:totals.cal,target:targets.cal,unit:"",color:B.gold},
               {label:"Protein",val:Math.round(totals.pro),target:targets.pro,unit:"g",color:"#4FD89A"},
@@ -731,6 +754,7 @@ const HabitTrackerScreen = () => {
 
 // COACH VIEW
 const CoachDashboard = ({ user }) => {
+  const isMobile = useIsMobile();
   const clients = [
     { name:"Jordan Williams", status:"Active", lastCheckin:"Jul 9", alert:true },
     { name:"Alex Martinez", status:"Active", lastCheckin:"Jul 8", alert:false },
@@ -745,7 +769,7 @@ const CoachDashboard = ({ user }) => {
         <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden · {clients.length} active clients</p>
       </div>
       <div style={{ padding:"16px 20px" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:20 }}>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:20 }}>
           {[{label:"Total Clients",val:clients.length,color:B.gold},{label:"Check-Ins Due",val:2,color:"#ffa600"},{label:"Pending Labs",val:1,color:"#D4A8F0"}].map(({label,val,color})=>(
             <Card key={label} style={{ textAlign:"center" }}>
               <p style={{ fontSize:24, fontWeight:700, color, margin:"0 0 4px" }}>{val}</p>
@@ -778,6 +802,7 @@ const CoachDashboard = ({ user }) => {
 
 // SUPER ADMIN VIEW
 const AdminDashboard = ({ user }) => {
+  const isMobile = useIsMobile();
   const orgs = [
     { name:"Lifestyle of Eden", coaches:3, clients:24, color:B.gold },
     { name:"Partner Brand Co.", coaches:2, clients:11, color:"#6FB8E8" },
@@ -791,7 +816,7 @@ const AdminDashboard = ({ user }) => {
         <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Platform-wide access · edencommunications.io</p>
       </div>
       <div style={{ padding:"16px 20px" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10, marginBottom:20 }}>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:10, marginBottom:20 }}>
           {[{label:"Organizations",val:orgs.length},{label:"Total Coaches",val:6},{label:"Total Clients",val:41},{label:"MRR",val:"$4.2k"}].map(({label,val})=>(
             <Card key={label} style={{ textAlign:"center" }}>
               <p style={{ fontSize:20, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>{val}</p>
@@ -831,6 +856,7 @@ const AdminDashboard = ({ user }) => {
 // ─── MAIN APP SHELL ───────────────────────────────────────────────────────────
 const AppShell = ({ user, onLogout }) => {
   const [tab, setTab] = useState("home");
+  const isMobile = useIsMobile();
 
   const clientTabs = [
     { key:"home",    icon:"home",    label:"Home" },
@@ -881,51 +907,62 @@ const AppShell = ({ user, onLogout }) => {
           <HoneycombLogo size={30}/>
           <div>
             <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>Eden Communications</p>
-            <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>🔒 HIPAA Secure · edencommunications.io</p>
+            {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>🔒 HIPAA Secure · edencommunications.io</p>}
           </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
           <div style={{ width:30, height:30, borderRadius:15, background:B.gold, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <span style={{ fontSize:13, fontWeight:800, color:B.black }}>{user.name[0]}</span>
           </div>
           <button onClick={onLogout} style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
             <Ic n="logout" size={14} c={B.muted}/>
-            <span style={{ fontSize:11, color:B.muted }}>Sign out</span>
+            {!isMobile && <span style={{ fontSize:11, color:B.muted }}>Sign out</span>}
           </button>
         </div>
       </div>
 
-      {/* Body: sidebar nav on wide screens, bottom nav on narrow */}
+      {/* Body */}
       <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"row" }}>
 
-        {/* Sidebar — shows when wide enough */}
-        <div style={{ width:200, background:B.surface, borderRight:`1px solid ${B.border}`, flexShrink:0, display:"flex", flexDirection:"column", padding:"12px 0" }}>
-          <div style={{ padding:"0 14px 16px", borderBottom:`1px solid ${B.border}`, marginBottom:8 }}>
-            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
-              {user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
-            </p>
-            <p style={{ fontSize:12, color:B.gold, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
-          </div>
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${B.gold}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?B.gold:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
-              <Ic n={t.icon} size={17} c={tab===t.key?B.gold:B.muted}/>
-              <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?B.gold:B.muted }}>{t.label}</span>
-            </button>
-          ))}
-          <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.border}` }}>
-            <div style={{ padding:"8px 10px", background:B.goldDim, border:`1px solid ${B.goldMid}`, borderRadius:8 }}>
-              <p style={{ fontSize:9, color:B.gold, margin:0, fontWeight:700, letterSpacing:0.8 }}>LIFESTYLE OF EDEN</p>
-              <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>Powered by Eden Comms</p>
+        {/* Sidebar — desktop only */}
+        {!isMobile && (
+          <div style={{ width:200, background:B.surface, borderRight:`1px solid ${B.border}`, flexShrink:0, display:"flex", flexDirection:"column", padding:"12px 0" }}>
+            <div style={{ padding:"0 14px 16px", borderBottom:`1px solid ${B.border}`, marginBottom:8 }}>
+              <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
+                {user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
+              </p>
+              <p style={{ fontSize:12, color:B.gold, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
+            </div>
+            {tabs.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${B.gold}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?B.gold:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
+                <Ic n={t.icon} size={17} c={tab===t.key?B.gold:B.muted}/>
+                <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?B.gold:B.muted }}>{t.label}</span>
+              </button>
+            ))}
+            <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.border}` }}>
+              <div style={{ padding:"8px 10px", background:B.goldDim, border:`1px solid ${B.goldMid}`, borderRadius:8 }}>
+                <p style={{ fontSize:9, color:B.gold, margin:0, fontWeight:700, letterSpacing:0.8 }}>LIFESTYLE OF EDEN</p>
+                <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>Powered by Eden Comms</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Main content area */}
         <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", background:B.black }}>
           {renderScreen()}
         </div>
       </div>
+
+      {/* Bottom nav — mobile only */}
+      {isMobile && (
+        <div style={{ background:B.surface, borderTop:`1px solid ${B.border}`, display:"flex", flexShrink:0, paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
+          {tabs.map(t => (
+            <NavTab key={t.key} icon={t.icon} label={t.label} active={tab===t.key} onClick={()=>setTab(t.key)}/>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
