@@ -1,28 +1,93 @@
+// ═══════════════════════════════════════════════════════════════
+// supabaseClient.ts
+// Import in any component: import { supabase } from '../supabaseClient'
+// ⚠️  The ANON key below is safe in frontend code — it is public.
+//     The SERVICE ROLE key must NEVER go here.
+// ═══════════════════════════════════════════════════════════════
+
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string
-const supabaseKey  = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn('[Supabase] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is not set. Messaging will not work until these are added.')
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+  realtime: {
+    params: { eventsPerSecond: 10 },
+  },
+})
+
+// ── Helper: get current user's profile ───────────────────────────
+export async function getCurrentProfile() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+  return data
 }
 
-export const supabase = createClient(supabaseUrl ?? '', supabaseKey ?? '')
+// ── Helper: log a session start (call on login) ───────────────────
+export async function logSessionStart(userId: string) {
+  const ua = navigator.userAgent
+  const device = /mobile/i.test(ua) ? 'mobile' : 'desktop'
+  const browser = /chrome/i.test(ua) ? 'Chrome'
+    : /firefox/i.test(ua) ? 'Firefox'
+    : /safari/i.test(ua) ? 'Safari'
+    : /edge/i.test(ua) ? 'Edge' : 'Other'
 
-// ── Admin audit helper ────────────────────────────────────────────────────────
+  const { data } = await supabase.from('login_sessions').insert({
+    user_id: userId,
+    user_agent: ua,
+    device_type: device,
+    browser,
+    is_active: true,
+  }).select().single()
+
+  if (data) sessionStorage.setItem('eden_session_id', (data as any).id)
+  return data
+}
+
+// ── Helper: log a session end (call on logout) ────────────────────
+export async function logSessionEnd() {
+  const sessionId = sessionStorage.getItem('eden_session_id')
+  if (!sessionId) return
+  const { data } = await supabase
+    .from('login_sessions')
+    .select('logged_in_at')
+    .eq('id', sessionId)
+    .single()
+
+  if (data) {
+    const mins = Math.round((Date.now() - new Date((data as any).logged_in_at).getTime()) / 60000)
+    await supabase.from('login_sessions').update({
+      logged_out_at: new Date().toISOString(),
+      duration_mins: mins,
+      is_active: false,
+    }).eq('id', sessionId)
+  }
+  sessionStorage.removeItem('eden_session_id')
+}
+
+// ── Helper: log admin audit action ───────────────────────────────
 export async function logAdminAction(
   adminId: string,
   action: string,
-  details: Record<string, unknown> | null,
-  tableName: string,
-  recordId: string
+  targetUserId: string | null = null,
+  targetTable: string | null = null,
+  targetId: string | null = null,
 ) {
-  const { error } = await supabase.from('admin_audit_log').insert({
-    admin_id:   adminId,
+  await supabase.from('admin_audit_log').insert({
+    admin_id: adminId,
     action,
-    details,
-    table_name: tableName,
-    record_id:  recordId,
+    target_user_id: targetUserId,
+    target_table: targetTable,
+    target_id: targetId,
   })
-  if (error) console.error('[logAdminAction]', error)
 }
