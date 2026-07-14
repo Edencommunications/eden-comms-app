@@ -1,0 +1,91 @@
+// ═══════════════════════════════════════════════════════════════
+// supabaseClient.js
+// Place this file at: src/supabaseClient.js
+// Import it in any component: import { supabase } from '../supabaseClient'
+// ═══════════════════════════════════════════════════════════════
+// ⚠️  IMPORTANT FOR COO:
+// The ANON key below is safe to be in frontend code — it is public.
+// The SERVICE ROLE key must NEVER go here. It lives only in
+// Replit Secrets (sidebar → Secrets tab) as SUPABASE_SERVICE_KEY.
+// ═══════════════════════════════════════════════════════════════
+
+import { createClient } from '@supabase/supabase-js'
+
+const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+  realtime: {
+    params: { eventsPerSecond: 10 },
+  },
+})
+
+// ── Helper: get current user's profile ───────────────────────────
+export async function getCurrentProfile() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+  return data
+}
+
+// ── Helper: log a session start (call on login) ───────────────────
+export async function logSessionStart(userId) {
+  const ua = navigator.userAgent
+  const device = /mobile/i.test(ua) ? 'mobile' : 'desktop'
+  const browser = /chrome/i.test(ua) ? 'Chrome'
+    : /firefox/i.test(ua) ? 'Firefox'
+    : /safari/i.test(ua) ? 'Safari'
+    : /edge/i.test(ua) ? 'Edge' : 'Other'
+
+  const { data } = await supabase.from('login_sessions').insert({
+    user_id: userId,
+    user_agent: ua,
+    device_type: device,
+    browser,
+    is_active: true,
+  }).select().single()
+
+  if (data) sessionStorage.setItem('eden_session_id', data.id)
+  return data
+}
+
+// ── Helper: log a session end (call on logout) ────────────────────
+export async function logSessionEnd() {
+  const sessionId = sessionStorage.getItem('eden_session_id')
+  if (!sessionId) return
+  const { data } = await supabase
+    .from('login_sessions')
+    .select('logged_in_at')
+    .eq('id', sessionId)
+    .single()
+
+  if (data) {
+    const mins = Math.round((Date.now() - new Date(data.logged_in_at).getTime()) / 60000)
+    await supabase.from('login_sessions').update({
+      logged_out_at: new Date().toISOString(),
+      duration_mins: mins,
+      is_active: false,
+    }).eq('id', sessionId)
+  }
+  sessionStorage.removeItem('eden_session_id')
+}
+
+// ── Helper: log admin audit action ───────────────────────────────
+export async function logAdminAction(adminId, action, targetUserId = null, targetTable = null, targetId = null) {
+  await supabase.from('admin_audit_log').insert({
+    admin_id: adminId,
+    action,
+    target_user_id: targetUserId,
+    target_table: targetTable,
+    target_id: targetId,
+  })
+}

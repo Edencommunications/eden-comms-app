@@ -1,4 +1,5 @@
 import { useState, useEffect, createContext, useContext } from "react";
+import Messaging from "./components/Messaging";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -863,7 +864,7 @@ const AppShell = ({ user, onLogout }) => {
       if (tab === "home") return <CoachDashboard user={user}/>;
     }
     if (tab === "home")    return <HomeScreen user={user}/>;
-    if (tab === "msgs")    return <MessagesScreen/>;
+    if (tab === "msgs")    return <Messaging currentUser={{ id: user.email, full_name: user.name, role: user.role, org_id: user.org }}/>;
     if (tab === "diet")    return <DietScreen/>;
     if (tab === "labs")    return <LabsScreen/>;
     if (tab === "checkin") return <CheckInScreen/>;
