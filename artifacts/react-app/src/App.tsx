@@ -363,12 +363,12 @@ const HomeScreen = ({ user }) => {
     <Screen>
       {/* Header */}
       <div style={{ background:`linear-gradient(180deg, #1a1200 0%, #000000 100%)`, padding:"28px 20px 20px" }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
-          <div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4, gap:8 }}>
+          <div style={{ minWidth:0 }}>
             <p style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>Welcome back</p>
-            <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0 }}>{user.name}</h1>
+            <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name}</h1>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
             <Badge color={B.gold}>{user.role.replace("_"," ")}</Badge>
             <div style={{ width:42, height:42, borderRadius:21, background:`linear-gradient(135deg,${B.gold},${"#ffa600"})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
               <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{user.name[0]}</span>
@@ -519,9 +519,9 @@ const DietScreen = () => {
               </div>
               {meal.foods.map((f,i)=>(
                 <div key={i} style={{ padding:"8px 0", borderTop:`1px solid ${B.border}` }}>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}>
-                    <span style={{ fontSize:12, color:B.text }}>{f.name}</span>
-                    <span style={{ fontSize:11, color:B.muted }}>{f.cal}cal</span>
+                  <div style={{ display:"flex", justifyContent:"space-between", gap:8 }}>
+                    <span style={{ fontSize:12, color:B.text, flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                    <span style={{ fontSize:11, color:B.muted, flexShrink:0 }}>{f.cal}cal</span>
                   </div>
                   <div style={{ display:"flex", gap:10, marginTop:3 }}>
                     {[["P",f.pro,"#4FD89A"],["C",f.carb,"#6FB8E8"],["F",f.fat,"#ffa600"],["Fib",f.fib,"#D4A8F0"]].map(([l,v,c])=>(
@@ -603,9 +603,9 @@ const LabsScreen = () => {
                 <p style={{ fontSize:13, color:B.text, margin:"0 0 10px", lineHeight:1.5 }}>{l.notes}</p>
                 {l.files.map(f=>(
                   <div key={f} style={{ background:B.surface, borderRadius:8, padding:"8px 12px", display:"flex", alignItems:"center", gap:8 }}>
-                    <span style={{ fontSize:18 }}>📄</span>
-                    <span style={{ fontSize:12, color:B.gold, flex:1 }}>{f}</span>
-                    <span style={{ fontSize:12, color:B.muted }}>View</span>
+                    <span style={{ fontSize:18, flexShrink:0 }}>📄</span>
+                    <span style={{ fontSize:12, color:B.gold, flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f}</span>
+                    <span style={{ fontSize:12, color:B.muted, flexShrink:0 }}>View</span>
                   </div>
                 ))}
               </Card>

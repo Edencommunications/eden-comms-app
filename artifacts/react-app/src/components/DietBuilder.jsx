@@ -2,7 +2,17 @@
 // DietBuilder.jsx — Week 3 v2 (Upgraded)
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+
+function useIsMobile(bp = 768) {
+  const [m, setM] = useState(() => window.innerWidth < bp)
+  useEffect(() => {
+    const h = () => setM(window.innerWidth < bp)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [bp])
+  return m
+}
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -426,6 +436,7 @@ function Card({children,sx={}}) {
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function DietBuilder({currentUser}) {
+  const isMobile = useIsMobile()
   const email  = currentUser?.email||''
   const info   = KNOWN_USERS[email]||{role:'client',name:'User'}
   const role   = info.role
@@ -688,17 +699,25 @@ export default function DietBuilder({currentUser}) {
             const mt=mealMacros(meal)
             return (
               <Card key={mi} sx={{marginBottom:10}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                  <div style={{fontWeight:700,fontSize:14,color:C.white}}>{meal.name}</div>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:11,color:C.gold,fontWeight:600}}>{mt.cal} cal</span>
-                    <span style={{fontSize:10,color:C.muted}}>P:{mt.pro}g C:{mt.carb}g F:{mt.fat}g Fib:{mt.fib}g</span>
-                    {isCoach&&(
-                      <button onClick={()=>{setActiveMeal(mi);setShowPicker(true)}}
-                        style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                        + Food
-                      </button>
-                    )}
+                {/* Meal header — stacks on mobile */}
+                <div style={{marginBottom:8}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:4}}>
+                    <div style={{fontWeight:700,fontSize:14,color:C.white,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{meal.name}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                      <span style={{fontSize:11,color:C.gold,fontWeight:600}}>{mt.cal} cal</span>
+                      {isCoach&&(
+                        <button onClick={()=>{setActiveMeal(mi);setShowPicker(true)}}
+                          style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                          + Food
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {/* Macro strip — own row so it never gets squished */}
+                  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                    {[['P',mt.pro,'#4FD89A'],['C',mt.carb,'#6FB8E8'],['F',mt.fat,'#f06060'],['Fib',mt.fib,'#D4A8F0']].map(([l,v,col])=>(
+                      <span key={l} style={{fontSize:10,color:col,fontWeight:600}}>{l}: {v}g</span>
+                    ))}
                   </div>
                 </div>
                 {meal.foods.length===0?(
