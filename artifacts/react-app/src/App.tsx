@@ -1599,55 +1599,77 @@ const AppShell = ({ user, onLogout }) => {
   const isMobile = useIsMobile();
 
   // ── Inactivity auto-logout ────────────────────────────────────────
-  const [idleWarning, setIdleWarning]   = useState(false);
-  const [countdown,   setCountdown]     = useState(WARNING_SECS);
-  const idleTimer    = useRef<any>(null);
-  const warnTimer    = useRef<any>(null);
-  const countRef     = useRef<any>(null);
+  const [idleWarning, setIdleWarning] = useState(false);
+  const [countdown,   setCountdown]   = useState(WARNING_SECS);
 
-  const clearAllTimers = () => {
-    clearTimeout(idleTimer.current);
-    clearTimeout(warnTimer.current);
-    clearInterval(countRef.current);
-  };
+  // All mutable state that the stable handler needs lives in refs
+  const idleTimerRef   = useRef<any>(null);
+  const countIntervalRef = useRef<any>(null);
+  const warningActiveRef = useRef(false);   // mirrors idleWarning but readable inside callbacks
+  const onLogoutRef    = useRef(onLogout);
+  useEffect(() => { onLogoutRef.current = onLogout; }, [onLogout]);
 
-  const startIdleTimer = () => {
+  const clearAllTimers = useCallback(() => {
+    clearTimeout(idleTimerRef.current);
+    clearInterval(countIntervalRef.current);
+  }, []);
+
+  const startIdleTimer = useCallback(() => {
     clearAllTimers();
-    idleTimer.current = setTimeout(() => {
+    idleTimerRef.current = setTimeout(() => {
+      warningActiveRef.current = true;
       setIdleWarning(true);
       setCountdown(WARNING_SECS);
       let c = WARNING_SECS;
-      countRef.current = setInterval(() => {
+      countIntervalRef.current = setInterval(() => {
         c -= 1;
         setCountdown(c);
         if (c <= 0) {
           clearAllTimers();
-          onLogout();
+          onLogoutRef.current();
         }
       }, 1000);
     }, IDLE_MS);
-  };
+  }, [clearAllTimers]);
 
-  const resetIdle = () => {
-    if (idleWarning) return;   // don't reset during the warning — user must click Stay
-    startIdleTimer();
-  };
+  // Stable event handler — created once, ref-based reads so no stale closure
+  const activityHandler = useRef(() => {
+    if (warningActiveRef.current) return;  // ignore activity while warning is showing
+    clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      warningActiveRef.current = true;
+      setIdleWarning(true);
+      setCountdown(WARNING_SECS);
+      let c = WARNING_SECS;
+      countIntervalRef.current = setInterval(() => {
+        c -= 1;
+        setCountdown(c);
+        if (c <= 0) {
+          clearInterval(countIntervalRef.current);
+          onLogoutRef.current();
+        }
+      }, 1000);
+    }, IDLE_MS);
+  });
 
-  const stayLoggedIn = () => {
+  const stayLoggedIn = useCallback(() => {
     clearAllTimers();
+    warningActiveRef.current = false;
     setIdleWarning(false);
     startIdleTimer();
-  };
+  }, [clearAllTimers, startIdleTimer]);
 
+  // Mount once — stable handler reference, never needs to be re-registered
   useEffect(() => {
     const events = ["mousemove","mousedown","keydown","touchstart","scroll","click"];
-    events.forEach(e => window.addEventListener(e, resetIdle, { passive:true }));
+    const handler = activityHandler.current;
+    events.forEach(e => window.addEventListener(e, handler, { passive: true }));
     startIdleTimer();
     return () => {
-      events.forEach(e => window.removeEventListener(e, resetIdle));
+      events.forEach(e => window.removeEventListener(e, handler));
       clearAllTimers();
     };
-  }, [idleWarning]); // re-register when warning state changes so resetIdle captures latest value
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clientTabs = [
     { key:"home",    icon:"home",    label:"Home" },
