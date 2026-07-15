@@ -764,6 +764,15 @@ const CLIENT_ROSTER = [
     tags:["Gut Protocol","Nervous System","Thyroid"],
     notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
     nextCheckin:"Jul 16", pendingLabs:true,
+    checkinHistory:[
+      { date:"Jul 9 2026",  weight:"148 lbs", energy:7, sleep:6, stress:5, digestion:7, compliance:92, mood:"Motivated", clientNotes:"Feeling leaner, energy is better mid-week. Had one off-meal Saturday.", coachNotes:"Great week. Protein hit targets 6/7 days. Reduce stress load — consider walking at night." },
+      { date:"Jul 2 2026",  weight:"149 lbs", energy:6, sleep:5, stress:7, digestion:6, compliance:85, mood:"Stressed", clientNotes:"Work has been crazy. Skipped meal 4 twice. Cravings late at night.", coachNotes:"Understandable week. Add L-Theanine AM. Plan meals 3 and 4 on Sunday prep day." },
+      { date:"Jun 25 2026", weight:"150 lbs", energy:6, sleep:6, stress:6, digestion:5, compliance:88, mood:"Neutral", clientNotes:"Bloating mid-week, not sure if it was the oats. Sleep okay.", coachNotes:"Swap oats for cream of rice on low days. Continue Bloat Eaze. Good overall week." },
+      { date:"Jun 18 2026", weight:"151 lbs", energy:5, sleep:5, stress:8, digestion:4, compliance:80, mood:"Tired", clientNotes:"Hormones off this week. Very fatigued, cycle week. Cravings terrible.", coachNotes:"Normal for cycle days 14-18. Drop to maintenance calories days 1-3. Increase magnesium." },
+      { date:"Jun 11 2026", weight:"152 lbs", energy:8, sleep:8, stress:4, digestion:8, compliance:96, mood:"Great", clientNotes:"Best week yet. Energy all day, no bloating, sleep was amazing.", coachNotes:"This is the template. Protocol is working. Keep exact same approach next week." },
+      { date:"Jun 4 2026",  weight:"152.5 lbs", energy:7, sleep:7, stress:5, digestion:7, compliance:90, mood:"Good", clientNotes:"Feeling good. High days felt heavy but manageable. Step goal hit 5/7 days.", coachNotes:"Solid week. Add 1000 steps to daily target. Consider adding Oregano Pro Week 3." },
+      { date:"May 28 2026", weight:"153 lbs", energy:6, sleep:6, stress:6, digestion:6, compliance:82, mood:"Neutral", clientNotes:"Adjusting to the new protocol. Still figuring out meal timing.", coachNotes:"Week 1 adjustment is normal. Focus on hitting protein first. Timing comes second." },
+    ],
   },
   {
     name:"Alex Martinez", status:"Active", lastCheckin:"Jul 8", alert:false,
@@ -774,6 +783,13 @@ const CLIENT_ROSTER = [
     tags:["NuEthix Protocol"],
     notes:"Strong progress. Maintaining current macros. Add 5R Gut in week 6.",
     nextCheckin:"Jul 15", pendingLabs:false,
+    checkinHistory:[
+      { date:"Jul 8 2026",  weight:"182 lbs", energy:8, sleep:7, stress:4, digestion:8, compliance:94, mood:"Confident", clientNotes:"Feeling strong. Lifts are up. Body looking leaner without losing weight.", coachNotes:"Recomp is working. Stay at current calories. Add creatine 5g daily." },
+      { date:"Jul 1 2026",  weight:"183 lbs", energy:7, sleep:7, stress:5, digestion:7, compliance:91, mood:"Good", clientNotes:"Consistent week. Hit all meals. Had a cheat meal Sunday — burger and fries.", coachNotes:"One cheat meal is fine. Back on plan Monday. Compliance is very strong." },
+      { date:"Jun 24 2026", weight:"183.5 lbs", energy:7, sleep:6, stress:6, digestion:7, compliance:88, mood:"Good", clientNotes:"Travel week — made it work at hotel gym. Ate out a few times but made smart choices.", coachNotes:"Excellent discipline traveling. Proud of the effort. Weight holding steady is great." },
+      { date:"Jun 17 2026", weight:"184 lbs", energy:8, sleep:8, stress:3, digestion:8, compliance:97, mood:"Excellent", clientNotes:"Perfect week. Meal prepped Sunday, hit every single meal.", coachNotes:"97% compliance is elite. This week proved what's possible. Use it as your baseline." },
+      { date:"Jun 10 2026", weight:"184.5 lbs", energy:6, sleep:6, stress:5, digestion:6, compliance:85, mood:"Neutral", clientNotes:"Little flat energy-wise. Wondering if calories are too low.", coachNotes:"Bump carbs 20g on training days only. Add GDA-MAX Pro with higher carb meals." },
+    ],
   },
   {
     name:"Taylor Reyes", status:"Active", lastCheckin:"Jul 7", alert:false,
@@ -784,6 +800,13 @@ const CLIENT_ROSTER = [
     tags:["Adrenal Protocol","PCOS Protocol"],
     notes:"Feeling more energy week 4. Keep pushing hydration and step goal.",
     nextCheckin:"Jul 14", pendingLabs:false,
+    checkinHistory:[
+      { date:"Jul 7 2026",  weight:"165 lbs", energy:7, sleep:7, stress:5, digestion:7, compliance:89, mood:"Motivated", clientNotes:"Noticed waist is smaller even if scale is same. Clothes fitting different.", coachNotes:"Body recomp happening. Scale isn't everything — measurements tell the real story." },
+      { date:"Jun 30 2026", weight:"166 lbs", energy:6, sleep:6, stress:6, digestion:6, compliance:84, mood:"Okay", clientNotes:"Struggled with low day hunger. Kept reaching for extra snacks.", coachNotes:"Add cucumber and celery as free foods on low days. Up water to 1 gallon." },
+      { date:"Jun 23 2026", weight:"167 lbs", energy:7, sleep:6, stress:5, digestion:7, compliance:86, mood:"Good", clientNotes:"High days feel amazing. Low days are a mental battle but getting easier.", coachNotes:"This is the adaptation phase. It gets easier by week 6. Stay the course." },
+      { date:"Jun 16 2026", weight:"168 lbs", energy:5, sleep:5, stress:8, digestion:5, compliance:75, mood:"Struggling", clientNotes:"Really hard week. Period cramps, emotional eating Thursday.", coachNotes:"Hormonal week is expected. No guilt. Add Cort Eaze on high-stress days." },
+      { date:"Jun 9 2026",  weight:"168.5 lbs", energy:6, sleep:7, stress:5, digestion:6, compliance:82, mood:"Neutral", clientNotes:"Getting used to the structure. Meal prep is getting easier.", coachNotes:"Week 5 progress is solid. Drop scale check-ins to 1x/week — focus on how you feel." },
+    ],
   },
   {
     name:"Sam Thompson", status:"Pending check-in", lastCheckin:"Jun 30", alert:true,
@@ -794,6 +817,14 @@ const CLIENT_ROSTER = [
     tags:["5R Gut Protocol","Methylation Protocol"],
     notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
     nextCheckin:"Overdue", pendingLabs:true,
+    checkinHistory:[
+      { date:"Jun 30 2026", weight:"191 lbs", energy:5, sleep:5, stress:7, digestion:4, compliance:78, mood:"Frustrated", clientNotes:"Gut still acting up. Bloating after every meal. Getting discouraged.", coachNotes:"Stick with protocol — gut healing takes 6-8 weeks minimum. GI Map will show what's happening." },
+      { date:"Jun 23 2026", weight:"192 lbs", energy:5, sleep:5, stress:7, digestion:4, compliance:80, mood:"Neutral", clientNotes:"Same issues. Some days better than others. Sleep is poor.", coachNotes:"Add Relax Liposomal before bed. Remove raw vegetables temporarily, cook all produce." },
+      { date:"Jun 16 2026", weight:"192.5 lbs", energy:6, sleep:6, stress:6, digestion:5, compliance:83, mood:"Hopeful", clientNotes:"Slightly better this week. Less bloating after breakfast at least.", coachNotes:"Green shoots. Morning protocol is working. Focus on that consistency." },
+      { date:"Jun 9 2026",  weight:"193 lbs", energy:5, sleep:4, stress:8, digestion:3, compliance:75, mood:"Tired", clientNotes:"Very fatigued. Not sleeping well. Work stress is high.", coachNotes:"Cortisol is elevated. Add Cort Eaze 2 caps waking + 2 caps before bed. Prioritize sleep." },
+      { date:"Jun 2 2026",  weight:"194 lbs", energy:6, sleep:6, stress:6, digestion:4, compliance:79, mood:"Okay", clientNotes:"Starting to understand the protocol better. Prep has improved.", coachNotes:"Gut healing is slow but progress is real. Labs ordered — GI Map and blood panel." },
+      { date:"May 26 2026", weight:"194.5 lbs", energy:5, sleep:5, stress:7, digestion:3, compliance:72, mood:"Struggling", clientNotes:"Hardest part is meal timing with work schedule. Skipping meals often.", coachNotes:"Use protein shakes as bridge meals. Schedule alarms for meal 3 and 4." },
+    ],
   },
 ];
 
