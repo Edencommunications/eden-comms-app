@@ -1476,10 +1476,12 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
         {rosterOpen && (
           <>
             {clients.map((c,i)=>(
-              <button key={i} onClick={()=>setSelectedClient(c)}
+              <div key={i} role="button" tabIndex={0}
+                onClick={()=>setSelectedClient(c)}
+                onKeyDown={e=>e.key==="Enter"&&setSelectedClient(c)}
                 style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`,
                   borderLeft:`3px solid ${(!loomMode && c.alert) ? B.gold : B.border}`,
-                  borderRadius:14, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", display:"block" }}>
+                  borderRadius:14, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", boxSizing:"border-box" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
@@ -1503,7 +1505,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
                     <span style={{ fontSize:11, color:B.gold }}>View →</span>
                   </div>
                 </div>
-              </button>
+              </div>
             ))}
             <div style={{ marginTop:6 }}>
               <Btn variant="secondary" fullWidth><Ic n="upload" size={16} c={B.muted}/>Import Client from GHL</Btn>

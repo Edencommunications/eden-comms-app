@@ -619,28 +619,31 @@ export default function DietBuilder({currentUser}) {
         </div>
       )}
 
-      {/* ── Top tab bar ──────────────────────────────────── */}
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:`0 16px`,display:'flex',alignItems:'center',gap:0,flexShrink:0,marginTop:privacyMode?28:0}}>
-        <div style={{flex:1,paddingRight:8}}>
-          <div style={{fontSize:13,fontWeight:700,color:C.white}}>{isCoach?`Diet Builder — Jordan Williams`:'My Diet Plan'}</div>
-          <div style={{fontSize:10,color:C.muted,marginTop:1}}>{protocol}</div>
+      {/* ── Top header row (title + loom button) ─────────── */}
+      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:`10px 16px 0`,flexShrink:0,marginTop:privacyMode?28:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:C.white}}>{isCoach?`Diet Builder — Jordan Williams`:'My Diet Plan'}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:1}}>{protocol}</div>
+          </div>
+          {isCoach&&(
+            <button onClick={()=>setPrivacyMode(p=>!p)}
+              title="Hide client name for screen recording"
+              style={{background:privacyMode?`${C.danger}33`:C.card,border:`1px solid ${privacyMode?C.danger:C.border}`,borderRadius:8,padding:'5px 10px',color:privacyMode?C.danger:C.muted,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+              {privacyMode?'🎥 Recording':'🎥 Loom Mode'}
+            </button>
+          )}
         </div>
 
-        {/* Privacy / Loom hide button — coach only */}
-        {isCoach&&(
-          <button onClick={()=>setPrivacyMode(p=>!p)}
-            title="Hide client roster for screen recording"
-            style={{background:privacyMode?`${C.danger}33`:C.card,border:`1px solid ${privacyMode?C.danger:C.border}`,borderRadius:8,padding:'5px 10px',color:privacyMode?C.danger:C.muted,fontSize:11,fontWeight:700,cursor:'pointer',marginRight:10,whiteSpace:'nowrap'}}>
-            {privacyMode?'🎥 Recording':'🎥 Loom Mode'}
-          </button>
-        )}
-
-        {TABS.map(([k,l])=>(
-          <button key={k} onClick={()=>setTab(k)}
-            style={{padding:'12px 11px',background:'none',border:'none',borderBottom:`2px solid ${tab===k?C.gold:'transparent'}`,color:tab===k?C.gold:C.muted,fontSize:11,fontWeight:tab===k?700:400,cursor:'pointer',whiteSpace:'nowrap'}}>
-            {l}
-          </button>
-        ))}
+        {/* ── Scrollable tab strip ───────────────────────── */}
+        <div style={{display:'flex',overflowX:'auto',scrollbarWidth:'none',WebkitOverflowScrolling:'touch',gap:0,marginLeft:-16,marginRight:-16,paddingLeft:16}}>
+          {TABS.map(([k,l])=>(
+            <button key={k} onClick={()=>setTab(k)}
+              style={{padding:'10px 14px',background:'none',border:'none',borderBottom:`2px solid ${tab===k?C.gold:'transparent'}`,color:tab===k?C.gold:C.muted,fontSize:11,fontWeight:tab===k?700:400,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════
