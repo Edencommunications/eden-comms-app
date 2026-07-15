@@ -1416,10 +1416,9 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   );
 };
 
-const CoachDashboard = ({ user, onNavigate }) => {
+const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
   const isMobile = useIsMobile();
   const [selectedClient, setSelectedClient] = useState(null);
-  const [loomMode, setLoomMode]             = useState(false);
   const [rosterOpen, setRosterOpen]         = useState(true);
   const [peekIndex, setPeekIndex]           = useState<number|null>(null);
   const clients = CLIENT_ROSTER;
@@ -1439,26 +1438,13 @@ const CoachDashboard = ({ user, onNavigate }) => {
   return (
     <Screen>
       {/* Header */}
-      <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"24px 20px 16px" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-          <div>
-            <p style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1, margin:"0 0 4px" }}>COACH PORTAL</p>
-            <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0 }}>{user.name}</h1>
-            <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden · {clients.length} active clients</p>
-          </div>
-          {/* Loom Mode toggle */}
-          <button onClick={()=>setLoomMode(v=>!v)}
-            style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, background:loomMode?"#ff525222":"transparent",
-              border:`1.5px solid ${loomMode?"#ff5252":B.border}`, borderRadius:10, padding:"8px 10px", cursor:"pointer", flexShrink:0 }}>
-            <span style={{ fontSize:18 }}>{loomMode ? "🔴" : "🎥"}</span>
-            <span style={{ fontSize:9, fontWeight:700, color:loomMode?"#ff5252":B.muted, letterSpacing:.6, textTransform:"uppercase" }}>
-              {loomMode ? "Loom ON" : "Loom"}
-            </span>
-          </button>
-        </div>
+      <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"20px 20px 16px" }}>
+        <p style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1, margin:"0 0 4px" }}>COACH PORTAL</p>
+        <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0 }}>{user.name}</h1>
+        <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden · {clients.length} active clients</p>
         {loomMode && (
           <div style={{ marginTop:10, padding:"6px 12px", background:"#ff525218", border:"1px solid #ff525244", borderRadius:8 }}>
-            <p style={{ fontSize:11, color:"#ff5252", margin:0, fontWeight:600 }}>🔴 Loom Mode — client names hidden. Tap 🎥 to exit.</p>
+            <p style={{ fontSize:11, color:"#ff5252", margin:0, fontWeight:600 }}>🔴 Loom Mode active — client names hidden across all tabs</p>
           </div>
         )}
       </div>
@@ -1585,7 +1571,8 @@ const AdminDashboard = ({ user }) => {
 
 // ─── MAIN APP SHELL ───────────────────────────────────────────────────────────
 const AppShell = ({ user, onLogout }) => {
-  const [tab, setTab] = useState("home");
+  const [tab, setTab]           = useState("home");
+  const [loomMode, setLoomMode] = useState(false);
   const isMobile = useIsMobile();
 
   const clientTabs = [
@@ -1617,10 +1604,10 @@ const AppShell = ({ user, onLogout }) => {
       if (tab === "home") return <AdminDashboard user={user}/>;
     }
     if (user.role === "coach") {
-      if (tab === "home") return <CoachDashboard user={user} onNavigate={setTab}/>;
+      if (tab === "home") return <CoachDashboard user={user} onNavigate={setTab} loomMode={loomMode} setLoomMode={setLoomMode}/>;
     }
     if (tab === "home")    return <HomeScreen user={user}/>;
-    if (tab === "msgs")    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
+    if (tab === "msgs")    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
     if (tab === "diet")    return <DietBuilder currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "labs")    return <LabsScreen/>;
     if (tab === "checkin") return <CheckInScreen/>;
@@ -1641,6 +1628,23 @@ const AppShell = ({ user, onLogout }) => {
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
+          {/* Loom Mode toggle — coach only, persists across all tabs */}
+          {user.role === "coach" && (
+            <button onClick={() => setLoomMode(v => !v)}
+              title={loomMode ? "Exit Loom Mode" : "Enable Loom Mode — hides other client names"}
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
+                background: loomMode ? "#ff525222" : "transparent",
+                border:`1.5px solid ${loomMode ? "#ff5252" : B.border}`,
+                borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
+              <span style={{ fontSize:15 }}>{loomMode ? "🔴" : "🎥"}</span>
+              {!isMobile && (
+                <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase",
+                  color: loomMode ? "#ff5252" : B.muted }}>
+                  {loomMode ? "Loom ON" : "Loom"}
+                </span>
+              )}
+            </button>
+          )}
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={setTab}/>
           <div style={{ width:30, height:30, borderRadius:15, background:B.gold, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <span style={{ fontSize:13, fontWeight:800, color:B.black }}>{user.name[0]}</span>

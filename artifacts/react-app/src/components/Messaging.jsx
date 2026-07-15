@@ -171,7 +171,7 @@ function formatBytes(b) {
 // MAIN COMPONENT
 // Props: currentUser = { email, name, role }
 // ════════════════════════════════════════════════════════════════
-export default function Messaging({ currentUser }) {
+export default function Messaging({ currentUser, loomMode = false }) {
   const isMobile = useIsMobile()
 
   const email    = currentUser?.email || ''
@@ -343,10 +343,26 @@ export default function Messaging({ currentUser }) {
           )}
         </div>
 
+        {/* Loom Mode banner */}
+        {loomMode && myRole === 'coach' && (
+          <div style={{ padding:'6px 12px', background:'#ff525218', borderBottom:`1px solid #ff525433` }}>
+            <div style={{ fontSize:10, color:'#ff5252', fontWeight:700 }}>
+              🔴 Loom Mode — other clients hidden
+            </div>
+          </div>
+        )}
+
         {/* Conversation list */}
         <div style={{ flex:1, overflowY:'auto' }}>
-          {conversations.map(convo => {
-            const isActive = convo.id === activeId
+          {conversations.map((convo, i) => {
+            const isActive  = convo.id === activeId
+            // In Loom Mode: active conversation always shows real name;
+            // all others are anonymised so they can't be read on camera
+            const isHidden  = loomMode && myRole === 'coach' && !isActive
+            const label     = isHidden ? `Client ${String.fromCharCode(65 + i)}` : convo.name
+            const snippet   = isHidden ? '···' : convo.lastMessage
+            const avatarTxt = isHidden ? String.fromCharCode(65 + i) : convo.initials
+
             return (
               <button key={convo.id}
                 onClick={() => { setActiveId(convo.id); if (isMobile) setSidebarOpen(false) }}
@@ -362,12 +378,12 @@ export default function Messaging({ currentUser }) {
                     background: isActive ? C.gold : C.card,
                     border:`1px solid ${isActive ? C.gold : C.border}`,
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    fontSize:13, fontWeight:800,
+                    fontSize:isHidden ? 14 : 13, fontWeight:800,
                     color: isActive ? C.black : C.muted }}>
-                    {convo.initials}
+                    {avatarTxt}
                   </div>
-                  {/* Online dot */}
-                  {convo.online && (
+                  {/* Online dot — only show for active or non-loom */}
+                  {convo.online && !isHidden && (
                     <div style={{ position:'absolute', bottom:1, right:1, width:9, height:9,
                       borderRadius:5, background:C.success, border:`2px solid ${C.surface}` }}/>
                   )}
@@ -375,17 +391,22 @@ export default function Messaging({ currentUser }) {
                 {/* Text */}
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
-                    <span style={{ fontSize:13, fontWeight:700, color: isActive ? C.gold : C.white,
+                    <span style={{ fontSize:13, fontWeight:700,
+                      color: isActive ? C.gold : isHidden ? C.border : C.white,
                       overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:120 }}>
-                      {convo.name}
+                      {label}
                     </span>
-                    <span style={{ fontSize:10, color:C.muted, flexShrink:0, marginLeft:4 }}>{convo.lastTime}</span>
+                    {/* Hide timestamp for masked entries */}
+                    {!isHidden && (
+                      <span style={{ fontSize:10, color:C.muted, flexShrink:0, marginLeft:4 }}>{convo.lastTime}</span>
+                    )}
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:140 }}>
-                      {convo.lastMessage}
+                      {snippet}
                     </span>
-                    {convo.unread > 0 && (
+                    {/* Unread badges hidden for masked entries */}
+                    {!isHidden && convo.unread > 0 && (
                       <span style={{ flexShrink:0, marginLeft:4, minWidth:18, height:18, borderRadius:9,
                         background:C.gold, display:'flex', alignItems:'center', justifyContent:'center',
                         fontSize:10, fontWeight:800, color:C.black, padding:'0 5px' }}>
