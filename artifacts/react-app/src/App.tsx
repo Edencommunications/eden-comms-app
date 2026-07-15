@@ -797,7 +797,7 @@ const CLIENT_ROSTER = [
   },
 ];
 
-const ClientDetailModal = ({ client, onClose }) => {
+const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   const isMobile = useIsMobile();
   if (!client) return null;
   return (
@@ -885,12 +885,14 @@ const ClientDetailModal = ({ client, onClose }) => {
           {/* Action buttons */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:8 }}>
             {[
-              { label:"📋 Open Diet Plan", color:B.gold, bg:`${B.gold}22`, border:`1px solid ${B.gold}44` },
-              { label:"💬 Send Message",   color:"#4FD89A", bg:"#4FD89A22", border:"1px solid #4FD89A44" },
-              { label:"🧪 View Labs",      color:"#D4A8F0", bg:"#D4A8F022", border:"1px solid #D4A8F044" },
-              { label:"📊 Check-In Log",   color:"#6FB8E8", bg:"#6FB8E822", border:"1px solid #6FB8E844" },
-            ].map(({label,color,bg,border})=>(
-              <button key={label} style={{ background:bg, border, borderRadius:10, padding:"11px 12px", color, fontWeight:700, fontSize:12, cursor:"pointer" }}>
+              { label:"📋 Open Diet Plan", color:B.gold,    bg:`${B.gold}22`,    border:`1px solid ${B.gold}44`,    tab:"diet" },
+              { label:"💬 Send Message",   color:"#4FD89A", bg:"#4FD89A22",      border:"1px solid #4FD89A44",      tab:"msgs" },
+              { label:"🧪 View Labs",      color:"#D4A8F0", bg:"#D4A8F022",      border:"1px solid #D4A8F044",      tab:"labs" },
+              { label:"📊 Check-In Log",   color:"#6FB8E8", bg:"#6FB8E822",      border:"1px solid #6FB8E844",      tab:"checkin" },
+            ].map(({label,color,bg,border,tab})=>(
+              <button key={label}
+                onClick={()=>{ onClose(); onNavigate?.(tab) }}
+                style={{ background:bg, border, borderRadius:10, padding:"11px 12px", color, fontWeight:700, fontSize:12, cursor:"pointer" }}>
                 {label}
               </button>
             ))}
@@ -901,7 +903,7 @@ const ClientDetailModal = ({ client, onClose }) => {
   );
 };
 
-const CoachDashboard = ({ user }) => {
+const CoachDashboard = ({ user, onNavigate }) => {
   const isMobile = useIsMobile();
   const [selectedClient, setSelectedClient] = useState(null);
   const clients = CLIENT_ROSTER;
@@ -942,7 +944,7 @@ const CoachDashboard = ({ user }) => {
           <Btn variant="secondary" fullWidth><Ic n="upload" size={16} c={B.muted}/>Import Client from GHL</Btn>
         </div>
       </div>
-      {selectedClient && <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)}/>}
+      {selectedClient && <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}/>}
     </Screen>
   );
 };
@@ -1034,7 +1036,7 @@ const AppShell = ({ user, onLogout }) => {
       if (tab === "home") return <AdminDashboard user={user}/>;
     }
     if (user.role === "coach") {
-      if (tab === "home") return <CoachDashboard user={user}/>;
+      if (tab === "home") return <CoachDashboard user={user} onNavigate={setTab}/>;
     }
     if (tab === "home")    return <HomeScreen user={user}/>;
     if (tab === "msgs")    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
