@@ -68,7 +68,7 @@ const SUPP_DB = {
   '5R Gut Protocol':[
     {name:'Biofilm Resolve',        dose:'2 caps 45-60 min before meals 1,3,5', directions:'7-Day Prep Phase. Take on empty stomach', code:'TOGNIETTI10', link:'https://nuethix.com/collections/supplements/products/biofilm-resolve?variant=37274128482466'},
     {name:'Saccharomyces Boulardii',dose:'2 caps with meal 1, 2 caps with last meal', directions:'Weeks 1-6', code:'', link:'https://www.amazon.com/Saccharomyces-Boulardii-Billion-Probiotics-Serving/dp/B09BDJ87L6/'},
-    {name:'Fungal Pro',             dose:'2 caps 2x daily (meal 1 and last meal)', directions:'Weeks 1-6. Discontinue after 6 weeks.', code:'', link:'https://www.practitionerdepot.com/product/fungal-pro-dysbiocide-120ct?variant=Default%20Title'},
+    {name:'Fungal Pro',             dose:'2 caps 2x daily (meal 1 and last meal)', directions:'Weeks 1-6. Discontinue after 6 weeks.', code:'TOGNIETTI10', link:'https://www.practitionerdepot.com/product/fungal-pro-dysbiocide-120ct?variant=Default%20Title'},
     {name:'Artemisia Wormwood',     dose:'1 cap with meals 1, 3, 4 (2 weeks only)', directions:'First 2 weeks only, then stop', code:'', link:'https://www.amazon.com/Nutricost-Wormwood-Capsules-450mg-120/dp/B07WDTGK8S/'},
     {name:'Mastic Gum',            dose:'1000mg (2 caps) with meals 2 and 5', directions:'Weeks 1-6',         code:'', link:'https://www.amazon.com/Jarrow-Formulas-Supports-Stomach-Duodenal/dp/B0013OVVAK/'},
     {name:'FC Extinguish',         dose:'2 caps 2x daily',                    directions:'Weeks 1-6',         code:'TOGNIETTI10', link:'https://www.practitionerdepot.com/product/fc-extinguish-fc-cidal-120ct?variant=Default%20Title'},
@@ -81,7 +81,7 @@ const SUPP_DB = {
     {name:'Calcium D-Glucarate',   dose:'1000mg with meal 1 and meal 5',       directions:'Weeks 1-6',         code:'', link:'https://www.amazon.com/Nutricost-Calcium-D-Glucarate-500mg-Capsules/dp/B09NPFFSVC/'},
     {name:'Zinc Carnosine',        dose:'1 tablet 2x daily meals 1 and 4',     directions:'Weeks 1-6',         code:'', link:'https://www.amazon.com/Nutricost-Zinc-Carnosine-86mg-Capsules/dp/B0BRNX1LLH/'},
     {name:'Cort Eaze',             dose:'2 caps waking, 2 caps meal 3, 2 caps bed', directions:'Weeks 1-6',   code:'TOGNIETTI10', link:'https://nuethix.com/collections/supplements/products/cort-eaze?variant=32244757364781'},
-    {name:'Biotics Bile Plus',     dose:'2 caps per meal',                     directions:'Week 7 and beyond', code:'', link:'https://www.practitionerdepot.com/products/bile-plus?variant=46157575061721'},
+    {name:'Biotics Bile Plus',     dose:'2 caps per meal',                     directions:'Week 7 and beyond', code:'TOGNIETTI10', link:'https://www.practitionerdepot.com/products/bile-plus?variant=46157575061721'},
     {name:'Gut Defender',          dose:'2 caps with meal 1',                  directions:'Week 7+ maintenance 6 weeks', code:'TOGNIETTI10', link:'https://nuethix.com/collections/supplements/products/gut-defender-new?variant=37158070845602'},
   ],
   'PCOS Protocol':[
@@ -487,7 +487,9 @@ export default function DietBuilder({currentUser}) {
   const [clientSupps,     setClientSupps]     = useState([]) // assigned to this client
   const [showSuppPicker,  setShowSuppPicker]  = useState(false)
   const [customSuppText,  setCustomSuppText]  = useState('')
-  const [rx,              setRx]              = useState('')
+  const [rxList,          setRxList]          = useState([])
+  const [rxExpanded,      setRxExpanded]      = useState({})
+  const [rxDraftLog,      setRxDraftLog]      = useState({}) // keyed by rx id
   const [coachNotes,      setCoachNotes]      = useState('')
 
   // ── Macro totals ──────────────────────────────────────────
@@ -1086,10 +1088,10 @@ export default function DietBuilder({currentUser}) {
                           style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
                       </div>
                     </div>
-                    {s.code&&(
-                      <div style={{marginTop:6,fontSize:10,color:C.muted}}>
-                        Discount: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span>
-                        {s.link&&<> · <a href={s.link} target="_blank" rel="noreferrer" style={{color:C.gold}}>Purchase →</a></>}
+                    {(s.code||s.link)&&(
+                      <div style={{marginTop:6,fontSize:10,color:C.muted,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                        {s.code&&<span>Discount: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span></span>}
+                        {s.link&&<a href={s.link} target="_blank" rel="noreferrer" style={{color:C.gold,textDecoration:'none',fontWeight:600}}>Purchase →</a>}
                       </div>
                     )}
                   </div>
@@ -1106,11 +1108,135 @@ export default function DietBuilder({currentUser}) {
               </Card>
 
               <Card sx={{marginBottom:12}}>
-                <Lbl t="Prescriptions / Medications"/>
-                <textarea value={rx} onChange={e=>setRx(e.target.value)}
-                  placeholder="Prescription protocols, HRT, or medications…"
-                  rows={4}
-                  style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                  <Lbl t="Prescriptions / Medications"/>
+                  <button onClick={()=>{
+                    const id=Date.now().toString()
+                    setRxList(p=>[...p,{id,name:'',dosage:'',reason:'',taperLog:[]}])
+                    setRxExpanded(p=>({...p,[id]:true}))
+                    setRxDraftLog(p=>({...p,[id]:{date:new Date().toISOString().slice(0,10),dose:'',direction:'hold',note:''}}))
+                  }} style={{background:C.gold,border:'none',borderRadius:6,padding:'5px 12px',color:C.black,fontWeight:700,fontSize:11,cursor:'pointer',letterSpacing:.5}}>+ Add Rx</button>
+                </div>
+                {rxList.length===0&&(
+                  <div style={{textAlign:'center',padding:'18px 0',color:C.muted,fontSize:12}}>No prescriptions added yet. Click + Add Rx to begin.</div>
+                )}
+                {rxList.map((rx,ri)=>(
+                  <div key={rx.id} style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflow:'hidden'}}>
+                    {/* Header row */}
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.surface,cursor:'pointer'}}
+                      onClick={()=>setRxExpanded(p=>({...p,[rx.id]:!p[rx.id]}))}>
+                      <div style={{fontSize:13,color:rx.name?C.white:C.muted,fontWeight:700,flex:1}}>
+                        {rx.name||'New Prescription'}
+                        {rx.dosage&&<span style={{color:C.gold,fontWeight:400,fontSize:11,marginLeft:8}}>{rx.dosage}</span>}
+                      </div>
+                      <div style={{fontSize:11,color:C.muted}}>{rx.taperLog.length} entries</div>
+                      <div style={{color:C.gold,fontSize:12}}>{rxExpanded[rx.id]?'▲':'▼'}</div>
+                      <button onClick={e=>{e.stopPropagation();setRxList(p=>p.filter(r=>r.id!==rx.id))}}
+                        style={{background:'transparent',border:'none',color:'#ff4444',fontSize:14,cursor:'pointer',padding:'0 2px',lineHeight:1}}>✕</button>
+                    </div>
+
+                    {rxExpanded[rx.id]&&(
+                      <div style={{padding:'12px 12px 0'}}>
+                        {/* Core fields */}
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                          <div>
+                            <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Prescription Name</div>
+                            <input value={rx.name} onChange={e=>setRxList(p=>p.map((r,i)=>i===ri?{...r,name:e.target.value}:r))}
+                              placeholder="e.g. Progesterone, T3, LDN…"
+                              style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div>
+                            <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Current Dosage</div>
+                            <input value={rx.dosage} onChange={e=>setRxList(p=>p.map((r,i)=>i===ri?{...r,dosage:e.target.value}:r))}
+                              placeholder="e.g. 100mg nightly, 5mg 2x daily…"
+                              style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                        </div>
+                        <div style={{marginBottom:10}}>
+                          <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Reason for Use / Goals</div>
+                          <input value={rx.reason} onChange={e=>setRxList(p=>p.map((r,i)=>i===ri?{...r,reason:e.target.value}:r))}
+                            placeholder="e.g. Low progesterone, hypothyroid support, inflammation…"
+                            style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                        </div>
+
+                        {/* Taper log */}
+                        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,marginBottom:0}}>
+                          <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.8,textTransform:'uppercase',marginBottom:8}}>Taper / Dose Adjustment Log</div>
+
+                          {rx.taperLog.length>0&&(
+                            <div style={{marginBottom:10,maxHeight:180,overflowY:'auto'}}>
+                              {[...rx.taperLog].reverse().map((entry,ei)=>{
+                                const dirColors={up:'#4caf50',down:'#ff7043',hold:C.gold,discontinue:'#ff4444'}
+                                const dirLabels={up:'↑ Taper Up',down:'↓ Taper Down',hold:'— Hold',discontinue:'⊘ Discontinue'}
+                                return(
+                                  <div key={ei} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+                                    <div style={{fontSize:10,color:C.muted,minWidth:72,paddingTop:1}}>{entry.date}</div>
+                                    <div style={{flex:1}}>
+                                      <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2}}>
+                                        <span style={{fontSize:10,fontWeight:700,color:dirColors[entry.direction]||C.gold}}>{dirLabels[entry.direction]||entry.direction}</span>
+                                        {entry.dose&&<span style={{fontSize:11,color:C.white,fontWeight:600}}>{entry.dose}</span>}
+                                      </div>
+                                      {entry.note&&<div style={{fontSize:11,color:C.muted,lineHeight:1.4}}>{entry.note}</div>}
+                                    </div>
+                                    <button onClick={()=>setRxList(p=>p.map((r,i)=>i===ri?{...r,taperLog:r.taperLog.filter((_,j)=>rx.taperLog.length-1-ei!==j)}:r))}
+                                      style={{background:'transparent',border:'none',color:'#ff4444',fontSize:12,cursor:'pointer',padding:0,lineHeight:1,flexShrink:0}}>✕</button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          {/* New entry form */}
+                          {(()=>{
+                            const draft=rxDraftLog[rx.id]||{date:new Date().toISOString().slice(0,10),dose:'',direction:'hold',note:''}
+                            const setDraft=v=>setRxDraftLog(p=>({...p,[rx.id]:{...draft,...v}}))
+                            return(
+                              <div style={{background:C.surface,borderRadius:8,padding:'10px 10px 10px',border:`1px solid ${C.border}`,marginBottom:12}}>
+                                <div style={{fontSize:9,color:C.gold,fontWeight:700,letterSpacing:.8,textTransform:'uppercase',marginBottom:8}}>New Entry</div>
+                                <div style={{display:'grid',gridTemplateColumns:'110px 1fr 1fr',gap:6,marginBottom:6}}>
+                                  <div>
+                                    <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.6}}>Date</div>
+                                    <input type="date" value={draft.date} onChange={e=>setDraft({date:e.target.value})}
+                                      style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,padding:'5px 6px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box',colorScheme:'dark'}}/>
+                                  </div>
+                                  <div>
+                                    <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.6}}>Action</div>
+                                    <select value={draft.direction} onChange={e=>setDraft({direction:e.target.value})}
+                                      style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,padding:'5px 6px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box'}}>
+                                      <option value="up">↑ Taper Up</option>
+                                      <option value="down">↓ Taper Down</option>
+                                      <option value="hold">— Hold / Maintain</option>
+                                      <option value="discontinue">⊘ Discontinue</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.6}}>New Dose</div>
+                                    <input value={draft.dose} onChange={e=>setDraft({dose:e.target.value})}
+                                      placeholder="e.g. 150mg, 2 tabs…"
+                                      style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,padding:'5px 6px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                                  </div>
+                                </div>
+                                <div style={{marginBottom:8}}>
+                                  <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.6}}>Coach Notes</div>
+                                  <input value={draft.note} onChange={e=>setDraft({note:e.target.value})}
+                                    placeholder="Reason for change, symptoms, response, days until recheck…"
+                                    style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,padding:'5px 6px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                                </div>
+                                <button onClick={()=>{
+                                  if(!draft.date) return
+                                  setRxList(p=>p.map((r,i)=>i===ri?{...r,taperLog:[...r.taperLog,{...draft}]}:r))
+                                  setDraft({date:new Date().toISOString().slice(0,10),dose:'',direction:'hold',note:''})
+                                }} style={{background:C.gold,border:'none',borderRadius:6,padding:'5px 16px',color:C.black,fontWeight:700,fontSize:11,cursor:'pointer'}}>
+                                  Add Entry
+                                </button>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </Card>
 
               <Card sx={{marginBottom:12}}>
