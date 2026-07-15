@@ -830,11 +830,35 @@ const CLIENT_ROSTER = [
 
 const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   const isMobile = useIsMobile();
+  const [expandedEntry, setExpandedEntry] = useState<number|null>(null);
   if (!client) return null;
+
+  const history: any[] = client.checkinHistory || [];
+  const lastCompleted = history.length > 0 ? history[0].date : client.lastCheckin;
+
+  // Score color: for energy/sleep/digestion higher=better; stress lower=better
+  const scoreColor = (val: number, invert = false) => {
+    const v = invert ? 11 - val : val;
+    if (v >= 8) return "#4caf50";
+    if (v >= 5) return B.gold;
+    return "#ff5252";
+  };
+
+  const ScoreChip = ({ label, val, invert = false }: { label:string; val:number; invert?:boolean }) => (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", minWidth:44 }}>
+      <div style={{
+        width:32, height:32, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+        background:`${scoreColor(val, invert)}22`, border:`1.5px solid ${scoreColor(val, invert)}`,
+        fontSize:13, fontWeight:800, color:scoreColor(val, invert)
+      }}>{val}</div>
+      <div style={{ fontSize:8, color:B.muted, marginTop:3, textTransform:"uppercase", letterSpacing:.6, textAlign:"center" }}>{label}</div>
+    </div>
+  );
+
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ background:B.surface, borderTop:`2px solid ${B.gold}`, borderRadius:"18px 18px 0 0", width:"100%", maxWidth:600, maxHeight:"88vh", display:"flex", flexDirection:"column" }}>
+      <div style={{ background:B.surface, borderTop:`2px solid ${B.gold}`, borderRadius:"18px 18px 0 0", width:"100%", maxWidth:600, maxHeight:"92vh", display:"flex", flexDirection:"column" }}>
         {/* Handle */}
         <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
           <div style={{ width:40, height:4, borderRadius:2, background:B.border }}/>
@@ -852,15 +876,17 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
         </div>
         {/* Scrollable body */}
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
-          {/* Quick stats */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:16 }}>
+
+          {/* Quick stats — 2×2 */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
             {[
-              { label:"Current Weight", val:client.currentWeight },
-              { label:"Target Weight",  val:client.targetWeight },
-              { label:"Next Check-In",  val:client.nextCheckin },
-            ].map(({label,val})=>(
-              <div key={label} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"10px 12px", textAlign:"center" }}>
-                <p style={{ fontSize:13, fontWeight:700, color:B.gold, margin:"0 0 3px" }}>{val}</p>
+              { label:"Current Weight", val:client.currentWeight, hi:false },
+              { label:"Target Weight",  val:client.targetWeight,  hi:false },
+              { label:"Last Check-In",  val:lastCompleted,        hi:false },
+              { label:"Next Check-In",  val:client.nextCheckin,   hi:client.nextCheckin==="Overdue" },
+            ].map(({label,val,hi})=>(
+              <div key={label} style={{ background:B.card, border:`1px solid ${hi ? B.gold+"66" : B.border}`, borderRadius:10, padding:"10px 12px", textAlign:"center" }}>
+                <p style={{ fontSize:13, fontWeight:700, color: hi ? "#ff9800" : B.gold, margin:"0 0 3px" }}>{val}</p>
                 <p style={{ fontSize:9, color:B.muted, margin:0 }}>{label}</p>
               </div>
             ))}
@@ -888,7 +914,7 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
             <p style={{ fontSize:12, color:B.gold, fontWeight:600, margin:"0 0 6px" }}>{client.protocol}</p>
             <p style={{ fontSize:12, color:B.text, margin:"0 0 10px" }}>{client.goal}</p>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {client.tags.map(t=>(
+              {client.tags.map((t:string)=>(
                 <span key={t} style={{ fontSize:10, fontWeight:700, color:B.gold, background:`${B.gold}18`, border:`1px solid ${B.gold}33`, borderRadius:6, padding:"3px 8px" }}>{t}</span>
               ))}
             </div>
@@ -910,6 +936,73 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
               {client.pendingLabs && (
                 <p style={{ fontSize:12, color:B.text, margin:0 }}>• Lab results pending review</p>
               )}
+            </Card>
+          )}
+
+          {/* ── Check-In History ── */}
+          {history.length > 0 && (
+            <Card style={{ marginBottom:12, padding:0, overflow:"hidden" }}>
+              {/* Section header */}
+              <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.border}` }}>
+                <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>
+                  Check-In History · {history.length} entries
+                </p>
+              </div>
+
+              {history.map((entry:any, idx:number) => {
+                const isOpen = expandedEntry === idx;
+                const compColor = entry.compliance >= 90 ? "#4caf50" : entry.compliance >= 75 ? B.gold : "#ff5252";
+                return (
+                  <div key={idx} style={{ borderBottom: idx < history.length-1 ? `1px solid ${B.border}` : "none" }}>
+
+                    {/* Row — always visible */}
+                    <button
+                      onClick={()=>setExpandedEntry(isOpen ? null : idx)}
+                      style={{ width:"100%", background:"none", border:"none", padding:"12px 16px", textAlign:"left", cursor:"pointer", display:"block" }}>
+
+                      {/* Top line: date + weight + compliance + mood */}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                        <div>
+                          <span style={{ fontSize:13, fontWeight:700, color:B.text }}>{entry.date}</span>
+                          <span style={{ fontSize:12, color:B.gold, fontWeight:600, marginLeft:10 }}>{entry.weight}</span>
+                        </div>
+                        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                          <span style={{ fontSize:11, fontWeight:700, color:compColor, background:`${compColor}18`, border:`1px solid ${compColor}44`, borderRadius:6, padding:"2px 7px" }}>
+                            {entry.compliance}% compliant
+                          </span>
+                          <span style={{ fontSize:10, color:B.muted }}>{isOpen ? "▲" : "▼"}</span>
+                        </div>
+                      </div>
+
+                      {/* Score chips row */}
+                      <div style={{ display:"flex", gap:10, justifyContent:"flex-start" }}>
+                        <ScoreChip label="Energy"    val={entry.energy}    />
+                        <ScoreChip label="Sleep"     val={entry.sleep}     />
+                        <ScoreChip label="Stress"    val={entry.stress}    invert />
+                        <ScoreChip label="Digestion" val={entry.digestion} />
+                        <div style={{ display:"flex", flexDirection:"column", justifyContent:"center", marginLeft:4 }}>
+                          <span style={{ fontSize:11, color:B.muted }}>Mood:</span>
+                          <span style={{ fontSize:12, fontWeight:700, color:B.text }}>{entry.mood}</span>
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Expanded: notes */}
+                    {isOpen && (
+                      <div style={{ padding:"0 16px 14px" }}>
+                        <div style={{ background:B.bg, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
+                          <p style={{ fontSize:9, color:B.muted, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 5px", fontWeight:700 }}>Client's Notes</p>
+                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6, fontStyle:"italic" }}>"{entry.clientNotes}"</p>
+                        </div>
+                        <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}33`, borderRadius:8, padding:"10px 12px" }}>
+                          <p style={{ fontSize:9, color:B.gold, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 5px", fontWeight:700 }}>Coach Response</p>
+                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6 }}>{entry.coachNotes}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </Card>
           )}
 
