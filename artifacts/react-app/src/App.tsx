@@ -16,6 +16,7 @@ function useIsMobile(breakpoint = 768) {
 }
 import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
+import Notifications from "./components/Notifications";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -1640,6 +1641,7 @@ const AppShell = ({ user, onLogout }) => {
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
+          <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={setTab}/>
           <div style={{ width:30, height:30, borderRadius:15, background:B.gold, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <span style={{ fontSize:13, fontWeight:800, color:B.black }}>{user.name[0]}</span>
           </div>
