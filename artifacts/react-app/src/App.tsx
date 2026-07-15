@@ -643,7 +643,7 @@ const LabsScreen = () => {
 };
 
 const CheckInScreen = () => {
-  const [form, setForm] = useState({ weight:"", temp:"", steps:"", sleep:"5", sleepNotes:"", bloating:"5", brainFog:"5", sexDrive:"5", energy:"5", hunger:"5", bowelCount:"", bowelType:"", heartRate:"", hrv:"", notes:"" });
+  const [form, setForm] = useState({ weight:"", temp:"", steps:"", heartRate:"", hrv:"", bloodPressure:"", sleep:"5", sleepWindow:"", sleepDisruption:"", sleepCycles:"", bloating:"5", brainFog:"5", sexDrive:"5", energy:"5", hunger:"5", stress:"5", mood:"", bowelCount:"", bowelType:"", notes:"" });
   const set = k => v => setForm(f=>({...f,[k]:v}));
   const Scale = ({ label, val, onChange }) => (
     <div style={{ marginBottom:16 }}>
@@ -670,18 +670,46 @@ const CheckInScreen = () => {
           <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>VITALS</p>
           <Input label="Body Weight (lbs)" value={form.weight} onChange={set("weight")} placeholder="e.g. 172.4"/>
           <Input label="Body Temperature (°F)" value={form.temp} onChange={set("temp")} placeholder="e.g. 97.8"/>
+          <Input label="Blood Pressure" value={form.bloodPressure} onChange={set("bloodPressure")} placeholder="e.g. 118/74"/>
           <Input label="Average Daily Steps" value={form.steps} onChange={set("steps")} placeholder="e.g. 9500"/>
           <Input label="Morning Resting Heart Rate (BPM)" value={form.heartRate} onChange={set("heartRate")} placeholder="e.g. 58"/>
           <Input label="HRV" value={form.hrv} onChange={set("hrv")} placeholder="e.g. 72"/>
         </Card>
         <Card style={{ marginBottom:12 }}>
+          <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>SLEEP</p>
+          <Scale label="Sleep Quality (1=terrible, 10=perfect)" val={form.sleep} onChange={set("sleep")}/>
+          <Input label="Sleep Window (bedtime – wake time)" value={form.sleepWindow} onChange={set("sleepWindow")} placeholder="e.g. 10:30 PM – 6:00 AM"/>
+          <Input label="Estimated Sleep Cycles" value={form.sleepCycles} onChange={set("sleepCycles")} placeholder="e.g. 4–5 cycles (each ~90 min)"/>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ display:"block", fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Sleep Disruption Notes</label>
+            <textarea value={form.sleepDisruption} onChange={e=>set("sleepDisruption")(e.target.value)}
+              placeholder="e.g. Woke twice around 2 AM and 4 AM. Gut discomfort. Racing thoughts."
+              rows={3}
+              style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"10px 12px", color:B.text, fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"inherit", resize:"vertical" }}/>
+          </div>
+        </Card>
+        <Card style={{ marginBottom:12 }}>
           <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>WELLBEING SCALES</p>
-          <Scale label="Sleep Quality" val={form.sleep} onChange={set("sleep")}/>
+          <Scale label="Energy" val={form.energy} onChange={set("energy")}/>
           <Scale label="Bloating (1=bad, 10=none)" val={form.bloating} onChange={set("bloating")}/>
           <Scale label="Brain Fog (1=extreme, 10=none)" val={form.brainFog} onChange={set("brainFog")}/>
           <Scale label="Sex Drive" val={form.sexDrive} onChange={set("sexDrive")}/>
-          <Scale label="Energy" val={form.energy} onChange={set("energy")}/>
           <Scale label="Hunger (1=fine, 10=starving)" val={form.hunger} onChange={set("hunger")}/>
+          <Scale label="Stress (1=calm, 10=maxed out)" val={form.stress} onChange={set("stress")}/>
+        </Card>
+        <Card style={{ marginBottom:12 }}>
+          <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>MOOD</p>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ display:"block", fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Overall Mood This Week</label>
+            <select value={form.mood} onChange={e=>set("mood")(e.target.value)}
+              style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", color:form.mood ? B.text : B.muted, fontSize:14, outline:"none", fontFamily:"inherit" }}>
+              <option value="">Select…</option>
+              <option>Excellent</option><option>Great</option><option>Motivated</option><option>Confident</option>
+              <option>Good</option><option>Okay</option><option>Neutral</option>
+              <option>Tired</option><option>Stressed</option><option>Anxious</option>
+              <option>Frustrated</option><option>Struggling</option><option>Hopeful</option>
+            </select>
+          </div>
         </Card>
         <Card style={{ marginBottom:12 }}>
           <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>DIGESTION</p>
@@ -769,39 +797,46 @@ const CLIENT_ROSTER = [
     notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
     nextCheckin:"Jul 16", pendingLabs:true,
     checkinHistory:[
-      { date:"Jul 9 2026",  weight:"148.0", temp:"97.8", steps:"9,200", heartRate:"62", hrv:"68",
-        energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4,
-        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:92, mood:"Motivated",
+      { date:"Jul 9 2026",  weight:"148.0", temp:"97.8", steps:"9,200", heartRate:"62", hrv:"68", bloodPressure:"118/74",
+        energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:92, mood:"Motivated",
+        sleepWindow:"10:30 PM – 6:00 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once around 3 AM, went back to sleep within 10 min. Otherwise solid.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Feeling leaner, energy is better mid-week. Had one off-meal Saturday.",
         coachNotes:"Great week. Protein hit targets 6/7 days. Reduce stress load — consider walking at night." },
-      { date:"Jul 2 2026",  weight:"149.0", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58",
-        energy:6, sleep:5, bloating:6, brainFog:5, sexDrive:5, hunger:7,
-        bowelCount:"1", bowelType:"Mixed", stress:7, compliance:85, mood:"Stressed",
+      { date:"Jul 2 2026",  weight:"149.0", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58", bloodPressure:"122/78",
+        energy:6, sleep:5, bloating:6, brainFog:5, sexDrive:5, hunger:7, stress:7, compliance:85, mood:"Stressed",
+        sleepWindow:"11:00 PM – 6:30 AM", sleepCycles:"3–4 cycles", sleepDisruption:"Woke multiple times — mind racing from work. Hard to fall back asleep after 4 AM.",
+        bowelCount:"1", bowelType:"Mixed",
         clientNotes:"Work has been crazy. Skipped meal 4 twice. Cravings late at night.",
         coachNotes:"Understandable week. Add L-Theanine AM. Plan meals 3 and 4 on Sunday prep day." },
-      { date:"Jun 25 2026", weight:"150.0", temp:"97.7", steps:"8,500", heartRate:"64", hrv:"62",
-        energy:6, sleep:6, bloating:4, brainFog:6, sexDrive:6, hunger:5,
-        bowelCount:"2", bowelType:"Mixed", stress:6, compliance:88, mood:"Neutral",
+      { date:"Jun 25 2026", weight:"150.0", temp:"97.7", steps:"8,500", heartRate:"64", hrv:"62", bloodPressure:"120/76",
+        energy:6, sleep:6, bloating:4, brainFog:6, sexDrive:6, hunger:5, stress:6, compliance:88, mood:"Neutral",
+        sleepWindow:"10:45 PM – 6:15 AM", sleepCycles:"4 cycles", sleepDisruption:"Woke once for bathroom around 2 AM. Light sleep in the early morning hours.",
+        bowelCount:"2", bowelType:"Mixed",
         clientNotes:"Bloating mid-week, not sure if it was the oats. Sleep okay.",
         coachNotes:"Swap oats for cream of rice on low days. Continue Bloat Eaze. Good overall week." },
-      { date:"Jun 18 2026", weight:"151.0", temp:"97.4", steps:"6,200", heartRate:"72", hrv:"52",
-        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:3, hunger:8,
-        bowelCount:"1", bowelType:"Constipated", stress:8, compliance:80, mood:"Tired",
+      { date:"Jun 18 2026", weight:"151.0", temp:"97.4", steps:"6,200", heartRate:"72", hrv:"52", bloodPressure:"124/80",
+        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:3, hunger:8, stress:8, compliance:80, mood:"Tired",
+        sleepWindow:"11:30 PM – 6:00 AM", sleepCycles:"3 cycles", sleepDisruption:"Tossed and turned during cycle days. Night sweats twice. Very restless between 2–4 AM.",
+        bowelCount:"1", bowelType:"Constipated",
         clientNotes:"Hormones off this week. Very fatigued, cycle week. Cravings terrible.",
         coachNotes:"Normal for cycle days 14-18. Drop to maintenance calories days 1-3. Increase magnesium." },
-      { date:"Jun 11 2026", weight:"152.0", temp:"98.0", steps:"10,400", heartRate:"60", hrv:"74",
-        energy:8, sleep:8, bloating:8, brainFog:8, sexDrive:7, hunger:3,
-        bowelCount:"2", bowelType:"Well formed", stress:4, compliance:96, mood:"Great",
+      { date:"Jun 11 2026", weight:"152.0", temp:"98.0", steps:"10,400", heartRate:"60", hrv:"74", bloodPressure:"116/72",
+        energy:8, sleep:8, bloating:8, brainFog:8, sexDrive:7, hunger:3, stress:4, compliance:96, mood:"Great",
+        sleepWindow:"10:00 PM – 6:00 AM", sleepCycles:"5–6 cycles", sleepDisruption:"None — slept completely through. Woke up feeling fully rested.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Best week yet. Energy all day, no bloating, sleep was amazing.",
         coachNotes:"This is the template. Protocol is working. Keep exact same approach next week." },
-      { date:"Jun 4 2026",  weight:"152.5", temp:"97.9", steps:"9,600", heartRate:"63", hrv:"70",
-        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:4,
-        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:90, mood:"Good",
+      { date:"Jun 4 2026",  weight:"152.5", temp:"97.9", steps:"9,600", heartRate:"63", hrv:"70", bloodPressure:"119/75",
+        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:90, mood:"Good",
+        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once briefly around 2 AM, felt alert for about 20 min, then fell back asleep.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Feeling good. High days felt heavy but manageable. Step goal hit 5/7 days.",
         coachNotes:"Solid week. Add 1000 steps to daily target. Consider adding Oregano Pro Week 3." },
-      { date:"May 28 2026", weight:"153.0", temp:"97.7", steps:"7,500", heartRate:"65", hrv:"60",
-        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:5,
-        bowelCount:"2", bowelType:"Mixed", stress:6, compliance:82, mood:"Neutral",
+      { date:"May 28 2026", weight:"153.0", temp:"97.7", steps:"7,500", heartRate:"65", hrv:"60", bloodPressure:"121/77",
+        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:5, stress:6, compliance:82, mood:"Neutral",
+        sleepWindow:"11:00 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"New protocol adjustments causing some restlessness. Mind active thinking about meal prep.",
+        bowelCount:"2", bowelType:"Mixed",
         clientNotes:"Adjusting to the new protocol. Still figuring out meal timing.",
         coachNotes:"Week 1 adjustment is normal. Focus on hitting protein first. Timing comes second." },
     ],
@@ -816,29 +851,34 @@ const CLIENT_ROSTER = [
     notes:"Strong progress. Maintaining current macros. Add 5R Gut in week 6.",
     nextCheckin:"Jul 15", pendingLabs:false,
     checkinHistory:[
-      { date:"Jul 8 2026",  weight:"182.0", temp:"98.2", steps:"11,200", heartRate:"58", hrv:"82",
-        energy:8, sleep:7, bloating:8, brainFog:8, sexDrive:8, hunger:3,
-        bowelCount:"2", bowelType:"Well formed", stress:4, compliance:94, mood:"Confident",
+      { date:"Jul 8 2026",  weight:"182.0", temp:"98.2", steps:"11,200", heartRate:"58", hrv:"82", bloodPressure:"124/80",
+        energy:8, sleep:7, bloating:8, brainFog:8, sexDrive:8, hunger:3, stress:4, compliance:94, mood:"Confident",
+        sleepWindow:"10:00 PM – 6:00 AM", sleepCycles:"5 cycles", sleepDisruption:"Minimal — woke once briefly around 5 AM but fell back asleep quickly.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Feeling strong. Lifts are up. Body looking leaner without losing weight.",
         coachNotes:"Recomp is working. Stay at current calories. Add creatine 5g daily." },
-      { date:"Jul 1 2026",  weight:"183.0", temp:"98.1", steps:"10,800", heartRate:"60", hrv:"78",
-        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:7, hunger:4,
-        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:91, mood:"Good",
+      { date:"Jul 1 2026",  weight:"183.0", temp:"98.1", steps:"10,800", heartRate:"60", hrv:"78", bloodPressure:"126/82",
+        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:7, hunger:4, stress:5, compliance:91, mood:"Good",
+        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Slight snoring noted by partner. Used nasal strip — helped somewhat. Woke once.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Consistent week. Hit all meals. Had a cheat meal Sunday — burger and fries.",
         coachNotes:"One cheat meal is fine. Back on plan Monday. Compliance is very strong." },
-      { date:"Jun 24 2026", weight:"183.5", temp:"98.0", steps:"8,900", heartRate:"62", hrv:"72",
-        energy:7, sleep:6, bloating:7, brainFog:6, sexDrive:6, hunger:5,
-        bowelCount:"2", bowelType:"Well formed", stress:6, compliance:88, mood:"Good",
+      { date:"Jun 24 2026", weight:"183.5", temp:"98.0", steps:"8,900", heartRate:"62", hrv:"72", bloodPressure:"128/82",
+        energy:7, sleep:6, bloating:7, brainFog:6, sexDrive:6, hunger:5, stress:6, compliance:88, mood:"Good",
+        sleepWindow:"11:00 PM – 6:00 AM", sleepCycles:"3–4 cycles", sleepDisruption:"Hotel stay — different bed, light sleep first two nights. Improved by night 3.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Travel week — made it work at hotel gym. Ate out a few times but made smart choices.",
         coachNotes:"Excellent discipline traveling. Proud of the effort. Weight holding steady is great." },
-      { date:"Jun 17 2026", weight:"184.0", temp:"98.3", steps:"12,100", heartRate:"56", hrv:"88",
-        energy:8, sleep:8, bloating:9, brainFog:9, sexDrive:8, hunger:2,
-        bowelCount:"2", bowelType:"Well formed", stress:3, compliance:97, mood:"Excellent",
+      { date:"Jun 17 2026", weight:"184.0", temp:"98.3", steps:"12,100", heartRate:"56", hrv:"88", bloodPressure:"122/78",
+        energy:8, sleep:8, bloating:9, brainFog:9, sexDrive:8, hunger:2, stress:3, compliance:97, mood:"Excellent",
+        sleepWindow:"9:30 PM – 5:45 AM", sleepCycles:"5–6 cycles", sleepDisruption:"None — best sleep of the entire program. Woke up fully alert before the alarm.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Perfect week. Meal prepped Sunday, hit every single meal.",
         coachNotes:"97% compliance is elite. This week proved what's possible. Use it as your baseline." },
-      { date:"Jun 10 2026", weight:"184.5", temp:"98.0", steps:"9,200", heartRate:"64", hrv:"68",
-        energy:6, sleep:6, bloating:6, brainFog:5, sexDrive:6, hunger:6,
-        bowelCount:"2", bowelType:"Mixed", stress:5, compliance:85, mood:"Neutral",
+      { date:"Jun 10 2026", weight:"184.5", temp:"98.0", steps:"9,200", heartRate:"64", hrv:"68", bloodPressure:"126/80",
+        energy:6, sleep:6, bloating:6, brainFog:5, sexDrive:6, hunger:6, stress:5, compliance:85, mood:"Neutral",
+        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"Slightly restless — possible low carb before bed. Woke around 3 AM feeling hungry.",
+        bowelCount:"2", bowelType:"Mixed",
         clientNotes:"Little flat energy-wise. Wondering if calories are too low.",
         coachNotes:"Bump carbs 20g on training days only. Add GDA-MAX Pro with higher carb meals." },
     ],
@@ -853,29 +893,34 @@ const CLIENT_ROSTER = [
     notes:"Feeling more energy week 4. Keep pushing hydration and step goal.",
     nextCheckin:"Jul 14", pendingLabs:false,
     checkinHistory:[
-      { date:"Jul 7 2026",  weight:"165.0", temp:"97.8", steps:"9,800", heartRate:"66", hrv:"64",
-        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:5,
-        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:89, mood:"Motivated",
+      { date:"Jul 7 2026",  weight:"165.0", temp:"97.8", steps:"9,800", heartRate:"66", hrv:"64", bloodPressure:"112/70",
+        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:5, stress:5, compliance:89, mood:"Motivated",
+        sleepWindow:"10:30 PM – 6:15 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once for bathroom around 2 AM. Light sleep 3–4 AM but overall decent.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"Noticed waist is smaller even if scale is same. Clothes fitting different.",
         coachNotes:"Body recomp happening. Scale isn't everything — measurements tell the real story." },
-      { date:"Jun 30 2026", weight:"166.0", temp:"97.6", steps:"8,600", heartRate:"68", hrv:"60",
-        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:7,
-        bowelCount:"2", bowelType:"Mixed", stress:6, compliance:84, mood:"Okay",
+      { date:"Jun 30 2026", weight:"166.0", temp:"97.6", steps:"8,600", heartRate:"68", hrv:"60", bloodPressure:"114/72",
+        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:7, stress:6, compliance:84, mood:"Okay",
+        sleepWindow:"11:00 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"Struggled to fall asleep — hunger pangs kept me up until about midnight.",
+        bowelCount:"2", bowelType:"Mixed",
         clientNotes:"Struggled with low day hunger. Kept reaching for extra snacks.",
         coachNotes:"Add cucumber and celery as free foods on low days. Up water to 1 gallon." },
-      { date:"Jun 23 2026", weight:"167.0", temp:"97.8", steps:"9,200", heartRate:"67", hrv:"62",
-        energy:7, sleep:6, bloating:6, brainFog:7, sexDrive:6, hunger:6,
-        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:86, mood:"Good",
+      { date:"Jun 23 2026", weight:"167.0", temp:"97.8", steps:"9,200", heartRate:"67", hrv:"62", bloodPressure:"113/71",
+        energy:7, sleep:6, bloating:6, brainFog:7, sexDrive:6, hunger:6, stress:5, compliance:86, mood:"Good",
+        sleepWindow:"10:45 PM – 6:00 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once briefly, went back to sleep quickly. No major disruptions.",
+        bowelCount:"2", bowelType:"Well formed",
         clientNotes:"High days feel amazing. Low days are a mental battle but getting easier.",
         coachNotes:"This is the adaptation phase. It gets easier by week 6. Stay the course." },
-      { date:"Jun 16 2026", weight:"168.0", temp:"97.3", steps:"5,800", heartRate:"74", hrv:"50",
-        energy:5, sleep:5, bloating:4, brainFog:4, sexDrive:3, hunger:8,
-        bowelCount:"1", bowelType:"Constipated", stress:8, compliance:75, mood:"Struggling",
+      { date:"Jun 16 2026", weight:"168.0", temp:"97.3", steps:"5,800", heartRate:"74", hrv:"50", bloodPressure:"116/74",
+        energy:5, sleep:5, bloating:4, brainFog:4, sexDrive:3, hunger:8, stress:8, compliance:75, mood:"Struggling",
+        sleepWindow:"11:30 PM – 6:30 AM", sleepCycles:"3 cycles", sleepDisruption:"Period cramps woke me at 2 AM and again at 4 AM. Heating pad helped but sleep was broken all week.",
+        bowelCount:"1", bowelType:"Constipated",
         clientNotes:"Really hard week. Period cramps, emotional eating Thursday.",
         coachNotes:"Hormonal week is expected. No guilt. Add Cort Eaze on high-stress days." },
-      { date:"Jun 9 2026",  weight:"168.5", temp:"97.7", steps:"8,200", heartRate:"68", hrv:"58",
-        energy:6, sleep:7, bloating:6, brainFog:6, sexDrive:5, hunger:5,
-        bowelCount:"2", bowelType:"Mixed", stress:5, compliance:82, mood:"Neutral",
+      { date:"Jun 9 2026",  weight:"168.5", temp:"97.7", steps:"8,200", heartRate:"68", hrv:"58", bloodPressure:"114/72",
+        energy:6, sleep:7, bloating:6, brainFog:6, sexDrive:5, hunger:5, stress:5, compliance:82, mood:"Neutral",
+        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"Slight restlessness falling asleep. Woke once briefly, back to sleep within 5 min.",
+        bowelCount:"2", bowelType:"Mixed",
         clientNotes:"Getting used to the structure. Meal prep is getting easier.",
         coachNotes:"Week 5 progress is solid. Drop scale check-ins to 1x/week — focus on how you feel." },
     ],
@@ -890,34 +935,40 @@ const CLIENT_ROSTER = [
     notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
     nextCheckin:"Overdue", pendingLabs:true,
     checkinHistory:[
-      { date:"Jun 30 2026", weight:"191.0", temp:"97.4", steps:"6,800", heartRate:"72", hrv:"52",
-        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:4, hunger:6,
-        bowelCount:"3", bowelType:"Loose", stress:7, compliance:78, mood:"Frustrated",
+      { date:"Jun 30 2026", weight:"191.0", temp:"97.4", steps:"6,800", heartRate:"72", hrv:"52", bloodPressure:"134/86",
+        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:4, hunger:6, stress:7, compliance:78, mood:"Frustrated",
+        sleepWindow:"11:30 PM – 5:30 AM", sleepCycles:"3 cycles", sleepDisruption:"Woke 2–3 times with gut discomfort and bloating. Had to get up once at 2 AM. Very broken sleep.",
+        bowelCount:"3", bowelType:"Loose",
         clientNotes:"Gut still acting up. Bloating after every meal. Getting discouraged.",
         coachNotes:"Stick with protocol — gut healing takes 6-8 weeks minimum. GI Map will show what's happening." },
-      { date:"Jun 23 2026", weight:"192.0", temp:"97.5", steps:"7,200", heartRate:"70", hrv:"54",
-        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:4, hunger:5,
-        bowelCount:"4", bowelType:"Diarrhea", stress:7, compliance:80, mood:"Neutral",
+      { date:"Jun 23 2026", weight:"192.0", temp:"97.5", steps:"7,200", heartRate:"70", hrv:"54", bloodPressure:"132/84",
+        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:4, hunger:5, stress:7, compliance:80, mood:"Neutral",
+        sleepWindow:"11:00 PM – 5:45 AM", sleepCycles:"3 cycles", sleepDisruption:"Gut cramps woke me at 2 AM — had to use the bathroom. Racing mind afterwards. Poor quality overall.",
+        bowelCount:"4", bowelType:"Diarrhea",
         clientNotes:"Same issues. Some days better than others. Sleep is poor.",
         coachNotes:"Add Relax Liposomal before bed. Remove raw vegetables temporarily, cook all produce." },
-      { date:"Jun 16 2026", weight:"192.5", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58",
-        energy:6, sleep:6, bloating:4, brainFog:5, sexDrive:5, hunger:5,
-        bowelCount:"2", bowelType:"Loose", stress:6, compliance:83, mood:"Hopeful",
+      { date:"Jun 16 2026", weight:"192.5", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58", bloodPressure:"130/82",
+        energy:6, sleep:6, bloating:4, brainFog:5, sexDrive:5, hunger:5, stress:6, compliance:83, mood:"Hopeful",
+        sleepWindow:"10:45 PM – 5:30 AM", sleepCycles:"3–4 cycles", sleepDisruption:"Better than last week — only woke once. Less gut pain at night. Still not deep sleep.",
+        bowelCount:"2", bowelType:"Loose",
         clientNotes:"Slightly better this week. Less bloating after breakfast at least.",
         coachNotes:"Green shoots. Morning protocol is working. Focus on that consistency." },
-      { date:"Jun 9 2026",  weight:"193.0", temp:"97.2", steps:"5,800", heartRate:"76", hrv:"48",
-        energy:5, sleep:4, bloating:2, brainFog:3, sexDrive:3, hunger:6,
-        bowelCount:"4", bowelType:"Diarrhea", stress:8, compliance:75, mood:"Tired",
+      { date:"Jun 9 2026",  weight:"193.0", temp:"97.2", steps:"5,800", heartRate:"76", hrv:"48", bloodPressure:"136/88",
+        energy:5, sleep:4, bloating:2, brainFog:3, sexDrive:3, hunger:6, stress:8, compliance:75, mood:"Tired",
+        sleepWindow:"12:00 AM – 5:30 AM", sleepCycles:"2–3 cycles", sleepDisruption:"Very poor. Gut pain woke me multiple times. Racing mind from work stress. Felt exhausted all week.",
+        bowelCount:"4", bowelType:"Diarrhea",
         clientNotes:"Very fatigued. Not sleeping well. Work stress is high.",
         coachNotes:"Cortisol is elevated. Add Cort Eaze 2 caps waking + 2 caps before bed. Prioritize sleep." },
-      { date:"Jun 2 2026",  weight:"194.0", temp:"97.5", steps:"7,000", heartRate:"70", hrv:"55",
-        energy:6, sleep:6, bloating:3, brainFog:5, sexDrive:4, hunger:6,
-        bowelCount:"3", bowelType:"Loose", stress:6, compliance:79, mood:"Okay",
+      { date:"Jun 2 2026",  weight:"194.0", temp:"97.5", steps:"7,000", heartRate:"70", hrv:"55", bloodPressure:"132/84",
+        energy:6, sleep:6, bloating:3, brainFog:5, sexDrive:4, hunger:6, stress:6, compliance:79, mood:"Okay",
+        sleepWindow:"11:00 PM – 6:00 AM", sleepCycles:"3 cycles", sleepDisruption:"Woke twice with gut discomfort. Fell back asleep okay. Sleep quality improving slightly.",
+        bowelCount:"3", bowelType:"Loose",
         clientNotes:"Starting to understand the protocol better. Prep has improved.",
         coachNotes:"Gut healing is slow but progress is real. Labs ordered — GI Map and blood panel." },
-      { date:"May 26 2026", weight:"194.5", temp:"97.3", steps:"5,400", heartRate:"74", hrv:"50",
-        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:3, hunger:7,
-        bowelCount:"3", bowelType:"Diarrhea", stress:7, compliance:72, mood:"Struggling",
+      { date:"May 26 2026", weight:"194.5", temp:"97.3", steps:"5,400", heartRate:"74", hrv:"50", bloodPressure:"134/86",
+        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:3, hunger:7, stress:7, compliance:72, mood:"Struggling",
+        sleepWindow:"12:30 AM – 5:30 AM", sleepCycles:"2 cycles", sleepDisruption:"Late nights from work deadlines. Only 5 hours. Woke exhausted. Gut issues compounded poor sleep.",
+        bowelCount:"3", bowelType:"Diarrhea",
         clientNotes:"Hardest part is meal timing with work schedule. Skipping meals often.",
         coachNotes:"Use protein shakes as bridge meals. Schedule alarms for meal 3 and 4." },
     ],
@@ -1110,15 +1161,55 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                       </div>
                     </div>
 
-                    {/* Vitals strip */}
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:5, marginBottom:12 }}>
-                      {[["Temp",entry.temp+"°F"],["Steps",entry.steps],["HR",entry.heartRate+" bpm"],["HRV",entry.hrv],["BMs",entry.bowelCount+" · "+entry.bowelType]].map(([l,v])=>(
+                    {/* Vitals strip — row 1: Temp / BP / Steps / HR / HRV */}
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:5, marginBottom:5 }}>
+                      {[
+                        ["Temp",    entry.temp+"°F"],
+                        ["BP",      entry.bloodPressure || "—"],
+                        ["Steps",   entry.steps],
+                        ["HR",      entry.heartRate+" bpm"],
+                        ["HRV",     entry.hrv],
+                      ].map(([l,v])=>(
                         <div key={l} style={{ background:B.bg, borderRadius:7, padding:"6px 8px", textAlign:"center" }}>
                           <p style={{ fontSize:8, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.5 }}>{l}</p>
                           <p style={{ fontSize:10, fontWeight:700, color:B.text, margin:0 }}>{v}</p>
                         </div>
                       ))}
                     </div>
+                    {/* Vitals strip — row 2: BMs */}
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:5, marginBottom:10 }}>
+                      <div style={{ background:B.bg, borderRadius:7, padding:"6px 10px", display:"flex", alignItems:"center", gap:10 }}>
+                        <p style={{ fontSize:8, color:B.muted, margin:0, textTransform:"uppercase", letterSpacing:.5, minWidth:24 }}>BMs</p>
+                        <p style={{ fontSize:10, fontWeight:700, color:B.text, margin:0 }}>{entry.bowelCount} · {entry.bowelType}</p>
+                      </div>
+                    </div>
+
+                    {/* Sleep details block */}
+                    {(entry.sleepWindow || entry.sleepDisruption || entry.sleepCycles) && (
+                      <div style={{ background:"#1a1a2e", border:"1px solid #2a2a4a", borderRadius:9, padding:"9px 11px", marginBottom:10 }}>
+                        <p style={{ fontSize:9, color:"#7b8cde", textTransform:"uppercase", letterSpacing:.8, margin:"0 0 7px", fontWeight:700 }}>🌙 Sleep</p>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom: entry.sleepDisruption ? 7 : 0 }}>
+                          {entry.sleepWindow && (
+                            <div>
+                              <p style={{ fontSize:8, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.5 }}>Window</p>
+                              <p style={{ fontSize:11, fontWeight:600, color:B.text, margin:0 }}>{entry.sleepWindow}</p>
+                            </div>
+                          )}
+                          {entry.sleepCycles && (
+                            <div>
+                              <p style={{ fontSize:8, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.5 }}>Cycles</p>
+                              <p style={{ fontSize:11, fontWeight:600, color:B.text, margin:0 }}>{entry.sleepCycles}</p>
+                            </div>
+                          )}
+                        </div>
+                        {entry.sleepDisruption && (
+                          <div>
+                            <p style={{ fontSize:8, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.5 }}>Disruptions</p>
+                            <p style={{ fontSize:11, color:"#ccc", margin:0, lineHeight:1.55, fontStyle:"italic" }}>{entry.sleepDisruption}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* All 7 score chips */}
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
