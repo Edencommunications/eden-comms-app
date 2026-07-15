@@ -1147,19 +1147,27 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                     padding:"16px", borderLeft:`3px solid ${borderAccent}44`, marginLeft:2 }}>
 
                     {/* Header row */}
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
                       <div>
                         <p style={{ fontSize:14, fontWeight:800, color:B.text, margin:"0 0 2px" }}>{entry.date}</p>
-                        <p style={{ fontSize:12, color:B.muted, margin:0 }}>{entry.mood}</p>
+                        <p style={{ fontSize:12, color:B.muted, margin:0 }}>{entry.weight} lbs</p>
                       </div>
                       <div style={{ textAlign:"right" }}>
-                        <p style={{ fontSize:16, fontWeight:800, color:B.gold, margin:"0 0 2px" }}>{entry.weight} lbs</p>
                         <span style={{ fontSize:11, fontWeight:700, color:compColor, background:`${compColor}18`,
                           border:`1px solid ${compColor}44`, borderRadius:6, padding:"2px 8px" }}>
                           {entry.compliance}% compliant
                         </span>
                       </div>
                     </div>
+                    {/* Mood badge */}
+                    {entry.mood && (
+                      <div style={{ marginBottom:10 }}>
+                        <span style={{ fontSize:11, fontWeight:600, color:B.gold, background:`${B.gold}18`,
+                          border:`1px solid ${B.gold}33`, borderRadius:20, padding:"3px 10px" }}>
+                          😊 {entry.mood}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Vitals strip — row 1: Temp / BP / Steps / HR / HRV */}
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:5, marginBottom:5 }}>
@@ -1406,43 +1414,91 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
 const CoachDashboard = ({ user, onNavigate }) => {
   const isMobile = useIsMobile();
   const [selectedClient, setSelectedClient] = useState(null);
+  const [loomMode, setLoomMode]             = useState(false);
+  const [rosterOpen, setRosterOpen]         = useState(true);
   const clients = CLIENT_ROSTER;
+
+  // Anonymise labels when Loom Mode is on
+  const displayName     = (c: any, i: number) => loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name;
+  const displayProtocol = (c: any)            => loomMode ? "Protocol hidden" : c.protocol;
+  const displayCheckin  = (c: any)            => loomMode ? "—" : c.lastCheckin;
+
   return (
     <Screen>
-      <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"28px 20px 20px" }}>
-        <p style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1, margin:"0 0 4px" }}>COACH PORTAL</p>
-        <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0 }}>{user.name}</h1>
-        <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden · {clients.length} active clients</p>
+      {/* Header */}
+      <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"24px 20px 16px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div>
+            <p style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1, margin:"0 0 4px" }}>COACH PORTAL</p>
+            <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0 }}>{user.name}</h1>
+            <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden · {clients.length} active clients</p>
+          </div>
+          {/* Loom Mode toggle */}
+          <button onClick={()=>setLoomMode(v=>!v)}
+            style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, background:loomMode?"#ff525222":"transparent",
+              border:`1.5px solid ${loomMode?"#ff5252":B.border}`, borderRadius:10, padding:"8px 10px", cursor:"pointer", flexShrink:0 }}>
+            <span style={{ fontSize:18 }}>{loomMode ? "🔴" : "🎥"}</span>
+            <span style={{ fontSize:9, fontWeight:700, color:loomMode?"#ff5252":B.muted, letterSpacing:.6, textTransform:"uppercase" }}>
+              {loomMode ? "Loom ON" : "Loom"}
+            </span>
+          </button>
+        </div>
+        {loomMode && (
+          <div style={{ marginTop:10, padding:"6px 12px", background:"#ff525218", border:"1px solid #ff525244", borderRadius:8 }}>
+            <p style={{ fontSize:11, color:"#ff5252", margin:0, fontWeight:600 }}>🔴 Loom Mode — client names hidden. Tap 🎥 to exit.</p>
+          </div>
+        )}
       </div>
+
       <div style={{ padding:"16px 20px" }}>
+        {/* Stat cards */}
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:20 }}>
-          {[{label:"Total Clients",val:clients.length,color:B.gold},{label:"Check-Ins Due",val:2,color:"#ffa600"},{label:"Pending Labs",val:1,color:"#D4A8F0"}].map(({label,val,color})=>(
+          {[{label:"Total Clients",val:loomMode?"—":clients.length,color:B.gold},{label:"Check-Ins Due",val:loomMode?"—":2,color:"#ffa600"},{label:"Pending Labs",val:loomMode?"—":1,color:"#D4A8F0"}].map(({label,val,color})=>(
             <Card key={label} style={{ textAlign:"center" }}>
               <p style={{ fontSize:24, fontWeight:700, color, margin:"0 0 4px" }}>{val}</p>
               <p style={{ fontSize:10, color:B.muted, margin:0, lineHeight:1.3 }}>{label}</p>
             </Card>
           ))}
         </div>
-        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>My Clients</p>
-        {clients.map((c,i)=>(
-          <button key={i} onClick={()=>setSelectedClient(c)}
-            style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`, borderLeft:`3px solid ${c.alert?B.gold:B.border}`, borderRadius:14, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", display:"block" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{c.name}</p>
-                <p style={{ fontSize:11, color:B.muted, margin:"0 0 6px" }}>Last check-in: {c.lastCheckin}</p>
-                <p style={{ fontSize:10, color:B.muted, margin:0, fontStyle:"italic" }}>{c.protocol}</p>
-              </div>
-              <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0, marginLeft:12 }}>
-                <Badge color={c.alert?B.gold:B.success}>{c.status}</Badge>
-                <span style={{ fontSize:11, color:B.gold }}>View →</span>
-              </div>
+
+        {/* My Clients — collapsible header */}
+        <button onClick={()=>setRosterOpen(v=>!v)}
+          style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
+            background:"none", border:"none", cursor:"pointer", padding:0, marginBottom:rosterOpen?12:0 }}>
+          <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>
+            My Clients {loomMode && <span style={{ color:"#ff5252" }}>· hidden</span>}
+          </p>
+          <span style={{ fontSize:16, color:B.muted, transition:"transform .2s",
+            display:"inline-block", transform: rosterOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+        </button>
+
+        {rosterOpen && (
+          <>
+            {clients.map((c,i)=>(
+              <button key={i} onClick={()=>setSelectedClient(c)}
+                style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`,
+                  borderLeft:`3px solid ${(!loomMode && c.alert) ? B.gold : B.border}`,
+                  borderRadius:14, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", display:"block" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div>
+                    <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{displayName(c,i)}</p>
+                    <p style={{ fontSize:11, color:B.muted, margin:"0 0 6px" }}>
+                      Last check-in: {displayCheckin(c)}
+                    </p>
+                    <p style={{ fontSize:10, color:B.muted, margin:0, fontStyle:"italic" }}>{displayProtocol(c)}</p>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0, marginLeft:12 }}>
+                    {!loomMode && <Badge color={c.alert?B.gold:B.success}>{c.status}</Badge>}
+                    <span style={{ fontSize:11, color:B.gold }}>View →</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+            <div style={{ marginTop:6 }}>
+              <Btn variant="secondary" fullWidth><Ic n="upload" size={16} c={B.muted}/>Import Client from GHL</Btn>
             </div>
-          </button>
-        ))}
-        <div style={{ marginTop:16 }}>
-          <Btn variant="secondary" fullWidth><Ic n="upload" size={16} c={B.muted}/>Import Client from GHL</Btn>
-        </div>
+          </>
+        )}
       </div>
       {selectedClient && <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}/>}
     </Screen>
