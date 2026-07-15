@@ -754,14 +754,157 @@ const HabitTrackerScreen = () => {
 };
 
 // COACH VIEW
+const CLIENT_ROSTER = [
+  {
+    name:"Jordan Williams", status:"Active", lastCheckin:"Jul 9", alert:true,
+    email:"client@eden.io", phone:"(312) 555-0192", startDate:"Mar 4 2026",
+    protocol:"Base Diet Protocol Female · 2 High / 2 Low",
+    goal:"Fat loss + hormonal balance", currentWeight:"148 lbs", targetWeight:"135 lbs",
+    height:"5'5\"", age:29, gender:"Female",
+    tags:["Gut Protocol","Nervous System","Thyroid"],
+    notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
+    nextCheckin:"Jul 16", pendingLabs:true,
+  },
+  {
+    name:"Alex Martinez", status:"Active", lastCheckin:"Jul 8", alert:false,
+    email:"alex@eden.io", phone:"(773) 555-0341", startDate:"Apr 12 2026",
+    protocol:"Base Diet Protocol Male · Maintenance",
+    goal:"Body recomposition", currentWeight:"182 lbs", targetWeight:"178 lbs",
+    height:"5'11\"", age:34, gender:"Male",
+    tags:["NuEthix Protocol"],
+    notes:"Strong progress. Maintaining current macros. Add 5R Gut in week 6.",
+    nextCheckin:"Jul 15", pendingLabs:false,
+  },
+  {
+    name:"Taylor Reyes", status:"Active", lastCheckin:"Jul 7", alert:false,
+    email:"taylor@eden.io", phone:"(312) 555-0887", startDate:"May 1 2026",
+    protocol:"2 High 2 Low Female · 10% Deficit",
+    goal:"Weight loss + energy", currentWeight:"165 lbs", targetWeight:"148 lbs",
+    height:"5'7\"", age:27, gender:"Female",
+    tags:["Adrenal Protocol","PCOS Protocol"],
+    notes:"Feeling more energy week 4. Keep pushing hydration and step goal.",
+    nextCheckin:"Jul 14", pendingLabs:false,
+  },
+  {
+    name:"Sam Thompson", status:"Pending check-in", lastCheckin:"Jun 30", alert:true,
+    email:"sam@eden.io", phone:"(847) 555-0563", startDate:"Feb 18 2026",
+    protocol:"Male Leaky Gut Base Diet · 5% Deficit",
+    goal:"Gut healing + lean muscle", currentWeight:"191 lbs", targetWeight:"185 lbs",
+    height:"6'0\"", age:41, gender:"Male",
+    tags:["5R Gut Protocol","Methylation Protocol"],
+    notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
+    nextCheckin:"Overdue", pendingLabs:true,
+  },
+];
+
+const ClientDetailModal = ({ client, onClose }) => {
+  const isMobile = useIsMobile();
+  if (!client) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:B.surface, borderTop:`2px solid ${B.gold}`, borderRadius:"18px 18px 0 0", width:"100%", maxWidth:600, maxHeight:"88vh", display:"flex", flexDirection:"column" }}>
+        {/* Handle */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
+          <div style={{ width:40, height:4, borderRadius:2, background:B.border }}/>
+        </div>
+        {/* Header */}
+        <div style={{ padding:"14px 20px 12px", borderBottom:`1px solid ${B.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div>
+            <p style={{ fontSize:18, fontWeight:800, color:B.text, margin:"0 0 4px" }}>{client.name}</p>
+            <p style={{ fontSize:11, color:B.muted, margin:0 }}>{client.email} · {client.phone}</p>
+          </div>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <Badge color={client.alert ? B.gold : B.success}>{client.status}</Badge>
+            <button onClick={onClose} style={{ background:"none", border:"none", color:B.muted, fontSize:22, cursor:"pointer", padding:0, lineHeight:1 }}>×</button>
+          </div>
+        </div>
+        {/* Scrollable body */}
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+          {/* Quick stats */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:16 }}>
+            {[
+              { label:"Current Weight", val:client.currentWeight },
+              { label:"Target Weight",  val:client.targetWeight },
+              { label:"Next Check-In",  val:client.nextCheckin },
+            ].map(({label,val})=>(
+              <div key={label} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"10px 12px", textAlign:"center" }}>
+                <p style={{ fontSize:13, fontWeight:700, color:B.gold, margin:"0 0 3px" }}>{val}</p>
+                <p style={{ fontSize:9, color:B.muted, margin:0 }}>{label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Profile */}
+          <Card style={{ marginBottom:12 }}>
+            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>Profile</p>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {[
+                ["Height", client.height], ["Age", client.age+" yrs"],
+                ["Gender", client.gender], ["Client Since", client.startDate],
+              ].map(([l,v])=>(
+                <div key={l}>
+                  <p style={{ fontSize:9, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.8 }}>{l}</p>
+                  <p style={{ fontSize:13, color:B.text, fontWeight:600, margin:0 }}>{v}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Protocol & Goal */}
+          <Card style={{ marginBottom:12 }}>
+            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>Protocol & Goal</p>
+            <p style={{ fontSize:12, color:B.gold, fontWeight:600, margin:"0 0 6px" }}>{client.protocol}</p>
+            <p style={{ fontSize:12, color:B.text, margin:"0 0 10px" }}>{client.goal}</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {client.tags.map(t=>(
+                <span key={t} style={{ fontSize:10, fontWeight:700, color:B.gold, background:`${B.gold}18`, border:`1px solid ${B.gold}33`, borderRadius:6, padding:"3px 8px" }}>{t}</span>
+              ))}
+            </div>
+          </Card>
+
+          {/* Coach notes */}
+          <Card style={{ marginBottom:12, borderLeft:`3px solid ${B.gold}` }}>
+            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 8px" }}>Coach Notes</p>
+            <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.7 }}>{client.notes}</p>
+          </Card>
+
+          {/* Pending alerts */}
+          {(client.alert || client.pendingLabs) && (
+            <Card style={{ marginBottom:12, background:`${B.gold}0d`, border:`1px solid ${B.gold}44` }}>
+              <p style={{ fontSize:10, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 8px" }}>⚠ Pending Actions</p>
+              {client.status.toLowerCase().includes("pending") && (
+                <p style={{ fontSize:12, color:B.text, margin:"0 0 4px" }}>• Check-in response overdue</p>
+              )}
+              {client.pendingLabs && (
+                <p style={{ fontSize:12, color:B.text, margin:0 }}>• Lab results pending review</p>
+              )}
+            </Card>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:8 }}>
+            {[
+              { label:"📋 Open Diet Plan", color:B.gold, bg:`${B.gold}22`, border:`1px solid ${B.gold}44` },
+              { label:"💬 Send Message",   color:"#4FD89A", bg:"#4FD89A22", border:"1px solid #4FD89A44" },
+              { label:"🧪 View Labs",      color:"#D4A8F0", bg:"#D4A8F022", border:"1px solid #D4A8F044" },
+              { label:"📊 Check-In Log",   color:"#6FB8E8", bg:"#6FB8E822", border:"1px solid #6FB8E844" },
+            ].map(({label,color,bg,border})=>(
+              <button key={label} style={{ background:bg, border, borderRadius:10, padding:"11px 12px", color, fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CoachDashboard = ({ user }) => {
   const isMobile = useIsMobile();
-  const clients = [
-    { name:"Jordan Williams", status:"Active", lastCheckin:"Jul 9", alert:true },
-    { name:"Alex Martinez", status:"Active", lastCheckin:"Jul 8", alert:false },
-    { name:"Taylor Reyes", status:"Active", lastCheckin:"Jul 7", alert:false },
-    { name:"Sam Thompson", status:"Pending checkin", lastCheckin:"Jun 30", alert:true },
-  ];
+  const [selectedClient, setSelectedClient] = useState(null);
+  const clients = CLIENT_ROSTER;
   return (
     <Screen>
       <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"28px 20px 20px" }}>
@@ -780,23 +923,26 @@ const CoachDashboard = ({ user }) => {
         </div>
         <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>My Clients</p>
         {clients.map((c,i)=>(
-          <Card key={i} style={{ marginBottom:10, borderLeft:`3px solid ${c.alert?"#ffa600":B.border}` }}>
+          <button key={i} onClick={()=>setSelectedClient(c)}
+            style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`, borderLeft:`3px solid ${c.alert?B.gold:B.border}`, borderRadius:14, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", display:"block" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{c.name}</p>
-                <p style={{ fontSize:11, color:B.muted, margin:0 }}>Last check-in: {c.lastCheckin}</p>
+                <p style={{ fontSize:11, color:B.muted, margin:"0 0 6px" }}>Last check-in: {c.lastCheckin}</p>
+                <p style={{ fontSize:10, color:B.muted, margin:0, fontStyle:"italic" }}>{c.protocol}</p>
               </div>
-              <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-                <Badge color={c.alert?"#ffa600":B.success}>{c.status}</Badge>
-                <Btn variant="ghost" style={{ fontSize:11, padding:"4px 0" }}>View →</Btn>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0, marginLeft:12 }}>
+                <Badge color={c.alert?B.gold:B.success}>{c.status}</Badge>
+                <span style={{ fontSize:11, color:B.gold }}>View →</span>
               </div>
             </div>
-          </Card>
+          </button>
         ))}
         <div style={{ marginTop:16 }}>
           <Btn variant="secondary" fullWidth><Ic n="upload" size={16} c={B.muted}/>Import Client from GHL</Btn>
         </div>
       </div>
+      {selectedClient && <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)}/>}
     </Screen>
   );
 };

@@ -173,47 +173,63 @@ const FOODS = [
   {name:'99% Lean Ground Turkey',serving:'4oz',cal:120,pro:28,fat:1,carb:0,fib:0,cat:'Proteins'},
   {name:'Wild Caught Shrimp',serving:'4oz',cal:112,pro:26.7,fat:0.7,carb:0,fib:0,cat:'Proteins'},
   {name:'Mahi Mahi',serving:'4oz',cal:124,pro:26.7,fat:1.3,carb:0,fib:0,cat:'Proteins'},
-  {name:'Organic Egg Whites',serving:'184g',cal:80,pro:18,fat:0,carb:0,fib:0,cat:'Proteins'},
+  {name:'Organic Egg Whites',serving:'1g',cal:0.43,pro:0.1,fat:0,carb:0,fib:0,cat:'Proteins'},
   {name:'Whole Omega-3 Egg',serving:'1 egg',cal:90,pro:8.6,fat:6.1,carb:0,fib:0,cat:'Proteins'},
-  {name:'Filet Mignon',serving:'4oz',cal:227,pro:34.7,fat:9.3,carb:0,fib:0,cat:'Proteins'},
-  {name:'Grass-Fed Ground Beef 96/4',serving:'4oz',cal:170,pro:24,fat:8,carb:0,fib:0,cat:'Proteins'},
+  {name:'Filet Mignon',serving:'1oz',cal:56.75,pro:8.68,fat:2.33,carb:0,fib:0,cat:'Proteins'},
+  {name:'Grass-Fed Ground Beef 96/4',serving:'1oz',cal:42.5,pro:6,fat:2,carb:0,fib:0,cat:'Proteins'},
   {name:'Medipure Protein',serving:'1 scoop',cal:120,pro:22,fat:2,carb:5,fib:1,cat:'Proteins'},
-  {name:'Wild Caught Tuna (drained)',serving:'4oz',cal:124,pro:28.2,fat:1.1,carb:0,fib:0,cat:'Proteins'},
-  {name:'Grass-Fed Top Sirloin',serving:'4oz',cal:186,pro:34.7,fat:6,carb:0,fib:0,cat:'Proteins'},
-  {name:'Brown Rice (cooked)',serving:'195g',cal:218,pro:4.5,fat:1.6,carb:45,fib:3.5,cat:'Carbohydrates'},
-  {name:'White Rice (cooked)',serving:'186g',cal:242,pro:4.4,fat:0.4,carb:53,fib:0.6,cat:'Carbohydrates'},
-  {name:'Oatmeal (dry)',serving:'40g',cal:150,pro:5,fat:3,carb:27,fib:4,cat:'Carbohydrates'},
-  {name:'Red Potato',serving:'148g',cal:150,pro:3,fat:0,carb:26,fib:3,cat:'Carbohydrates'},
-  {name:'Sweet Potato',serving:'130g',cal:112,pro:2,fat:0,carb:26,fib:4,cat:'Carbohydrates'},
-  {name:'Quinoa (cooked)',serving:'185g',cal:222,pro:8,fat:3.6,carb:39,fib:5.2,cat:'Carbohydrates'},
+  {name:'Wild Caught Tuna (drained)',serving:'1oz',cal:31,pro:7.05,fat:0.28,carb:0,fib:0,cat:'Proteins'},
+  {name:'Grass-Fed Top Sirloin',serving:'1oz',cal:46.5,pro:8.68,fat:1.5,carb:0,fib:0,cat:'Proteins'},
+  {name:'Force of Nature Ground Bison',serving:'1oz',cal:40,pro:5.5,fat:2,carb:0,fib:0,cat:'Proteins'},
+  {name:'Force of Nature Ground Venison',serving:'1oz',cal:37.5,pro:6,fat:1.5,carb:0,fib:0,cat:'Proteins'},
+  {name:'Force of Nature Ground Elk',serving:'1oz',cal:37.5,pro:6.25,fat:1.25,carb:0,fib:0,cat:'Proteins'},
+  {name:'Force of Nature Ground Wild Boar',serving:'1oz',cal:40,pro:5.25,fat:2,carb:0,fib:0,cat:'Proteins'},
+  {name:'Force of Nature Ground Lamb',serving:'1oz',cal:50,pro:5,fat:3.25,carb:0,fib:0,cat:'Proteins'},
+  {name:'Force of Nature Ancestral Blend',serving:'1oz',cal:47.5,pro:5,fat:3,carb:0,fib:0,cat:'Proteins'},
+  {name:'Wild Caught Halibut',serving:'1oz',cal:31,pro:5.9,fat:0.66,carb:0,fib:0,cat:'Proteins'},
+  {name:'Wild Caught Cod',serving:'1oz',cal:23,pro:5.1,fat:0.19,carb:0,fib:0,cat:'Proteins'},
+  {name:'Organic Turkey Breast',serving:'1oz',cal:30,pro:7,fat:0.25,carb:0,fib:0,cat:'Proteins'},
+  {name:'Bison Ribeye',serving:'1oz',cal:47,pro:5.8,fat:2.5,carb:0,fib:0,cat:'Proteins'},
+  {name:'Brown Rice (cooked)',serving:'1g',cal:1.118,pro:0.023,fat:0.008,carb:0.231,fib:0.018,cat:'Carbohydrates'},
+  {name:'White Rice (cooked)',serving:'1g',cal:1.3,pro:0.024,fat:0.002,carb:0.285,fib:0.003,cat:'Carbohydrates'},
+  {name:'Oatmeal (dry)',serving:'1g',cal:3.75,pro:0.125,fat:0.075,carb:0.675,fib:0.1,cat:'Carbohydrates'},
+  {name:'Red Potato',serving:'1g',cal:1.013,pro:0.02,fat:0,carb:0.176,fib:0.02,cat:'Carbohydrates'},
+  {name:'Sweet Potato',serving:'1g',cal:0.862,pro:0.015,fat:0,carb:0.2,fib:0.031,cat:'Carbohydrates'},
+  {name:'Quinoa (cooked)',serving:'1g',cal:1.2,pro:0.043,fat:0.019,carb:0.211,fib:0.028,cat:'Carbohydrates'},
   {name:'Ezekiel Bread',serving:'1 slice',cal:80,pro:5,fat:0.5,carb:15,fib:3,cat:'Carbohydrates'},
-  {name:'Cream of Rice (dry)',serving:'45g',cal:150,pro:2,fat:0,carb:35,fib:0.3,cat:'Carbohydrates'},
-  {name:'Lentil Pasta (dry)',serving:'56g',cal:200,pro:15,fat:1.5,carb:34,fib:3,cat:'Carbohydrates'},
-  {name:'Medjool Dates',serving:'24g (1 date)',cal:66,pro:0.4,fat:0.1,carb:18,fib:1.6,cat:'Carbohydrates'},
-  {name:'Extra Virgin Olive Oil',serving:'14g (1 tbsp)',cal:120,pro:0,fat:14,carb:0,fib:0,cat:'Fats'},
-  {name:'Coconut Oil (unrefined)',serving:'14g (1 tbsp)',cal:120,pro:0,fat:14,carb:0,fib:0,cat:'Fats'},
-  {name:'Avocado',serving:'50g',cal:80,pro:1,fat:7.3,carb:4.3,fib:3.4,cat:'Fats'},
-  {name:'Almond Butter',serving:'32g (2 tbsp)',cal:192,pro:6.8,fat:17.4,carb:6.1,fib:3.4,cat:'Fats'},
-  {name:'Almonds',serving:'28g (1oz)',cal:164,pro:6,fat:14.2,carb:6.1,fib:3.5,cat:'Fats'},
-  {name:'Macadamia Oil',serving:'14g (1 tbsp)',cal:120,pro:0,fat:14,carb:0,fib:0,cat:'Fats'},
-  {name:'Chia Seeds',serving:'12g (1 tbsp)',cal:58,pro:2,fat:3.7,carb:5,fib:4.1,cat:'Fats'},
-  {name:'Raw Honey',serving:'7g (1 tsp)',cal:20,pro:0,fat:0,carb:6,fib:0,cat:'Fats'},
-  {name:'Blueberries',serving:'100g',cal:68,pro:0.7,fat:0.3,carb:14.5,fib:2.4,cat:'Fruits/Vegetables'},
-  {name:'Mixed Berries (frozen)',serving:'100g',cal:55,pro:0.8,fat:0.3,carb:12,fib:2.5,cat:'Fruits/Vegetables'},
-  {name:'Pineapple',serving:'100g',cal:46,pro:0.4,fat:0.2,carb:10.1,fib:1.4,cat:'Fruits/Vegetables'},
-  {name:'Strawberries',serving:'100g',cal:30,pro:0.8,fat:0.1,carb:6,fib:2,cat:'Fruits/Vegetables'},
-  {name:'Banana',serving:'100g',cal:103,pro:1.2,fat:0.3,carb:23.2,fib:2.6,cat:'Fruits/Vegetables'},
-  {name:'Papaya',serving:'100g',cal:39,pro:0.6,fat:0.1,carb:9.8,fib:1.8,cat:'Fruits/Vegetables'},
-  {name:'Kiwi (with skin)',serving:'100g',cal:55,pro:1.1,fat:0.5,carb:10.6,fib:3,cat:'Fruits/Vegetables'},
-  {name:'Raspberries',serving:'100g',cal:32,pro:1.4,fat:0.3,carb:4.6,fib:6.5,cat:'Fruits/Vegetables'},
-  {name:'Wild Blueberries',serving:'140g',cal:80,pro:0,fat:0.5,carb:19,fib:6,cat:'Fruits/Vegetables'},
-  {name:'Dark Sweet Cherries',serving:'80g',cal:51,pro:0.9,fat:0.1,carb:12.3,fib:1.5,cat:'Fruits/Vegetables'},
-  {name:'Broccoli',serving:'100g',cal:38,pro:4.4,fat:0.9,carb:1.8,fib:2.6,cat:'Fruits/Vegetables'},
-  {name:'Green Beans (canned)',serving:'100g',cal:21,pro:1,fat:0.4,carb:4.1,fib:1.5,cat:'Fruits/Vegetables'},
-  {name:'Baby Spinach',serving:'100g',cal:29,pro:2.8,fat:0.8,carb:1.6,fib:1.5,cat:'Fruits/Vegetables'},
-  {name:'Spaghetti Squash',serving:'100g',cal:31,pro:0.6,fat:0.6,carb:6.9,fib:1.5,cat:'Fruits/Vegetables'},
-  {name:'Cucumber',serving:'80g',cal:12,pro:0.5,fat:0.1,carb:2.2,fib:0.6,cat:'Fruits/Vegetables'},
-  {name:'Grapefruit',serving:'200g',cal:68,pro:1.6,fat:0.2,carb:13.6,fib:2.2,cat:'Fruits/Vegetables'},
+  {name:'Cream of Rice (dry)',serving:'1g',cal:3.33,pro:0.044,fat:0,carb:0.778,fib:0.007,cat:'Carbohydrates'},
+  {name:'Lentil Pasta (dry)',serving:'1g',cal:3.57,pro:0.268,fat:0.027,carb:0.607,fib:0.054,cat:'Carbohydrates'},
+  {name:'Medjool Dates',serving:'1 date',cal:66,pro:0.4,fat:0.1,carb:18,fib:1.6,cat:'Carbohydrates'},
+  {name:'Extra Virgin Olive Oil',serving:'1g',cal:8.57,pro:0,fat:1,carb:0,fib:0,cat:'Fats'},
+  {name:'Coconut Oil (unrefined)',serving:'1g',cal:8.57,pro:0,fat:1,carb:0,fib:0,cat:'Fats'},
+  {name:'Avocado',serving:'1g',cal:1.6,pro:0.02,fat:0.146,carb:0.086,fib:0.068,cat:'Fats'},
+  {name:'Almond Butter',serving:'1g',cal:6,pro:0.213,fat:0.544,carb:0.191,fib:0.106,cat:'Fats'},
+  {name:'Almonds',serving:'1g',cal:5.857,pro:0.214,fat:0.507,carb:0.218,fib:0.125,cat:'Fats'},
+  {name:'Macadamia Oil',serving:'1g',cal:8.57,pro:0,fat:1,carb:0,fib:0,cat:'Fats'},
+  {name:'Chia Seeds',serving:'1g',cal:4.83,pro:0.167,fat:0.308,carb:0.417,fib:0.342,cat:'Fats'},
+  {name:'Raw Honey',serving:'1 tsp',cal:20,pro:0,fat:0,carb:6,fib:0,cat:'Fats'},
+  {name:'Blueberries',serving:'1g',cal:0.68,pro:0.007,fat:0.003,carb:0.145,fib:0.024,cat:'Fruits/Vegetables'},
+  {name:'Mixed Berries (frozen)',serving:'1g',cal:0.55,pro:0.008,fat:0.003,carb:0.12,fib:0.025,cat:'Fruits/Vegetables'},
+  {name:'Pineapple',serving:'1g',cal:0.46,pro:0.004,fat:0.002,carb:0.101,fib:0.014,cat:'Fruits/Vegetables'},
+  {name:'Strawberries',serving:'1g',cal:0.3,pro:0.008,fat:0.001,carb:0.06,fib:0.02,cat:'Fruits/Vegetables'},
+  {name:'Banana',serving:'1g',cal:1.03,pro:0.012,fat:0.003,carb:0.232,fib:0.026,cat:'Fruits/Vegetables'},
+  {name:'Papaya',serving:'1g',cal:0.39,pro:0.006,fat:0.001,carb:0.098,fib:0.018,cat:'Fruits/Vegetables'},
+  {name:'Kiwi (with skin)',serving:'1g',cal:0.55,pro:0.011,fat:0.005,carb:0.106,fib:0.03,cat:'Fruits/Vegetables'},
+  {name:'Raspberries',serving:'1g',cal:0.32,pro:0.014,fat:0.003,carb:0.046,fib:0.065,cat:'Fruits/Vegetables'},
+  {name:'Wild Blueberries',serving:'1g',cal:0.571,pro:0,fat:0.004,carb:0.136,fib:0.043,cat:'Fruits/Vegetables'},
+  {name:'Dark Sweet Cherries',serving:'1g',cal:0.638,pro:0.011,fat:0.001,carb:0.154,fib:0.019,cat:'Fruits/Vegetables'},
+  {name:'Broccoli',serving:'1g',cal:0.38,pro:0.044,fat:0.009,carb:0.018,fib:0.026,cat:'Fruits/Vegetables'},
+  {name:'Green Beans',serving:'1g',cal:0.21,pro:0.01,fat:0.004,carb:0.041,fib:0.015,cat:'Fruits/Vegetables'},
+  {name:'Baby Spinach',serving:'1g',cal:0.29,pro:0.028,fat:0.008,carb:0.016,fib:0.015,cat:'Fruits/Vegetables'},
+  {name:'Spaghetti Squash',serving:'1g',cal:0.31,pro:0.006,fat:0.006,carb:0.069,fib:0.015,cat:'Fruits/Vegetables'},
+  {name:'Cucumber',serving:'1g',cal:0.15,pro:0.006,fat:0.001,carb:0.028,fib:0.008,cat:'Fruits/Vegetables'},
+  {name:'Grapefruit',serving:'1g',cal:0.34,pro:0.008,fat:0.001,carb:0.068,fib:0.011,cat:'Fruits/Vegetables'},
+  {name:'Asparagus',serving:'1g',cal:0.2,pro:0.022,fat:0.001,carb:0.038,fib:0.021,cat:'Fruits/Vegetables'},
+  {name:'Zucchini',serving:'1g',cal:0.17,pro:0.012,fat:0.003,carb:0.031,fib:0.01,cat:'Fruits/Vegetables'},
+  {name:'Kale',serving:'1g',cal:0.5,pro:0.043,fat:0.009,carb:0.099,fib:0.02,cat:'Fruits/Vegetables'},
+  {name:'Arugula',serving:'1g',cal:0.25,pro:0.026,fat:0.007,carb:0.037,fib:0.016,cat:'Fruits/Vegetables'},
+  {name:'Bell Pepper',serving:'1g',cal:0.31,pro:0.01,fat:0.003,carb:0.06,fib:0.021,cat:'Fruits/Vegetables'},
+  {name:'Celery',serving:'1g',cal:0.16,pro:0.007,fat:0.002,carb:0.03,fib:0.016,cat:'Fruits/Vegetables'},
   {name:'Fish Oil 2000mg',serving:'2 caps',cal:20,pro:0,fat:2,carb:0,fib:0,cat:'Supplements'},
   {name:'Glutamine 20g',serving:'20g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
   {name:'Bloat Eaze',serving:'1 scoop',cal:10,pro:0,fat:0,carb:2,fib:0,cat:'Supplements'},
@@ -255,6 +271,35 @@ const DEFICIT_SURPLUS = [
   {label:'15% Deficit',val:0.85},{label:'20% Deficit',val:0.80},
   {label:'25% Deficit',val:0.75},
 ]
+
+// ── Serving helpers ───────────────────────────────────────────
+// Extract the numeric base from a serving string like "4oz", "184g", "1 egg"
+function parseBaseQty(servingStr) {
+  const m = String(servingStr).match(/^([\d.]+)/)
+  return m ? parseFloat(m[1]) : 1
+}
+// Extract the unit label, e.g. "oz", "g", "egg", "scoop", "slice"
+function parseServingUnit(servingStr) {
+  const s = String(servingStr)
+  // strip leading number + optional space, take first word
+  const m = s.match(/^[\d.]+\s*([a-zA-Z]+)/)
+  return m ? m[1] : 'x'
+}
+// Default display qty for a food when first added
+function defaultQty(food) {
+  const unit = parseServingUnit(food.serving)
+  const base = parseBaseQty(food.serving)
+  // For per-gram foods default to a sensible round amount
+  if (unit === 'g') {
+    if (food.cat === 'Proteins') return 100  // 100g
+    if (food.cat === 'Carbohydrates') return 100
+    if (food.cat === 'Fats') return 14 // ~1 tbsp
+    if (food.cat === 'Fruits/Vegetables') return 100
+    return base
+  }
+  if (unit === 'oz') return 4
+  return base
+}
 
 // ── Macro math ────────────────────────────────────────────────
 function mealMacros(meal) {
@@ -410,14 +455,21 @@ export default function DietBuilder({currentUser}) {
   // ── Food picker actions ───────────────────────────────────
   function addFood(food) {
     if(activeMeal===null) return
-    setMeals(p=>p.map((m,i)=>i===activeMeal?{...m,foods:[...m.foods,{food,servings:1}]}:m))
+    const qty = defaultQty(food)
+    const base = parseBaseQty(food.serving)
+    setMeals(p=>p.map((m,i)=>i===activeMeal?{...m,foods:[...m.foods,{food,qty:String(qty),servings:qty/base}]}:m))
     setShowPicker(false); setFoodSearch('')
   }
   function removeFood(mi,fi) {
     setMeals(p=>p.map((m,i)=>i===mi?{...m,foods:m.foods.filter((_,j)=>j!==fi)}:m))
   }
-  function updateServings(mi,fi,v) {
-    setMeals(p=>p.map((m,i)=>i===mi?{...m,foods:m.foods.map((f,j)=>j===fi?{...f,servings:parseFloat(v)||1}:f)}:m))
+  function updateQty(mi,fi,rawVal) {
+    const newQty = parseFloat(rawVal)
+    setMeals(p=>p.map((m,i)=>i===mi?{...m,foods:m.foods.map((f,j)=>j===fi?{
+      ...f,
+      qty:rawVal,
+      servings:isNaN(newQty)||newQty<=0?f.servings:(newQty/parseBaseQty(f.food.serving))
+    }:f)}:m))
   }
 
   // ── Calculator ────────────────────────────────────────────
@@ -596,30 +648,51 @@ export default function DietBuilder({currentUser}) {
                   <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'6px 0'}}>
                     {isCoach?'Click + Food to build this meal':'No foods added yet'}
                   </div>
-                ):meal.foods.map((item,fi)=>(
-                  <div key={fi} style={{padding:'7px 0',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
-                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                        {item.food.serving} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g Fib:{Math.round(item.food.fib*item.servings)}g
+                ):meal.foods.map((item,fi)=>{
+                  const unit = parseServingUnit(item.food.serving)
+                  const cal  = Math.round(item.food.cal*item.servings)
+                  const pro  = Math.round(item.food.pro*item.servings)
+                  const carb = Math.round(item.food.carb*item.servings)
+                  const fat  = Math.round(item.food.fat*item.servings)
+                  const fib  = Math.round(item.food.fib*item.servings)
+                  return (
+                    <div key={fi} style={{padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
+                      {/* Row 1: name + remove */}
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:5}}>
+                        <div style={{fontSize:12,color:C.white,fontWeight:600,flex:1,paddingRight:8}}>{item.food.name}</div>
+                        {isCoach&&(
+                          <button onClick={()=>removeFood(mi,fi)}
+                            style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:18,padding:'0',lineHeight:1,flexShrink:0}}>×</button>
+                        )}
                       </div>
+                      {/* Row 2: qty input + macros */}
+                      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                        {isCoach&&(
+                          <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                            <input
+                              type="number" min="0" step="any"
+                              value={item.qty??String(parseBaseQty(item.food.serving))}
+                              onChange={e=>updateQty(mi,fi,e.target.value)}
+                              style={{width:60,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 7px',color:C.gold,fontSize:12,fontWeight:700,outline:'none',textAlign:'center'}}/>
+                            <span style={{fontSize:11,color:C.muted}}>{unit}</span>
+                          </div>
+                        )}
+                        <div style={{fontSize:10,color:C.muted,lineHeight:1.6}}>
+                          <span style={{color:C.gold,fontWeight:600}}>{cal} cal</span>
+                          {'  ·  P:'}<span style={{color:'#4FD89A'}}>{pro}g</span>
+                          {'  C:'}<span style={{color:'#6FB8E8'}}>{carb}g</span>
+                          {'  F:'}<span style={{color:'#f06060'}}>{fat}g</span>
+                          {'  Fib:'}<span style={{color:'#D4A8F0'}}>{fib}g</span>
+                        </div>
+                      </div>
+                      {!isCoach&&(
+                        <div style={{marginTop:5,fontSize:10,color:C.muted}}>
+                          {item.qty} {unit} · {cal} cal · P:{pro}g C:{carb}g F:{fat}g
+                        </div>
+                      )}
                     </div>
-                    {isCoach&&(
-                      <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-                        <span style={{fontSize:10,color:C.muted}}>×</span>
-                        <input type="number" min="0.25" step="0.25" value={item.servings}
-                          onChange={e=>updateServings(mi,fi,e.target.value)}
-                          style={{width:46,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.white,fontSize:12,outline:'none',textAlign:'center'}}/>
-                        <button onClick={()=>removeFood(mi,fi)}
-                          style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 2px'}}>×</button>
-                      </div>
-                    )}
-                    {!isCoach&&(
-                      <input placeholder="Adjustment note…"
-                        style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.white,fontSize:11,outline:'none',width:140}}/>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </Card>
             )
           })}
@@ -1085,21 +1158,32 @@ export default function DietBuilder({currentUser}) {
                 return (
                   <div key={cat}>
                     <div style={{padding:'5px 16px 2px',fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>{cat}</div>
-                    {foods.map(food=>(
-                      <button key={food.name} onClick={()=>addFood(food)}
-                        style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'8px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}}
-                        onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}10`}
-                        onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                        <div>
-                          <div style={{fontSize:13,color:C.white,fontWeight:500}}>{food.name}</div>
-                          <div style={{fontSize:10,color:C.muted,marginTop:1}}>{food.serving}</div>
-                        </div>
-                        <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-                          <div style={{fontSize:12,color:C.gold,fontWeight:600}}>{food.cal} cal</div>
-                          <div style={{fontSize:10,color:C.muted}}>P:{food.pro}g C:{food.carb}g F:{food.fat}g</div>
-                        </div>
-                      </button>
-                    ))}
+                    {foods.map(food=>{
+                      const dQty = defaultQty(food)
+                      const unit = parseServingUnit(food.serving)
+                      const base = parseBaseQty(food.serving)
+                      const mult = dQty / base
+                      const dCal = Math.round(food.cal * mult)
+                      const dPro = Math.round(food.pro * mult)
+                      const dCarb= Math.round(food.carb * mult)
+                      const dFat = Math.round(food.fat * mult)
+                      const label= food.serving.match(/^\d/) ? `${dQty} ${unit}` : food.serving
+                      return (
+                        <button key={food.name} onClick={()=>addFood(food)}
+                          style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'8px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}}
+                          onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}10`}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          <div>
+                            <div style={{fontSize:13,color:C.white,fontWeight:500}}>{food.name}</div>
+                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>per {label}</div>
+                          </div>
+                          <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
+                            <div style={{fontSize:12,color:C.gold,fontWeight:600}}>{dCal} cal</div>
+                            <div style={{fontSize:10,color:C.muted}}>P:{dPro}g C:{dCarb}g F:{dFat}g</div>
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 )
               })}
