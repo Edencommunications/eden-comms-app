@@ -690,12 +690,12 @@ const CheckInScreen = () => {
         </Card>
         <Card style={{ marginBottom:12 }}>
           <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>WELLBEING SCALES</p>
-          <Scale label="Energy" val={form.energy} onChange={set("energy")}/>
-          <Scale label="Bloating (1=bad, 10=none)" val={form.bloating} onChange={set("bloating")}/>
-          <Scale label="Brain Fog (1=extreme, 10=none)" val={form.brainFog} onChange={set("brainFog")}/>
-          <Scale label="Sex Drive" val={form.sexDrive} onChange={set("sexDrive")}/>
-          <Scale label="Hunger (1=fine, 10=starving)" val={form.hunger} onChange={set("hunger")}/>
+          <Scale label="Energy (1=depleted, 10=great)" val={form.energy} onChange={set("energy")}/>
           <Scale label="Stress (1=calm, 10=maxed out)" val={form.stress} onChange={set("stress")}/>
+          <Scale label="Hunger (1=fine, 10=starving)" val={form.hunger} onChange={set("hunger")}/>
+          <Scale label="Sex Drive (1=low, 10=high)" val={form.sexDrive} onChange={set("sexDrive")}/>
+          <Scale label="Brain Fog (1=extreme, 10=none)" val={form.brainFog} onChange={set("brainFog")}/>
+          <Scale label="Bloating (1=bad, 10=none)" val={form.bloating} onChange={set("bloating")}/>
         </Card>
         <Card style={{ marginBottom:12 }}>
           <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>MOOD</p>
@@ -1416,12 +1416,20 @@ const CoachDashboard = ({ user, onNavigate }) => {
   const [selectedClient, setSelectedClient] = useState(null);
   const [loomMode, setLoomMode]             = useState(false);
   const [rosterOpen, setRosterOpen]         = useState(true);
+  const [peekIndex, setPeekIndex]           = useState<number|null>(null);
   const clients = CLIENT_ROSTER;
 
   // Anonymise labels when Loom Mode is on
   const displayName     = (c: any, i: number) => loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name;
   const displayProtocol = (c: any)            => loomMode ? "Protocol hidden" : c.protocol;
   const displayCheckin  = (c: any)            => loomMode ? "—" : c.lastCheckin;
+
+  // Peek: reveal real name for 2 seconds then hide
+  const handlePeek = (e: any, i: number) => {
+    e.stopPropagation();
+    setPeekIndex(i);
+    setTimeout(() => setPeekIndex(null), 2000);
+  };
 
   return (
     <Screen>
@@ -1464,12 +1472,14 @@ const CoachDashboard = ({ user, onNavigate }) => {
         {/* My Clients — collapsible header */}
         <button onClick={()=>setRosterOpen(v=>!v)}
           style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
-            background:"none", border:"none", cursor:"pointer", padding:0, marginBottom:rosterOpen?12:0 }}>
-          <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>
-            My Clients {loomMode && <span style={{ color:"#ff5252" }}>· hidden</span>}
-          </p>
-          <span style={{ fontSize:16, color:B.muted, transition:"transform .2s",
-            display:"inline-block", transform: rosterOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+            background:B.card, border:`1px solid ${B.border}`, borderRadius:10,
+            cursor:"pointer", padding:"12px 14px", marginBottom: rosterOpen ? 10 : 0 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:B.text, letterSpacing:1, textTransform:"uppercase" }}>
+            👥 My Clients {loomMode && <span style={{ color:"#ff5252" }}>· hidden</span>}
+          </span>
+          <span style={{ fontSize:18, color:B.gold, fontWeight:700,
+            display:"inline-block", transition:"transform .2s",
+            transform: rosterOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
         </button>
 
         {rosterOpen && (
@@ -1480,9 +1490,19 @@ const CoachDashboard = ({ user, onNavigate }) => {
                   borderLeft:`3px solid ${(!loomMode && c.alert) ? B.gold : B.border}`,
                   borderRadius:14, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", display:"block" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <div>
-                    <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{displayName(c,i)}</p>
-                    <p style={{ fontSize:11, color:B.muted, margin:"0 0 6px" }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                      <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
+                      {/* Peek button — only shows in Loom Mode */}
+                      {loomMode && (
+                        <button onClick={e=>handlePeek(e,i)}
+                          style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:6,
+                            padding:"1px 6px", cursor:"pointer", fontSize:11, color:B.muted }}>
+                          {peekIndex===i ? <span style={{ color:B.gold, fontWeight:700 }}>{c.name}</span> : "👁"}
+                        </button>
+                      )}
+                    </div>
+                    <p style={{ fontSize:11, color:B.muted, margin:"0 0 4px" }}>
                       Last check-in: {displayCheckin(c)}
                     </p>
                     <p style={{ fontSize:10, color:B.muted, margin:0, fontStyle:"italic" }}>{displayProtocol(c)}</p>
