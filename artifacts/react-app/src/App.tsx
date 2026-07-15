@@ -741,49 +741,88 @@ const CheckInScreen = () => {
 };
 
 const HabitTrackerScreen = () => {
+  const isMobile = useIsMobile();
   const habits = ["Take supplements","Wake up at 5 AM","1 Gallon Water Daily","Workout","Cold Shower","20oz Lemon Water upon waking","8 Hour Sleep Window","Read 30 Minutes"];
   const days = ["M","T","W","T","F","S","S"];
   const [checked, setChecked] = useState({});
-  const toggle = (h,d) => {
-    const k = `${h}-${d}`;
+  const toggle = (h,i) => {
+    const k = `${h}-${i}`;
     setChecked(c=>({...c,[k]:!c[k]}));
   };
   const weekTotal = h => days.filter((_,i)=>checked[`${h}-${i}`]).length;
+  const totalPct  = Math.round(habits.reduce((a,h)=>a+weekTotal(h),0)/(habits.length*7)*100);
+
   return (
     <Screen>
       <PageHeader title="Habit Tracker" subtitle="Week of Jul 7 – 13, 2026"/>
       <div style={{ padding:"16px 20px 40px" }}>
-        <Card style={{ marginBottom:12 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>This Week</p>
-            <div style={{ display:"flex", gap:8 }}>
-              {days.map((d,i)=>(
-                <span key={i} style={{ fontSize:11, fontWeight:700, color:B.muted, width:22, textAlign:"center" }}>{d}</span>
-              ))}
-              <span style={{ fontSize:11, fontWeight:700, color:B.muted, width:32, textAlign:"center" }}>Tot</span>
-            </div>
-          </div>
-          {habits.map(h=>(
-            <div key={h} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderTop:`1px solid ${B.border}` }}>
-              <span style={{ fontSize:12, color:B.text, flex:1, marginRight:8 }}>{h}</span>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                {days.map((_,i)=>{
-                  const done = checked[`${h}-${i}`];
-                  return (
-                    <button key={i} onClick={()=>toggle(h,i)}
-                      style={{ width:22, height:22, borderRadius:6, border:`1.5px solid ${done?B.gold:B.border}`, background:done?`${B.gold}33`:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      {done && <span style={{ fontSize:12, color:B.gold }}>✓</span>}
-                    </button>
-                  );
-                })}
-                <span style={{ fontSize:12, fontWeight:700, color:weekTotal(h)>=5?B.success:weekTotal(h)>=3?B.gold:B.muted, width:32, textAlign:"center" }}>{weekTotal(h)}/7</span>
+
+        {isMobile ? (
+          /* ── MOBILE: one card per habit, days as a tappable strip ── */
+          <>
+            {habits.map(h => {
+              const tot = weekTotal(h);
+              const pctColor = tot>=5?B.success:tot>=3?B.gold:B.muted;
+              return (
+                <div key={h} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                    <span style={{ fontSize:13, fontWeight:600, color:B.text, flex:1, marginRight:8 }}>{h}</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:pctColor, flexShrink:0 }}>{tot}/7</span>
+                  </div>
+                  <div style={{ display:"flex", gap:6 }}>
+                    {days.map((d,i)=>{
+                      const done = checked[`${h}-${i}`];
+                      return (
+                        <button key={i} onClick={()=>toggle(h,i)}
+                          style={{ flex:1, minWidth:0, paddingTop:6, paddingBottom:6,
+                            borderRadius:8, border:`1.5px solid ${done?B.gold:B.border}`,
+                            background:done?`${B.gold}33`:"none", cursor:"pointer",
+                            display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                          <span style={{ fontSize:9, fontWeight:700, color:done?B.gold:B.muted }}>{d}</span>
+                          <span style={{ fontSize:13, color:B.gold, lineHeight:1 }}>{done?"✓":"·"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        ) : (
+          /* ── DESKTOP: original compact grid ── */
+          <Card style={{ marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>This Week</p>
+              <div style={{ display:"flex", gap:8 }}>
+                {days.map((d,i)=>(
+                  <span key={i} style={{ fontSize:11, fontWeight:700, color:B.muted, width:26, textAlign:"center" }}>{d}</span>
+                ))}
+                <span style={{ fontSize:11, fontWeight:700, color:B.muted, width:36, textAlign:"center" }}>Tot</span>
               </div>
             </div>
-          ))}
-        </Card>
-        <div style={{ padding:"12px 14px", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, display:"flex", justifyContent:"space-between" }}>
+            {habits.map(h=>(
+              <div key={h} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderTop:`1px solid ${B.border}` }}>
+                <span style={{ fontSize:12, color:B.text, flex:1, marginRight:12 }}>{h}</span>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  {days.map((_,i)=>{
+                    const done = checked[`${h}-${i}`];
+                    return (
+                      <button key={i} onClick={()=>toggle(h,i)}
+                        style={{ width:26, height:26, borderRadius:6, border:`1.5px solid ${done?B.gold:B.border}`, background:done?`${B.gold}33`:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        {done && <span style={{ fontSize:13, color:B.gold }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                  <span style={{ fontSize:12, fontWeight:700, color:weekTotal(h)>=5?B.success:weekTotal(h)>=3?B.gold:B.muted, width:36, textAlign:"center" }}>{weekTotal(h)}/7</span>
+                </div>
+              </div>
+            ))}
+          </Card>
+        )}
+
+        <div style={{ padding:"12px 14px", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, display:"flex", justifyContent:"space-between", marginTop: isMobile?4:0 }}>
           <span style={{ fontSize:13, color:B.text }}>Overall Week Score</span>
-          <span style={{ fontSize:14, fontWeight:700, color:B.gold }}>{Math.round(habits.reduce((a,h)=>a+weekTotal(h),0)/(habits.length*7)*100)}%</span>
+          <span style={{ fontSize:14, fontWeight:700, color:B.gold }}>{totalPct}%</span>
         </div>
       </div>
     </Screen>
