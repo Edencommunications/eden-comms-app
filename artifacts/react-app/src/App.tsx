@@ -691,11 +691,15 @@ const CheckInScreen = () => {
         <Card style={{ marginBottom:12 }}>
           <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>WELLBEING SCALES</p>
           <Scale label="Energy (1=depleted, 10=great)" val={form.energy} onChange={set("energy")}/>
-          <Scale label="Stress (1=calm, 10=maxed out)" val={form.stress} onChange={set("stress")}/>
           <Scale label="Hunger (1=fine, 10=starving)" val={form.hunger} onChange={set("hunger")}/>
           <Scale label="Sex Drive (1=low, 10=high)" val={form.sexDrive} onChange={set("sexDrive")}/>
           <Scale label="Brain Fog (1=extreme, 10=none)" val={form.brainFog} onChange={set("brainFog")}/>
           <Scale label="Bloating (1=bad, 10=none)" val={form.bloating} onChange={set("bloating")}/>
+        </Card>
+        <Card style={{ marginBottom:12, border:`1px solid #ff525244`, background:"#1a0a0a" }}>
+          <p style={{ fontSize:12, fontWeight:700, color:"#ff8a80", margin:"0 0 4px", letterSpacing:0.8 }}>STRESS LEVEL</p>
+          <p style={{ fontSize:11, color:"#ff525288", margin:"0 0 12px" }}>Rate your average stress this week</p>
+          <Scale label="Stress (1=completely calm, 10=maxed out)" val={form.stress} onChange={set("stress")}/>
         </Card>
         <Card style={{ marginBottom:12 }}>
           <p style={{ fontSize:12, fontWeight:700, color:B.gold, margin:"0 0 12px", letterSpacing:0.8 }}>MOOD</p>
