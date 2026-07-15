@@ -741,86 +741,65 @@ const CheckInScreen = () => {
 };
 
 const HabitTrackerScreen = () => {
-  const isMobile = useIsMobile();
-  const habits = ["Take supplements","Wake up at 5 AM","1 Gallon Water Daily","Workout","Cold Shower","20oz Lemon Water upon waking","8 Hour Sleep Window","Read 30 Minutes"];
-  const days = ["M","T","W","T","F","S","S"];
-  const [checked, setChecked] = useState({});
-  const toggle = (h,i) => {
-    const k = `${h}-${i}`;
-    setChecked(c=>({...c,[k]:!c[k]}));
+  const habits = [
+    { id:"supps",   label:"Take supplements",            target:7 },
+    { id:"wake",    label:"Wake up at 5 AM",              target:7 },
+    { id:"water",   label:"1 Gallon Water Daily",         target:7 },
+    { id:"workout", label:"Workout",                      target:5 },
+    { id:"shower",  label:"Cold Shower",                  target:5 },
+    { id:"lemon",   label:"20oz Lemon Water upon waking", target:7 },
+    { id:"sleep",   label:"8 Hour Sleep Window",          target:7 },
+    { id:"read",    label:"Read 30 Minutes",              target:5 },
+  ];
+
+  const [counts, setCounts] = useState<Record<string,number>>({});
+  const set = (id:string, v:number) =>
+    setCounts(p => ({ ...p, [id]: Math.min(7, Math.max(0, v)) }));
+
+  const totalPossible = habits.reduce((a,h) => a + h.target, 0);
+  const totalDone     = habits.reduce((a,h) => a + (counts[h.id] ?? 0), 0);
+  const totalPct      = totalPossible > 0 ? Math.round(totalDone / totalPossible * 100) : 0;
+
+  const scoreColor = (done:number, target:number) => {
+    const r = done / target;
+    return r >= 0.85 ? B.success : r >= 0.5 ? B.gold : B.muted;
   };
-  const weekTotal = h => days.filter((_,i)=>checked[`${h}-${i}`]).length;
-  const totalPct  = Math.round(habits.reduce((a,h)=>a+weekTotal(h),0)/(habits.length*7)*100);
 
   return (
     <Screen>
       <PageHeader title="Habit Tracker" subtitle="Week of Jul 7 – 13, 2026"/>
       <div style={{ padding:"16px 20px 40px" }}>
+        <Card style={{ marginBottom:12 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>This Week</p>
+            <p style={{ fontSize:11, color:B.muted, margin:0 }}>Goal / Week</p>
+          </div>
 
-        {isMobile ? (
-          /* ── MOBILE: one card per habit, days as a tappable strip ── */
-          <>
-            {habits.map(h => {
-              const tot = weekTotal(h);
-              const pctColor = tot>=5?B.success:tot>=3?B.gold:B.muted;
-              return (
-                <div key={h} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:"12px 14px", marginBottom:10 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                    <span style={{ fontSize:13, fontWeight:600, color:B.text, flex:1, marginRight:8 }}>{h}</span>
-                    <span style={{ fontSize:12, fontWeight:700, color:pctColor, flexShrink:0 }}>{tot}/7</span>
-                  </div>
-                  <div style={{ display:"flex", gap:6 }}>
-                    {days.map((d,i)=>{
-                      const done = checked[`${h}-${i}`];
-                      return (
-                        <button key={i} onClick={()=>toggle(h,i)}
-                          style={{ flex:1, minWidth:0, paddingTop:6, paddingBottom:6,
-                            borderRadius:8, border:`1.5px solid ${done?B.gold:B.border}`,
-                            background:done?`${B.gold}33`:"none", cursor:"pointer",
-                            display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                          <span style={{ fontSize:9, fontWeight:700, color:done?B.gold:B.muted }}>{d}</span>
-                          <span style={{ fontSize:13, color:B.gold, lineHeight:1 }}>{done?"✓":"·"}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </>
-        ) : (
-          /* ── DESKTOP: original compact grid ── */
-          <Card style={{ marginBottom:12 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>This Week</p>
-              <div style={{ display:"flex", gap:8 }}>
-                {days.map((d,i)=>(
-                  <span key={i} style={{ fontSize:11, fontWeight:700, color:B.muted, width:26, textAlign:"center" }}>{d}</span>
-                ))}
-                <span style={{ fontSize:11, fontWeight:700, color:B.muted, width:36, textAlign:"center" }}>Tot</span>
-              </div>
-            </div>
-            {habits.map(h=>(
-              <div key={h} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderTop:`1px solid ${B.border}` }}>
-                <span style={{ fontSize:12, color:B.text, flex:1, marginRight:12 }}>{h}</span>
-                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                  {days.map((_,i)=>{
-                    const done = checked[`${h}-${i}`];
-                    return (
-                      <button key={i} onClick={()=>toggle(h,i)}
-                        style={{ width:26, height:26, borderRadius:6, border:`1.5px solid ${done?B.gold:B.border}`, background:done?`${B.gold}33`:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                        {done && <span style={{ fontSize:13, color:B.gold }}>✓</span>}
-                      </button>
-                    );
-                  })}
-                  <span style={{ fontSize:12, fontWeight:700, color:weekTotal(h)>=5?B.success:weekTotal(h)>=3?B.gold:B.muted, width:36, textAlign:"center" }}>{weekTotal(h)}/7</span>
-                </div>
-              </div>
-            ))}
-          </Card>
-        )}
+          {habits.map(h => {
+            const count = counts[h.id] ?? 0;
+            const col   = scoreColor(count, h.target);
+            return (
+              <div key={h.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"11px 0", borderTop:`1px solid ${B.border}`, gap:10 }}>
+                {/* Label */}
+                <span style={{ fontSize:13, color:B.text, flex:1, minWidth:0 }}>{h.label}</span>
 
-        <div style={{ padding:"12px 14px", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, display:"flex", justifyContent:"space-between", marginTop: isMobile?4:0 }}>
+                {/* Stepper */}
+                <div style={{ display:"flex", alignItems:"center", gap:0, flexShrink:0, background:B.surface, borderRadius:10, overflow:"hidden", border:`1px solid ${B.border}` }}>
+                  <button onClick={() => set(h.id, count - 1)}
+                    style={{ width:36, height:36, background:"none", border:"none", color:B.muted, fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>−</button>
+                  <span style={{ minWidth:28, textAlign:"center", fontSize:15, fontWeight:700, color:col }}>{count}</span>
+                  <button onClick={() => set(h.id, count + 1)}
+                    style={{ width:36, height:36, background:"none", border:"none", color:B.gold, fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>+</button>
+                </div>
+
+                {/* Target */}
+                <span style={{ fontSize:12, color:B.muted, flexShrink:0, width:28, textAlign:"right" }}>/{h.target}</span>
+              </div>
+            );
+          })}
+        </Card>
+
+        <div style={{ padding:"12px 14px", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, display:"flex", justifyContent:"space-between" }}>
           <span style={{ fontSize:13, color:B.text }}>Overall Week Score</span>
           <span style={{ fontSize:14, fontWeight:700, color:B.gold }}>{totalPct}%</span>
         </div>
