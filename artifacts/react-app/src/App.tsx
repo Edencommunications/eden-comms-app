@@ -1234,17 +1234,28 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                     </ResponsiveContainer>
                   </ChartPanel>
 
-                  {/* HRV & Heart Rate */}
-                  <ChartPanel title="Heart Rate & HRV">
-                    <ResponsiveContainer width="100%" height={150}>
+                  {/* Heart Rate */}
+                  <ChartPanel title="Resting Heart Rate (bpm) — lower trend = better">
+                    <ResponsiveContainer width="100%" height={130}>
                       <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
                         <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
                         <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={["auto","auto"]}/>
-                        <Tooltip {...CT.tooltip}/>
-                        <Legend wrapperStyle={{ fontSize:10, color:B.muted, paddingTop:4 }}/>
-                        <Line type="monotone" dataKey="heartRate" stroke="#ff5252"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Heart Rate (bpm)"/>
-                        <Line type="monotone" dataKey="hrv"       stroke="#4FD89A"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="HRV"/>
+                        <Tooltip {...CT.tooltip} formatter={(v:any)=>[v+" bpm","Heart Rate"]}/>
+                        <Line type="monotone" dataKey="heartRate" stroke="#ff5252" strokeWidth={2} dot={{ fill:"#ff5252", r:3 }} activeDot={{ r:5 }} name="HR (bpm)"/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* HRV */}
+                  <ChartPanel title="HRV — higher trend = better recovery">
+                    <ResponsiveContainer width="100%" height={130}>
+                      <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={["auto","auto"]}/>
+                        <Tooltip {...CT.tooltip} formatter={(v:any)=>[v,"HRV"]}/>
+                        <Line type="monotone" dataKey="hrv" stroke="#4FD89A" strokeWidth={2} dot={{ fill:"#4FD89A", r:3 }} activeDot={{ r:5 }} name="HRV"/>
                       </LineChart>
                     </ResponsiveContainer>
                   </ChartPanel>
