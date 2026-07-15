@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useCallback } from "react";
+import { useState, useEffect, useRef, createContext, useContext, useCallback } from "react";
 import {
   ResponsiveContainer, LineChart, AreaChart, BarChart,
   Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -1590,10 +1590,64 @@ const AdminDashboard = ({ user }) => {
 };
 
 // ─── MAIN APP SHELL ───────────────────────────────────────────────────────────
+const IDLE_MS      = 14 * 60 * 1000;  // 14 min idle → show warning
+const WARNING_SECS = 60;               // 60 s to respond before forced logout
+
 const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
   const [loomMode, setLoomMode] = useState(false);
   const isMobile = useIsMobile();
+
+  // ── Inactivity auto-logout ────────────────────────────────────────
+  const [idleWarning, setIdleWarning]   = useState(false);
+  const [countdown,   setCountdown]     = useState(WARNING_SECS);
+  const idleTimer    = useRef<any>(null);
+  const warnTimer    = useRef<any>(null);
+  const countRef     = useRef<any>(null);
+
+  const clearAllTimers = () => {
+    clearTimeout(idleTimer.current);
+    clearTimeout(warnTimer.current);
+    clearInterval(countRef.current);
+  };
+
+  const startIdleTimer = () => {
+    clearAllTimers();
+    idleTimer.current = setTimeout(() => {
+      setIdleWarning(true);
+      setCountdown(WARNING_SECS);
+      let c = WARNING_SECS;
+      countRef.current = setInterval(() => {
+        c -= 1;
+        setCountdown(c);
+        if (c <= 0) {
+          clearAllTimers();
+          onLogout();
+        }
+      }, 1000);
+    }, IDLE_MS);
+  };
+
+  const resetIdle = () => {
+    if (idleWarning) return;   // don't reset during the warning — user must click Stay
+    startIdleTimer();
+  };
+
+  const stayLoggedIn = () => {
+    clearAllTimers();
+    setIdleWarning(false);
+    startIdleTimer();
+  };
+
+  useEffect(() => {
+    const events = ["mousemove","mousedown","keydown","touchstart","scroll","click"];
+    events.forEach(e => window.addEventListener(e, resetIdle, { passive:true }));
+    startIdleTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetIdle));
+      clearAllTimers();
+    };
+  }, [idleWarning]); // re-register when warning state changes so resetIdle captures latest value
 
   const clientTabs = [
     { key:"home",    icon:"home",    label:"Home" },
@@ -1716,6 +1770,41 @@ const AppShell = ({ user, onLogout }) => {
           {tabs.map(t => (
             <NavTab key={t.key} icon={t.icon} label={t.label} active={tab===t.key} onClick={()=>setTab(t.key)}/>
           ))}
+        </div>
+      )}
+
+      {/* ── HIPAA inactivity warning overlay ────────────────────────── */}
+      {idleWarning && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,0.85)",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:18,
+            padding:"32px 28px", maxWidth:340, width:"100%", textAlign:"center", boxShadow:"0 8px 40px #000a" }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🔒</div>
+            <h2 style={{ fontSize:18, fontWeight:800, color:B.text, margin:"0 0 8px" }}>
+              Still there?
+            </h2>
+            <p style={{ fontSize:13, color:B.muted, margin:"0 0 20px", lineHeight:1.6 }}>
+              For HIPAA security, you'll be signed out automatically due to inactivity.
+            </p>
+            {/* Countdown ring */}
+            <div style={{ fontSize:36, fontWeight:900,
+              color: countdown <= 15 ? "#ff5252" : countdown <= 30 ? B.gold : B.text,
+              marginBottom:20, fontVariantNumeric:"tabular-nums" }}>
+              {countdown}s
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <button onClick={stayLoggedIn}
+                style={{ background:B.gold, border:"none", borderRadius:10, padding:"13px 0",
+                  fontWeight:800, fontSize:14, color:B.black, cursor:"pointer", width:"100%" }}>
+                Stay Signed In
+              </button>
+              <button onClick={() => { clearAllTimers(); onLogout(); }}
+                style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:10,
+                  padding:"11px 0", fontWeight:600, fontSize:13, color:B.muted, cursor:"pointer", width:"100%" }}>
+                Sign Out Now
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
