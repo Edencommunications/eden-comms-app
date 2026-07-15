@@ -1272,20 +1272,33 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                     </ResponsiveContainer>
                   </ChartPanel>
 
-                  {/* Wellbeing multi-line */}
-                  <ChartPanel title="Wellbeing Scores (1–10, higher = better)">
-                    <ResponsiveContainer width="100%" height={180}>
+                  {/* Wellbeing — Energy / Sleep / Sex Drive */}
+                  <ChartPanel title="Energy · Sleep · Sex Drive (1–10, higher = better)">
+                    <ResponsiveContainer width="100%" height={160}>
                       <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
                         <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
                         <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={[1,10]}/>
                         <Tooltip {...CT.tooltip}/>
                         <Legend wrapperStyle={{ fontSize:10, color:B.muted, paddingTop:4 }}/>
-                        <Line type="monotone" dataKey="energy"   stroke={B.gold}    strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Energy"/>
-                        <Line type="monotone" dataKey="sleep"    stroke="#6FB8E8"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Sleep"/>
-                        <Line type="monotone" dataKey="bloating" stroke="#4FD89A"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Bloating"/>
-                        <Line type="monotone" dataKey="brainFog" stroke="#D4A8F0"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Brain Fog"/>
-                        <Line type="monotone" dataKey="sexDrive" stroke="#FF7EB3"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Sex Drive"/>
+                        <Line type="monotone" dataKey="energy"   stroke={B.gold}   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Energy"/>
+                        <Line type="monotone" dataKey="sleep"    stroke="#6FB8E8"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Sleep"/>
+                        <Line type="monotone" dataKey="sexDrive" stroke="#FF7EB3"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Sex Drive"/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* Wellbeing — Brain Fog / Bloating */}
+                  <ChartPanel title="Brain Fog · Bloating (1–10, higher = better)">
+                    <ResponsiveContainer width="100%" height={160}>
+                      <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={[1,10]}/>
+                        <Tooltip {...CT.tooltip}/>
+                        <Legend wrapperStyle={{ fontSize:10, color:B.muted, paddingTop:4 }}/>
+                        <Line type="monotone" dataKey="brainFog" stroke="#D4A8F0"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Brain Fog"/>
+                        <Line type="monotone" dataKey="bloating" stroke="#4FD89A"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Bloating"/>
                       </LineChart>
                     </ResponsiveContainer>
                   </ChartPanel>
