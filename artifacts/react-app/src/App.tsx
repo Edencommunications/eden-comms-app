@@ -11,6 +11,7 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 import Messaging from "./components/Messaging";
+import DietBuilder from "./components/DietBuilder";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -891,7 +892,7 @@ const AppShell = ({ user, onLogout }) => {
     }
     if (tab === "home")    return <HomeScreen user={user}/>;
     if (tab === "msgs")    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
-    if (tab === "diet")    return <DietScreen/>;
+    if (tab === "diet")    return <DietBuilder currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "labs")    return <LabsScreen/>;
     if (tab === "checkin") return <CheckInScreen/>;
     if (tab === "habits")  return <HabitTrackerScreen/>;
