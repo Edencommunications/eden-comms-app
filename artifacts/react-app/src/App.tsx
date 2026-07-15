@@ -1,4 +1,8 @@
 import { useState, useEffect, createContext, useContext, useCallback } from "react";
+import {
+  ResponsiveContainer, LineChart, AreaChart, BarChart,
+  Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+} from "recharts";
 
 // ─── RESPONSIVE HOOK ──────────────────────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
@@ -922,13 +926,30 @@ const CLIENT_ROSTER = [
 
 const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   const isMobile = useIsMobile();
-  const [expandedEntry, setExpandedEntry] = useState<number|null>(null);
+  const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
   if (!client) return null;
 
   const history: any[] = client.checkinHistory || [];
   const lastCompleted = history.length > 0 ? history[0].date : client.lastCheckin;
 
-  // Score color: for energy/sleep/digestion higher=better; stress lower=better
+  // Oldest→newest for charts (left = past, right = present)
+  const chartData = [...history].reverse().map((e:any) => ({
+    date: e.date.replace(" 2026",""),
+    weight:    parseFloat(e.weight),
+    compliance:e.compliance,
+    energy:    e.energy,
+    sleep:     e.sleep,
+    bloating:  e.bloating,
+    brainFog:  e.brainFog,
+    sexDrive:  e.sexDrive,
+    hunger:    e.hunger,
+    stress:    e.stress,
+    steps:     parseInt(String(e.steps).replace(/,/g,"")),
+    heartRate: parseInt(e.heartRate),
+    hrv:       parseInt(e.hrv),
+    temp:      parseFloat(e.temp),
+  }));
+
   const scoreColor = (val: number, invert = false) => {
     const v = invert ? 11 - val : val;
     if (v >= 8) return "#4caf50";
@@ -944,6 +965,21 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
         fontSize:13, fontWeight:800, color:scoreColor(val, invert)
       }}>{val}</div>
       <div style={{ fontSize:8, color:B.muted, marginTop:3, textTransform:"uppercase", letterSpacing:.6, textAlign:"center" }}>{label}</div>
+    </div>
+  );
+
+  // Shared chart theme
+  const CT = {
+    grid:    "#2a2a2a",
+    tick:    "#666",
+    tooltip: { contentStyle:{ background:"#1a1a1a", border:"1px solid #333", borderRadius:8, fontSize:11 }, labelStyle:{ color:"#fff", fontWeight:700 }, itemStyle:{ color:"#ccc" } },
+  };
+  const ChartPanel = ({ title, children }: { title:string; children:React.ReactNode }) => (
+    <div style={{ marginBottom:20 }}>
+      <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 8px" }}>{title}</p>
+      <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12, padding:"12px 4px 8px 0" }}>
+        {children}
+      </div>
     </div>
   );
 
@@ -1036,112 +1072,198 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
             <Card style={{ marginBottom:12, padding:0, overflow:"hidden" }}>
               {/* Section header */}
               <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>
-                  Check-In History
-                </p>
-                <span style={{ fontSize:10, color:B.muted }}>{history.length} entries · tap to expand</span>
+                {/* Toggle */}
+                <div style={{ display:"flex", gap:0 }}>
+                  {(["timeline","charts"] as const).map(v=>(
+                    <button key={v} onClick={()=>setHistoryView(v)}
+                      style={{ padding:"4px 14px", fontSize:11, fontWeight:700, cursor:"pointer", border:"none", borderRadius:6,
+                        background: historyView===v ? B.gold : "transparent",
+                        color: historyView===v ? "#000" : B.muted,
+                        textTransform:"capitalize" }}>
+                      {v==="timeline" ? "⏱ Timeline" : "📈 Charts"}
+                    </button>
+                  ))}
+                </div>
+                <span style={{ fontSize:10, color:B.muted }}>{history.length} entries</span>
               </div>
 
-              {history.map((entry:any, idx:number) => {
-                const isOpen = expandedEntry === idx;
+              {/* ── TIMELINE VIEW ── */}
+              {historyView === "timeline" && history.map((entry:any, idx:number) => {
                 const compColor = entry.compliance >= 90 ? "#4caf50" : entry.compliance >= 75 ? B.gold : "#ff5252";
+                const borderAccent = entry.compliance >= 90 ? "#4caf50" : entry.compliance >= 75 ? B.gold : "#ff5252";
                 return (
-                  <div key={idx} style={{ borderBottom: idx < history.length-1 ? `1px solid ${B.border}` : "none" }}>
+                  <div key={idx} style={{ borderBottom: idx < history.length-1 ? `1px solid ${B.border}` : "none",
+                    padding:"16px", borderLeft:`3px solid ${borderAccent}44`, marginLeft:2 }}>
 
-                    {/* Collapsed row — always visible */}
-                    <button
-                      onClick={()=>setExpandedEntry(isOpen ? null : idx)}
-                      style={{ width:"100%", background: isOpen ? `${B.gold}08` : "none", border:"none", padding:"12px 16px", textAlign:"left", cursor:"pointer", display:"block" }}>
-
-                      {/* Top line: date + weight + compliance */}
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                        <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
-                          <span style={{ fontSize:13, fontWeight:700, color:B.text }}>{entry.date}</span>
-                          <span style={{ fontSize:13, color:B.gold, fontWeight:700 }}>{entry.weight} lbs</span>
-                          <span style={{ fontSize:11, color:B.muted, fontWeight:500 }}>· {entry.mood}</span>
-                        </div>
-                        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                          <span style={{ fontSize:11, fontWeight:700, color:compColor, background:`${compColor}18`, border:`1px solid ${compColor}44`, borderRadius:6, padding:"2px 7px" }}>
-                            {entry.compliance}%
-                          </span>
-                          <span style={{ fontSize:10, color:B.muted }}>{isOpen ? "▲" : "▼"}</span>
-                        </div>
+                    {/* Header row */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+                      <div>
+                        <p style={{ fontSize:14, fontWeight:800, color:B.text, margin:"0 0 2px" }}>{entry.date}</p>
+                        <p style={{ fontSize:12, color:B.muted, margin:0 }}>{entry.mood}</p>
                       </div>
-
-                      {/* Key score chips — always visible */}
-                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                        <ScoreChip label="Energy"  val={entry.energy} />
-                        <ScoreChip label="Sleep"   val={entry.sleep} />
-                        <ScoreChip label="Bloat"   val={entry.bloating} />
-                        <ScoreChip label="Brain Fog" val={entry.brainFog} />
-                        <ScoreChip label="Hunger"  val={entry.hunger} invert />
-                        <ScoreChip label="Stress"  val={entry.stress} invert />
+                      <div style={{ textAlign:"right" }}>
+                        <p style={{ fontSize:16, fontWeight:800, color:B.gold, margin:"0 0 2px" }}>{entry.weight} lbs</p>
+                        <span style={{ fontSize:11, fontWeight:700, color:compColor, background:`${compColor}18`,
+                          border:`1px solid ${compColor}44`, borderRadius:6, padding:"2px 8px" }}>
+                          {entry.compliance}% compliant
+                        </span>
                       </div>
-                    </button>
+                    </div>
 
-                    {/* Expanded full detail */}
-                    {isOpen && (
-                      <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${B.border}` }}>
-
-                        {/* Vitals grid */}
-                        <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"12px 0 8px" }}>Vitals</p>
-                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:14 }}>
-                          {[
-                            ["Weight",     entry.weight+" lbs"],
-                            ["Body Temp",  entry.temp+"°F"],
-                            ["Daily Steps",entry.steps],
-                            ["Heart Rate", entry.heartRate+" bpm"],
-                            ["HRV",        entry.hrv],
-                          ].map(([l,v])=>(
-                            <div key={l} style={{ background:B.bg, borderRadius:8, padding:"8px 10px" }}>
-                              <p style={{ fontSize:9, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.6 }}>{l}</p>
-                              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{v}</p>
-                            </div>
-                          ))}
+                    {/* Vitals strip */}
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:5, marginBottom:12 }}>
+                      {[["Temp",entry.temp+"°F"],["Steps",entry.steps],["HR",entry.heartRate+" bpm"],["HRV",entry.hrv],["BMs",entry.bowelCount+" · "+entry.bowelType]].map(([l,v])=>(
+                        <div key={l} style={{ background:B.bg, borderRadius:7, padding:"6px 8px", textAlign:"center" }}>
+                          <p style={{ fontSize:8, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.5 }}>{l}</p>
+                          <p style={{ fontSize:10, fontWeight:700, color:B.text, margin:0 }}>{v}</p>
                         </div>
+                      ))}
+                    </div>
 
-                        {/* Wellbeing scores — full set */}
-                        <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 8px" }}>Wellbeing Scores</p>
-                        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:14 }}>
-                          <ScoreChip label="Energy"   val={entry.energy} />
-                          <ScoreChip label="Sleep"    val={entry.sleep} />
-                          <ScoreChip label="Bloating" val={entry.bloating} />
-                          <ScoreChip label="Brain Fog" val={entry.brainFog} />
-                          <ScoreChip label="Sex Drive" val={entry.sexDrive} />
-                          <ScoreChip label="Hunger"   val={entry.hunger} invert />
-                          <ScoreChip label="Stress"   val={entry.stress} invert />
-                        </div>
+                    {/* All 7 score chips */}
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
+                      <ScoreChip label="Energy"    val={entry.energy} />
+                      <ScoreChip label="Sleep"     val={entry.sleep} />
+                      <ScoreChip label="Bloating"  val={entry.bloating} />
+                      <ScoreChip label="Brain Fog" val={entry.brainFog} />
+                      <ScoreChip label="Sex Drive" val={entry.sexDrive} />
+                      <ScoreChip label="Hunger"    val={entry.hunger} invert />
+                      <ScoreChip label="Stress"    val={entry.stress} invert />
+                    </div>
 
-                        {/* Digestion */}
-                        <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 8px" }}>Digestion</p>
-                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:14 }}>
-                          {[
-                            ["Daily BMs", entry.bowelCount],
-                            ["Stool Type", entry.bowelType],
-                          ].map(([l,v])=>(
-                            <div key={l} style={{ background:B.bg, borderRadius:8, padding:"8px 10px" }}>
-                              <p style={{ fontSize:9, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.6 }}>{l}</p>
-                              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{v}</p>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Client notes */}
-                        <div style={{ background:B.bg, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
-                          <p style={{ fontSize:9, color:B.muted, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 5px", fontWeight:700 }}>Client's Notes</p>
-                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.65, fontStyle:"italic" }}>"{entry.clientNotes}"</p>
-                        </div>
-
-                        {/* Coach response */}
-                        <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}33`, borderRadius:8, padding:"10px 12px" }}>
-                          <p style={{ fontSize:9, color:B.gold, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 5px", fontWeight:700 }}>Coach Response</p>
-                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.65 }}>{entry.coachNotes}</p>
-                        </div>
-                      </div>
-                    )}
+                    {/* Notes */}
+                    <div style={{ background:B.bg, borderRadius:8, padding:"9px 11px", marginBottom:7 }}>
+                      <p style={{ fontSize:9, color:B.muted, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 4px", fontWeight:700 }}>Client</p>
+                      <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6, fontStyle:"italic" }}>"{entry.clientNotes}"</p>
+                    </div>
+                    <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}33`, borderRadius:8, padding:"9px 11px" }}>
+                      <p style={{ fontSize:9, color:B.gold, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 4px", fontWeight:700 }}>Coach</p>
+                      <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6 }}>{entry.coachNotes}</p>
+                    </div>
                   </div>
                 );
               })}
+
+              {/* ── CHARTS VIEW ── */}
+              {historyView === "charts" && (
+                <div style={{ padding:"16px" }}>
+
+                  {/* Weight */}
+                  <ChartPanel title="Weight (lbs)">
+                    <ResponsiveContainer width="100%" height={140}>
+                      <AreaChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <defs>
+                          <linearGradient id="wGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor={B.gold} stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor={B.gold} stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={["auto","auto"]}/>
+                        <Tooltip {...CT.tooltip}/>
+                        <Area type="monotone" dataKey="weight" stroke={B.gold} strokeWidth={2} fill="url(#wGrad)" dot={{ fill:B.gold, r:3 }} activeDot={{ r:5 }}/>
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* Compliance */}
+                  <ChartPanel title="Weekly Compliance (%)">
+                    <ResponsiveContainer width="100%" height={130}>
+                      <BarChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid} vertical={false}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={[60,100]}/>
+                        <Tooltip {...CT.tooltip} formatter={(v:any)=>[v+"%","Compliance"]}/>
+                        <Bar dataKey="compliance" fill={B.gold} radius={[4,4,0,0]}
+                          label={{ position:"top", fontSize:9, fill:B.gold, formatter:(v:any)=>v+"%"}}/>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* Wellbeing multi-line */}
+                  <ChartPanel title="Wellbeing Scores (1–10, higher = better)">
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={[1,10]}/>
+                        <Tooltip {...CT.tooltip}/>
+                        <Legend wrapperStyle={{ fontSize:10, color:B.muted, paddingTop:4 }}/>
+                        <Line type="monotone" dataKey="energy"   stroke={B.gold}    strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Energy"/>
+                        <Line type="monotone" dataKey="sleep"    stroke="#6FB8E8"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Sleep"/>
+                        <Line type="monotone" dataKey="bloating" stroke="#4FD89A"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Bloating"/>
+                        <Line type="monotone" dataKey="brainFog" stroke="#D4A8F0"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Brain Fog"/>
+                        <Line type="monotone" dataKey="sexDrive" stroke="#FF7EB3"   strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Sex Drive"/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* Stress & Hunger (lower = better) */}
+                  <ChartPanel title="Stress & Hunger (1–10, lower = better)">
+                    <ResponsiveContainer width="100%" height={150}>
+                      <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={[1,10]}/>
+                        <Tooltip {...CT.tooltip}/>
+                        <Legend wrapperStyle={{ fontSize:10, color:B.muted, paddingTop:4 }}/>
+                        <Line type="monotone" dataKey="stress"  stroke="#ff5252" strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Stress"/>
+                        <Line type="monotone" dataKey="hunger"  stroke="#FF9E6C" strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Hunger"/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* Steps */}
+                  <ChartPanel title="Daily Steps">
+                    <ResponsiveContainer width="100%" height={130}>
+                      <AreaChart data={chartData} margin={{ top:4, right:16, left:-8, bottom:0 }}>
+                        <defs>
+                          <linearGradient id="stepsGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#6FB8E8" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#6FB8E8" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}
+                          tickFormatter={(v:number)=>v>=1000?Math.round(v/1000)+"k":String(v)} domain={["auto","auto"]}/>
+                        <Tooltip {...CT.tooltip} formatter={(v:any)=>[Number(v).toLocaleString()+" steps","Steps"]}/>
+                        <Area type="monotone" dataKey="steps" stroke="#6FB8E8" strokeWidth={2} fill="url(#stepsGrad)" dot={{ fill:"#6FB8E8", r:3 }} activeDot={{ r:5 }}/>
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* HRV & Heart Rate */}
+                  <ChartPanel title="Heart Rate & HRV">
+                    <ResponsiveContainer width="100%" height={150}>
+                      <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={["auto","auto"]}/>
+                        <Tooltip {...CT.tooltip}/>
+                        <Legend wrapperStyle={{ fontSize:10, color:B.muted, paddingTop:4 }}/>
+                        <Line type="monotone" dataKey="heartRate" stroke="#ff5252"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="Heart Rate (bpm)"/>
+                        <Line type="monotone" dataKey="hrv"       stroke="#4FD89A"  strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} name="HRV"/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                  {/* Body Temp */}
+                  <ChartPanel title="Body Temperature (°F)">
+                    <ResponsiveContainer width="100%" height={120}>
+                      <LineChart data={chartData} margin={{ top:4, right:16, left:-20, bottom:0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+                        <XAxis dataKey="date" tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false}/>
+                        <YAxis tick={{ fill:CT.tick, fontSize:9 }} tickLine={false} axisLine={false} domain={["auto","auto"]}/>
+                        <Tooltip {...CT.tooltip} formatter={(v:any)=>[v+"°F","Temp"]}/>
+                        <Line type="monotone" dataKey="temp" stroke="#D4A8F0" strokeWidth={2} dot={{ fill:"#D4A8F0", r:3 }} activeDot={{ r:5 }}/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartPanel>
+
+                </div>
+              )}
             </Card>
           )}
 
