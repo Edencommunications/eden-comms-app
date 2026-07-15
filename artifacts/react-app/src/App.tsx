@@ -765,13 +765,41 @@ const CLIENT_ROSTER = [
     notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
     nextCheckin:"Jul 16", pendingLabs:true,
     checkinHistory:[
-      { date:"Jul 9 2026",  weight:"148 lbs", energy:7, sleep:6, stress:5, digestion:7, compliance:92, mood:"Motivated", clientNotes:"Feeling leaner, energy is better mid-week. Had one off-meal Saturday.", coachNotes:"Great week. Protein hit targets 6/7 days. Reduce stress load — consider walking at night." },
-      { date:"Jul 2 2026",  weight:"149 lbs", energy:6, sleep:5, stress:7, digestion:6, compliance:85, mood:"Stressed", clientNotes:"Work has been crazy. Skipped meal 4 twice. Cravings late at night.", coachNotes:"Understandable week. Add L-Theanine AM. Plan meals 3 and 4 on Sunday prep day." },
-      { date:"Jun 25 2026", weight:"150 lbs", energy:6, sleep:6, stress:6, digestion:5, compliance:88, mood:"Neutral", clientNotes:"Bloating mid-week, not sure if it was the oats. Sleep okay.", coachNotes:"Swap oats for cream of rice on low days. Continue Bloat Eaze. Good overall week." },
-      { date:"Jun 18 2026", weight:"151 lbs", energy:5, sleep:5, stress:8, digestion:4, compliance:80, mood:"Tired", clientNotes:"Hormones off this week. Very fatigued, cycle week. Cravings terrible.", coachNotes:"Normal for cycle days 14-18. Drop to maintenance calories days 1-3. Increase magnesium." },
-      { date:"Jun 11 2026", weight:"152 lbs", energy:8, sleep:8, stress:4, digestion:8, compliance:96, mood:"Great", clientNotes:"Best week yet. Energy all day, no bloating, sleep was amazing.", coachNotes:"This is the template. Protocol is working. Keep exact same approach next week." },
-      { date:"Jun 4 2026",  weight:"152.5 lbs", energy:7, sleep:7, stress:5, digestion:7, compliance:90, mood:"Good", clientNotes:"Feeling good. High days felt heavy but manageable. Step goal hit 5/7 days.", coachNotes:"Solid week. Add 1000 steps to daily target. Consider adding Oregano Pro Week 3." },
-      { date:"May 28 2026", weight:"153 lbs", energy:6, sleep:6, stress:6, digestion:6, compliance:82, mood:"Neutral", clientNotes:"Adjusting to the new protocol. Still figuring out meal timing.", coachNotes:"Week 1 adjustment is normal. Focus on hitting protein first. Timing comes second." },
+      { date:"Jul 9 2026",  weight:"148.0", temp:"97.8", steps:"9,200", heartRate:"62", hrv:"68",
+        energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4,
+        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:92, mood:"Motivated",
+        clientNotes:"Feeling leaner, energy is better mid-week. Had one off-meal Saturday.",
+        coachNotes:"Great week. Protein hit targets 6/7 days. Reduce stress load — consider walking at night." },
+      { date:"Jul 2 2026",  weight:"149.0", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58",
+        energy:6, sleep:5, bloating:6, brainFog:5, sexDrive:5, hunger:7,
+        bowelCount:"1", bowelType:"Mixed", stress:7, compliance:85, mood:"Stressed",
+        clientNotes:"Work has been crazy. Skipped meal 4 twice. Cravings late at night.",
+        coachNotes:"Understandable week. Add L-Theanine AM. Plan meals 3 and 4 on Sunday prep day." },
+      { date:"Jun 25 2026", weight:"150.0", temp:"97.7", steps:"8,500", heartRate:"64", hrv:"62",
+        energy:6, sleep:6, bloating:4, brainFog:6, sexDrive:6, hunger:5,
+        bowelCount:"2", bowelType:"Mixed", stress:6, compliance:88, mood:"Neutral",
+        clientNotes:"Bloating mid-week, not sure if it was the oats. Sleep okay.",
+        coachNotes:"Swap oats for cream of rice on low days. Continue Bloat Eaze. Good overall week." },
+      { date:"Jun 18 2026", weight:"151.0", temp:"97.4", steps:"6,200", heartRate:"72", hrv:"52",
+        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:3, hunger:8,
+        bowelCount:"1", bowelType:"Constipated", stress:8, compliance:80, mood:"Tired",
+        clientNotes:"Hormones off this week. Very fatigued, cycle week. Cravings terrible.",
+        coachNotes:"Normal for cycle days 14-18. Drop to maintenance calories days 1-3. Increase magnesium." },
+      { date:"Jun 11 2026", weight:"152.0", temp:"98.0", steps:"10,400", heartRate:"60", hrv:"74",
+        energy:8, sleep:8, bloating:8, brainFog:8, sexDrive:7, hunger:3,
+        bowelCount:"2", bowelType:"Well formed", stress:4, compliance:96, mood:"Great",
+        clientNotes:"Best week yet. Energy all day, no bloating, sleep was amazing.",
+        coachNotes:"This is the template. Protocol is working. Keep exact same approach next week." },
+      { date:"Jun 4 2026",  weight:"152.5", temp:"97.9", steps:"9,600", heartRate:"63", hrv:"70",
+        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:4,
+        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:90, mood:"Good",
+        clientNotes:"Feeling good. High days felt heavy but manageable. Step goal hit 5/7 days.",
+        coachNotes:"Solid week. Add 1000 steps to daily target. Consider adding Oregano Pro Week 3." },
+      { date:"May 28 2026", weight:"153.0", temp:"97.7", steps:"7,500", heartRate:"65", hrv:"60",
+        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:5,
+        bowelCount:"2", bowelType:"Mixed", stress:6, compliance:82, mood:"Neutral",
+        clientNotes:"Adjusting to the new protocol. Still figuring out meal timing.",
+        coachNotes:"Week 1 adjustment is normal. Focus on hitting protein first. Timing comes second." },
     ],
   },
   {
@@ -784,11 +812,31 @@ const CLIENT_ROSTER = [
     notes:"Strong progress. Maintaining current macros. Add 5R Gut in week 6.",
     nextCheckin:"Jul 15", pendingLabs:false,
     checkinHistory:[
-      { date:"Jul 8 2026",  weight:"182 lbs", energy:8, sleep:7, stress:4, digestion:8, compliance:94, mood:"Confident", clientNotes:"Feeling strong. Lifts are up. Body looking leaner without losing weight.", coachNotes:"Recomp is working. Stay at current calories. Add creatine 5g daily." },
-      { date:"Jul 1 2026",  weight:"183 lbs", energy:7, sleep:7, stress:5, digestion:7, compliance:91, mood:"Good", clientNotes:"Consistent week. Hit all meals. Had a cheat meal Sunday — burger and fries.", coachNotes:"One cheat meal is fine. Back on plan Monday. Compliance is very strong." },
-      { date:"Jun 24 2026", weight:"183.5 lbs", energy:7, sleep:6, stress:6, digestion:7, compliance:88, mood:"Good", clientNotes:"Travel week — made it work at hotel gym. Ate out a few times but made smart choices.", coachNotes:"Excellent discipline traveling. Proud of the effort. Weight holding steady is great." },
-      { date:"Jun 17 2026", weight:"184 lbs", energy:8, sleep:8, stress:3, digestion:8, compliance:97, mood:"Excellent", clientNotes:"Perfect week. Meal prepped Sunday, hit every single meal.", coachNotes:"97% compliance is elite. This week proved what's possible. Use it as your baseline." },
-      { date:"Jun 10 2026", weight:"184.5 lbs", energy:6, sleep:6, stress:5, digestion:6, compliance:85, mood:"Neutral", clientNotes:"Little flat energy-wise. Wondering if calories are too low.", coachNotes:"Bump carbs 20g on training days only. Add GDA-MAX Pro with higher carb meals." },
+      { date:"Jul 8 2026",  weight:"182.0", temp:"98.2", steps:"11,200", heartRate:"58", hrv:"82",
+        energy:8, sleep:7, bloating:8, brainFog:8, sexDrive:8, hunger:3,
+        bowelCount:"2", bowelType:"Well formed", stress:4, compliance:94, mood:"Confident",
+        clientNotes:"Feeling strong. Lifts are up. Body looking leaner without losing weight.",
+        coachNotes:"Recomp is working. Stay at current calories. Add creatine 5g daily." },
+      { date:"Jul 1 2026",  weight:"183.0", temp:"98.1", steps:"10,800", heartRate:"60", hrv:"78",
+        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:7, hunger:4,
+        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:91, mood:"Good",
+        clientNotes:"Consistent week. Hit all meals. Had a cheat meal Sunday — burger and fries.",
+        coachNotes:"One cheat meal is fine. Back on plan Monday. Compliance is very strong." },
+      { date:"Jun 24 2026", weight:"183.5", temp:"98.0", steps:"8,900", heartRate:"62", hrv:"72",
+        energy:7, sleep:6, bloating:7, brainFog:6, sexDrive:6, hunger:5,
+        bowelCount:"2", bowelType:"Well formed", stress:6, compliance:88, mood:"Good",
+        clientNotes:"Travel week — made it work at hotel gym. Ate out a few times but made smart choices.",
+        coachNotes:"Excellent discipline traveling. Proud of the effort. Weight holding steady is great." },
+      { date:"Jun 17 2026", weight:"184.0", temp:"98.3", steps:"12,100", heartRate:"56", hrv:"88",
+        energy:8, sleep:8, bloating:9, brainFog:9, sexDrive:8, hunger:2,
+        bowelCount:"2", bowelType:"Well formed", stress:3, compliance:97, mood:"Excellent",
+        clientNotes:"Perfect week. Meal prepped Sunday, hit every single meal.",
+        coachNotes:"97% compliance is elite. This week proved what's possible. Use it as your baseline." },
+      { date:"Jun 10 2026", weight:"184.5", temp:"98.0", steps:"9,200", heartRate:"64", hrv:"68",
+        energy:6, sleep:6, bloating:6, brainFog:5, sexDrive:6, hunger:6,
+        bowelCount:"2", bowelType:"Mixed", stress:5, compliance:85, mood:"Neutral",
+        clientNotes:"Little flat energy-wise. Wondering if calories are too low.",
+        coachNotes:"Bump carbs 20g on training days only. Add GDA-MAX Pro with higher carb meals." },
     ],
   },
   {
@@ -801,11 +849,31 @@ const CLIENT_ROSTER = [
     notes:"Feeling more energy week 4. Keep pushing hydration and step goal.",
     nextCheckin:"Jul 14", pendingLabs:false,
     checkinHistory:[
-      { date:"Jul 7 2026",  weight:"165 lbs", energy:7, sleep:7, stress:5, digestion:7, compliance:89, mood:"Motivated", clientNotes:"Noticed waist is smaller even if scale is same. Clothes fitting different.", coachNotes:"Body recomp happening. Scale isn't everything — measurements tell the real story." },
-      { date:"Jun 30 2026", weight:"166 lbs", energy:6, sleep:6, stress:6, digestion:6, compliance:84, mood:"Okay", clientNotes:"Struggled with low day hunger. Kept reaching for extra snacks.", coachNotes:"Add cucumber and celery as free foods on low days. Up water to 1 gallon." },
-      { date:"Jun 23 2026", weight:"167 lbs", energy:7, sleep:6, stress:5, digestion:7, compliance:86, mood:"Good", clientNotes:"High days feel amazing. Low days are a mental battle but getting easier.", coachNotes:"This is the adaptation phase. It gets easier by week 6. Stay the course." },
-      { date:"Jun 16 2026", weight:"168 lbs", energy:5, sleep:5, stress:8, digestion:5, compliance:75, mood:"Struggling", clientNotes:"Really hard week. Period cramps, emotional eating Thursday.", coachNotes:"Hormonal week is expected. No guilt. Add Cort Eaze on high-stress days." },
-      { date:"Jun 9 2026",  weight:"168.5 lbs", energy:6, sleep:7, stress:5, digestion:6, compliance:82, mood:"Neutral", clientNotes:"Getting used to the structure. Meal prep is getting easier.", coachNotes:"Week 5 progress is solid. Drop scale check-ins to 1x/week — focus on how you feel." },
+      { date:"Jul 7 2026",  weight:"165.0", temp:"97.8", steps:"9,800", heartRate:"66", hrv:"64",
+        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:5,
+        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:89, mood:"Motivated",
+        clientNotes:"Noticed waist is smaller even if scale is same. Clothes fitting different.",
+        coachNotes:"Body recomp happening. Scale isn't everything — measurements tell the real story." },
+      { date:"Jun 30 2026", weight:"166.0", temp:"97.6", steps:"8,600", heartRate:"68", hrv:"60",
+        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:7,
+        bowelCount:"2", bowelType:"Mixed", stress:6, compliance:84, mood:"Okay",
+        clientNotes:"Struggled with low day hunger. Kept reaching for extra snacks.",
+        coachNotes:"Add cucumber and celery as free foods on low days. Up water to 1 gallon." },
+      { date:"Jun 23 2026", weight:"167.0", temp:"97.8", steps:"9,200", heartRate:"67", hrv:"62",
+        energy:7, sleep:6, bloating:6, brainFog:7, sexDrive:6, hunger:6,
+        bowelCount:"2", bowelType:"Well formed", stress:5, compliance:86, mood:"Good",
+        clientNotes:"High days feel amazing. Low days are a mental battle but getting easier.",
+        coachNotes:"This is the adaptation phase. It gets easier by week 6. Stay the course." },
+      { date:"Jun 16 2026", weight:"168.0", temp:"97.3", steps:"5,800", heartRate:"74", hrv:"50",
+        energy:5, sleep:5, bloating:4, brainFog:4, sexDrive:3, hunger:8,
+        bowelCount:"1", bowelType:"Constipated", stress:8, compliance:75, mood:"Struggling",
+        clientNotes:"Really hard week. Period cramps, emotional eating Thursday.",
+        coachNotes:"Hormonal week is expected. No guilt. Add Cort Eaze on high-stress days." },
+      { date:"Jun 9 2026",  weight:"168.5", temp:"97.7", steps:"8,200", heartRate:"68", hrv:"58",
+        energy:6, sleep:7, bloating:6, brainFog:6, sexDrive:5, hunger:5,
+        bowelCount:"2", bowelType:"Mixed", stress:5, compliance:82, mood:"Neutral",
+        clientNotes:"Getting used to the structure. Meal prep is getting easier.",
+        coachNotes:"Week 5 progress is solid. Drop scale check-ins to 1x/week — focus on how you feel." },
     ],
   },
   {
@@ -818,12 +886,36 @@ const CLIENT_ROSTER = [
     notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
     nextCheckin:"Overdue", pendingLabs:true,
     checkinHistory:[
-      { date:"Jun 30 2026", weight:"191 lbs", energy:5, sleep:5, stress:7, digestion:4, compliance:78, mood:"Frustrated", clientNotes:"Gut still acting up. Bloating after every meal. Getting discouraged.", coachNotes:"Stick with protocol — gut healing takes 6-8 weeks minimum. GI Map will show what's happening." },
-      { date:"Jun 23 2026", weight:"192 lbs", energy:5, sleep:5, stress:7, digestion:4, compliance:80, mood:"Neutral", clientNotes:"Same issues. Some days better than others. Sleep is poor.", coachNotes:"Add Relax Liposomal before bed. Remove raw vegetables temporarily, cook all produce." },
-      { date:"Jun 16 2026", weight:"192.5 lbs", energy:6, sleep:6, stress:6, digestion:5, compliance:83, mood:"Hopeful", clientNotes:"Slightly better this week. Less bloating after breakfast at least.", coachNotes:"Green shoots. Morning protocol is working. Focus on that consistency." },
-      { date:"Jun 9 2026",  weight:"193 lbs", energy:5, sleep:4, stress:8, digestion:3, compliance:75, mood:"Tired", clientNotes:"Very fatigued. Not sleeping well. Work stress is high.", coachNotes:"Cortisol is elevated. Add Cort Eaze 2 caps waking + 2 caps before bed. Prioritize sleep." },
-      { date:"Jun 2 2026",  weight:"194 lbs", energy:6, sleep:6, stress:6, digestion:4, compliance:79, mood:"Okay", clientNotes:"Starting to understand the protocol better. Prep has improved.", coachNotes:"Gut healing is slow but progress is real. Labs ordered — GI Map and blood panel." },
-      { date:"May 26 2026", weight:"194.5 lbs", energy:5, sleep:5, stress:7, digestion:3, compliance:72, mood:"Struggling", clientNotes:"Hardest part is meal timing with work schedule. Skipping meals often.", coachNotes:"Use protein shakes as bridge meals. Schedule alarms for meal 3 and 4." },
+      { date:"Jun 30 2026", weight:"191.0", temp:"97.4", steps:"6,800", heartRate:"72", hrv:"52",
+        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:4, hunger:6,
+        bowelCount:"3", bowelType:"Loose", stress:7, compliance:78, mood:"Frustrated",
+        clientNotes:"Gut still acting up. Bloating after every meal. Getting discouraged.",
+        coachNotes:"Stick with protocol — gut healing takes 6-8 weeks minimum. GI Map will show what's happening." },
+      { date:"Jun 23 2026", weight:"192.0", temp:"97.5", steps:"7,200", heartRate:"70", hrv:"54",
+        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:4, hunger:5,
+        bowelCount:"4", bowelType:"Diarrhea", stress:7, compliance:80, mood:"Neutral",
+        clientNotes:"Same issues. Some days better than others. Sleep is poor.",
+        coachNotes:"Add Relax Liposomal before bed. Remove raw vegetables temporarily, cook all produce." },
+      { date:"Jun 16 2026", weight:"192.5", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58",
+        energy:6, sleep:6, bloating:4, brainFog:5, sexDrive:5, hunger:5,
+        bowelCount:"2", bowelType:"Loose", stress:6, compliance:83, mood:"Hopeful",
+        clientNotes:"Slightly better this week. Less bloating after breakfast at least.",
+        coachNotes:"Green shoots. Morning protocol is working. Focus on that consistency." },
+      { date:"Jun 9 2026",  weight:"193.0", temp:"97.2", steps:"5,800", heartRate:"76", hrv:"48",
+        energy:5, sleep:4, bloating:2, brainFog:3, sexDrive:3, hunger:6,
+        bowelCount:"4", bowelType:"Diarrhea", stress:8, compliance:75, mood:"Tired",
+        clientNotes:"Very fatigued. Not sleeping well. Work stress is high.",
+        coachNotes:"Cortisol is elevated. Add Cort Eaze 2 caps waking + 2 caps before bed. Prioritize sleep." },
+      { date:"Jun 2 2026",  weight:"194.0", temp:"97.5", steps:"7,000", heartRate:"70", hrv:"55",
+        energy:6, sleep:6, bloating:3, brainFog:5, sexDrive:4, hunger:6,
+        bowelCount:"3", bowelType:"Loose", stress:6, compliance:79, mood:"Okay",
+        clientNotes:"Starting to understand the protocol better. Prep has improved.",
+        coachNotes:"Gut healing is slow but progress is real. Labs ordered — GI Map and blood panel." },
+      { date:"May 26 2026", weight:"194.5", temp:"97.3", steps:"5,400", heartRate:"74", hrv:"50",
+        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:3, hunger:7,
+        bowelCount:"3", bowelType:"Diarrhea", stress:7, compliance:72, mood:"Struggling",
+        clientNotes:"Hardest part is meal timing with work schedule. Skipping meals often.",
+        coachNotes:"Use protein shakes as bridge meals. Schedule alarms for meal 3 and 4." },
     ],
   },
 ];
@@ -943,10 +1035,11 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
           {history.length > 0 && (
             <Card style={{ marginBottom:12, padding:0, overflow:"hidden" }}>
               {/* Section header */}
-              <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.border}` }}>
+              <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>
-                  Check-In History · {history.length} entries
+                  Check-In History
                 </p>
+                <span style={{ fontSize:10, color:B.muted }}>{history.length} entries · tap to expand</span>
               </div>
 
               {history.map((entry:any, idx:number) => {
@@ -955,48 +1048,94 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                 return (
                   <div key={idx} style={{ borderBottom: idx < history.length-1 ? `1px solid ${B.border}` : "none" }}>
 
-                    {/* Row — always visible */}
+                    {/* Collapsed row — always visible */}
                     <button
                       onClick={()=>setExpandedEntry(isOpen ? null : idx)}
-                      style={{ width:"100%", background:"none", border:"none", padding:"12px 16px", textAlign:"left", cursor:"pointer", display:"block" }}>
+                      style={{ width:"100%", background: isOpen ? `${B.gold}08` : "none", border:"none", padding:"12px 16px", textAlign:"left", cursor:"pointer", display:"block" }}>
 
-                      {/* Top line: date + weight + compliance + mood */}
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                        <div>
+                      {/* Top line: date + weight + compliance */}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                        <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
                           <span style={{ fontSize:13, fontWeight:700, color:B.text }}>{entry.date}</span>
-                          <span style={{ fontSize:12, color:B.gold, fontWeight:600, marginLeft:10 }}>{entry.weight}</span>
+                          <span style={{ fontSize:13, color:B.gold, fontWeight:700 }}>{entry.weight} lbs</span>
+                          <span style={{ fontSize:11, color:B.muted, fontWeight:500 }}>· {entry.mood}</span>
                         </div>
                         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
                           <span style={{ fontSize:11, fontWeight:700, color:compColor, background:`${compColor}18`, border:`1px solid ${compColor}44`, borderRadius:6, padding:"2px 7px" }}>
-                            {entry.compliance}% compliant
+                            {entry.compliance}%
                           </span>
                           <span style={{ fontSize:10, color:B.muted }}>{isOpen ? "▲" : "▼"}</span>
                         </div>
                       </div>
 
-                      {/* Score chips row */}
-                      <div style={{ display:"flex", gap:10, justifyContent:"flex-start" }}>
-                        <ScoreChip label="Energy"    val={entry.energy}    />
-                        <ScoreChip label="Sleep"     val={entry.sleep}     />
-                        <ScoreChip label="Stress"    val={entry.stress}    invert />
-                        <ScoreChip label="Digestion" val={entry.digestion} />
-                        <div style={{ display:"flex", flexDirection:"column", justifyContent:"center", marginLeft:4 }}>
-                          <span style={{ fontSize:11, color:B.muted }}>Mood:</span>
-                          <span style={{ fontSize:12, fontWeight:700, color:B.text }}>{entry.mood}</span>
-                        </div>
+                      {/* Key score chips — always visible */}
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <ScoreChip label="Energy"  val={entry.energy} />
+                        <ScoreChip label="Sleep"   val={entry.sleep} />
+                        <ScoreChip label="Bloat"   val={entry.bloating} />
+                        <ScoreChip label="Brain Fog" val={entry.brainFog} />
+                        <ScoreChip label="Hunger"  val={entry.hunger} invert />
+                        <ScoreChip label="Stress"  val={entry.stress} invert />
                       </div>
                     </button>
 
-                    {/* Expanded: notes */}
+                    {/* Expanded full detail */}
                     {isOpen && (
-                      <div style={{ padding:"0 16px 14px" }}>
+                      <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${B.border}` }}>
+
+                        {/* Vitals grid */}
+                        <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"12px 0 8px" }}>Vitals</p>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:14 }}>
+                          {[
+                            ["Weight",     entry.weight+" lbs"],
+                            ["Body Temp",  entry.temp+"°F"],
+                            ["Daily Steps",entry.steps],
+                            ["Heart Rate", entry.heartRate+" bpm"],
+                            ["HRV",        entry.hrv],
+                          ].map(([l,v])=>(
+                            <div key={l} style={{ background:B.bg, borderRadius:8, padding:"8px 10px" }}>
+                              <p style={{ fontSize:9, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.6 }}>{l}</p>
+                              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{v}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Wellbeing scores — full set */}
+                        <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 8px" }}>Wellbeing Scores</p>
+                        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:14 }}>
+                          <ScoreChip label="Energy"   val={entry.energy} />
+                          <ScoreChip label="Sleep"    val={entry.sleep} />
+                          <ScoreChip label="Bloating" val={entry.bloating} />
+                          <ScoreChip label="Brain Fog" val={entry.brainFog} />
+                          <ScoreChip label="Sex Drive" val={entry.sexDrive} />
+                          <ScoreChip label="Hunger"   val={entry.hunger} invert />
+                          <ScoreChip label="Stress"   val={entry.stress} invert />
+                        </div>
+
+                        {/* Digestion */}
+                        <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 8px" }}>Digestion</p>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:14 }}>
+                          {[
+                            ["Daily BMs", entry.bowelCount],
+                            ["Stool Type", entry.bowelType],
+                          ].map(([l,v])=>(
+                            <div key={l} style={{ background:B.bg, borderRadius:8, padding:"8px 10px" }}>
+                              <p style={{ fontSize:9, color:B.muted, margin:"0 0 2px", textTransform:"uppercase", letterSpacing:.6 }}>{l}</p>
+                              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{v}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Client notes */}
                         <div style={{ background:B.bg, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
                           <p style={{ fontSize:9, color:B.muted, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 5px", fontWeight:700 }}>Client's Notes</p>
-                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6, fontStyle:"italic" }}>"{entry.clientNotes}"</p>
+                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.65, fontStyle:"italic" }}>"{entry.clientNotes}"</p>
                         </div>
+
+                        {/* Coach response */}
                         <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}33`, borderRadius:8, padding:"10px 12px" }}>
                           <p style={{ fontSize:9, color:B.gold, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 5px", fontWeight:700 }}>Coach Response</p>
-                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6 }}>{entry.coachNotes}</p>
+                          <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.65 }}>{entry.coachNotes}</p>
                         </div>
                       </div>
                     )}
