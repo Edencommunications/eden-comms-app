@@ -46,6 +46,8 @@ const DEMO_USERS = {
   "admin@edencomms.io":   { password: "Admin1234!", role: "super_admin",  name: "Eden Admin",      org: "eden" },
   "coach@eden.io":        { password: "Coach1234!", role: "coach",        name: "Coach Marcus",    org: "eden" },
   "client@eden.io":       { password: "Client123!", role: "client",       name: "Jordan Williams", org: "eden", coach: "coach@eden.io" },
+  "va@eden.io":           { password: "VA1234!",    role: "va",           name: "Sarah (VA)",      org: "eden" },
+  "headcoach@eden.io":    { password: "HC1234!",    role: "head_coach",   name: "Head Coach Nia",  org: "eden" },
   "coach@partnerbrand.io":{ password: "Coach1234!", role: "coach",        name: "Coach Rivera",    org: "partner_brand" },
 };
 
@@ -1846,6 +1848,329 @@ const StaffAccessManager = ({ user }:any) => {
   );
 };
 
+// ─── ADMIN CONVERSATION MONITOR ──────────────────────────────────────────────
+const AdminConversationMonitor = ({ user }:any) => {
+  const isMobile = useIsMobile();
+  const [convos,      setConvos]      = useState<any[]>([]);
+  const [profiles,    setProfiles]    = useState<Record<string,any>>({});
+  const [selected,    setSelected]    = useState<any>(null);
+  const [messages,    setMessages]    = useState<any[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [ready,       setReady]       = useState(false);
+  const [msgLoading,  setMsgLoading]  = useState(false);
+
+  useEffect(() => { init() }, []);
+
+  async function init() {
+    const meRows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id,company_id`);
+    const me = meRows?.[0];
+    if (!me?.company_id) { setLoading(false); return; }
+    const rows = await sbGet('conversations',
+      `company_id=eq.${me.company_id}&order=last_message_at.desc.nullslast&select=id,participant_a_id,participant_b_id,last_message,last_message_at`);
+    const valid = (rows||[]).filter((c:any) => c.participant_a_id && c.participant_b_id);
+    setConvos(valid); setReady(true);
+    const ids = new Set<string>();
+    for (const c of valid) { ids.add(c.participant_a_id); ids.add(c.participant_b_id); }
+    if (ids.size) {
+      const pRows = await sbGet('user_profiles', `id=in.(${[...ids].join(',')})&select=id,name,initials,role`);
+      const map:Record<string,any> = {};
+      for (const p of pRows||[]) map[p.id] = p;
+      setProfiles(map);
+    }
+    setLoading(false);
+  }
+
+  async function openConvo(c:any) {
+    setSelected(c); setMsgLoading(true);
+    const msgs = await sbGet('messages', `conversation_id=eq.${c.id}&order=created_at.asc`);
+    setMessages(msgs||[]); setMsgLoading(false);
+  }
+
+  const pName = (id:string) => profiles[id]?.name || 'Unknown';
+  const pInit = (id:string) => profiles[id]?.initials || '??';
+  const pRole = (id:string) => (profiles[id]?.role||'').replace(/_/g,' ');
+
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:B.muted, fontSize:13 }}>Loading conversations…</div>;
+
+  if (!ready) return (
+    <div style={{ padding:'24px 20px' }}>
+      <Card>
+        <div style={{ textAlign:'center', padding:'24px 0' }}>
+          <div style={{ fontSize:32, marginBottom:10 }}>💬</div>
+          <p style={{ fontSize:14, fontWeight:700, color:B.muted, margin:'0 0 8px' }}>Conversation monitor not ready</p>
+          <p style={{ fontSize:12, color:B.muted, margin:0, lineHeight:1.7 }}>
+            Run the SQL setup (companies + conversations participant columns).<br/>
+            Once set up, every coach ↔ client thread will appear here for admin review.
+          </p>
+        </div>
+      </Card>
+    </div>
+  );
+
+  return (
+    <div style={{ display:'flex', flex:1, overflow:'hidden', height:'100%' }}>
+      {/* Left — conversation list */}
+      {(!selected || !isMobile) && (
+        <div style={{ width: isMobile?'100%':280, flexShrink:0, borderRight:`1px solid ${B.border}`, overflowY:'auto', display:'flex', flexDirection:'column' }}>
+          <div style={{ padding:'12px 16px', borderBottom:`1px solid ${B.border}` }}>
+            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:0 }}>
+              All Conversations ({convos.length})
+            </p>
+          </div>
+          {convos.length===0 && <div style={{ padding:28, textAlign:'center', color:B.muted, fontSize:12 }}>No conversations yet</div>}
+          {convos.map((c:any) => {
+            const isActive = selected?.id===c.id;
+            return (
+              <button key={c.id} onClick={()=>openConvo(c)}
+                style={{ width:'100%', padding:'13px 16px', background:isActive?`${B.gold}15`:'transparent',
+                  borderLeft:`3px solid ${isActive?B.gold:'transparent'}`, border:'none',
+                  borderBottom:`1px solid ${B.border}`, cursor:'pointer', textAlign:'left' }}>
+                <p style={{ fontSize:12, fontWeight:700, color:isActive?B.gold:B.text, margin:'0 0 2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {pName(c.participant_a_id)} ↔ {pName(c.participant_b_id)}
+                </p>
+                <p style={{ fontSize:10, color:B.muted, margin:'0 0 3px', textTransform:'capitalize' }}>
+                  {pRole(c.participant_a_id)} · {pRole(c.participant_b_id)}
+                </p>
+                {c.last_message && <p style={{ fontSize:10, color:B.border, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.last_message}</p>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Right — thread view */}
+      {selected ? (
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <div style={{ padding:'10px 16px', background:B.surface, borderBottom:`1px solid ${B.border}`, display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+            {isMobile && <button onClick={()=>setSelected(null)} style={{ background:'none', border:'none', color:B.gold, fontSize:13, fontWeight:700, cursor:'pointer', padding:0 }}>← Back</button>}
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{pName(selected.participant_a_id)} ↔ {pName(selected.participant_b_id)}</p>
+              <p style={{ fontSize:10, color:B.muted, margin:0 }}>Admin read-only · HIPAA audit log active</p>
+            </div>
+            <button onClick={()=>openConvo(selected)} style={{ background:`${B.gold}22`, border:`1px solid ${B.goldMid}`, borderRadius:6, padding:'5px 10px', color:B.gold, fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}>Refresh</button>
+          </div>
+          <div style={{ flex:1, overflowY:'auto', padding:'16px' }}>
+            {msgLoading && <div style={{ textAlign:'center', padding:24, color:B.muted, fontSize:12 }}>Loading messages…</div>}
+            {!msgLoading && messages.length===0 && <div style={{ textAlign:'center', padding:24, color:B.muted, fontSize:12 }}>No messages yet</div>}
+            {!msgLoading && messages.map((msg:any, i:number) => (
+              <div key={msg.id||i} style={{ marginBottom:14 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
+                  <div style={{ width:22, height:22, borderRadius:11, background:B.goldDim, border:`1px solid ${B.goldMid}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:800, color:B.gold, flexShrink:0 }}>
+                    {pInit(msg.sender_id)}
+                  </div>
+                  <span style={{ fontSize:11, fontWeight:700, color:B.muted }}>{pName(msg.sender_id)}</span>
+                  {msg.created_at && <span style={{ fontSize:9, color:B.border }}>{new Date(msg.created_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+                </div>
+                <div style={{ marginLeft:28, background:B.card, border:`1px solid ${B.border}`, borderRadius:'4px 12px 12px 12px', padding:'9px 13px' }}>
+                  <p style={{ fontSize:13, color:B.text, margin:0, lineHeight:1.55, wordBreak:'break-word' }}>{msg.content||'📎 File attachment'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : !isMobile && (
+        <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>💬</div>
+            <p style={{ fontSize:14, color:B.muted }}>Select a conversation to read</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── STAFF CLIENT PANEL ───────────────────────────────────────────────────────
+const StaffClientPanel = ({ user }:any) => {
+  const isMobile = useIsMobile();
+  const [loading,     setLoading]     = useState(true);
+  const [myProfile,   setMyProfile]   = useState<any>(null);
+  const [clients,     setClients]     = useState<any[]>([]);
+  const [permsMap,    setPermsMap]    = useState<Record<string,any>>({});
+  const [selected,    setSelected]    = useState<any>(null);
+  const [dataLoading, setDataLoading] = useState(false);
+
+  useEffect(() => { init() }, []);
+
+  async function init() {
+    const meRows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=*`);
+    const me = meRows?.[0];
+    if (!me) { setLoading(false); return; }
+    setMyProfile(me);
+    const access:any[] = await sbGet('client_access', `staff_id=eq.${me.id}&company_id=eq.${me.company_id}&select=*`) || [];
+    if (!access.length) { setLoading(false); return; }
+    const specific = access.filter((a:any)=>a.client_id).map((a:any)=>a.client_id);
+    const compWide  = access.find((a:any)=>!a.client_id);
+    let clientRows:any[] = compWide
+      ? await sbGet('user_profiles', `company_id=eq.${me.company_id}&role=eq.client&order=name.asc`) || []
+      : specific.length ? await sbGet('user_profiles', `id=in.(${specific.join(',')})&order=name.asc`) || [] : [];
+    const pm:Record<string,any> = {};
+    for (const c of clientRows) {
+      const sp = access.find((a:any)=>a.client_id===c.id);
+      const cw = access.find((a:any)=>!a.client_id);
+      pm[c.id] = {...(cw?.permissions||{}), ...(sp?.permissions||{})};
+    }
+    setClients(clientRows); setPermsMap(pm); setLoading(false);
+  }
+
+  async function selectClient(client:any) {
+    const perms = permsMap[client.id]||{};
+    setSelected({client,perms,data:{}}); setDataLoading(true);
+    const data:Record<string,any> = {};
+    await Promise.all([
+      perms.diet     && sbGet('diet_plans',      `client_id=eq.${client.id}&order=updated_at.desc&limit=1`).then(r=>{data.diet=r?.[0]||null}),
+      perms.workout  && sbGet('workout_plans',   `client_id=eq.${client.id}&order=created_at.desc&limit=1`).then(r=>{data.workout=r?.[0]||null}),
+      perms.labs     && sbGet('lab_results',     `client_id=eq.${client.id}&order=created_at.desc&limit=6`).then(r=>{data.labs=r||[]}),
+      perms.checkins && sbGet('weekly_checkins', `client_id=eq.${client.id}&order=submitted_at.desc&limit=3`).then(r=>{data.checkins=r||[]}),
+    ].filter(Boolean));
+    setSelected({client,perms,data}); setDataLoading(false);
+  }
+
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:B.muted, fontSize:13 }}>Loading your clients…</div>;
+
+  if (!myProfile) return (
+    <Screen><div style={{ padding:'40px 20px', textAlign:'center' }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>👤</div>
+      <p style={{ fontSize:14, fontWeight:700, color:B.muted, margin:'0 0 8px' }}>Profile not set up yet</p>
+      <p style={{ fontSize:12, color:B.muted, margin:0, lineHeight:1.7 }}>Ask your admin to create your account in Supabase with user_profiles. Your assigned clients will appear here.</p>
+    </div></Screen>
+  );
+
+  if (!clients.length) return (
+    <Screen><div style={{ padding:'40px 20px', textAlign:'center' }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>📋</div>
+      <p style={{ fontSize:14, fontWeight:700, color:B.muted, margin:'0 0 8px' }}>No clients assigned yet</p>
+      <p style={{ fontSize:12, color:B.muted, margin:0 }}>Your admin will assign you to clients via Staff Access. Check back soon.</p>
+    </div></Screen>
+  );
+
+  return (
+    <div style={{ display:'flex', flex:1, overflow:'hidden', height:'100%' }}>
+      {/* Client list */}
+      {(!selected||!isMobile) && (
+        <div style={{ width:isMobile?'100%':230, flexShrink:0, borderRight:`1px solid ${B.border}`, overflowY:'auto' }}>
+          <div style={{ padding:'12px 16px', borderBottom:`1px solid ${B.border}` }}>
+            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:0 }}>My Clients ({clients.length})</p>
+          </div>
+          {clients.map((c:any)=>{
+            const perms = permsMap[c.id]||{};
+            const active = PERM_DEFS.filter((p:any)=>perms[p.key]);
+            const isAct  = selected?.client?.id===c.id;
+            return (
+              <button key={c.id} onClick={()=>selectClient(c)}
+                style={{ width:'100%', padding:'12px 14px', background:isAct?`${B.gold}15`:'transparent', borderLeft:`3px solid ${isAct?B.gold:'transparent'}`, border:'none', borderBottom:`1px solid ${B.border}`, cursor:'pointer', textAlign:'left' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <div style={{ width:34, height:34, borderRadius:17, background:isAct?B.gold:B.card, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:isAct?B.black:B.muted, flexShrink:0 }}>
+                    {(c.initials||c.name[0]).slice(0,2)}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:13, fontWeight:700, color:isAct?B.gold:B.text, margin:'0 0 4px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</p>
+                    <div style={{ display:'flex', gap:3 }}>{active.map((p:any)=><span key={p.key} style={{ fontSize:10 }}>{p.icon}</span>)}</div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Detail panel */}
+      {selected ? (
+        <div style={{ flex:1, overflowY:'auto' }}>
+          <div style={{ padding:'12px 16px', background:B.surface, borderBottom:`1px solid ${B.border}`, display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:10 }}>
+            {isMobile && <button onClick={()=>setSelected(null)} style={{ background:'none', border:'none', color:B.gold, fontSize:13, fontWeight:700, cursor:'pointer', padding:0 }}>← Back</button>}
+            <div>
+              <p style={{ fontSize:14, fontWeight:800, color:B.text, margin:0 }}>{selected.client.name}</p>
+              <p style={{ fontSize:10, color:B.muted, margin:0 }}>Read-only · permissions granted by admin</p>
+            </div>
+          </div>
+          {dataLoading && <div style={{ padding:32, textAlign:'center', color:B.muted, fontSize:12 }}>Loading data…</div>}
+          {!dataLoading && (
+            <div style={{ padding:'16px 20px 40px' }}>
+              {/* Permission chips */}
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:16 }}>
+                {PERM_DEFS.map((p:any)=>{
+                  const on=!!selected.perms[p.key];
+                  return <span key={p.key} style={{ fontSize:10, fontWeight:700, color:on?p.color:B.border, background:on?`${p.color}15`:B.surface, border:`1px solid ${on?p.color+'44':B.border}`, borderRadius:12, padding:'3px 10px' }}>{p.icon} {p.label}</span>;
+                })}
+              </div>
+
+              {/* Diet */}
+              {selected.perms.diet && (
+                <Card style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>🥗 Current Diet Plan</p>
+                  {selected.data.diet ? (<>
+                    <p style={{ fontSize:13, fontWeight:700, color:B.gold, margin:'0 0 4px' }}>{selected.data.diet.protocol||'Protocol on file'}</p>
+                    <p style={{ fontSize:11, color:B.muted, margin:'0 0 4px' }}>Updated: {selected.data.diet.updated_at?new Date(selected.data.diet.updated_at).toLocaleDateString():'—'}</p>
+                    {(()=>{try{const t=typeof selected.data.diet.targets==='string'?JSON.parse(selected.data.diet.targets):selected.data.diet.targets;
+                      return t?<p style={{ fontSize:11, color:B.muted, margin:0 }}>Targets · {t.calories} kcal · P:{t.protein}g · C:{t.carbs}g · F:{t.fat}g</p>:null;}catch{return null;}})()}
+                  </>) : <p style={{ fontSize:12, color:B.muted, margin:0 }}>No saved plan yet — coach must save from Diet Builder</p>}
+                </Card>
+              )}
+
+              {/* Workout */}
+              {selected.perms.workout && (
+                <Card style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>🏋️ Workout Plan</p>
+                  {selected.data.workout
+                    ? <><p style={{ fontSize:13, fontWeight:700, color:B.gold, margin:'0 0 4px' }}>Plan on file</p>
+                       <p style={{ fontSize:11, color:B.muted, margin:0 }}>Saved: {selected.data.workout.created_at?new Date(selected.data.workout.created_at).toLocaleDateString():'—'}</p></>
+                    : <p style={{ fontSize:12, color:B.muted, margin:0 }}>No workout plan saved yet</p>}
+                </Card>
+              )}
+
+              {/* Labs */}
+              {selected.perms.labs && (
+                <Card style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>🔬 Lab Results</p>
+                  {selected.data.labs?.length
+                    ? selected.data.labs.map((lab:any,i:number)=>(
+                        <div key={i} style={{ padding:'6px 0', borderTop:i>0?`1px solid ${B.border}`:'none' }}>
+                          <p style={{ fontSize:12, color:B.text, margin:'0 0 2px' }}>{lab.test_name||lab.marker_name||'Lab result'}</p>
+                          <p style={{ fontSize:10, color:B.muted, margin:0 }}>{lab.value} {lab.unit} · {lab.created_at?new Date(lab.created_at).toLocaleDateString():''}</p>
+                        </div>
+                      ))
+                    : <p style={{ fontSize:12, color:B.muted, margin:0 }}>No lab results on file</p>}
+                </Card>
+              )}
+
+              {/* Check-ins */}
+              {selected.perms.checkins && (
+                <Card style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>✅ Recent Check-ins</p>
+                  {selected.data.checkins?.length
+                    ? selected.data.checkins.map((ci:any,i:number)=>(
+                        <div key={i} style={{ padding:'6px 0', borderTop:i>0?`1px solid ${B.border}`:'none' }}>
+                          <p style={{ fontSize:12, color:B.text, margin:'0 0 2px' }}>{ci.submitted_at?new Date(ci.submitted_at).toLocaleDateString():'Check-in'}</p>
+                          <p style={{ fontSize:10, color:B.muted, margin:0 }}>Weight: {ci.weight_lbs||'—'} lbs · Energy: {ci.energy_level||'—'}/10 · Sleep: {ci.sleep_quality||'—'}/10</p>
+                        </div>
+                      ))
+                    : <p style={{ fontSize:12, color:B.muted, margin:0 }}>No check-ins on file</p>}
+                </Card>
+              )}
+
+              {/* Habits note */}
+              {selected.perms.habits && (
+                <Card style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 6px' }}>🌱 Habits</p>
+                  <p style={{ fontSize:12, color:B.muted, margin:0 }}>Company-wide habit protocols are in the Habits tab. Client-specific tracking will show here once per-client habit logs are saved.</p>
+                </Card>
+              )}
+            </div>
+          )}
+        </div>
+      ) : !isMobile && (
+        <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>👤</div>
+            <p style={{ fontSize:14, color:B.muted }}>Select a client to view their data</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
 const AdminDashboard = ({ user }:any) => {
   const isMobile = useIsMobile();
@@ -1865,7 +2190,7 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Tab bar */}
       <div style={{ display:'flex', borderBottom:`1px solid ${B.border}`, background:B.surface, padding:'0 20px', flexShrink:0 }}>
-        {[['overview','📊 Overview'],['access','👥 Staff Access']].map(([key,label])=>(
+        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations']].map(([key,label])=>(
           <button key={key} onClick={()=>setAdminTab(key)}
             style={{ padding:'12px 16px', background:'none', border:'none', borderBottom:`2px solid ${adminTab===key?B.gold:'transparent'}`,
               color:adminTab===key?B.gold:B.muted, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
@@ -1916,6 +2241,9 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Staff Access */}
       {adminTab==='access' && <StaffAccessManager user={user}/>}
+
+      {/* Conversations — admin reads all coach↔client threads */}
+      {adminTab==='convos' && <AdminConversationMonitor user={user}/>}
     </Screen>
   );
 };
@@ -2028,22 +2356,41 @@ const AppShell = ({ user, onLogout }) => {
     { key:"community", icon:"community", label:"Connect" },
   ];
 
-  const tabs = user.role === "super_admin" ? adminTabs : user.role === "coach" ? coachTabs : clientTabs;
+  // Staff roles (VA, head coach, etc.) — 2 tabs: their client view + messages
+  const isStaff = !["super_admin","coach","client"].includes(user.role);
+  const staffTabs = [
+    { key:"home", icon:"home", label:"My Clients" },
+    { key:"msgs", icon:"msg",  label:"Messages"   },
+  ];
+
+  const tabs = user.role === "super_admin" ? adminTabs
+             : user.role === "coach"       ? coachTabs
+             : isStaff                     ? staffTabs
+             : clientTabs;
 
   const renderScreen = () => {
+    // Super admin
     if (user.role === "super_admin") {
       if (tab === "home") return <AdminDashboard user={user}/>;
     }
+    // Coach
     if (user.role === "coach") {
       if (tab === "home") return <CoachDashboard user={user} onNavigate={setTab} loomMode={loomMode} setLoomMode={setLoomMode}/>;
     }
-    if (tab === "home")    return <HomeScreen user={user}/>;
-    if (tab === "msgs")    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
-    if (tab === "diet")    return <DietBuilder currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
-    if (tab === "labs")    return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="labs"/>;
-    if (tab === "checkin") return <CheckInScreen/>;
-    if (tab === "habits")  return <HabitTrackerScreen/>;
-    if (tab === "workout") return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="workout"/>;
+    // Staff (VA, head coach, etc.)
+    if (isStaff) {
+      if (tab === "home") return <StaffClientPanel user={user}/>;
+      if (tab === "msgs") return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
+      return <StaffClientPanel user={user}/>;
+    }
+    // Shared screens
+    if (tab === "home")      return <HomeScreen user={user}/>;
+    if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
+    if (tab === "diet")      return <DietBuilder currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
+    if (tab === "labs")      return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="labs"/>;
+    if (tab === "checkin")   return <CheckInScreen/>;
+    if (tab === "habits")    return <HabitTrackerScreen/>;
+    if (tab === "workout")   return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="workout"/>;
     if (tab === "admin")     return <AdminDashboard user={user}/>;
     if (tab === "community") return <CommunityScreen/>;
     return <HomeScreen user={user}/>;
