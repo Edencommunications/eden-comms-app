@@ -335,7 +335,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
           } else {
             // Company-wide — load all clients in the company
             const clients = await dbGet('user_profiles',
-              `company_id=eq.${companyId}&role=eq.client&order=name.asc`)
+              `company_id=eq.${companyId}&role=eq.client&order=created_at.asc`)
             for (const client of clients || []) {
               const convoId = await findOrCreateConvo(staffId, client.id, companyId)
               pushConvo(client, convoId)
@@ -370,7 +370,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
       } else if (myRole === 'coach') {
         // Primary clients (assigned coach)
         const clients = await dbGet('user_profiles',
-          `coach_id=eq.${me.id}&company_id=eq.${me.company_id}&order=name.asc`)
+          `coach_id=eq.${me.id}&company_id=eq.${me.company_id}&order=created_at.asc`)
         for (const client of clients || []) {
           const convoId = await findOrCreateConvo(me.id, client.id, me.company_id)
           pushConvo(client, convoId)
@@ -381,7 +381,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
       } else if (myRole === 'super_admin' || myRole === 'company_admin') {
         // Admin: see all users in their company
         const users = await dbGet('user_profiles',
-          `company_id=eq.${me.company_id}&id=neq.${me.id}&order=name.asc`)
+          `company_id=eq.${me.company_id}&id=neq.${me.id}&order=created_at.asc`)
         for (const user of users || []) {
           const convoId = await findOrCreateConvo(me.id, user.id, me.company_id)
           pushConvo(user, convoId)
