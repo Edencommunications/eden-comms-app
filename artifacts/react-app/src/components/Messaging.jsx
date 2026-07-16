@@ -209,6 +209,41 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB'
 }
 
+// ── Multi-tenant helpers ──────────────────────────────────────
+function makeInitials(name = '') {
+  return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '??'
+}
+async function dbGetOne(table, params = '') {
+  const rows = await dbGet(table, params + '&limit=1')
+  return rows?.[0] ?? null
+}
+// Convert a user_profiles row into the shape the sidebar / chat expect
+function profileToConvo(profile, supabaseConvoId) {
+  return {
+    id:              profile.id,
+    name:            profile.name,
+    initials:        profile.initials || makeInitials(profile.name),
+    supabaseConvoId: supabaseConvoId || null,
+    lastMessage:     profile._lastMessage || '',
+    lastTime:        '',
+    unread:          0,
+    online:          !!profile.is_online,
+    thread:          [],
+  }
+}
+// Find existing conversation between two users, or create one.
+// IDs are sorted before insert so the unique constraint (a,b) is always satisfied.
+async function findOrCreateConvo(aId, bId, companyId) {
+  const [pA, pB] = [aId, bId].sort()
+  const rows = await dbGet('conversations',
+    `participant_a_id=eq.${pA}&participant_b_id=eq.${pB}&select=id&limit=1`)
+  if (rows?.length) return rows[0].id
+  const created = await dbInsert('conversations', {
+    participant_a_id: pA, participant_b_id: pB, company_id: companyId ?? null,
+  })
+  return created?.[0]?.id ?? null
+}
+
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // Props: currentUser = { email, name, role }
@@ -222,9 +257,15 @@ export default function Messaging({ currentUser, loomMode = false }) {
   const myRole   = userInfo.role
   const myName   = userInfo.name
 
+  // ── Dynamic multi-tenant conversations (loaded from Supabase) ─
+  // Falls back to hardcoded demo data when user_profiles isn't set up yet.
+  const [dynConversations, setDynConversations] = useState(null) // null = not loaded
+  const [myProfileId,      setMyProfileId]      = useState(myUUID)
+
+  const demoConversations = myRole === 'coach' ? DEMO_CLIENTS : [CLIENT_COACH_CONVO, ADMIN_CONVO]
+  const conversations     = dynConversations ?? demoConversations
+
   // ── Conversation selection ────────────────────────────────
-  // Coach sees all 4 clients; client sees Coach Marcus + Eden Admin
-  const conversations = myRole === 'coach' ? DEMO_CLIENTS : [CLIENT_COACH_CONVO, ADMIN_CONVO]
   const [activeId,     setActiveId]     = useState(conversations[0].id)
   const [sidebarOpen,  setSidebarOpen]  = useState(false)
   const activeConvo = conversations.find(c => c.id === activeId) || conversations[0]
@@ -241,6 +282,65 @@ export default function Messaging({ currentUser, loomMode = false }) {
 
   const isLive = !!activeConvo.supabaseConvoId
 
+  // ── Load dynamic conversations from Supabase on mount ────────
+  useEffect(() => { loadDynamicConversations() }, [email])
+
+  async function loadDynamicConversations() {
+    if (!email) return
+    try {
+      // 1. Fetch the current user's own profile
+      const me = await dbGetOne('user_profiles', `email=eq.${encodeURIComponent(email)}`)
+      if (!me?.id) return  // table not set up yet → stay on demo data
+      setMyProfileId(me.id)
+
+      const convos = []
+
+      if (myRole === 'client') {
+        // 2. Client: find their assigned coach
+        if (me.coach_id) {
+          const coach = await dbGetOne('user_profiles', `id=eq.${me.coach_id}`)
+          if (coach) {
+            const convoId = await findOrCreateConvo(me.id, coach.id, me.company_id)
+            convos.push(profileToConvo(coach, convoId))
+          }
+        }
+        // 3. Client: find their company's admin
+        if (me.company_id) {
+          const admin = await dbGetOne('user_profiles',
+            `company_id=eq.${me.company_id}&role=in.(company_admin,super_admin)&id=neq.${me.id}`)
+          if (admin) {
+            const convoId = await findOrCreateConvo(me.id, admin.id, me.company_id)
+            convos.push(profileToConvo(admin, convoId))
+          }
+        }
+      } else if (myRole === 'coach') {
+        // 4. Coach: load all clients assigned to them in their company
+        const clients = await dbGet('user_profiles',
+          `coach_id=eq.${me.id}&company_id=eq.${me.company_id}&order=name.asc`)
+        for (const client of clients || []) {
+          const convoId = await findOrCreateConvo(me.id, client.id, me.company_id)
+          convos.push(profileToConvo(client, convoId))
+        }
+      } else if (myRole === 'super_admin' || myRole === 'company_admin') {
+        // 5. Admin: see all users in their company
+        const users = await dbGet('user_profiles',
+          `company_id=eq.${me.company_id}&id=neq.${me.id}&order=name.asc`)
+        for (const user of users || []) {
+          const convoId = await findOrCreateConvo(me.id, user.id, me.company_id)
+          convos.push(profileToConvo(user, convoId))
+        }
+      }
+
+      if (convos.length) {
+        setDynConversations(convos)
+        setActiveId(convos[0].id)
+      }
+    } catch (e) {
+      console.warn('Dynamic messaging unavailable — using demo data:', e)
+    }
+  }
+
+  // ── Reload messages when active conversation changes ──────────
   useEffect(() => {
     setLiveMessages([])
     setLiveFiles([])
@@ -267,11 +367,11 @@ export default function Messaging({ currentUser, loomMode = false }) {
 
   async function sendMessage() {
     const text = newMsg.trim()
-    if (!text || !myUUID || !isLive) return
+    if (!text || !myProfileId || !isLive) return
     setNewMsg('')
     await dbInsert('messages', {
       conversation_id: activeConvo.supabaseConvoId,
-      sender_id: myUUID,
+      sender_id: myProfileId,
       content: text,
       message_type: 'text',
     })
@@ -284,7 +384,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
 
   async function handleUpload(e) {
     const file = e.target.files?.[0]
-    if (!file || !myUUID || !isLive) return
+    if (!file || !myProfileId || !isLive) return
     setUploading(true)
     try {
       const path   = `${activeConvo.supabaseConvoId}/${Date.now()}-${file.name}`
@@ -300,14 +400,14 @@ export default function Messaging({ currentUser, loomMode = false }) {
       const fileType = isImage ? 'image' : file.name.toLowerCase().includes('lab') ? 'lab' : 'document'
       await dbInsert('messages', {
         conversation_id: activeConvo.supabaseConvoId,
-        sender_id: myUUID,
+        sender_id: myProfileId,
         content: isImage ? null : file.name,
         message_type: isImage ? 'image' : 'file',
         file_url: fileUrl, file_name: file.name, file_size: file.size, file_type: file.type,
       })
       await dbInsert('conversation_files', {
         conversation_id: activeConvo.supabaseConvoId,
-        uploaded_by: myUUID,
+        uploaded_by: myProfileId,
         file_url: fileUrl, file_name: file.name, file_size: file.size, file_type: fileType,
       })
       await dbUpdate('conversations', `id=eq.${activeConvo.supabaseConvoId}`, {
