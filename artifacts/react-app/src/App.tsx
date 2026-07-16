@@ -72,6 +72,7 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
     logout:   <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" fill="none" stroke={c} strokeWidth="1.8"/></>,
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2" fill="none" stroke={c} strokeWidth="1.8"/><line x1="16" y1="2" x2="16" y2="6" stroke={c} strokeWidth="1.8"/><line x1="8" y1="2" x2="8" y2="6" stroke={c} strokeWidth="1.8"/><line x1="3" y1="10" x2="21" y2="10" stroke={c} strokeWidth="1.8"/></>,
     workout:  <><path d="M6.5 6.5h11M6.5 17.5h11M3 10h3v4H3zM18 10h3v4h-3z" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></>,
+    community:<><path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" fill="none" stroke={c} strokeWidth="1.8"/><line x1="2" y1="20" x2="2.01" y2="20" stroke={c} strokeWidth="2.5" strokeLinecap="round"/></>,
     upload:   <><polyline points="16,16 12,12 8,16" fill="none" stroke={c} strokeWidth="1.8"/><line x1="12" y1="12" x2="12" y2="21" stroke={c} strokeWidth="1.8"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" fill="none" stroke={c} strokeWidth="1.8"/></>,
     shop:     <><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" fill="none" stroke={c} strokeWidth="1.8"/><line x1="3" y1="6" x2="21" y2="6" stroke={c} strokeWidth="1.8"/><path d="M16 10a4 4 0 0 1-8 0" fill="none" stroke={c} strokeWidth="1.8"/></>,
   };
@@ -416,11 +417,12 @@ const HomeScreen = ({ user }) => {
       <div style={{ padding:"20px 20px 32px" }}>
         <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Lifestyle of Eden</p>
         {[
-          { label:"🎙 Pillars Podcast Series", url:"https://lifestyleofeden.com" },
-          { label:"📺 YouTube Channel", url:"https://youtube.com" },
-          { label:"📸 Instagram", url:"https://instagram.com" },
-          { label:"👥 Facebook Page", url:"https://facebook.com" },
-          { label:"🛍 Eden Clothing", url:"https://lifestyleofeden.com/shop" },
+          { label:"🎙 Pillars Podcast", url:"https://open.spotify.com/show/0hEI4GF66eXXMSxlgmbVUP" },
+          { label:"📺 YouTube Channel", url:"https://www.youtube.com/@lifestyleofeden3879" },
+          { label:"📸 Instagram",       url:"https://www.instagram.com/nicktofficial/" },
+          { label:"👥 Facebook Page",   url:"https://www.facebook.com/profile.php?id=61587350518067" },
+          { label:"🌐 Website",         url:"https://lifestyleofeden.com" },
+          { label:"🛍 Eden Clothing",   url:"https://lifestyle-of-eden.myshopify.com/" },
         ].map(({ label, url }) => (
           <a key={label} href={url} target="_blank" rel="noopener noreferrer"
             style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", marginBottom:8, textDecoration:"none" }}>
@@ -428,6 +430,82 @@ const HomeScreen = ({ user }) => {
             <span style={{ color:B.gold, fontSize:14 }}>→</span>
           </a>
         ))}
+      </div>
+    </Screen>
+  );
+};
+
+// ─── COMMUNITY / CONNECT SCREEN ──────────────────────────────────────────────
+const CommunityScreen = () => {
+  const PILLARS = [
+    { n:"1 · Nutrition",                   url:"https://open.spotify.com/episode/1AvDa6x3tU9jORoGSxMdBL?si=hzNiIFHcQIqoYaC5H-TrVg&nd=1&dlsi=e7f414423b2140dd" },
+    { n:"2 · Community & Stress",          url:"https://open.spotify.com/episode/7D7p0ma4hRq0n8AGExlDaY?si=o6qTlhF6RPm7HgrleNmnHw&nd=1&dlsi=c794e85544654521" },
+    { n:"3 · Body Movement",               url:"https://open.spotify.com/episode/3T27X1cjSLkUZYQR7LftSS?si=s2oiqD5sT-W3gtFXHhG5PQ&nd=1&dlsi=9e1e0cf95bf14975" },
+    { n:"4 · Hydration",                   url:"https://open.spotify.com/episode/06XavfNu9UUlRSOnS5HKmV?si=QHnRycwEQPWwaiovb_oLRA&nd=1&dlsi=4d3714cdaedc4a22" },
+    { n:"5 · Oxygenation",                 url:"https://open.spotify.com/episode/3rGThSvLTAE4bcD5P7BUEL?si=Mi2I4u7GRx2OeDSubE8lVA&nd=1&dlsi=15551fba2f06436b" },
+    { n:"6 · Autophagy / mTOR Balance",    url:"https://open.spotify.com/episode/2TARseWW2DXvi9JJ8J4wZa?si=3OQxs1AJQeeikjfsE9VGUw&nd=1&dlsi=8c1cece953ca41d2" },
+    { n:"7 · Sleep & Circadian Alignment", url:"https://open.spotify.com/episode/3HndjaiJHVctnn3uXuvb4J?si=dSpzHtIDRfWqduVASsWpiw&nd=1&dlsi=25e8f1d81d414c9c" },
+  ];
+  const SOCIALS = [
+    { emoji:"🎙", label:"Spotify Podcast", sub:"Full show · all episodes",  url:"https://open.spotify.com/show/0hEI4GF66eXXMSxlgmbVUP",                     accent:"#1DB954", bg:"#1DB95418" },
+    { emoji:"📺", label:"YouTube",         sub:"@lifestyleofeden3879",       url:"https://www.youtube.com/@lifestyleofeden3879",                              accent:"#FF0000", bg:"#FF000018" },
+    { emoji:"📸", label:"Instagram",       sub:"@nicktofficial",             url:"https://www.instagram.com/nicktofficial/",                                  accent:"#E1306C", bg:"#E1306C18" },
+    { emoji:"👥", label:"Facebook",        sub:"Lifestyle of Eden Page",     url:"https://www.facebook.com/profile.php?id=61587350518067",                    accent:"#1877F2", bg:"#1877F218" },
+    { emoji:"🌐", label:"Website",         sub:"lifestyleofeden.com",        url:"https://lifestyleofeden.com",                                               accent:B.gold,    bg:`${B.gold}18` },
+    { emoji:"🛍", label:"Eden Clothing",   sub:"Shop the brand",             url:"https://lifestyle-of-eden.myshopify.com/",                                  accent:B.gold,    bg:`${B.gold}18` },
+  ];
+  return (
+    <Screen>
+      {/* Hero */}
+      <div style={{ background:"linear-gradient(180deg,#1a1200 0%,#000 100%)", padding:"24px 20px 20px" }}>
+        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>Lifestyle of Eden</p>
+        <h1 style={{ fontSize:22, fontWeight:800, color:B.text, margin:"0 0 4px" }}>Connect</h1>
+        <p style={{ fontSize:12, color:B.muted, margin:0 }}>Podcast · social media · shop — all in one place</p>
+      </div>
+
+      {/* Social platform cards */}
+      <div style={{ padding:"16px 20px 0" }}>
+        <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>Follow &amp; Subscribe</p>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          {SOCIALS.map(({ emoji, label, sub, url, accent, bg }) => (
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
+              <div style={{ background:bg, border:`1px solid ${accent}44`, borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column", gap:6, height:"100%", boxSizing:"border-box" }}>
+                <span style={{ fontSize:24 }}>{emoji}</span>
+                <div>
+                  <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:"0 0 2px" }}>{label}</p>
+                  <p style={{ fontSize:10, color:B.muted, margin:0, lineHeight:1.4 }}>{sub}</p>
+                </div>
+                <span style={{ fontSize:11, color:accent, fontWeight:700, marginTop:"auto" }}>Open →</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {/* 7 Pillars episodes */}
+      <div style={{ padding:"20px 20px 32px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+          <span style={{ fontSize:16 }}>🎧</span>
+          <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>The 7 Pillars — Podcast Episodes</p>
+        </div>
+        <div style={{ background:B.card, border:`1px solid #1DB95444`, borderRadius:14, overflow:"hidden" }}>
+          {PILLARS.map(({ n, url }, i) => (
+            <a key={n} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"13px 14px",
+                borderBottom: i < PILLARS.length - 1 ? `1px solid ${B.border}` : "none" }}
+                onMouseEnter={e=>(e.currentTarget.style.background=`#1DB95410`)}
+                onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:28, height:28, borderRadius:"50%", background:"#1DB95422", border:"1px solid #1DB95444", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <span style={{ fontSize:12 }}>▶</span>
+                  </div>
+                  <span style={{ fontSize:13, color:B.text, fontWeight:500 }}>Pillar {n}</span>
+                </div>
+                <span style={{ fontSize:11, color:"#1DB954", fontWeight:700, flexShrink:0, marginLeft:8 }}>Listen →</span>
+              </div>
+            </a>
+          ))}
+        </div>
       </div>
     </Screen>
   );
@@ -1658,27 +1736,29 @@ const AppShell = ({ user, onLogout }) => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clientTabs = [
-    { key:"home",    icon:"home",    label:"Home" },
-    { key:"msgs",    icon:"msg",     label:"Messages" },
-    { key:"diet",    icon:"diet",    label:"Diet" },
-    { key:"checkin", icon:"checkin", label:"Check In" },
-    { key:"habits",  icon:"habits",  label:"Habits" },
-    { key:"labs",    icon:"labs",    label:"Labs" },
-    { key:"workout", icon:"workout", label:"Workout" },
+    { key:"home",      icon:"home",      label:"Home" },
+    { key:"msgs",      icon:"msg",       label:"Messages" },
+    { key:"diet",      icon:"diet",      label:"Diet" },
+    { key:"checkin",   icon:"checkin",   label:"Check In" },
+    { key:"habits",    icon:"habits",    label:"Habits" },
+    { key:"labs",      icon:"labs",      label:"Labs" },
+    { key:"workout",   icon:"workout",   label:"Workout" },
+    { key:"community", icon:"community", label:"Connect" },
   ];
   const coachTabs = [
-    { key:"home",    icon:"home",    label:"Home" },
-    { key:"msgs",    icon:"msg",     label:"Messages" },
-    { key:"diet",    icon:"diet",    label:"Diet" },
-    { key:"habits",  icon:"habits",  label:"Habits" },
-    { key:"labs",    icon:"labs",    label:"Labs" },
-    { key:"workout", icon:"workout", label:"Workout" },
+    { key:"home",      icon:"home",      label:"Home" },
+    { key:"msgs",      icon:"msg",       label:"Messages" },
+    { key:"diet",      icon:"diet",      label:"Diet" },
+    { key:"habits",    icon:"habits",    label:"Habits" },
+    { key:"labs",      icon:"labs",      label:"Labs" },
+    { key:"workout",   icon:"workout",   label:"Workout" },
+    { key:"community", icon:"community", label:"Connect" },
   ];
   const adminTabs = [
-    { key:"home",   icon:"home",   label:"Home" },
-    { key:"msgs",   icon:"msg",    label:"Messages" },
-    { key:"admin",  icon:"admin",  label:"Admin" },
-    { key:"links",  icon:"links",  label:"Links" },
+    { key:"home",      icon:"home",      label:"Home" },
+    { key:"msgs",      icon:"msg",       label:"Messages" },
+    { key:"admin",     icon:"admin",     label:"Admin" },
+    { key:"community", icon:"community", label:"Connect" },
   ];
 
   const tabs = user.role === "super_admin" ? adminTabs : user.role === "coach" ? coachTabs : clientTabs;
@@ -1697,7 +1777,8 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "checkin") return <CheckInScreen/>;
     if (tab === "habits")  return <HabitTrackerScreen/>;
     if (tab === "workout") return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="workout"/>;
-    if (tab === "admin")   return <AdminDashboard user={user}/>;
+    if (tab === "admin")     return <AdminDashboard user={user}/>;
+    if (tab === "community") return <CommunityScreen/>;
     return <HomeScreen user={user}/>;
   };
 
