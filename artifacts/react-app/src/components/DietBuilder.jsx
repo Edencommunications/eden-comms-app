@@ -244,7 +244,7 @@ const FOODS = [
   {name:'Whole Omega-3 Egg',serving:'1 egg',cal:90,pro:8.6,fat:6.1,carb:0,fib:0,cat:'Proteins'},
   {name:'Filet Mignon',serving:'1oz',cal:56.75,pro:8.68,fat:2.33,carb:0,fib:0,cat:'Proteins'},
   {name:'Grass-Fed Ground Beef 96/4',serving:'1oz',cal:42.5,pro:6,fat:2,carb:0,fib:0,cat:'Proteins'},
-  {name:'Medipure Protein',serving:'1 scoop',cal:120,pro:22,fat:2,carb:5,fib:1,cat:'Proteins'},
+  {name:'Medipure Protein',serving:'1 scoop',cal:120,pro:22,fat:2,carb:5,fib:1,cat:'Proteins',link:'https://nuethix.com/products/medipure-ultra'},
   {name:'Wild Caught Tuna (drained)',serving:'1oz',cal:31,pro:7.05,fat:0.28,carb:0,fib:0,cat:'Proteins'},
   {name:'Grass-Fed Top Sirloin',serving:'1oz',cal:46.5,pro:8.68,fat:1.5,carb:0,fib:0,cat:'Proteins'},
   {name:'Force of Nature Ground Bison',serving:'1oz',cal:40,pro:5.5,fat:2,carb:0,fib:0,cat:'Proteins'},
@@ -311,12 +311,12 @@ const FOODS = [
   {name:'Arugula',serving:'1g',cal:0.25,pro:0.026,fat:0.007,carb:0.037,fib:0.016,cat:'Fruits/Vegetables'},
   {name:'Bell Pepper',serving:'1g',cal:0.31,pro:0.01,fat:0.003,carb:0.06,fib:0.021,cat:'Fruits/Vegetables'},
   {name:'Celery',serving:'1g',cal:0.16,pro:0.007,fat:0.002,carb:0.03,fib:0.016,cat:'Fruits/Vegetables'},
-  {name:'Fish Oil 2000mg',serving:'2 caps',cal:20,pro:0,fat:2,carb:0,fib:0,cat:'Supplements'},
-  {name:'Glutamine 20g',serving:'20g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
-  {name:'Bloat Eaze',serving:'1 scoop',cal:10,pro:0,fat:0,carb:2,fib:0,cat:'Supplements'},
-  {name:'Magnesium',serving:'1 scoop',cal:5,pro:0,fat:0,carb:1,fib:0,cat:'Supplements'},
-  {name:'Vitamin D',serving:'1 tab',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
-  {name:'Multivitamin',serving:'3 caps',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
+  {name:'Fish Oil 2000mg',serving:'2 caps',cal:20,pro:0,fat:2,carb:0,fib:0,cat:'Supplements',link:'https://nuethix.com/products/fatty-acids-pro'},
+  {name:'Glutamine 20g',serving:'20g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements',link:'https://nuethix.com/products/nu-glutamine'},
+  {name:'Bloat Eaze',serving:'1 scoop',cal:10,pro:0,fat:0,carb:2,fib:0,cat:'Supplements',link:'https://nuethix.com/collections/supplements/products/bloat-eaze-pro?variant=42854686753001'},
+  {name:'Magnesium',serving:'1 scoop',cal:5,pro:0,fat:0,carb:1,fib:0,cat:'Supplements',link:'https://nuethix.com/collections/supplements/products/prosorb-magnesium-new?variant=47369076703465'},
+  {name:'Vitamin D',serving:'1 tab',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements',link:'https://nuethix.com/collections/supplements/products/nu-d3-k2?variant=46760997322985'},
+  {name:'Multivitamin',serving:'3 caps',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements',link:'https://nuethix.com/products/nu-multi'},
   {name:'Water (16oz)',serving:'16oz',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Black Coffee',serving:'240ml',cal:5,pro:0.3,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Organic Apple Juice',serving:'250ml',cal:115,pro:0.2,fat:0.3,carb:28,fib:0.5,cat:'Drinks/Condiments'},
@@ -329,8 +329,10 @@ const FOODS = [
   {name:'Walnuts',serving:'1g',cal:6.54,pro:0.153,fat:0.654,carb:0.138,fib:0.069,cat:'Fats'},
   {name:'Pecans',serving:'1g',cal:6.91,pro:0.091,fat:0.72,carb:0.138,fib:0.097,cat:'Fats'},
   {name:'Organic Pear Juice',serving:'250ml',cal:110,pro:0.5,fat:0.2,carb:27,fib:0,cat:'Drinks/Condiments'},
-  {name:'Opti-Pure Probiotic',serving:'1 cap',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
-  {name:'Bile Plus',serving:'2 caps',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
+  {name:'Opti-Pure Probiotic',serving:'1 cap',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements',link:'https://nuethix.com/collections/supplements/products/opti-pure?variant=42315272585449'},
+  {name:'Bile Plus',serving:'2 caps',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements',link:'https://www.practitionerdepot.com/products/bile-plus?variant=46157575061721'},
+  {name:'HU Dark Chocolate Bar',serving:'1g',cal:5.7,pro:0.07,fat:0.40,carb:0.53,fib:0.09,cat:'Fats'},
+  {name:'HU Chocolate Gems',serving:'1g',cal:5.7,pro:0.07,fat:0.40,carb:0.50,fib:0.09,cat:'Fats'},
 ]
 
 const PROTOCOLS = [
@@ -636,6 +638,12 @@ export default function DietBuilder({currentUser}) {
     return {cal:a.cal+mt.cal,pro:a.pro+mt.pro,fat:a.fat+mt.fat,carb:a.carb+mt.carb,fib:a.fib+mt.fib}
   },{cal:0,pro:0,fat:0,carb:0,fib:0})
 
+  // ── Clear plan ────────────────────────────────────────────
+  function clearPlan() {
+    setHighMeals(['Meal 1','Meal 2','Meal 3','Meal 4','Meal 5','Meal 6'].map(n=>({name:n,foods:[]})))
+    setLowMeals(['Meal 1','Meal 2','Meal 3','Meal 4','Meal 5'].map(n=>({name:n,foods:[]})))
+  }
+
   // ── Template loader ───────────────────────────────────────
   function loadTemplate() {
     const tpl = DIET_TEMPLATES.find(t => t.id === tplId)
@@ -844,10 +852,16 @@ export default function DietBuilder({currentUser}) {
                 <div style={{flex:1}}>
                   <Sel label="Diet Protocol" value={protocol} onChange={setProtocol} options={PROTOCOLS}/>
                 </div>
-                <button onClick={()=>{setShowTemplates(true);setTplConfirm(false)}}
-                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'9px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',marginBottom:10,flexShrink:0}}>
-                  📋 Templates
-                </button>
+                <div style={{display:'flex',gap:6,marginBottom:10,flexShrink:0}}>
+                  <button onClick={()=>{setShowTemplates(true);setTplConfirm(false)}}
+                    style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'9px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                    📋 Templates
+                  </button>
+                  <button onClick={()=>{ if(window.confirm('Clear both High and Low calorie day plans? This cannot be undone.')) clearPlan() }}
+                    style={{background:'#ff525215',border:'1px solid #ff525255',borderRadius:8,padding:'9px 12px',color:'#ff7070',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                    🗑 Clear
+                  </button>
+                </div>
               </div>
             </Card>
           )}
@@ -919,7 +933,15 @@ export default function DietBuilder({currentUser}) {
                     <div key={fi} style={{padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
                       {/* Row 1: name + remove */}
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:5}}>
-                        <div style={{fontSize:12,color:C.white,fontWeight:600,flex:1,paddingRight:8}}>{item.food.name}</div>
+                        <div style={{flex:1,paddingRight:8}}>
+                          <div style={{fontSize:12,color:C.white,fontWeight:600}}>{item.food.name}</div>
+                          {item.food.link&&(
+                            <a href={item.food.link} target="_blank" rel="noreferrer"
+                              style={{fontSize:10,color:C.gold,textDecoration:'none',background:`${C.gold}12`,border:`1px solid ${C.gold}30`,borderRadius:5,padding:'2px 8px',display:'inline-block',marginTop:3}}>
+                              🛒 Buy · TOGNIETTI10 →
+                            </a>
+                          )}
+                        </div>
                         {isCoach&&(
                           <button onClick={()=>removeFood(mi,fi)}
                             style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:18,padding:'0',lineHeight:1,flexShrink:0}}>×</button>
@@ -1940,9 +1962,17 @@ export default function DietBuilder({currentUser}) {
                         </div>
                         {meal.notes&&<div style={{fontSize:10,color:C.muted,fontStyle:'italic',marginBottom:6}}>{meal.notes}</div>}
                         {meal.foods.map((item,fi)=>(
-                          <div key={fi} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
-                            <span style={{color:C.white}}>{item.food.name}</span>
-                            <span style={{color:C.muted,flexShrink:0,marginLeft:8}}>{item.qty} {parseServingUnit(item.food.serving)}</span>
+                          <div key={fi} style={{padding:'4px 0',borderTop:`1px solid ${C.border}`}}>
+                            <div style={{display:'flex',justifyContent:'space-between',fontSize:11}}>
+                              <span style={{color:C.white}}>{item.food.name}</span>
+                              <span style={{color:C.muted,flexShrink:0,marginLeft:8}}>{item.qty} {parseServingUnit(item.food.serving)}</span>
+                            </div>
+                            {item.food.link&&(
+                              <a href={item.food.link} target="_blank" rel="noreferrer"
+                                style={{fontSize:10,color:C.gold,textDecoration:'none',display:'inline-flex',alignItems:'center',gap:3,marginTop:2}}>
+                                🛒 Buy · TOGNIETTI10 →
+                              </a>
+                            )}
                           </div>
                         ))}
                       </div>
