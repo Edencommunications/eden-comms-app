@@ -1662,6 +1662,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"diet",    icon:"diet",    label:"Diet" },
     { key:"checkin", icon:"checkin", label:"Check In" },
     { key:"habits",  icon:"habits",  label:"Habits" },
+    { key:"labs",    icon:"labs",    label:"Labs" },
     { key:"workout", icon:"workout", label:"Workout" },
   ];
   const coachTabs = [
@@ -1669,6 +1670,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"msgs",    icon:"msg",     label:"Messages" },
     { key:"diet",    icon:"diet",    label:"Diet" },
     { key:"habits",  icon:"habits",  label:"Habits" },
+    { key:"labs",    icon:"labs",    label:"Labs" },
     { key:"workout", icon:"workout", label:"Workout" },
   ];
   const adminTabs = [
@@ -1690,10 +1692,10 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "home")    return <HomeScreen user={user}/>;
     if (tab === "msgs")    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
     if (tab === "diet")    return <DietBuilder currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
-    if (tab === "labs")    return <LabsScreen/>;
+    if (tab === "labs")    return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="labs"/>;
     if (tab === "checkin") return <CheckInScreen/>;
     if (tab === "habits")  return <HabitTrackerScreen/>;
-    if (tab === "workout") return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
+    if (tab === "workout") return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="workout"/>;
     if (tab === "admin")   return <AdminDashboard user={user}/>;
     return <HomeScreen user={user}/>;
   };

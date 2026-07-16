@@ -40,6 +40,25 @@ async function dbInsert(table,body) {
   if(!r.ok) console.error('INSERT',await r.text())
 }
 
+// ── Global config (habits / foods / exercises synced across all users) ─────
+async function getConfig(key) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/global_config?key=eq.${encodeURIComponent(key)}&select=value`,{headers:H})
+    if(!r.ok) return []
+    const d = await r.json()
+    return d[0]?.value || []
+  } catch { return [] }
+}
+async function setConfig(key,value) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/global_config`,{
+      method:'POST',
+      headers:{...H,'Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({key,value,updated_at:new Date().toISOString()})
+    })
+  } catch(e){console.error('CONFIG',e)}
+}
+
 // ── MASTER HABIT LIST ─────────────────────────────────────────
 const MASTER_HABITS = [
   {id:'supps',   name:'Take supplements',             defaultTarget:7},
@@ -417,6 +436,17 @@ const DIET_TEMPLATES = (() => {
     withMeals: WITH_MEALS,
     cooking: COOKING,
     restrictions: RESTRICTIONS,
+    supplements: [
+      {name:'Medipure Protein',        link:'https://nuethix.com/products/medipure-ultra',                                                                        code:'TOGNIETTI10', note:'2 scoops (male) · 1 scoop (female) — Meals 1 & 4 shakes'},
+      {name:'Bloat Eaze',              link:'https://nuethix.com/collections/supplements/products/bloat-eaze-pro?variant=42854686753001',                          code:'TOGNIETTI10', note:'1 scoop fasted AM morning routine'},
+      {name:'Bile Plus',               link:'https://www.practitionerdepot.com/products/bile-plus?variant=46157575061721',                                         code:'TOGNIETTI10', note:'2 caps with every meal'},
+      {name:'Glutamine',               link:'https://nuethix.com/products/nu-glutamine',                                                                           code:'TOGNIETTI10', note:'20g in Meal 1 shake'},
+      {name:'Fish Oil 2000mg',         link:'https://nuethix.com/products/fatty-acids-pro',                                                                        code:'TOGNIETTI10', note:'Meal 1 + Meal 3'},
+      {name:'Vitamin D3+K2',           link:'https://nuethix.com/collections/supplements/products/nu-d3-k2?variant=46760997322985',                                code:'TOGNIETTI10', note:'1 tab with Meal 1'},
+      {name:'Multivitamin (Nu-Multi)', link:'https://nuethix.com/products/nu-multi',                                                                               code:'TOGNIETTI10', note:'3 caps with Meal 1'},
+      {name:'Opti-Pure Probiotic',     link:'https://nuethix.com/collections/supplements/products/opti-pure?variant=42315272585449',                               code:'TOGNIETTI10', note:'3 caps Meal 1 + Meal 5 — taper after 1st bottle'},
+      {name:'Magnesium (Prosorb+)',    link:'https://nuethix.com/collections/supplements/products/prosorb-magnesium-new?variant=47369076703465',                   code:'TOGNIETTI10', note:'Female Meal 5 only'},
+    ],
     versions: {
       Male: {
         cardio: '60-minute walk daily — flush phase only, no weight training',
@@ -585,6 +615,21 @@ export default function DietBuilder({currentUser}) {
   const [tplId,           setTplId]           = useState('flush')
   const [tplConfirm,      setTplConfirm]      = useState(false)
 
+  // ── Global config — synced to all coaches & clients via Supabase ──
+  const [extraHabits,       setExtraHabits]       = useState([])
+  const [extraFoods,        setExtraFoods]         = useState([])
+  const [newMasterHabit,    setNewMasterHabit]     = useState('')
+  const [newMasterHabitTgt, setNewMasterHabitTgt]  = useState(7)
+  const [newCustomFood,     setNewCustomFood]      = useState({name:'',serving:'100g',cal:'',pro:'',fat:'',carb:'',fib:'',cat:'Proteins'})
+  const [showFoodForm,      setShowFoodForm]       = useState(false)
+  const [configSaving,      setConfigSaving]       = useState(false)
+
+  // ── Load global config on mount ───────────────────────────
+  useEffect(()=>{
+    getConfig('custom_habits').then(d=>setExtraHabits(Array.isArray(d)?d:[]))
+    getConfig('custom_foods').then(d=>setExtraFoods(Array.isArray(d)?d:[]))
+  },[])
+
   // ── Macro totals ──────────────────────────────────────────
   const totals = meals.reduce((a,m)=>{
     const mt=mealMacros(m)
@@ -679,12 +724,55 @@ export default function DietBuilder({currentUser}) {
     setCustomHabit('')
   }
 
+  // ── Master list management (writes to Supabase global_config) ────────────
+  async function addToMasterHabits() {
+    if(!newMasterHabit.trim()) return
+    setConfigSaving(true)
+    const h={id:'mh_'+Date.now(),name:newMasterHabit.trim(),defaultTarget:newMasterHabitTgt,custom:true}
+    const updated=[...extraHabits,h]
+    setExtraHabits(updated)
+    setNewMasterHabit('')
+    await setConfig('custom_habits',updated)
+    setConfigSaving(false)
+  }
+
+  async function removeFromMasterHabits(id) {
+    const updated=extraHabits.filter(h=>h.id!==id)
+    setExtraHabits(updated)
+    await setConfig('custom_habits',updated)
+  }
+
+  async function addCustomFoodToMaster() {
+    const f=newCustomFood
+    if(!f.name.trim()||!f.cal) return
+    setConfigSaving(true)
+    const food={
+      name:f.name.trim(), serving:f.serving||'100g',
+      cal:parseFloat(f.cal)||0, pro:parseFloat(f.pro)||0,
+      fat:parseFloat(f.fat)||0, carb:parseFloat(f.carb)||0,
+      fib:parseFloat(f.fib)||0, cat:f.cat, custom:true
+    }
+    const updated=[...extraFoods,food]
+    setExtraFoods(updated)
+    setNewCustomFood({name:'',serving:'100g',cal:'',pro:'',fat:'',carb:'',fib:'',cat:'Proteins'})
+    setShowFoodForm(false)
+    await setConfig('custom_foods',updated)
+    setConfigSaving(false)
+  }
+
+  async function removeCustomFood(name) {
+    const updated=extraFoods.filter(f=>f.name!==name)
+    setExtraFoods(updated)
+    await setConfig('custom_foods',updated)
+  }
+
   const habitScore = assignedHabits.length>0
     ? Math.round(assignedHabits.reduce((a,h)=>a+(habitCounts[h.id]||0),0)
       / assignedHabits.reduce((a,h)=>a+h.target,0)*100)
     : 0
 
-  const filteredFoods = FOODS.filter(f=>
+  const allFoods = [...FOODS, ...extraFoods]
+  const filteredFoods = allFoods.filter(f=>
     !foodSearch||f.name.toLowerCase().includes(foodSearch.toLowerCase())||
     f.cat.toLowerCase().includes(foodSearch.toLowerCase())
   )
@@ -1482,30 +1570,73 @@ export default function DietBuilder({currentUser}) {
                       const dFat = Math.round(food.fat * mult)
                       const label= food.serving.match(/^\d/) ? `${dQty} ${unit}` : food.serving
                       return (
-                        <button key={food.name} onClick={()=>addFood(food)}
-                          style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'8px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}}
-                          onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}10`}
-                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                          <div>
-                            <div style={{fontSize:13,color:C.white,fontWeight:500}}>{food.name}</div>
-                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>per {label}</div>
-                          </div>
-                          <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-                            <div style={{fontSize:12,color:C.gold,fontWeight:600}}>{dCal} cal</div>
-                            <div style={{fontSize:10,color:C.muted}}>P:{dPro}g C:{dCarb}g F:{dFat}g</div>
-                          </div>
-                        </button>
+                        <div key={food.name} style={{display:'flex',alignItems:'center'}}>
+                          <button onClick={()=>addFood(food)}
+                            style={{flex:1,textAlign:'left',background:'none',border:'none',padding:'8px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}}
+                            onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}10`}
+                            onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                            <div>
+                              <div style={{fontSize:13,color:C.white,fontWeight:500}}>{food.name}{food.custom&&<span style={{fontSize:9,color:C.gold,fontWeight:700,marginLeft:6}}>CUSTOM</span>}</div>
+                              <div style={{fontSize:10,color:C.muted,marginTop:1}}>per {label}</div>
+                            </div>
+                            <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
+                              <div style={{fontSize:12,color:C.gold,fontWeight:600}}>{dCal} cal</div>
+                              <div style={{fontSize:10,color:C.muted}}>P:{dPro}g C:{dCarb}g F:{dFat}g</div>
+                            </div>
+                          </button>
+                          {food.custom&&isCoach&&(
+                            <button onClick={()=>removeCustomFood(food.name)}
+                              title="Remove from company list"
+                              style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:'0 12px 0 0',flexShrink:0}}>×</button>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
                 )
               })}
             </div>
-            <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
-              <button onClick={()=>setShowPicker(false)}
-                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
-                Cancel
-              </button>
+
+            {/* Footer — Add Custom Food form (coach only) */}
+            <div style={{borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              {isCoach&&showFoodForm&&(
+                <div style={{padding:'12px 16px',background:C.surface,borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,marginBottom:8}}>NEW FOOD — SYNCED TO ALL CLIENTS</div>
+                  <input placeholder="Food name *" value={newCustomFood.name} onChange={e=>setNewCustomFood(p=>({...p,name:e.target.value}))}
+                    style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',marginBottom:6}}/>
+                  <div style={{display:'flex',gap:6,marginBottom:6}}>
+                    <input placeholder="Serving (e.g. 100g)" value={newCustomFood.serving} onChange={e=>setNewCustomFood(p=>({...p,serving:e.target.value}))}
+                      style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+                    <select value={newCustomFood.cat} onChange={e=>setNewCustomFood(p=>({...p,cat:e.target.value}))}
+                      style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 4px',color:C.white,fontSize:11,outline:'none'}}>
+                      {['Proteins','Carbohydrates','Fats','Fruits/Vegetables','Supplements','Drinks/Condiments'].map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:5,marginBottom:8}}>
+                    {[['cal','Cal*'],['pro','Pro g'],['fat','Fat g'],['carb','Crb g'],['fib','Fib g']].map(([k,ph])=>(
+                      <input key={k} placeholder={ph} value={newCustomFood[k]} onChange={e=>setNewCustomFood(p=>({...p,[k]:e.target.value}))}
+                        type="number" min="0" step="0.1"
+                        style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 4px',color:C.white,fontSize:11,outline:'none',textAlign:'center'}}/>
+                    ))}
+                  </div>
+                  <button onClick={addCustomFoodToMaster} disabled={configSaving||!newCustomFood.name.trim()||!newCustomFood.cal}
+                    style={{width:'100%',background:(newCustomFood.name.trim()&&newCustomFood.cal)?C.gold:'#333',border:'none',borderRadius:8,padding:9,fontWeight:700,color:(newCustomFood.name.trim()&&newCustomFood.cal)?C.black:C.muted,fontSize:12,cursor:(newCustomFood.name.trim()&&newCustomFood.cal)?'pointer':'default'}}>
+                    {configSaving?'Saving to all clients…':'✓ Save to Company Food List'}
+                  </button>
+                </div>
+              )}
+              <div style={{padding:'10px 16px',display:'flex',gap:8}}>
+                {isCoach&&(
+                  <button onClick={()=>setShowFoodForm(p=>!p)}
+                    style={{flex:1,background:showFoodForm?`${C.gold}22`:'none',border:`1px solid ${showFoodForm?C.gold:C.border}`,borderRadius:8,padding:10,color:showFoodForm?C.gold:C.muted,fontSize:12,cursor:'pointer',fontWeight:showFoodForm?700:400}}>
+                    {showFoodForm?'✕ Cancel':'➕ Add Custom Food'}
+                  </button>
+                )}
+                <button onClick={()=>{setShowPicker(false);setShowFoodForm(false)}}
+                  style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1521,6 +1652,8 @@ export default function DietBuilder({currentUser}) {
               <div style={{fontSize:11,color:C.muted}}>Select which habits this client should track</div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:'8px 16px'}}>
+              {/* Built-in habits */}
+              <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6,marginTop:4}}>Built-in Habits</div>
               {MASTER_HABITS.map(h=>{
                 const assigned = assignedHabits.find(x=>x.id===h.id)
                 return (
@@ -1534,16 +1667,53 @@ export default function DietBuilder({currentUser}) {
                   </button>
                 )
               })}
-              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:4}}>
-                <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Add Custom Habit</div>
-                <div style={{display:'flex',gap:8}}>
-                  <input value={customHabit} onChange={e=>setCustomHabit(e.target.value)}
-                    placeholder="e.g. Infrared sauna 3x/week"
-                    style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
-                  <button onClick={addCustomHabit}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+
+              {/* Custom habits from master list */}
+              {extraHabits.length>0&&(
+                <>
+                  <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6,marginTop:10}}>Custom Habits (Company-wide)</div>
+                  {extraHabits.map(h=>{
+                    const assigned = assignedHabits.find(x=>x.id===h.id)
+                    return (
+                      <div key={h.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                        <button onClick={()=>toggleHabitAssign(h)}
+                          style={{flex:1,textAlign:'left',background:assigned?`${C.gold}15`:C.surface,border:`1px solid ${assigned?C.gold:C.border}`,borderRadius:8,padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
+                          <span style={{fontSize:16}}>{assigned?'✅':'⬜'}</span>
+                          <div>
+                            <div style={{fontSize:13,color:C.white,fontWeight:assigned?700:400}}>{h.name}</div>
+                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>Default: {h.defaultTarget}x/week</div>
+                          </div>
+                        </button>
+                        {isCoach&&<button onClick={()=>removeFromMasterHabits(h.id)}
+                          title="Remove from master list"
+                          style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.danger,cursor:'pointer',fontSize:13,flexShrink:0}}>×</button>}
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+
+              {/* Add to master list (coach only) */}
+              {isCoach&&(
+                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:8}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>➕ Add to Company Master List</div>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Appears for all coaches and clients across your company</div>
+                  <div style={{display:'flex',gap:6,marginBottom:6}}>
+                    <input value={newMasterHabit} onChange={e=>setNewMasterHabit(e.target.value)}
+                      onKeyDown={e=>e.key==='Enter'&&addToMasterHabits()}
+                      placeholder="e.g. Infrared sauna"
+                      style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                    <select value={newMasterHabitTgt} onChange={e=>setNewMasterHabitTgt(parseInt(e.target.value))}
+                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 6px',color:C.white,fontSize:12,outline:'none',width:60}}>
+                      {[1,2,3,4,5,6,7].map(n=><option key={n} value={n}>{n}x</option>)}
+                    </select>
+                  </div>
+                  <button onClick={addToMasterHabits} disabled={configSaving||!newMasterHabit.trim()}
+                    style={{width:'100%',background:newMasterHabit.trim()?C.gold:'#333',border:'none',borderRadius:8,padding:'9px',fontWeight:700,color:newMasterHabit.trim()?C.black:C.muted,fontSize:12,cursor:newMasterHabit.trim()?'pointer':'default'}}>
+                    {configSaving?'Saving to all clients…':'➕ Add to Master List'}
+                  </button>
                 </div>
-              </div>
+              )}
             </div>
             <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
               <button onClick={()=>setShowHabitPicker(false)}
@@ -1703,6 +1873,27 @@ export default function DietBuilder({currentUser}) {
                     <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>☀️ Morning Routine (empty stomach)</div>
                     <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',fontSize:12,color:C.white,lineHeight:1.8,whiteSpace:'pre-line'}}>{tpl.morningRoutine}</div>
                   </div>
+
+                  {/* Supplement shopping list */}
+                  {tpl.supplements&&(
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>🛒 Required Supplements — Code: <span style={{color:C.gold}}>TOGNIETTI10</span></div>
+                      <div style={{background:C.surface,borderRadius:8,padding:'4px 12px'}}>
+                        {tpl.supplements.map((s,si)=>(
+                          <div key={si} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
+                            <div style={{flex:1,minWidth:0,marginRight:8}}>
+                              <div style={{fontSize:12,color:C.white,fontWeight:600}}>{s.name}</div>
+                              <div style={{fontSize:10,color:C.muted,marginTop:1}}>{s.note}</div>
+                            </div>
+                            <a href={s.link} target="_blank" rel="noreferrer"
+                              style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'5px 11px',color:C.gold,fontSize:11,fontWeight:700,textDecoration:'none',whiteSpace:'nowrap',flexShrink:0}}>
+                              Buy →
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* With every meal */}
                   <div style={{marginBottom:10}}>
