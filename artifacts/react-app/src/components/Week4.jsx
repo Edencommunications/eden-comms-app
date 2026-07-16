@@ -851,18 +851,40 @@ export default function Week4({currentUser, initialTab='labs'}) {
           </div>
 
           {/* Helpful links */}
-          <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0,display:'flex',gap:8,flexWrap:'wrap'}}>
-            {[
-              ['Male Blood Work Panel',  'https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN'],
-              ['Female Blood Work Panel','https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN'],
-              ['DUTCH Test',            'https://www.practitionerdepot.com/products/dutch-test'],
-              ['GI Map',               'https://www.practitionerdepot.com/products/gi-map'],
-            ].map(([l,u])=>(
-              <a key={l} href={u} target="_blank" rel="noreferrer"
-                style={{fontSize:11,color:C.gold,textDecoration:'none',background:`${C.gold}15`,border:`1px solid ${C.gold}33`,borderRadius:6,padding:'4px 10px'}}>
-                {l} →
-              </a>
-            ))}
+          <div style={{padding:'10px 16px 4px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+            {/* Blood work & lab links */}
+            <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🩸 Lab Ordering</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+              {[
+                ['Male Blood Work Panel',  'https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN'],
+                ['Female Blood Work Panel','https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN'],
+                ['DUTCH Test',            'https://www.practitionerdepot.com/products/dutch-test'],
+                ['GI Map',               'https://www.practitionerdepot.com/products/gi-map'],
+              ].map(([l,u])=>(
+                <a key={l} href={u} target="_blank" rel="noreferrer"
+                  style={{fontSize:11,color:C.gold,textDecoration:'none',background:`${C.gold}15`,border:`1px solid ${C.gold}33`,borderRadius:6,padding:'4px 10px'}}>
+                  {l} →
+                </a>
+              ))}
+            </div>
+            {/* 7 Pillars podcasts */}
+            <div style={{fontSize:9,fontWeight:700,color:'#4FD89A',letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🎙️ The 7 Pillars — Podcast Episodes</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',paddingBottom:10}}>
+              {[
+                ['1 · Nutrition',                    'https://open.spotify.com/episode/1AvDa6x3tU9jORoGSxMdBL?si=hzNiIFHcQIqoYaC5H-TrVg&nd=1&dlsi=e7f414423b2140dd'],
+                ['2 · Community & Stress',           'https://open.spotify.com/episode/7D7p0ma4hRq0n8AGExlDaY?si=o6qTlhF6RPm7HgrleNmnHw&nd=1&dlsi=c794e85544654521'],
+                ['3 · Body Movement',                'https://open.spotify.com/episode/3T27X1cjSLkUZYQR7LftSS?si=s2oiqD5sT-W3gtFXHhG5PQ&nd=1&dlsi=9e1e0cf95bf14975'],
+                ['4 · Hydration',                    'https://open.spotify.com/episode/06XavfNu9UUlRSOnS5HKmV?si=QHnRycwEQPWwaiovb_oLRA&nd=1&dlsi=4d3714cdaedc4a22'],
+                ['5 · Oxygenation',                  'https://open.spotify.com/episode/3rGThSvLTAE4bcD5P7BUEL?si=Mi2I4u7GRx2OeDSubE8lVA&nd=1&dlsi=15551fba2f06436b'],
+                ['6 · Autophagy / mTOR',             'https://open.spotify.com/episode/2TARseWW2DXvi9JJ8J4wZa?si=3OQxs1AJQeeikjfsE9VGUw&nd=1&dlsi=8c1cece953ca41d2'],
+                ['7 · Sleep & Circadian Alignment',  'https://open.spotify.com/episode/3HndjaiJHVctnn3uXuvb4J?si=dSpzHtIDRfWqduVASsWpiw&nd=1&dlsi=25e8f1d81d414c9c'],
+              ].map(([l,u])=>(
+                <a key={l} href={u} target="_blank" rel="noreferrer"
+                  style={{fontSize:11,color:'#4FD89A',textDecoration:'none',background:'#4FD89A15',border:'1px solid #4FD89A33',borderRadius:6,padding:'4px 10px',display:'flex',alignItems:'center',gap:5}}>
+                  <span style={{fontSize:13}}>🎧</span>{l}
+                </a>
+              ))}
+            </div>
           </div>
         </div>
       )}
