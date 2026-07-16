@@ -295,40 +295,101 @@ export default function Messaging({ currentUser, loomMode = false }) {
 
       const convos = []
 
+      // Helper: dedup by profile id so the same person never appears twice
+      const seen = new Set()
+      function pushConvo(profile, convoId) {
+        if (!profile?.id || seen.has(profile.id)) return
+        seen.add(profile.id)
+        convos.push(profileToConvo(profile, convoId))
+      }
+
+      // Helper: load all staff assigned to a client via client_access (messages enabled)
+      async function loadAccessedStaff(clientId, companyId) {
+        const rows = await dbGet('client_access',
+          `company_id=eq.${companyId}&client_id=eq.${clientId}`)
+        const companyWide = await dbGet('client_access',
+          `company_id=eq.${companyId}&client_id=is.null`)
+        for (const row of [...(rows||[]), ...(companyWide||[])]) {
+          if (!row.permissions?.messages) continue
+          const staff = await dbGetOne('user_profiles', `id=eq.${row.staff_id}`)
+          if (staff) {
+            const convoId = await findOrCreateConvo(clientId, staff.id, companyId)
+            pushConvo(staff, convoId)
+          }
+        }
+      }
+
+      // Helper: load all clients a staff member has messaging access to
+      async function loadAccessedClients(staffId, companyId) {
+        const rows = await dbGet('client_access',
+          `company_id=eq.${companyId}&staff_id=eq.${staffId}`)
+        for (const row of rows || []) {
+          if (!row.permissions?.messages) continue
+          if (row.client_id) {
+            // Specific client
+            const client = await dbGetOne('user_profiles', `id=eq.${row.client_id}`)
+            if (client) {
+              const convoId = await findOrCreateConvo(staffId, client.id, companyId)
+              pushConvo(client, convoId)
+            }
+          } else {
+            // Company-wide — load all clients in the company
+            const clients = await dbGet('user_profiles',
+              `company_id=eq.${companyId}&role=eq.client&order=name.asc`)
+            for (const client of clients || []) {
+              const convoId = await findOrCreateConvo(staffId, client.id, companyId)
+              pushConvo(client, convoId)
+            }
+          }
+        }
+      }
+
       if (myRole === 'client') {
-        // 2. Client: find their assigned coach
+        // Primary coach
         if (me.coach_id) {
           const coach = await dbGetOne('user_profiles', `id=eq.${me.coach_id}`)
           if (coach) {
             const convoId = await findOrCreateConvo(me.id, coach.id, me.company_id)
-            convos.push(profileToConvo(coach, convoId))
+            pushConvo(coach, convoId)
           }
         }
-        // 3. Client: find their company's admin
+        // Company admin
         if (me.company_id) {
           const admin = await dbGetOne('user_profiles',
             `company_id=eq.${me.company_id}&role=in.(company_admin,super_admin)&id=neq.${me.id}`)
           if (admin) {
             const convoId = await findOrCreateConvo(me.id, admin.id, me.company_id)
-            convos.push(profileToConvo(admin, convoId))
+            pushConvo(admin, convoId)
           }
         }
+        // Additional staff assigned to this client via client_access
+        if (me.company_id) {
+          await loadAccessedStaff(me.id, me.company_id)
+        }
+
       } else if (myRole === 'coach') {
-        // 4. Coach: load all clients assigned to them in their company
+        // Primary clients (assigned coach)
         const clients = await dbGet('user_profiles',
           `coach_id=eq.${me.id}&company_id=eq.${me.company_id}&order=name.asc`)
         for (const client of clients || []) {
           const convoId = await findOrCreateConvo(me.id, client.id, me.company_id)
-          convos.push(profileToConvo(client, convoId))
+          pushConvo(client, convoId)
         }
+        // Additional clients from client_access (e.g. coach is also a VA for other clients)
+        if (me.company_id) await loadAccessedClients(me.id, me.company_id)
+
       } else if (myRole === 'super_admin' || myRole === 'company_admin') {
-        // 5. Admin: see all users in their company
+        // Admin: see all users in their company
         const users = await dbGet('user_profiles',
           `company_id=eq.${me.company_id}&id=neq.${me.id}&order=name.asc`)
         for (const user of users || []) {
           const convoId = await findOrCreateConvo(me.id, user.id, me.company_id)
-          convos.push(profileToConvo(user, convoId))
+          pushConvo(user, convoId)
         }
+
+      } else {
+        // Staff (VA, head_coach, etc.) — load all clients from client_access
+        if (me.company_id) await loadAccessedClients(me.id, me.company_id)
       }
 
       if (convos.length) {

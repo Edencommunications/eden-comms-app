@@ -1601,8 +1601,255 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
 };
 
 // SUPER ADMIN VIEW
-const AdminDashboard = ({ user }) => {
+// ─── SUPABASE HELPERS (admin components) ─────────────────────────────────────
+const SB_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU';
+const SB_H    = { 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=representation' };
+async function sbGet(table:string, params='') {
+  try { const r=await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{headers:SB_H}); if(!r.ok) return []; return r.json(); } catch { return []; }
+}
+async function sbInsert(table:string, body:any) {
+  try { const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:SB_H,body:JSON.stringify(body)}); if(!r.ok) return null; const t=await r.text(); return t?JSON.parse(t):null; } catch { return null; }
+}
+async function sbPatch(table:string, params:string, body:any) {
+  try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'PATCH',headers:SB_H,body:JSON.stringify(body)}); } catch {}
+}
+async function sbDelete(table:string, params:string) {
+  try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:SB_H}); } catch {}
+}
+
+// ─── STAFF ACCESS MANAGER ─────────────────────────────────────────────────────
+const PERM_DEFS = [
+  { key:'messages', label:'Messages',  icon:'💬', color:'#6FB8E8' },
+  { key:'diet',     label:'Diet',      icon:'🥗', color:'#4FD89A' },
+  { key:'labs',     label:'Labs',      icon:'🔬', color:'#D4A8F0' },
+  { key:'workout',  label:'Workout',   icon:'🏋️', color:'#f06060' },
+  { key:'checkins', label:'Check-ins', icon:'✅', color:B.gold    },
+  { key:'habits',   label:'Habits',    icon:'🌱', color:'#88ddaa' },
+];
+const DEFAULT_PERMS:any = { messages:true, diet:false, labs:false, workout:false, checkins:false, habits:false };
+
+const FALLBACK_STAFF:any[]   = [
+  { id:'s1', name:'Coach Marcus',   role:'coach',      initials:'CM' },
+  { id:'s2', name:'Head Coach Nia', role:'head_coach', initials:'HN' },
+  { id:'s3', name:'Sarah (VA)',      role:'va',         initials:'SA' },
+];
+const FALLBACK_CLIENTS:any[] = [
+  { id:'c1', name:'Jordan Williams', initials:'JW' },
+  { id:'c2', name:'Alex Carter',     initials:'AC' },
+  { id:'c3', name:'Taylor Brooks',   initials:'TB' },
+  { id:'c4', name:'Sam Rivera',      initials:'SR' },
+];
+
+const StaffAccessManager = ({ user }:any) => {
+  const [companyId,   setCompanyId]   = useState<string|null>(null);
+  const [adminId,     setAdminId]     = useState<string|null>(null);
+  const [staffList,   setStaffList]   = useState<any[]>(FALLBACK_STAFF);
+  const [clientList,  setClientList]  = useState<any[]>(FALLBACK_CLIENTS);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [showModal,   setShowModal]   = useState(false);
+  const [editing,     setEditing]     = useState<any>(null);
+  const [saving,      setSaving]      = useState(false);
+  const [usingDemo,   setUsingDemo]   = useState(true);
+  const [fStaff,  setFStaff]  = useState('');
+  const [fClient, setFClient] = useState('all');
+  const [fPerms,  setFPerms]  = useState<any>({...DEFAULT_PERMS});
+
+  useEffect(() => { loadAll(); }, []);
+
+  async function loadAll() {
+    const rows:any[] = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id,company_id`);
+    const me = rows?.[0];
+    if (!me?.company_id) return;
+    setCompanyId(me.company_id); setAdminId(me.id); setUsingDemo(false);
+    const [sf, cl, ass] = await Promise.all([
+      sbGet('user_profiles', `company_id=eq.${me.company_id}&role=neq.client&select=id,name,role,initials,email`),
+      sbGet('user_profiles', `company_id=eq.${me.company_id}&role=eq.client&select=id,name,initials`),
+      sbGet('client_access', `company_id=eq.${me.company_id}&select=*`),
+    ]);
+    if (sf?.length)         setStaffList(sf);
+    if (cl?.length)         setClientList(cl);
+    if (Array.isArray(ass)) setAssignments(ass);
+  }
+
+  function openAdd() {
+    setEditing(null); setFStaff(staffList[0]?.id||''); setFClient('all'); setFPerms({...DEFAULT_PERMS}); setShowModal(true);
+  }
+  function openEdit(a:any) {
+    setEditing(a); setFStaff(a.staff_id); setFClient(a.client_id||'all'); setFPerms({...DEFAULT_PERMS,...a.permissions}); setShowModal(true);
+  }
+
+  async function save() {
+    if (!fStaff && !editing) return;
+    setSaving(true);
+    if (editing) {
+      if (!usingDemo) await sbPatch('client_access', `id=eq.${editing.id}`, { permissions:fPerms });
+      setAssignments(p => p.map(a => a.id===editing.id ? {...a,permissions:fPerms} : a));
+    } else {
+      const payload = { company_id:companyId, staff_id:fStaff, client_id:fClient==='all'?null:fClient, permissions:fPerms, assigned_by:adminId };
+      if (!usingDemo) {
+        const res:any = await sbInsert('client_access', payload);
+        if (res?.[0]) setAssignments(p => [...p, res[0]]);
+      } else {
+        setAssignments(p => [...p, {...payload, id:`demo-${Date.now()}`}]);
+      }
+    }
+    setSaving(false); setShowModal(false);
+  }
+
+  async function remove(a:any) {
+    if (!window.confirm(`Remove ${staffName(a.staff_id)}'s access to ${clientLabel(a.client_id)}?`)) return;
+    if (!usingDemo) await sbDelete('client_access', `id=eq.${a.id}`);
+    setAssignments(p => p.filter(x => x.id!==a.id));
+  }
+
+  const staffName  = (id:string) => staffList.find(s=>s.id===id)?.name    || '—';
+  const staffInit  = (id:string) => staffList.find(s=>s.id===id)?.initials || '?';
+  const staffRole  = (id:string) => (staffList.find(s=>s.id===id)?.role||'').replace(/_/g,' ');
+  const clientLabel = (id:string|null) => id ? (clientList.find(c=>c.id===id)?.name||id) : '👥 All Clients';
+
+  const grouped = staffList
+    .map(s => ({ staff:s, rows:assignments.filter(a=>a.staff_id===s.id) }))
+    .filter(g => g.rows.length > 0);
+
+  return (
+    <div style={{ padding:'16px 20px 60px' }}>
+      {/* Toolbar */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <div>
+          <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 2px' }}>Staff Access Control</p>
+          {usingDemo && <p style={{ fontSize:10, color:'#f06060', margin:0 }}>⚠️ Demo mode — populate user_profiles in Supabase to persist</p>}
+        </div>
+        <button onClick={openAdd} style={{ background:B.gold, border:'none', borderRadius:8, padding:'8px 14px', color:B.black, fontSize:12, fontWeight:800, cursor:'pointer' }}>
+          + Add Assignment
+        </button>
+      </div>
+
+      {/* Empty state */}
+      {grouped.length === 0 && (
+        <Card>
+          <div style={{ textAlign:'center', padding:'28px 0' }}>
+            <div style={{ fontSize:36, marginBottom:10 }}>👥</div>
+            <p style={{ fontSize:14, fontWeight:700, color:B.muted, margin:'0 0 6px' }}>No staff assignments yet</p>
+            <p style={{ fontSize:11, color:B.muted, margin:0, lineHeight:1.6 }}>Assign VAs, head coaches, or staff to clients.<br/>They'll appear in each other's Messages and see only what you allow.</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Assignment groups */}
+      {grouped.map(({ staff, rows }) => (
+        <div key={staff.id} style={{ marginBottom:20 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+            <div style={{ width:36, height:36, borderRadius:18, background:B.goldDim, border:`1px solid ${B.goldMid}`,
+              display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:B.gold }}>
+              {staff.initials}
+            </div>
+            <div>
+              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{staff.name}</p>
+              <p style={{ fontSize:10, color:B.muted, margin:0, textTransform:'capitalize' }}>{staffRole(staff.id)}</p>
+            </div>
+          </div>
+
+          {rows.map((a:any) => {
+            const active = PERM_DEFS.filter(p => a.permissions?.[p.key]);
+            return (
+              <Card key={a.id} style={{ marginBottom:8, marginLeft:46 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:B.text, margin:'0 0 8px' }}>{clientLabel(a.client_id)}</p>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                      {active.length===0 && <span style={{ fontSize:10, color:B.muted }}>No permissions enabled</span>}
+                      {active.map((p:any) => (
+                        <span key={p.key} style={{ fontSize:10, fontWeight:700, color:p.color, background:`${p.color}18`, border:`1px solid ${p.color}44`, borderRadius:12, padding:'2px 8px' }}>
+                          {p.icon} {p.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                    <button onClick={()=>openEdit(a)} style={{ background:`${B.gold}22`, border:`1px solid ${B.goldMid}`, borderRadius:6, padding:'5px 10px', color:B.gold, fontSize:11, fontWeight:700, cursor:'pointer' }}>Edit</button>
+                    <button onClick={()=>remove(a)} style={{ background:'#ff444415', border:'1px solid #ff444433', borderRadius:6, padding:'5px 10px', color:'#ff7070', fontSize:11, fontWeight:700, cursor:'pointer' }}>×</button>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Modal */}
+      {showModal && (
+        <div onClick={e=>{if(e.target===e.currentTarget)setShowModal(false)}}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+          <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:'16px 16px 0 0', padding:20, width:'100%', maxWidth:500, maxHeight:'90vh', overflowY:'auto' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+              <p style={{ fontSize:15, fontWeight:800, color:B.text, margin:0 }}>{editing?'Edit Permissions':'Assign Staff Member'}</p>
+              <button onClick={()=>setShowModal(false)} style={{ background:'none', border:'none', color:B.muted, fontSize:24, cursor:'pointer', padding:0, lineHeight:1 }}>×</button>
+            </div>
+
+            {!editing && (<>
+              {/* Staff picker */}
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', display:'block', marginBottom:6 }}>Staff Member</label>
+                <select value={fStaff} onChange={e=>setFStaff(e.target.value)}
+                  style={{ width:'100%', background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:'10px 12px', color:B.text, fontSize:13, outline:'none' }}>
+                  <option value=''>— Select —</option>
+                  {staffList.map((s:any) => <option key={s.id} value={s.id}>{s.name} ({(s.role||'').replace(/_/g,' ')})</option>)}
+                </select>
+              </div>
+              {/* Client picker */}
+              <div style={{ marginBottom:18 }}>
+                <label style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', display:'block', marginBottom:6 }}>Assign To</label>
+                <select value={fClient} onChange={e=>setFClient(e.target.value)}
+                  style={{ width:'100%', background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:'10px 12px', color:B.text, fontSize:13, outline:'none' }}>
+                  <option value='all'>👥 All Clients (company-wide)</option>
+                  {clientList.map((c:any) => <option key={c.id} value={c.id}>👤 {c.name}</option>)}
+                </select>
+              </div>
+            </>)}
+
+            {editing && (
+              <div style={{ padding:'10px 12px', background:B.surface, borderRadius:8, marginBottom:18 }}>
+                <p style={{ fontSize:12, color:B.muted, margin:'0 0 2px' }}>Editing access for</p>
+                <p style={{ fontSize:13, fontWeight:700, color:B.gold, margin:0 }}>{staffName(editing.staff_id)} → {clientLabel(editing.client_id)}</p>
+              </div>
+            )}
+
+            {/* Permission toggles */}
+            <label style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', display:'block', marginBottom:10 }}>What Can They See?</label>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:20 }}>
+              {PERM_DEFS.map((p:any) => {
+                const on = !!fPerms[p.key];
+                return (
+                  <button key={p.key} onClick={()=>setFPerms((prev:any)=>({...prev,[p.key]:!prev[p.key]}))}
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px',
+                      background: on?`${p.color}18`:B.surface, border:`1px solid ${on?p.color:B.border}`,
+                      borderRadius:10, cursor:'pointer', textAlign:'left' }}>
+                    <span style={{ fontSize:18 }}>{p.icon}</span>
+                    <div>
+                      <p style={{ fontSize:12, fontWeight:700, color:on?p.color:B.muted, margin:0 }}>{p.label}</p>
+                      <p style={{ fontSize:9, color:on?p.color:B.border, margin:0 }}>{on?'Allowed':'Hidden'}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button onClick={save} disabled={saving||(!editing&&!fStaff)}
+              style={{ width:'100%', background:B.gold, border:'none', borderRadius:10, padding:'13px', color:B.black, fontSize:14, fontWeight:800, cursor:'pointer', opacity:(saving||(!editing&&!fStaff))?0.4:1 }}>
+              {saving ? 'Saving…' : editing ? 'Save Changes' : 'Assign Access'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
+const AdminDashboard = ({ user }:any) => {
   const isMobile = useIsMobile();
+  const [adminTab, setAdminTab] = useState('overview');
   const orgs = [
     { name:"Lifestyle of Eden", coaches:3, clients:24, color:B.gold },
     { name:"Partner Brand Co.", coaches:2, clients:11, color:"#6FB8E8" },
@@ -1610,45 +1857,65 @@ const AdminDashboard = ({ user }) => {
   ];
   return (
     <Screen>
-      <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"28px 20px 20px" }}>
+      <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"28px 20px 16px" }}>
         <p style={{ fontSize:11, color:B.gold, fontWeight:700, letterSpacing:1, margin:"0 0 4px" }}>🛡 SUPER ADMIN</p>
         <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0 }}>Eden Admin Panel</h1>
         <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Platform-wide access · edencommunications.io</p>
       </div>
-      <div style={{ padding:"16px 20px" }}>
-        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:10, marginBottom:20 }}>
-          {[{label:"Organizations",val:orgs.length},{label:"Total Coaches",val:6},{label:"Total Clients",val:41},{label:"MRR",val:"$4.2k"}].map(({label,val})=>(
-            <Card key={label} style={{ textAlign:"center" }}>
-              <p style={{ fontSize:20, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>{val}</p>
-              <p style={{ fontSize:9, color:B.muted, margin:0, lineHeight:1.3 }}>{label}</p>
-            </Card>
-          ))}
-        </div>
-        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Organizations</p>
-        {orgs.map((o,i)=>(
-          <Card key={i} style={{ marginBottom:10, borderLeft:`3px solid ${o.color}` }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{o.name}</p>
-                <p style={{ fontSize:11, color:B.muted, margin:0 }}>{o.coaches} coaches · {o.clients} clients</p>
-              </div>
-              <Btn variant="ghost" style={{ fontSize:11, padding:"4px 0" }}>Manage →</Btn>
-            </div>
-          </Card>
-        ))}
-        <Divider/>
-        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Platform Actions</p>
-        {["Add New Organization","Add Coach Account","View All Client Data","Audit Log","Zapier / GHL Webhooks","Stripe Subscription Overview"].map(action=>(
-          <button key={action} style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", marginBottom:8, textAlign:"left" }}>
-            <span style={{ fontSize:13, color:B.text }}>{action}</span>
-            <span style={{ color:B.gold }}>→</span>
+
+      {/* Tab bar */}
+      <div style={{ display:'flex', borderBottom:`1px solid ${B.border}`, background:B.surface, padding:'0 20px', flexShrink:0 }}>
+        {[['overview','📊 Overview'],['access','👥 Staff Access']].map(([key,label])=>(
+          <button key={key} onClick={()=>setAdminTab(key)}
+            style={{ padding:'12px 16px', background:'none', border:'none', borderBottom:`2px solid ${adminTab===key?B.gold:'transparent'}`,
+              color:adminTab===key?B.gold:B.muted, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+            {label}
           </button>
         ))}
-        <div style={{ marginTop:12, padding:"12px 14px", background:`${B.gold}11`, border:`1px solid ${B.gold}33`, borderRadius:10 }}>
-          <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>🔒 HIPAA COMPLIANCE STATUS</p>
-          <p style={{ fontSize:12, color:B.muted, margin:0 }}>AES-256 encryption active · Audit logs enabled · BAA on file · Last access review: Jul 13 2026</p>
-        </div>
       </div>
+
+      {/* Overview */}
+      {adminTab==='overview' && (
+        <div style={{ overflowY:'auto', flex:1 }}>
+          <div style={{ padding:"16px 20px" }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:10, marginBottom:20 }}>
+              {[{label:"Organizations",val:orgs.length},{label:"Total Coaches",val:6},{label:"Total Clients",val:41},{label:"MRR",val:"$4.2k"}].map(({label,val})=>(
+                <Card key={label} style={{ textAlign:"center" }}>
+                  <p style={{ fontSize:20, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>{val}</p>
+                  <p style={{ fontSize:9, color:B.muted, margin:0, lineHeight:1.3 }}>{label}</p>
+                </Card>
+              ))}
+            </div>
+            <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Organizations</p>
+            {orgs.map((o,i)=>(
+              <Card key={i} style={{ marginBottom:10, borderLeft:`3px solid ${o.color}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div>
+                    <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{o.name}</p>
+                    <p style={{ fontSize:11, color:B.muted, margin:0 }}>{o.coaches} coaches · {o.clients} clients</p>
+                  </div>
+                  <Btn variant="ghost" style={{ fontSize:11, padding:"4px 0" }}>Manage →</Btn>
+                </div>
+              </Card>
+            ))}
+            <Divider/>
+            <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Platform Actions</p>
+            {["Add New Organization","Add Coach Account","View All Client Data","Audit Log","Zapier / GHL Webhooks","Stripe Subscription Overview"].map(action=>(
+              <button key={action} style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", marginBottom:8, textAlign:"left" }}>
+                <span style={{ fontSize:13, color:B.text }}>{action}</span>
+                <span style={{ color:B.gold }}>→</span>
+              </button>
+            ))}
+            <div style={{ marginTop:12, padding:"12px 14px", background:`${B.gold}11`, border:`1px solid ${B.gold}33`, borderRadius:10 }}>
+              <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>🔒 HIPAA COMPLIANCE STATUS</p>
+              <p style={{ fontSize:12, color:B.muted, margin:0 }}>AES-256 encryption active · Audit logs enabled · BAA on file · Last access review: Jul 13 2026</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Access */}
+      {adminTab==='access' && <StaffAccessManager user={user}/>}
     </Screen>
   );
 };
