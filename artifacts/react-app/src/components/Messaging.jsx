@@ -31,6 +31,48 @@ const C = {
   muted: '#888888', success: '#4FD89A', danger: '#ff4444',
 }
 
+// ── Admin conversation (client → admin thread) ─────────────────
+const ADMIN_CONVO = {
+  id: 'admin',
+  name: 'Eden Admin',
+  initials: 'EA',
+  supabaseConvoId: null,
+  lastMessage: 'Feel free to message us for anything account-related.',
+  lastTime: '3d ago',
+  unread: 1,
+  online: true,
+  thread: [
+    { id:1, from:'coach', text:"Welcome to Eden Communications, Jordan! I'm the Eden admin. For anything outside your coaching sessions — account questions, billing, technical issues — I'm your contact here.", time:'Mon 8:00 AM' },
+    { id:2, from:'client', text:"Thank you! Great to be here.", time:'Mon 8:05 AM' },
+    { id:3, from:'coach', text:"Glad to have you 🙏 Coach Marcus handles everything health and protocol. I'm here for the rest. Don't hesitate to reach out anytime.", time:'Mon 8:07 AM' },
+  ],
+}
+
+// ── Coach conversation as seen by the CLIENT (labels flipped) ──
+// Clients see "Coach Marcus" in the thread, not their own name.
+const CLIENT_COACH_CONVO = {
+  id: 'jordan',
+  name: 'Coach Marcus',
+  initials: 'CM',
+  supabaseConvoId: JORDAN_CONVO_ID,
+  lastMessage: "Thank you! I'll start the new protocol tomorrow 🙏",
+  lastTime: '2h ago',
+  unread: 2,
+  online: true,
+  thread: [
+    { id:1, from:'coach', text:"Hey Jordan! Just reviewed your check-in. Great numbers this week — weight is trending in the right direction.", time:'Mon 9:14 AM' },
+    { id:2, from:'client', text:"Thank you so much! I've been really consistent with the supplements.", time:'Mon 9:22 AM' },
+    { id:3, from:'coach', text:"It shows. Your energy score jumped from a 5 to a 7. Sleep is improving too. Keep that same sleep window this week.", time:'Mon 9:31 AM' },
+    { id:4, from:'client', text:"Will do. One question — should I take the Cort Eaze every day or just on high-stress days?", time:'Mon 11:05 AM' },
+    { id:5, from:'coach', text:"High-stress days only. If you're waking up and already feel calm and your HRV is solid, skip it.", time:'Mon 11:18 AM' },
+    { id:6, from:'client', text:"Got it! That makes sense.", time:'Mon 11:19 AM' },
+    { id:7, from:'coach', text:"Also — I'm updating your protocol with a new magnesium dose. You'll see it in the Diet & Supps tab. Take it 30 min before bed.", time:'Tue 8:02 AM' },
+    { id:8, from:'client', text:"Okay I saw it! Do I take both the glycinate and the threonate or just one?", time:'Tue 8:45 AM' },
+    { id:9, from:'coach', text:"Just the glycinate for now. We'll add threonate in 4 weeks once your sleep baseline stabilizes.", time:'Tue 9:00 AM' },
+    { id:10, from:'client', text:"Thank you! I'll start the new protocol tomorrow 🙏", time:'Tue 9:03 AM' },
+  ],
+}
+
 // ── Demo conversations for all 4 clients (coach view) ─────────
 const DEMO_CLIENTS = [
   {
@@ -181,8 +223,8 @@ export default function Messaging({ currentUser, loomMode = false }) {
   const myName   = userInfo.name
 
   // ── Conversation selection ────────────────────────────────
-  // Coach sees all 4 clients; client sees only their coach thread
-  const conversations = myRole === 'coach' ? DEMO_CLIENTS : [DEMO_CLIENTS[0]]
+  // Coach sees all 4 clients; client sees Coach Marcus + Eden Admin
+  const conversations = myRole === 'coach' ? DEMO_CLIENTS : [CLIENT_COACH_CONVO, ADMIN_CONVO]
   const [activeId,     setActiveId]     = useState(conversations[0].id)
   const [sidebarOpen,  setSidebarOpen]  = useState(false)
   const activeConvo = conversations.find(c => c.id === activeId) || conversations[0]
@@ -334,7 +376,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
           <div>
             <div style={{ fontSize:15, fontWeight:700, color:C.white }}>Messages</div>
             <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>
-              {myRole === 'coach' ? `${conversations.length} clients` : 'Coach Marcus'}
+              {myRole === 'coach' ? `${conversations.length} clients` : 'Coach Marcus · Eden Admin'}
             </div>
           </div>
           {isMobile && (
