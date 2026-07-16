@@ -1438,20 +1438,12 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
   const isMobile = useIsMobile();
   const [selectedClient, setSelectedClient] = useState(null);
   const [rosterOpen, setRosterOpen]         = useState(true);
-  const [peekIndex, setPeekIndex]           = useState<number|null>(null);
   const clients = CLIENT_ROSTER;
 
   // Anonymise labels when Loom Mode is on
   const displayName     = (c: any, i: number) => loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name;
   const displayProtocol = (c: any)            => loomMode ? "Protocol hidden" : c.protocol;
   const displayCheckin  = (c: any)            => loomMode ? "—" : c.lastCheckin;
-
-  // Peek: reveal real name for 2 seconds then hide
-  const handlePeek = (e: any, i: number) => {
-    e.stopPropagation();
-    setPeekIndex(i);
-    setTimeout(() => setPeekIndex(null), 2000);
-  };
 
   return (
     <Screen>
@@ -1504,14 +1496,6 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                       <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
-                      {/* Peek button — only shows in Loom Mode */}
-                      {loomMode && (
-                        <button onClick={e=>handlePeek(e,i)}
-                          style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:6,
-                            padding:"1px 6px", cursor:"pointer", fontSize:11, color:B.muted }}>
-                          {peekIndex===i ? <span style={{ color:B.gold, fontWeight:700 }}>{c.name}</span> : "👁"}
-                        </button>
-                      )}
                     </div>
                     <p style={{ fontSize:11, color:B.muted, margin:"0 0 4px" }}>
                       Last check-in: {displayCheckin(c)}
