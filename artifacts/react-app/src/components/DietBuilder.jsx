@@ -329,6 +329,7 @@ const FOODS = [
   {name:'Walnuts',serving:'1g',cal:6.54,pro:0.153,fat:0.654,carb:0.138,fib:0.069,cat:'Fats'},
   {name:'Pecans',serving:'1g',cal:6.91,pro:0.091,fat:0.72,carb:0.138,fib:0.097,cat:'Fats'},
   {name:'Organic Pear Juice',serving:'250ml',cal:110,pro:0.5,fat:0.2,carb:27,fib:0,cat:'Drinks/Condiments'},
+  {name:'Medipure Protein',serving:'1 scoop',cal:120,pro:22,fat:2,carb:5,fib:1,cat:'Supplements',link:'https://nuethix.com/products/medipure-ultra'},
   {name:'Opti-Pure Probiotic',serving:'1 cap',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements',link:'https://nuethix.com/collections/supplements/products/opti-pure?variant=42315272585449'},
   {name:'Bile Plus',serving:'2 caps',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements',link:'https://www.practitionerdepot.com/products/bile-plus?variant=46157575061721'},
   {name:'HU Dark Chocolate Bar',serving:'1g',cal:5.7,pro:0.07,fat:0.40,carb:0.53,fib:0.09,cat:'Fats'},
@@ -550,7 +551,9 @@ export default function DietBuilder({currentUser}) {
 
   // ── Meal plan ─────────────────────────────────────────────
   const [dayType,   setDayType]   = useState('high')
-  const [protocol,  setProtocol]  = useState('Base Diet Protocol Male')
+  const [protocol,  setProtocol]  = useState(
+    (currentUser?.role==='client'||currentUser?.role==='super_admin')?'Female Low Protein Flush Diet':'Base Diet Protocol Male'
+  )
   const [showPicker,setShowPicker]= useState(false)
   const [activeMeal,setActiveMeal]= useState(null)
   const [foodSearch,setFoodSearch]= useState('')
@@ -846,8 +849,9 @@ export default function DietBuilder({currentUser}) {
       ══════════════════════════════════════════════════════ */}
       {tab==='plan'&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
-          {isCoach&&(
-            <Card sx={{marginBottom:12}}>
+          {/* Protocol selector (coach) / protocol badge (client) */}
+          <Card sx={{marginBottom:12}}>
+            {isCoach?(
               <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
                 <div style={{flex:1}}>
                   <Sel label="Diet Protocol" value={protocol} onChange={setProtocol} options={PROTOCOLS}/>
@@ -863,8 +867,41 @@ export default function DietBuilder({currentUser}) {
                   </button>
                 </div>
               </div>
-            </Card>
-          )}
+            ):(
+              <div>
+                <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Your Protocol</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{protocol}</div>
+              </div>
+            )}
+          </Card>
+
+          {/* Protocol Supplements card — visible to coach AND client whenever protocol is Flush Diet */}
+          {protocol.toLowerCase().includes('flush')&&(()=>{
+            const tpl = DIET_TEMPLATES.find(t=>t.id==='flush-diet')
+            if(!tpl) return null
+            return (
+              <Card sx={{marginBottom:12,border:`1px solid ${C.gold}44`,background:`${C.gold}08`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase'}}>🛒 Flush Diet — Required Supplements</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>Use code <span style={{color:C.gold,fontWeight:700}}>TOGNIETTI10</span> for 10% off</div>
+                  </div>
+                </div>
+                {tpl.supplements.map((s,si)=>(
+                  <div key={si} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
+                    <div style={{flex:1,minWidth:0,marginRight:8}}>
+                      <div style={{fontSize:12,color:C.white,fontWeight:600}}>{s.name}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>{s.note}</div>
+                    </div>
+                    <a href={s.link} target="_blank" rel="noreferrer"
+                      style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,textDecoration:'none',whiteSpace:'nowrap',flexShrink:0}}>
+                      Buy →
+                    </a>
+                  </div>
+                ))}
+              </Card>
+            )
+          })()}
 
           <div style={{display:'flex',gap:8,marginBottom:12}}>
             {['high','low'].map(d=>(
