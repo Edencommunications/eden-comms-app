@@ -1077,6 +1077,22 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
             <button onClick={onClose} style={{ background:"none", border:"none", color:B.muted, fontSize:22, cursor:"pointer", padding:0, lineHeight:1 }}>×</button>
           </div>
         </div>
+        {/* Action buttons — pinned below header, no scroll needed */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:"10px 16px", borderBottom:`1px solid ${B.border}`, flexShrink:0 }}>
+          {[
+            { label:"📋 Diet Plan",    color:B.gold,    bg:`${B.gold}22`,    border:`1px solid ${B.gold}44`,    tab:"diet" },
+            { label:"💬 Message",      color:"#4FD89A", bg:"#4FD89A22",      border:"1px solid #4FD89A44",      tab:"msgs" },
+            { label:"🧪 Labs",         color:"#D4A8F0", bg:"#D4A8F022",      border:"1px solid #D4A8F044",      tab:"labs" },
+            { label:"📊 Check-In Log", color:"#6FB8E8", bg:"#6FB8E822",      border:"1px solid #6FB8E844",      tab:"checkin" },
+          ].map(({label,color,bg,border,tab})=>(
+            <button key={label}
+              onClick={()=>{ onClose(); onNavigate?.(tab) }}
+              style={{ background:bg, border, borderRadius:10, padding:"10px 8px", color, fontWeight:700, fontSize:12, cursor:"pointer" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Scrollable body */}
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
 
@@ -1414,21 +1430,6 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
             </Card>
           )}
 
-          {/* Action buttons */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:8 }}>
-            {[
-              { label:"📋 Open Diet Plan", color:B.gold,    bg:`${B.gold}22`,    border:`1px solid ${B.gold}44`,    tab:"diet" },
-              { label:"💬 Send Message",   color:"#4FD89A", bg:"#4FD89A22",      border:"1px solid #4FD89A44",      tab:"msgs" },
-              { label:"🧪 View Labs",      color:"#D4A8F0", bg:"#D4A8F022",      border:"1px solid #D4A8F044",      tab:"labs" },
-              { label:"📊 Check-In Log",   color:"#6FB8E8", bg:"#6FB8E822",      border:"1px solid #6FB8E844",      tab:"checkin" },
-            ].map(({label,color,bg,border,tab})=>(
-              <button key={label}
-                onClick={()=>{ onClose(); onNavigate?.(tab) }}
-                style={{ background:bg, border, borderRadius:10, padding:"11px 12px", color, fontWeight:700, fontSize:12, cursor:"pointer" }}>
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>
