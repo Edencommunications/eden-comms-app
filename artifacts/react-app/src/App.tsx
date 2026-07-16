@@ -17,6 +17,7 @@ function useIsMobile(breakpoint = 768) {
 import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
 import Notifications from "./components/Notifications";
+import Week4 from "./components/Week4";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -1660,15 +1661,15 @@ const AppShell = ({ user, onLogout }) => {
     { key:"msgs",    icon:"msg",     label:"Messages" },
     { key:"diet",    icon:"diet",    label:"Diet" },
     { key:"checkin", icon:"checkin", label:"Check In" },
-    { key:"labs",    icon:"labs",    label:"Labs" },
     { key:"habits",  icon:"habits",  label:"Habits" },
+    { key:"workout", icon:"workout", label:"Workout" },
   ];
   const coachTabs = [
-    { key:"home",   icon:"home",    label:"Home" },
-    { key:"msgs",   icon:"msg",     label:"Messages" },
-    { key:"diet",   icon:"diet",    label:"Diet" },
-    { key:"labs",   icon:"labs",    label:"Labs" },
-    { key:"habits", icon:"habits",  label:"Habits" },
+    { key:"home",    icon:"home",    label:"Home" },
+    { key:"msgs",    icon:"msg",     label:"Messages" },
+    { key:"diet",    icon:"diet",    label:"Diet" },
+    { key:"habits",  icon:"habits",  label:"Habits" },
+    { key:"workout", icon:"workout", label:"Workout" },
   ];
   const adminTabs = [
     { key:"home",   icon:"home",   label:"Home" },
@@ -1692,6 +1693,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "labs")    return <LabsScreen/>;
     if (tab === "checkin") return <CheckInScreen/>;
     if (tab === "habits")  return <HabitTrackerScreen/>;
+    if (tab === "workout") return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "admin")   return <AdminDashboard user={user}/>;
     return <HomeScreen user={user}/>;
   };
