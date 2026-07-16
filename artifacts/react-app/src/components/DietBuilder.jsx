@@ -307,6 +307,11 @@ const FOODS = [
   {name:'Hot Sauce',serving:'5g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Salsa',serving:'30g',cal:10,pro:0.4,fat:0,carb:2,fib:0.5,cat:'Drinks/Condiments'},
   {name:'Unrefined Mineral Salt',serving:'1/4 tsp',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
+  {name:'Walnuts',serving:'1g',cal:6.54,pro:0.153,fat:0.654,carb:0.138,fib:0.069,cat:'Fats'},
+  {name:'Pecans',serving:'1g',cal:6.91,pro:0.091,fat:0.72,carb:0.138,fib:0.097,cat:'Fats'},
+  {name:'Organic Pear Juice',serving:'250ml',cal:110,pro:0.5,fat:0.2,carb:27,fib:0,cat:'Drinks/Condiments'},
+  {name:'Opti-Pure Probiotic',serving:'1 cap',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
+  {name:'Bile Plus',serving:'2 caps',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
 ]
 
 const PROTOCOLS = [
@@ -383,6 +388,69 @@ function calcBMR(weight,height,age,gender) {
     ?Math.round(10*w+6.25*h-5*a+5)
     :Math.round(10*w+6.25*h-5*a-161)
 }
+
+// ── Diet Templates ────────────────────────────────────────────
+const DIET_TEMPLATES = (() => {
+  const f = name => FOODS.find(fd => fd.name === name)
+  const item = (name, qty) => {
+    const food = f(name)
+    if (!food) return null
+    const base = parseBaseQty(food.serving)
+    return { food, qty: String(qty), servings: qty / base }
+  }
+
+  const RESTRICTIONS = [
+    'Gluten (wheat, barley, rye)','Added sugars','Dairy',
+    'Alcohol','Smoking','Processed foods','Artificial sweeteners','Pain pills or antibiotics',
+  ]
+  const INSTRUCTIONS = `No deviations until the flush is complete. Goal: open the liver to remove toxins, excess hormones & inflammation, up-regulate the thyroid to metabolize cortisol, and speed up BMR.\n\nBlack coffee (1–2 cups/day) is fine.\n\nUpdates: Every Wednesday before 9 AM CST — wake up on an empty stomach, send photos + morning weight. Report any deviations in detail. Incorporate two daily de-stressors (deep breathing 20 min, nature walk, massage, or movie).`
+  const MORNING  = `Upon waking, on an empty stomach:\n• 25 oz room-temp lemon water\n• 1 scoop Bloat Eaze (code: TOGNIETTI10)`
+  const WITH_MEALS = `With every meal: 2 caps Bile Plus (code: TOGNIETTI10)`
+  const COOKING  = `Cooking: 6–8g EVOO on pan. Condiments: yellow mustard, salsa, stevia-sweetened ketchup, hot sauce. Target 1–1.5 gallons water daily + unrefined mineral salt.`
+
+  return [{
+    id: 'flush',
+    name: 'Flush Diet',
+    description: 'Opens the liver, up-regulates the thyroid & bowels, flushes inflammation, and speeds up BMR.',
+    instructions: INSTRUCTIONS,
+    morningRoutine: MORNING,
+    withMeals: WITH_MEALS,
+    cooking: COOKING,
+    restrictions: RESTRICTIONS,
+    versions: {
+      Male: {
+        cardio: '60-minute walk daily — flush phase only, no weight training',
+        meals: [
+          { name:'Meal 1 — Shake', notes:'With: Fish Oil 2000mg · Vitamin D · Multivitamin 3 caps · Opti-Pure 3 caps',
+            foods:[item('Medipure Protein',2),item('Baby Spinach',60),item('Cucumber',80),item('Glutamine 20g',20),item('Papaya',180),item('Chia Seeds',15),item('Organic Apple Juice',250),item('Fish Oil 2000mg',2),item('Vitamin D',1),item('Multivitamin',3),item('Opti-Pure Probiotic',3),item('Water (16oz)',16)].filter(Boolean)},
+          { name:'Meal 2', notes:'With: 2 caps Bile Plus',
+            foods:[item('Whole Omega-3 Egg',2),item('Beef Bone Broth',240),item('Oatmeal (dry)',80),item('Pineapple',150),item('Strawberries',100),item('Water (16oz)',16)].filter(Boolean)},
+          { name:'Meal 3', notes:'2 kiwi with skin on · With: 2 caps Bile Plus',
+            foods:[item('Wild Caught Salmon',4),item('Brown Rice (cooked)',200),item('Kiwi (with skin)',166),item('Extra Virgin Olive Oil',15),item('Spaghetti Squash',140),item('Fish Oil 2000mg',2),item('Water (16oz)',16)].filter(Boolean)},
+          { name:'Meal 4 — Shake', notes:'Use Pear or Apple juice (250ml)',
+            foods:[item('Medipure Protein',2),item('Baby Spinach',60),item('Cucumber',80),item('Chia Seeds',15),item('Dark Sweet Cherries',100),item('Wild Blueberries',80),item('Organic Apple Juice',250)].filter(Boolean)},
+          { name:'Meal 5', notes:'Opti-Pure 3 caps (taper after 1st bottle → 3 in AM only → stop) · With: 2 caps Bile Plus',
+            foods:[item('Mahi Mahi',4),item('Coconut Oil (unrefined)',14),item('Walnuts',10),item('Brown Rice (cooked)',100),item('Orange',100),item('Green Beans',113),item('Bloat Eaze',1),item('Opti-Pure Probiotic',3),item('Water (16oz)',16)].filter(Boolean)},
+        ],
+      },
+      Female: {
+        cardio: '45–60 minute walk daily — flush phase only, no weight training',
+        meals: [
+          { name:'Meal 1 — Shake', notes:'Black coffee OK 90 min after waking · With: Fish Oil 2000mg · Vitamin D · Multivitamin 3 caps · Opti-Pure 3 caps',
+            foods:[item('Medipure Protein',1),item('Baby Spinach',60),item('Cucumber',80),item('Glutamine 20g',20),item('Papaya',150),item('Chia Seeds',15),item('Organic Apple Juice',250),item('Fish Oil 2000mg',2),item('Vitamin D',1),item('Multivitamin',3),item('Opti-Pure Probiotic',3),item('Water (16oz)',16)].filter(Boolean)},
+          { name:'Meal 2', notes:'With: 2 caps Bile Plus',
+            foods:[item('Whole Omega-3 Egg',1),item('Beef Bone Broth',150),item('Oatmeal (dry)',40),item('Pineapple',120),item('Strawberries',120),item('Water (16oz)',16)].filter(Boolean)},
+          { name:'Meal 3', notes:'2 kiwi with skin on · With: 2 caps Bile Plus',
+            foods:[item('Wild Caught Salmon',2.5),item('Brown Rice (cooked)',180),item('Kiwi (with skin)',166),item('Extra Virgin Olive Oil',15),item('Spaghetti Squash',140),item('Fish Oil 2000mg',2),item('Water (16oz)',16)].filter(Boolean)},
+          { name:'Meal 4 — Shake', notes:'Use Pear or Apple juice (250ml)',
+            foods:[item('Medipure Protein',1),item('Baby Spinach',60),item('Cucumber',80),item('Chia Seeds',15),item('Dark Sweet Cherries',80),item('Wild Blueberries',80),item('Organic Apple Juice',250)].filter(Boolean)},
+          { name:'Meal 5', notes:'Opti-Pure 3 caps (taper after 1st bottle → 3 in AM only → stop) · With: 2 caps Bile Plus',
+            foods:[item('Mahi Mahi',3),item('Coconut Oil (unrefined)',10),item('Walnuts',10),item('Brown Rice (cooked)',80),item('Green Beans',113),item('Bloat Eaze',1),item('Magnesium',1),item('Opti-Pure Probiotic',3),item('Water (16oz)',16)].filter(Boolean)},
+        ],
+      },
+    },
+  }]
+})()
 
 // ── Mini UI ───────────────────────────────────────────────────
 const MCOLS={cal:'#ffa600',pro:'#4FD89A',carb:'#6FB8E8',fat:'#f06060',fib:'#D4A8F0'}
@@ -511,11 +579,31 @@ export default function DietBuilder({currentUser}) {
   const [rxDraftLog,      setRxDraftLog]      = useState({}) // keyed by rx id
   const [coachNotes,      setCoachNotes]      = useState('')
 
+  // ── Templates ─────────────────────────────────────────────
+  const [showTemplates,   setShowTemplates]   = useState(false)
+  const [tplGender,       setTplGender]       = useState('Male')
+  const [tplId,           setTplId]           = useState('flush')
+  const [tplConfirm,      setTplConfirm]      = useState(false)
+
   // ── Macro totals ──────────────────────────────────────────
   const totals = meals.reduce((a,m)=>{
     const mt=mealMacros(m)
     return {cal:a.cal+mt.cal,pro:a.pro+mt.pro,fat:a.fat+mt.fat,carb:a.carb+mt.carb,fib:a.fib+mt.fib}
   },{cal:0,pro:0,fat:0,carb:0,fib:0})
+
+  // ── Template loader ───────────────────────────────────────
+  function loadTemplate() {
+    const tpl = DIET_TEMPLATES.find(t => t.id === tplId)
+    if (!tpl) return
+    const version = tpl.versions[tplGender]
+    if (!version) return
+    const newMeals = version.meals.map(m => ({ name: m.name, foods: m.foods, notes: m.notes || '' }))
+    setHighMeals(newMeals)
+    setLowMeals(newMeals)
+    setDayType('high')
+    setTplConfirm(false)
+    setShowTemplates(false)
+  }
 
   // ── Food picker actions ───────────────────────────────────
   function addFood(food) {
@@ -664,7 +752,15 @@ export default function DietBuilder({currentUser}) {
         <div style={{flex:1,overflowY:'auto',padding:16}}>
           {isCoach&&(
             <Card sx={{marginBottom:12}}>
-              <Sel label="Diet Protocol" value={protocol} onChange={setProtocol} options={PROTOCOLS}/>
+              <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+                <div style={{flex:1}}>
+                  <Sel label="Diet Protocol" value={protocol} onChange={setProtocol} options={PROTOCOLS}/>
+                </div>
+                <button onClick={()=>{setShowTemplates(true);setTplConfirm(false)}}
+                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'9px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',marginBottom:10,flexShrink:0}}>
+                  📋 Templates
+                </button>
+              </div>
             </Card>
           )}
 
@@ -1543,6 +1639,158 @@ export default function DietBuilder({currentUser}) {
                 style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
                 Done — {clientSupps.length} supplements added
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          DIET TEMPLATE MODAL
+      ══════════════════════════════════════════════════════ */}
+      {showTemplates&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.92)',zIndex:200,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+          onClick={e=>{if(e.target===e.currentTarget)setShowTemplates(false)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:'18px 18px 0 0',width:'100%',maxWidth:520,maxHeight:'92vh',display:'flex',flexDirection:'column'}}>
+
+            {/* Header */}
+            <div style={{padding:'16px 16px 12px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:16,fontWeight:800,color:C.white}}>Diet Templates</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>Load a pre-built plan — fully editable after loading</div>
+                </div>
+                <button onClick={()=>setShowTemplates(false)}
+                  style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px',color:C.muted,fontSize:18,cursor:'pointer',lineHeight:1}}>×</button>
+              </div>
+
+              {/* Template selector tabs */}
+              <div style={{display:'flex',gap:6,marginBottom:12}}>
+                {DIET_TEMPLATES.map(t=>(
+                  <button key={t.id} onClick={()=>{setTplId(t.id);setTplConfirm(false)}}
+                    style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${tplId===t.id?C.gold:C.border}`,background:tplId===t.id?`${C.gold}22`:C.surface,color:tplId===t.id?C.gold:C.muted,fontSize:12,fontWeight:tplId===t.id?700:400,cursor:'pointer'}}>
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Gender toggle */}
+              <div style={{display:'flex',gap:6}}>
+                {['Male','Female'].map(g=>(
+                  <button key={g} onClick={()=>{setTplGender(g);setTplConfirm(false)}}
+                    style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${tplGender===g?C.gold:C.border}`,background:tplGender===g?`${C.gold}22`:C.surface,color:tplGender===g?C.gold:C.muted,fontSize:13,fontWeight:tplGender===g?700:400,cursor:'pointer'}}>
+                    {g==='Male'?'♂ Male':'♀ Female'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Scrollable body */}
+            {(() => {
+              const tpl = DIET_TEMPLATES.find(t=>t.id===tplId)
+              const ver = tpl?.versions[tplGender]
+              if(!tpl||!ver) return null
+              return (
+                <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+                  {/* Description */}
+                  <div style={{background:C.surface,borderLeft:`3px solid ${C.gold}`,borderRadius:8,padding:'10px 12px',marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,marginBottom:4}}>ABOUT THIS TEMPLATE</div>
+                    <div style={{fontSize:12,color:C.white,lineHeight:1.6}}>{tpl.description}</div>
+                  </div>
+
+                  {/* Morning routine */}
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>☀️ Morning Routine (empty stomach)</div>
+                    <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',fontSize:12,color:C.white,lineHeight:1.8,whiteSpace:'pre-line'}}>{tpl.morningRoutine}</div>
+                  </div>
+
+                  {/* With every meal */}
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>💊 With Every Meal</div>
+                    <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',fontSize:12,color:C.white}}>{tpl.withMeals}</div>
+                  </div>
+
+                  {/* Cardio */}
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>🏃 Cardio</div>
+                    <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',fontSize:12,color:C.white}}>{ver.cardio}</div>
+                  </div>
+
+                  {/* Eliminate */}
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>🚫 Eliminate</div>
+                    <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',display:'flex',flexWrap:'wrap',gap:6}}>
+                      {tpl.restrictions.map(r=>(
+                        <span key={r} style={{fontSize:10,background:`${C.danger}22`,color:C.danger,padding:'2px 8px',borderRadius:10,fontWeight:600}}>{r}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Cooking & condiments */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>🍳 Cooking & Condiments</div>
+                    <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',fontSize:12,color:C.white,lineHeight:1.6}}>{tpl.cooking}</div>
+                  </div>
+
+                  {/* Meal breakdown */}
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>🥗 Meal Breakdown ({ver.meals.length} meals)</div>
+                  {ver.meals.map((meal,mi)=>{
+                    const mt = mealMacros(meal)
+                    return (
+                      <div key={mi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:8}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                          <div style={{fontSize:13,fontWeight:700,color:C.white}}>{meal.name}</div>
+                          <span style={{fontSize:11,color:C.gold,fontWeight:600}}>{mt.cal} cal</span>
+                        </div>
+                        <div style={{display:'flex',gap:10,marginBottom:6}}>
+                          {[['P',mt.pro,'#4FD89A'],['C',mt.carb,'#6FB8E8'],['F',mt.fat,'#f06060']].map(([l,v,col])=>(
+                            <span key={l} style={{fontSize:10,color:col,fontWeight:600}}>{l}: {v}g</span>
+                          ))}
+                        </div>
+                        {meal.notes&&<div style={{fontSize:10,color:C.muted,fontStyle:'italic',marginBottom:6}}>{meal.notes}</div>}
+                        {meal.foods.map((item,fi)=>(
+                          <div key={fi} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
+                            <span style={{color:C.white}}>{item.food.name}</span>
+                            <span style={{color:C.muted,flexShrink:0,marginLeft:8}}>{item.qty} {parseServingUnit(item.food.serving)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+
+                  {/* Update instructions */}
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>📋 Instructions & Update Protocol</div>
+                    <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',fontSize:11,color:C.muted,lineHeight:1.7,whiteSpace:'pre-line'}}>{tpl.instructions}</div>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Sticky footer CTA */}
+            <div style={{padding:'12px 16px 20px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              {!tplConfirm?(
+                <button onClick={()=>setTplConfirm(true)}
+                  style={{width:'100%',background:`linear-gradient(135deg,#ffb733,#ffa600)`,border:'none',borderRadius:12,padding:14,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer'}}>
+                  Load {tplGender} Flush Diet Template
+                </button>
+              ):(
+                <div>
+                  <div style={{fontSize:12,color:C.danger,textAlign:'center',marginBottom:10,fontWeight:600}}>
+                    ⚠️ This will replace the current meal plan. Continue?
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={()=>setTplConfirm(false)}
+                      style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:12,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                      Cancel
+                    </button>
+                    <button onClick={loadTemplate}
+                      style={{flex:2,background:C.danger,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.white,fontSize:13,cursor:'pointer'}}>
+                      Yes, Load Template
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
