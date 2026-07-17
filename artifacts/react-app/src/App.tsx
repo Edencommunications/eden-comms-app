@@ -76,6 +76,7 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2" fill="none" stroke={c} strokeWidth="1.8"/><line x1="16" y1="2" x2="16" y2="6" stroke={c} strokeWidth="1.8"/><line x1="8" y1="2" x2="8" y2="6" stroke={c} strokeWidth="1.8"/><line x1="3" y1="10" x2="21" y2="10" stroke={c} strokeWidth="1.8"/></>,
     workout:  <><path d="M6.5 6.5h11M6.5 17.5h11M3 10h3v4H3zM18 10h3v4h-3z" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></>,
     community:<><path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" fill="none" stroke={c} strokeWidth="1.8"/><line x1="2" y1="20" x2="2.01" y2="20" stroke={c} strokeWidth="2.5" strokeLinecap="round"/></>,
+    learn:    <><path d="M22 10v6M2 10l10-5 10 5-10 5z" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 12v5c3 3 9 3 12 0v-5" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></>,
     upload:   <><polyline points="16,16 12,12 8,16" fill="none" stroke={c} strokeWidth="1.8"/><line x1="12" y1="12" x2="12" y2="21" stroke={c} strokeWidth="1.8"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" fill="none" stroke={c} strokeWidth="1.8"/></>,
     shop:     <><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" fill="none" stroke={c} strokeWidth="1.8"/><line x1="3" y1="6" x2="21" y2="6" stroke={c} strokeWidth="1.8"/><path d="M16 10a4 4 0 0 1-8 0" fill="none" stroke={c} strokeWidth="1.8"/></>,
   };
