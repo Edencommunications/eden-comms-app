@@ -1,0 +1,1011 @@
+// ═══════════════════════════════════════════════════════════════
+// Week5.jsx — CEO Course + Recipe Book (Final)
+// Admin-only course/video management
+// Admin grants access per client, per coach, or all at once
+// Coach sees client progress dashboards
+// Place at: src/components/Week5.jsx
+// ═══════════════════════════════════════════════════════════════
+import { useState, useEffect } from 'react'
+
+const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
+const SHEET_ID      = '1lckx8AWxzxxddhWESgj7R-FVHoE6g2JBC9NG1J72QTA'
+const SHEET_NAME    = 'FoodList'
+const RECIPE_BUY    = 'https://funnel.lifestyleofeden.com/loe-recipes-5482'
+
+// ── Known users (expand in Week 6 with real auth) ─────────────
+const KNOWN_USERS = {
+  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus',    role:'coach' },
+  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051' },
+  'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',      role:'super_admin' },
+}
+
+// ── Demo roster (Week 6 pulls this from Supabase dynamically) ─
+const DEMO_COACHES = [
+  { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus', role:'coach' },
+]
+const DEMO_CLIENTS = [
+  { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', coachName:'Coach Marcus' },
+]
+
+const CEO_COURSE_ID = 'a0000000-0000-0000-0000-000000000001'
+
+const C = {
+  gold:'#ffa600', black:'#000', white:'#fff',
+  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
+  muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
+}
+const H = {
+  'apikey':SUPABASE_ANON,
+  'Authorization':`Bearer ${SUPABASE_ANON}`,
+  'Content-Type':'application/json',
+  'Prefer':'return=representation',
+}
+
+async function dbGet(table, params='') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
+  if (!r.ok) return []
+  return r.json()
+}
+async function dbInsert(table, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method:'POST', headers:H, body:JSON.stringify(body)
+  })
+  if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
+  const t = await r.text(); return t ? JSON.parse(t) : null
+}
+async function dbUpdate(table, params, body) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    method:'PATCH', headers:H, body:JSON.stringify(body)
+  })
+}
+
+// ── Static recipe fallback ────────────────────────────────────
+const STATIC_RECIPES = [
+  {name:'Whole Food Protein Pancakes',    servings:1,cal:270,pro:27, fat:7,  carb:28, fib:5, category:'Breakfast',tags:['high-protein']},
+  {name:'Breakfast Tacos',               servings:1,cal:670,pro:45, fat:32, carb:49, fib:9, category:'Breakfast',tags:['high-protein']},
+  {name:'Whole Food Banana Bread',       servings:1,cal:250,pro:10, fat:8,  carb:40, fib:5, category:'Snacks',   tags:['snack']},
+  {name:"Homemade Superfood Acai Bowl",  servings:1,cal:230,pro:25, fat:6,  carb:19, fib:7, category:'Breakfast',tags:['superfood']},
+  {name:'Pumpkin Custard Pie',           servings:1,cal:233,pro:5.5,fat:2.7,carb:46, fib:5, category:'Desserts', tags:['dessert']},
+  {name:'Mineral Oat Bowl',              servings:1,cal:520,pro:18, fat:23, carb:63, fib:10,category:'Breakfast',tags:['carbs']},
+  {name:'Ezekiel Burrito Wrap',          servings:1,cal:490,pro:50, fat:12, carb:44, fib:12,category:'Lunch',    tags:['high-protein']},
+  {name:'Black Bean Quinoa Burger',      servings:1,cal:170,pro:9,  fat:5,  carb:24, fib:9, category:'Lunch',    tags:['plant-based']},
+  {name:'Banana Date Smoothie',          servings:1,cal:420,pro:30, fat:12, carb:55, fib:7, category:'Drinks',   tags:['smoothie']},
+  {name:'Date Energy Balls',             servings:1,cal:88, pro:1.7,fat:0.8,carb:18, fib:2, category:'Snacks',   tags:['snack']},
+  {name:'PB Protein Balls',             servings:1,cal:89, pro:3.6,fat:5.5,carb:7,  fib:2, category:'Snacks',   tags:['high-protein']},
+  {name:'Gut Health Hot Chocolate',      servings:1,cal:145,pro:21, fat:3,  carb:18, fib:5, category:'Drinks',   tags:['gut-health']},
+  {name:'Sweet Potato Chickpea Burger',  servings:1,cal:210,pro:8,  fat:6,  carb:32, fib:9, category:'Lunch',    tags:['plant-based']},
+  {name:'Avocado Cucumber Lime Salad',   servings:1,cal:280,pro:3,  fat:26, carb:13, fib:7, category:'Sides',    tags:['salad']},
+  {name:'Honey & Thyme Roasted Carrots', servings:1,cal:205,pro:2,  fat:14, carb:20, fib:5, category:'Sides',    tags:['vegetables']},
+  {name:'Mediterranean Tomato Salad',    servings:1,cal:150,pro:2,  fat:14, carb:9,  fib:3, category:'Sides',    tags:['salad']},
+  {name:'Apple Walnut Slaw',             servings:1,cal:330,pro:5,  fat:26, carb:22, fib:6, category:'Sides',    tags:['salad']},
+  {name:'Miso Soup',                     servings:1,cal:200,pro:15, fat:8,  carb:12, fib:4, category:'Soups',    tags:['gut-health']},
+  {name:'Stuffed Peppers',               servings:1,cal:240,pro:25, fat:11, carb:12, fib:5, category:'Dinner',   tags:['high-protein']},
+  {name:'Whole Food Taco Soup (Beef)',   servings:1,cal:395,pro:35, fat:15, carb:30, fib:10,category:'Soups',    tags:['high-protein']},
+  {name:'Whole Food Taco Soup (Chicken)',servings:1,cal:352,pro:40, fat:8,  carb:30, fib:9, category:'Soups',    tags:['high-protein']},
+  {name:'Tafu Stir Fry',                 servings:1,cal:450,pro:25, fat:18, carb:45, fib:7, category:'Dinner',   tags:['plant-based']},
+  {name:'Recovery Power Bowl',           servings:1,cal:778,pro:26, fat:33, carb:106,fib:16,category:'Lunch',    tags:['recovery']},
+  {name:'Quinoa Lentil Power Bowl',      servings:1,cal:990,pro:41, fat:35, carb:135,fib:22,category:'Lunch',    tags:['plant-based']},
+  {name:'Banana Ice Cream',             servings:1,cal:315,pro:3.9,fat:1,  carb:81, fib:7, category:'Desserts', tags:['dessert']},
+  {name:'Cookie Dough Dip',             servings:1,cal:166,pro:4.5,fat:5,  carb:27, fib:6, category:'Desserts', tags:['dessert']},
+  {name:'Plant-Based Nutella Spread',   servings:1,cal:152,pro:3,  fat:13, carb:8.5,fib:3, category:'Snacks',   tags:['plant-based']},
+  {name:'PB Cinnamon Muffin',           servings:1,cal:180,pro:15, fat:6,  carb:18, fib:5, category:'Snacks',   tags:['high-protein']},
+  {name:'Pesto Chickpea Salad',         servings:1,cal:400,pro:18, fat:20, carb:40, fib:12,category:'Lunch',    tags:['plant-based']},
+  {name:'Beef Carpaccio',               servings:1,cal:400,pro:36, fat:20, carb:28, fib:2, category:'Dinner',   tags:['high-protein']},
+  {name:"Gregor's Pesto Sauce",         servings:1,cal:320,pro:11, fat:24, carb:16, fib:5, category:'Sauces',   tags:['sauce']},
+  {name:'Tahini Lemon Sauce',           servings:1,cal:92, pro:2,  fat:6,  carb:9,  fib:3, category:'Sauces',   tags:['sauce']},
+  {name:'Date Caramel Frosting',        servings:1,cal:136,pro:2,  fat:4.5,carb:24, fib:3, category:'Desserts', tags:['dessert']},
+]
+const RECIPE_CATS = ['All',...new Set(STATIC_RECIPES.map(r=>r.category))]
+const MCOLS = {cal:'#ffa600',pro:'#4FD89A',carb:'#6FB8E8',fat:'#f06060',fib:'#D4A8F0'}
+
+// ── Mini UI ───────────────────────────────────────────────────
+function Ring({pct,size=64,stroke=5,color=C.gold}) {
+  const r=(size-stroke)/2, circ=2*Math.PI*r, off=circ*(1-pct/100)
+  return (
+    <svg width={size} height={size} style={{transform:'rotate(-90deg)',flexShrink:0}}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.border} strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={off} strokeLinecap="round" style={{transition:'stroke-dashoffset .6s'}}/>
+    </svg>
+  )
+}
+function MacroChip({label,val,unit=''}) {
+  return (
+    <div style={{textAlign:'center',minWidth:50}}>
+      <div style={{fontSize:14,fontWeight:700,color:MCOLS[label]||C.gold}}>{val}{unit}</div>
+      <div style={{fontSize:9,color:C.muted,marginTop:2,textTransform:'capitalize'}}>{label}</div>
+    </div>
+  )
+}
+function Card({children,sx={}}) {
+  return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,...sx}}>{children}</div>
+}
+function Lbl({t}) {
+  return <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'14px 0 7px'}}>{t}</div>
+}
+
+// ════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ════════════════════════════════════════════════════════════════
+export default function Week5({currentUser, onAddRecipeToDiet}) {
+  const email   = currentUser?.email||''
+  const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
+  const myUUID  = info.uuid
+  const isAdmin = info.role==='super_admin'
+  const isCoach = info.role==='coach'
+  const isClient= info.role==='client'
+
+  const [tab, setTab] = useState('course')
+
+  // ── Course state ──────────────────────────────────────────
+  const [courses,      setCourses]      = useState([])
+  const [activeCourse, setActiveCourse] = useState(null)
+  const [modules,      setModules]      = useState([])
+  const [completed,    setCompleted]    = useState(new Set())
+  const [courseView,   setCourseView]   = useState('catalog')
+  const [activeSection,setActiveSection]= useState(null)
+  const [activeModule, setActiveModule] = useState(null)
+
+  // Admin: video URL editing
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [tempUrl,      setTempUrl]      = useState('')
+  const [savingUrl,    setSavingUrl]    = useState(false)
+
+  // Admin: access management
+  const [showAccess,   setShowAccess]   = useState(false)
+  const [accessList,   setAccessList]   = useState([])
+  const [accessCourse, setAccessCourse] = useState(null)
+
+  // Admin: new course
+  const [showNewCourse,setShowNewCourse]= useState(false)
+  const [newTitle,     setNewTitle]     = useState('')
+  const [newDesc,      setNewDesc]      = useState('')
+  const [savingCourse, setSavingCourse] = useState(false)
+
+  // Coach: client progress view
+  const [showProgress, setShowProgress]  = useState(false)
+  const [clientProgress,setClientProgress]= useState([])
+
+  // Recipe state
+  const [recipes,       setRecipes]       = useState(STATIC_RECIPES)
+  const [liveLoading,   setLiveLoading]   = useState(false)
+  const [recipeSearch,  setRecipeSearch]  = useState('')
+  const [recipeCat,     setRecipeCat]     = useState('All')
+  const [selectedRecipe,setSelectedRecipe]= useState(null)
+  const [hasRecipeAccess,setHasRecipeAccess]= useState(false)
+
+  useEffect(()=>{
+    loadCourses()
+    loadLiveRecipes()
+    if (myUUID) checkRecipeAccess()
+  },[myUUID])
+
+  // ── Load courses based on role ────────────────────────────
+  async function loadCourses() {
+    let data
+    if (isAdmin) {
+      // Admin sees ALL courses
+      data = await dbGet('courses','order=sort_order.asc')
+    } else {
+      // Coach/client: only courses they have access to
+      const access = await dbGet('course_access',`user_id=eq.${myUUID}&revoked=eq.false`)
+      if (!access?.length) { setCourses([]); return }
+      const ids = access.map(a=>a.course_id).join(',')
+      data = await dbGet('courses',`id=in.(${ids})&is_active=eq.true&order=sort_order.asc`)
+    }
+    setCourses(data||[])
+    if (data?.length>0) openCourse(data[0])
+  }
+
+  async function openCourse(course) {
+    setActiveCourse(course)
+    setCourseView('home')
+    const mods = await dbGet('course_modules',`course_id=eq.${course.id}&order=sort_order.asc`)
+    setModules(mods||[])
+    if (myUUID) {
+      const prog = await dbGet('course_progress',`user_id=eq.${myUUID}&course_id=eq.${course.id}`)
+      setCompleted(new Set((prog||[]).filter(p=>p.completed).map(p=>p.module_id)))
+    }
+  }
+
+  // ── Mark module complete ───────────────────────────────────
+  async function markComplete(moduleId) {
+    if (!myUUID||!activeCourse) return
+    setCompleted(prev=>new Set([...prev,moduleId]))
+    await fetch(`${SUPABASE_URL}/rest/v1/course_progress`,{
+      method:'POST',
+      headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({
+        user_id:myUUID, course_id:activeCourse.id,
+        module_id:moduleId, completed:true,
+        completed_at:new Date().toISOString(),
+      }),
+    })
+  }
+
+  // ── ADMIN: Save video URL ─────────────────────────────────
+  async function saveVideoUrl() {
+    if (!activeModule||!tempUrl.trim()) return
+    setSavingUrl(true)
+    await dbUpdate('course_modules',`id=eq.${activeModule.id}`,{
+      video_url:tempUrl.trim(), updated_at:new Date().toISOString(),
+    })
+    setModules(prev=>prev.map(m=>m.id===activeModule.id?{...m,video_url:tempUrl.trim()}:m))
+    setActiveModule(prev=>({...prev,video_url:tempUrl.trim()}))
+    setShowUrlInput(false); setTempUrl(''); setSavingUrl(false)
+    alert('Video URL saved and live for everyone with course access.')
+  }
+
+  // ── ADMIN: Create course ──────────────────────────────────
+  async function createCourse() {
+    if (!newTitle.trim()) return
+    setSavingCourse(true)
+    const inserted = await dbInsert('courses',{
+      title:newTitle.trim(), description:newDesc.trim(),
+      is_active:false, sort_order:courses.length+1,
+      created_by:myUUID,
+    })
+    if (inserted) {
+      const arr = Array.isArray(inserted)?inserted:[inserted]
+      setCourses(prev=>[...prev,arr[0]])
+      setNewTitle(''); setNewDesc('')
+      setShowNewCourse(false)
+      alert(`Course "${newTitle}" created. It is unpublished. Go to Manage Access to grant access and use the publish toggle to make it visible.`)
+    }
+    setSavingCourse(false)
+  }
+
+  // ── ADMIN: Toggle course published ────────────────────────
+  async function togglePublish(course) {
+    await dbUpdate('courses',`id=eq.${course.id}`,{ is_active:!course.is_active })
+    setCourses(prev=>prev.map(c=>c.id===course.id?{...c,is_active:!c.is_active}:c))
+    if (activeCourse?.id===course.id) setActiveCourse(prev=>({...prev,is_active:!prev.is_active}))
+  }
+
+  // ── ADMIN: Open access management ─────────────────────────
+  async function openAccessManager(course) {
+    setAccessCourse(course)
+    const data = await dbGet('course_access',`course_id=eq.${course.id}&revoked=eq.false`)
+    setAccessList(data||[])
+    setShowAccess(true)
+  }
+
+  // ── ADMIN: Grant access to specific user ─────────────────
+  async function grantAccess(user, course) {
+    const already = accessList.find(a=>a.user_id===user.uuid)
+    if (already) { alert(`${user.name} already has access.`); return }
+    await fetch(`${SUPABASE_URL}/rest/v1/course_access`,{
+      method:'POST',
+      headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({
+        course_id:course.id, user_id:user.uuid,
+        user_name:user.name, user_role:user.role,
+        coach_id:user.coachId||null,
+        granted_by:myUUID,
+      }),
+    })
+    setAccessList(prev=>[...prev,{user_id:user.uuid,user_name:user.name,user_role:user.role}])
+  }
+
+  // ── ADMIN: Grant access to ALL clients under a coach ─────
+  async function grantToCoachClients(coachId, coachName, course) {
+    const clients = DEMO_CLIENTS.filter(c=>c.coachId===coachId)
+    if (!clients.length) { alert('No clients found under this coach.'); return }
+    for (const client of clients) {
+      await grantAccess(client, course)
+    }
+    // Also grant to coach
+    const coach = DEMO_COACHES.find(c=>c.uuid===coachId)
+    if (coach) await grantAccess(coach, course)
+    alert(`Access granted to ${coachName} and all ${clients.length} client(s).`)
+  }
+
+  // ── ADMIN: Grant access to everyone ──────────────────────
+  async function grantToEveryone(course) {
+    const everyone = [...DEMO_COACHES, ...DEMO_CLIENTS]
+    for (const user of everyone) {
+      await grantAccess(user, course)
+    }
+    alert(`Access granted to all ${everyone.length} coaches and clients.`)
+  }
+
+  // ── ADMIN: Revoke access ──────────────────────────────────
+  async function revokeAccess(userId, course) {
+    await dbUpdate('course_access',`course_id=eq.${course.id}&user_id=eq.${userId}`,{ revoked:true })
+    setAccessList(prev=>prev.filter(a=>a.user_id!==userId))
+  }
+
+  // ── COACH: Load client progress ───────────────────────────
+  async function loadClientProgress(course) {
+    // Get all clients under this coach who have access
+    const access = await dbGet('course_access',`course_id=eq.${course.id}&coach_id=eq.${myUUID}&revoked=eq.false`)
+    const totalMods = modules.length || 34
+    const progressData = []
+    for (const a of (access||[])) {
+      const prog = await dbGet('course_progress',
+        `user_id=eq.${a.user_id}&course_id=eq.${course.id}&completed=eq.true`
+      )
+      const done = prog?.length||0
+      const lastDone = prog?.sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))[0]
+      progressData.push({
+        name:     a.user_name||'Client',
+        userId:   a.user_id,
+        done,
+        total:    totalMods,
+        pct:      Math.round(done/totalMods*100),
+        lastActive: lastDone?.completed_at ? new Date(lastDone.completed_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'Not started',
+      })
+    }
+    setClientProgress(progressData)
+    setShowProgress(true)
+  }
+
+  // ── Recipe helpers ────────────────────────────────────────
+  async function checkRecipeAccess() {
+    const data = await dbGet('recipe_access',`user_id=eq.${myUUID}`)
+    setHasRecipeAccess(Array.isArray(data)&&data.length>0)
+  }
+  async function grantRecipeAccess() {
+    await fetch(`${SUPABASE_URL}/rest/v1/recipe_access`,{
+      method:'POST',
+      headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({user_id:KNOWN_USERS['client@eden.io']?.uuid,granted_by:'admin'}),
+    })
+    alert('Recipe book access granted.')
+  }
+
+  async function loadLiveRecipes() {
+    setLiveLoading(true)
+    try {
+      const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&range=AT:BA`
+      const res=await fetch(url); const text=await res.text()
+      const json=JSON.parse(text.replace(/^.*?\(/,'').replace(/\);?\s*$/,''))
+      const rows=json?.table?.rows||[]
+      if(rows.length>1){
+        const parsed=rows.slice(1).map(row=>{
+          const c=row.c||[]
+          return{name:c[0]?.v||'',servings:c[2]?.v||1,cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,category:'Recipe',tags:[],isLive:true}
+        }).filter(r=>r.name&&r.cal>0)
+        if(parsed.length>0){
+          const names=new Set(parsed.map(r=>r.name))
+          setRecipes([...parsed,...STATIC_RECIPES.filter(r=>!names.has(r.name))])
+        }
+      }
+    } catch(e){} finally{setLiveLoading(false)}
+  }
+
+  // ── Derived data ──────────────────────────────────────────
+  const sections = modules.reduce((acc,m)=>{
+    if(!acc.find(s=>s.id===m.section_id)){
+      acc.push({id:m.section_id,title:m.section_title,color:m.section_color,modules:modules.filter(x=>x.section_id===m.section_id)})
+    }
+    return acc
+  },[])
+
+  const total      = modules.length
+  const doneCount  = completed.size
+  const overallPct = total?Math.round(doneCount/total*100):0
+  const nextMod    = modules.find(m=>!completed.has(m.module_id))
+
+  const filteredRecipes = recipes.filter(r=>{
+    const ms=!recipeSearch||r.name.toLowerCase().includes(recipeSearch.toLowerCase())||r.tags?.some(t=>t.includes(recipeSearch.toLowerCase()))
+    const mc=recipeCat==='All'||r.category===recipeCat
+    return ms&&mc
+  })
+
+  const TABS=[['course','🎓 Course'],['recipes','🍽 Recipes']]
+
+  // ════════════════════════════════════════════════════════════
+  // RENDER
+  // ════════════════════════════════════════════════════════════
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:C.black,overflow:'hidden'}}>
+
+      {/* Tab bar */}
+      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 16px',display:'flex',alignItems:'center',flexShrink:0}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.white}}>Learning & Resources</div>
+          {isAdmin&&<div style={{fontSize:10,color:C.gold,marginTop:1}}>🛡 Admin — Full Control</div>}
+          {isCoach&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>Coach View — Read only</div>}
+        </div>
+        {TABS.map(([k,l])=>(
+          <button key={k} onClick={()=>setTab(k)}
+            style={{padding:'13px 14px',background:'none',border:'none',borderBottom:`2px solid ${tab===k?C.gold:'transparent'}`,color:tab===k?C.gold:C.muted,fontSize:12,fontWeight:tab===k?700:400,cursor:'pointer'}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════
+          COURSE TAB
+      ══════════════════════════════════════════════════════ */}
+      {tab==='course'&&(
+        <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+
+          {/* Course sidebar */}
+          <div style={{width:220,background:C.surface,borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
+            <div style={{padding:'12px 14px 8px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>Courses</div>
+              {isAdmin&&(
+                <button onClick={()=>setShowNewCourse(true)}
+                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'3px 8px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                  + New
+                </button>
+              )}
+            </div>
+            <div style={{flex:1,overflowY:'auto'}}>
+              {courses.length===0&&(
+                <div style={{padding:16,fontSize:11,color:C.muted,textAlign:'center',lineHeight:1.6}}>
+                  {isAdmin?'Create your first course using the + New button above':isCoach?'No courses have been assigned to your clients yet':'No courses available yet'}
+                </div>
+              )}
+              {courses.map(c=>(
+                <button key={c.id} onClick={()=>openCourse(c)}
+                  style={{width:'100%',textAlign:'left',background:activeCourse?.id===c.id?`${C.gold}15`:C.surface,border:'none',borderLeft:`3px solid ${activeCourse?.id===c.id?C.gold:'transparent'}`,padding:'11px 13px',cursor:'pointer',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                    <div style={{fontSize:12,fontWeight:activeCourse?.id===c.id?700:400,color:activeCourse?.id===c.id?C.gold:C.white,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.title}</div>
+                    {isAdmin&&(
+                      <span style={{fontSize:9,background:c.is_active?`${C.success}22`:`${C.danger}22`,color:c.is_active?C.success:C.danger,padding:'1px 5px',borderRadius:4,fontWeight:700,flexShrink:0}}>
+                        {c.is_active?'LIVE':'DRAFT'}
+                      </span>
+                    )}
+                  </div>
+                  {/* Admin quick actions */}
+                  {isAdmin&&activeCourse?.id===c.id&&(
+                    <div style={{display:'flex',gap:5,marginTop:5,flexWrap:'wrap'}}>
+                      <button onClick={e=>{e.stopPropagation();togglePublish(c)}}
+                        style={{background:c.is_active?`${C.danger}22`:`${C.success}22`,border:`1px solid ${c.is_active?C.danger:C.success}44`,borderRadius:5,padding:'2px 7px',color:c.is_active?C.danger:C.success,fontSize:9,fontWeight:700,cursor:'pointer'}}>
+                        {c.is_active?'Unpublish':'Publish'}
+                      </button>
+                      <button onClick={e=>{e.stopPropagation();openAccessManager(c)}}
+                        style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:5,padding:'2px 7px',color:C.gold,fontSize:9,fontWeight:700,cursor:'pointer'}}>
+                        Manage Access
+                      </button>
+                    </div>
+                  )}
+                  {/* Coach: view client progress */}
+                  {isCoach&&activeCourse?.id===c.id&&(
+                    <button onClick={e=>{e.stopPropagation();loadClientProgress(c)}}
+                      style={{marginTop:5,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:5,padding:'2px 7px',color:C.gold,fontSize:9,fontWeight:700,cursor:'pointer'}}>
+                      Client Progress →
+                    </button>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Course content */}
+          <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+
+            {/* Home */}
+            {courseView==='home'&&activeCourse&&(
+              <div style={{flex:1,overflowY:'auto',padding:16}}>
+                <Card sx={{marginBottom:14,display:'flex',alignItems:'center',gap:16}}>
+                  <div style={{position:'relative',flexShrink:0}}>
+                    <Ring pct={overallPct} size={72} stroke={6}/>
+                    <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <span style={{fontSize:16,fontWeight:700,color:C.white}}>{overallPct}%</span>
+                    </div>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:2}}>{activeCourse.title}</div>
+                    <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{activeCourse.description}</div>
+                    <div style={{fontSize:11,color:C.muted}}>{doneCount} of {total} modules complete</div>
+                    {isAdmin&&!activeCourse.is_active&&(
+                      <div style={{fontSize:10,color:C.danger,marginTop:4,fontWeight:700}}>
+                        ⚠ Draft — not visible to coaches or clients yet. Publish when ready.
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                {nextMod&&(
+                  <button onClick={()=>{setActiveModule(nextMod);setActiveSection(sections.find(s=>s.id===nextMod.section_id));setCourseView('module')}}
+                    style={{width:'100%',background:C.card,border:`1px solid ${C.gold}44`,borderRadius:12,padding:'13px 16px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',textAlign:'left',marginBottom:14}}>
+                    <div style={{width:40,height:40,borderRadius:10,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>▶</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.8,marginBottom:3}}>CONTINUE — MODULE {nextMod.module_id}</div>
+                      <div style={{fontSize:13,fontWeight:600,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nextMod.title}</div>
+                    </div>
+                    {nextMod.video_url&&<span style={{fontSize:10,background:`${C.success}22`,color:C.success,padding:'2px 7px',borderRadius:10,fontWeight:700,flexShrink:0}}>▶ Ready</span>}
+                  </button>
+                )}
+
+                {sections.map(s=>{
+                  const done=s.modules.filter(m=>completed.has(m.module_id)).length
+                  const pct=Math.round(done/s.modules.length*100)
+                  const videosAdded=s.modules.filter(m=>m.video_url).length
+                  return (
+                    <button key={s.id} onClick={()=>{setActiveSection(s);setCourseView('section')}}
+                      style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 16px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',textAlign:'left',marginBottom:8}}>
+                      <div style={{width:36,height:36,borderRadius:10,background:`${s.color}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:s.color,flexShrink:0}}>{s.id}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:10,fontWeight:700,color:s.color,letterSpacing:.8,marginBottom:2}}>SECTION {s.id}</div>
+                        <div style={{fontSize:12,fontWeight:600,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
+                        <div style={{height:3,borderRadius:2,background:C.border,marginTop:7}}>
+                          <div style={{width:`${pct}%`,height:'100%',borderRadius:2,background:s.color,transition:'width .5s'}}/>
+                        </div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:3,display:'flex',gap:10}}>
+                          <span>{done}/{s.modules.length} complete</span>
+                          {isAdmin&&<span style={{color:videosAdded===s.modules.length?C.success:C.danger}}>{videosAdded}/{s.modules.length} videos</span>}
+                        </div>
+                      </div>
+                      {pct===100&&<span style={{color:C.success,fontSize:20}}>✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Section */}
+            {courseView==='section'&&activeSection&&(
+              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+                  <button onClick={()=>setCourseView('home')}
+                    style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,padding:0,marginBottom:8}}>
+                    ← All Sections
+                  </button>
+                  <div style={{fontSize:10,fontWeight:700,color:activeSection.color,letterSpacing:.8,marginBottom:3}}>SECTION {activeSection.id}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.white}}>{activeSection.title}</div>
+                </div>
+                <div style={{flex:1,overflowY:'auto',padding:12}}>
+                  {activeSection.modules.map((m,mi)=>{
+                    const isDone=completed.has(m.module_id)
+                    const isNext=!isDone&&activeSection.modules.slice(0,mi).every(p=>completed.has(p.module_id))
+                    return (
+                      <button key={m.id} onClick={()=>{setActiveModule(m);setCourseView('module')}}
+                        style={{width:'100%',textAlign:'left',background:isNext?`${C.gold}12`:C.card,border:`1px solid ${isNext?C.gold+'44':C.border}`,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',marginBottom:6}}>
+                        <div style={{width:32,height:32,borderRadius:8,background:isDone?`${C.success}22`:isNext?`${C.gold}22`:C.surface,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:`1px solid ${isDone?C.success+'44':isNext?C.gold+'44':C.border}`}}>
+                          {isDone?<span style={{color:C.success}}>✓</span>:isNext?<span style={{color:C.gold}}>▶</span>:<span style={{fontSize:10,color:C.muted}}>{m.module_id}</span>}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:10,fontWeight:700,color:isDone?C.success:isNext?C.gold:C.muted,letterSpacing:.5,marginBottom:2}}>
+                            {isDone?'COMPLETE':isNext?'UP NEXT':`MODULE ${m.module_id}`}
+                          </div>
+                          <div style={{fontSize:13,fontWeight:600,color:isDone?C.muted:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.title}</div>
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3,flexShrink:0}}>
+                          <span style={{fontSize:11,color:C.muted}}>{m.duration}</span>
+                          {m.video_url&&<span style={{fontSize:9,background:`${C.success}22`,color:C.success,padding:'1px 5px',borderRadius:4,fontWeight:700}}>▶ VIDEO</span>}
+                          {isAdmin&&!m.video_url&&<span style={{fontSize:9,background:`${C.danger}22`,color:C.danger,padding:'1px 5px',borderRadius:4,fontWeight:700}}>NO VIDEO</span>}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Module */}
+            {courseView==='module'&&activeModule&&(
+              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                <div style={{padding:'10px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:10}}>
+                  <button onClick={()=>setCourseView('section')}
+                    style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,padding:0}}>← Back</button>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:10,fontWeight:700,color:activeModule.section_color||C.gold,letterSpacing:.8}}>MODULE {activeModule.module_id}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeModule.title}</div>
+                  </div>
+                  <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{activeModule.duration}</span>
+                </div>
+
+                {/* Video area */}
+                <div style={{flexShrink:0}}>
+                  {activeModule.video_url?(
+                    <div style={{position:'relative',paddingTop:'56.25%'}}>
+                      <iframe src={activeModule.video_url}
+                        style={{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}}
+                        allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
+                        title={activeModule.title}/>
+                    </div>
+                  ):(
+                    <div style={{background:'#050505',padding:'36px 16px',textAlign:'center'}}>
+                      <div style={{fontSize:36,marginBottom:10}}>🎬</div>
+                      <div style={{fontSize:14,color:C.white,fontWeight:700,marginBottom:6}}>{activeModule.title}</div>
+                      <div style={{fontSize:12,color:C.muted,marginBottom:isAdmin?16:0}}>
+                        {isAdmin?'Paste your video embed URL below — saves to Supabase and goes live for all users with access':'Video coming soon'}
+                      </div>
+                      {isAdmin&&!showUrlInput&&(
+                        <button onClick={()=>setShowUrlInput(true)}
+                          style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'8px 18px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                          + Add Video URL
+                        </button>
+                      )}
+                      {isAdmin&&showUrlInput&&(
+                        <div style={{display:'flex',gap:8,maxWidth:440,margin:'0 auto'}}>
+                          <input value={tempUrl} onChange={e=>setTempUrl(e.target.value)}
+                            placeholder="Paste Vimeo, Loom, or YouTube embed URL…"
+                            style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none'}}/>
+                          <button onClick={saveVideoUrl} disabled={savingUrl}
+                            style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',opacity:savingUrl?.6:1}}>
+                            {savingUrl?'Saving…':'Publish'}
+                          </button>
+                          <button onClick={()=>{setShowUrlInput(false);setTempUrl('')}}
+                            style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px',color:C.muted,cursor:'pointer'}}>✕</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Admin update existing video */}
+                  {isAdmin&&activeModule.video_url&&(
+                    <div style={{padding:'8px 16px',background:C.surface,borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:10,color:C.success,fontWeight:700}}>🎬 Video live</span>
+                      <span style={{fontSize:10,color:C.muted,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeModule.video_url}</span>
+                      {!showUrlInput?(
+                        <button onClick={()=>{setTempUrl(activeModule.video_url);setShowUrlInput(true)}}
+                          style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 10px',color:C.muted,fontSize:10,cursor:'pointer',flexShrink:0}}>
+                          Update
+                        </button>
+                      ):(
+                        <div style={{display:'flex',gap:6,flexShrink:0}}>
+                          <input value={tempUrl} onChange={e=>setTempUrl(e.target.value)}
+                            style={{width:200,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+                          <button onClick={saveVideoUrl}
+                            style={{background:C.gold,border:'none',borderRadius:6,padding:'4px 10px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>Save</button>
+                          <button onClick={()=>{setShowUrlInput(false);setTempUrl('')}}
+                            style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.muted,fontSize:11,cursor:'pointer'}}>✕</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{flex:1,overflowY:'auto',padding:16}}>
+                  {/* Only coaches and clients can mark complete, not admins managing */}
+                  {!isAdmin&&(
+                    !completed.has(activeModule.module_id)?(
+                      <button onClick={()=>markComplete(activeModule.module_id)}
+                        style={{width:'100%',background:activeModule.section_color||C.gold,border:'none',borderRadius:10,padding:13,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:12}}>
+                        ✓ Mark as Complete
+                      </button>
+                    ):(
+                      <div style={{width:'100%',background:`${C.success}22`,border:`1px solid ${C.success}44`,borderRadius:10,padding:13,textAlign:'center',color:C.success,fontWeight:700,fontSize:14,marginBottom:12}}>
+                        ✓ Module Complete
+                      </div>
+                    )
+                  )}
+                  {/* Next module */}
+                  {(()=>{
+                    const idx=modules.findIndex(m=>m.id===activeModule.id)
+                    const next=modules[idx+1]
+                    if(!next) return null
+                    return (
+                      <button onClick={()=>{setActiveModule(next);setActiveSection(sections.find(s=>s.id===next.section_id))}}
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',textAlign:'left'}}>
+                        <div style={{width:36,height:36,borderRadius:8,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:C.gold,flexShrink:0}}>▶</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,marginBottom:2}}>UP NEXT — MODULE {next.module_id}</div>
+                          <div style={{fontSize:13,fontWeight:600,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{next.title}</div>
+                        </div>
+                        <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{next.duration}</span>
+                      </button>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          RECIPE TAB
+      ══════════════════════════════════════════════════════ */}
+      {tab==='recipes'&&(
+        <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+          <div style={{width:selectedRecipe?300:undefined,flex:selectedRecipe?undefined:1,display:'flex',flexDirection:'column',overflow:'hidden',borderRight:selectedRecipe?`1px solid ${C.border}`:undefined}}>
+            <div style={{padding:'12px 16px 10px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:C.white}}>LOE Recipe Book</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{liveLoading?'Loading from Google Sheets…':`${recipes.length} recipes · auto-updates weekly`}</div>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  {isAdmin&&<button onClick={grantRecipeAccess} style={{background:`${C.success}22`,border:`1px solid ${C.success}44`,borderRadius:6,padding:'5px 9px',color:C.success,fontSize:10,fontWeight:700,cursor:'pointer'}}>Grant Access</button>}
+                  <button onClick={loadLiveRecipes} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 9px',color:C.muted,fontSize:10,cursor:'pointer'}}>↻</button>
+                </div>
+              </div>
+              <input value={recipeSearch} onChange={e=>setRecipeSearch(e.target.value)} placeholder="Search recipes…"
+                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',marginBottom:8}}/>
+              <div style={{display:'flex',gap:5,overflowX:'auto',paddingBottom:2}}>
+                {RECIPE_CATS.map(cat=>(
+                  <button key={cat} onClick={()=>setRecipeCat(cat)}
+                    style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${recipeCat===cat?C.gold:C.border}`,background:recipeCat===cat?`${C.gold}20`:C.card,color:recipeCat===cat?C.gold:C.muted,fontSize:10,fontWeight:recipeCat===cat?700:400,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!hasRecipeAccess&&isClient&&(
+              <div style={{margin:'10px 14px 0',background:'linear-gradient(135deg,#1a1200,#2a1800)',border:`1px solid ${C.gold}33`,borderRadius:10,padding:'11px 13px',flexShrink:0}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.white,marginBottom:4}}>🔒 Full Recipe Book Access</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:9,lineHeight:1.5}}>Pull any recipe into your diet plan free. Unlock full access for ingredients, instructions, and weekly new recipes.</div>
+                <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
+                  style={{display:'block',background:C.gold,borderRadius:7,padding:'8px',textAlign:'center',textDecoration:'none',color:C.black,fontWeight:800,fontSize:12}}>
+                  Unlock Full Recipe Book →
+                </a>
+              </div>
+            )}
+
+            <div style={{flex:1,overflowY:'auto',padding:'8px 0'}}>
+              {filteredRecipes.map((r,i)=>(
+                <button key={i} onClick={()=>setSelectedRecipe(r)}
+                  style={{width:'100%',textAlign:'left',background:selectedRecipe?.name===r.name?`${C.gold}12`:C.surface,border:'none',borderLeft:`3px solid ${selectedRecipe?.name===r.name?C.gold:'transparent'}`,padding:'10px 16px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{width:34,height:34,borderRadius:8,background:`${C.gold}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>
+                    {r.category==='Breakfast'?'🍳':r.category==='Lunch'?'🥗':r.category==='Dinner'?'🍽':r.category==='Desserts'?'🍰':r.category==='Drinks'?'🥤':r.category==='Snacks'?'🥜':r.category==='Soups'?'🍲':r.category==='Sauces'?'🫙':'🍴'}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:selectedRecipe?.name===r.name?C.gold:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.cal} cal · P:{r.pro}g C:{r.carb}g F:{r.fat}g</div>
+                    {r.isLive&&<span style={{fontSize:8,background:`${C.success}22`,color:C.success,padding:'1px 5px',borderRadius:4,fontWeight:700}}>LIVE</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {selectedRecipe&&(
+            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <div style={{padding:'13px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:10}}>
+                <button onClick={()=>setSelectedRecipe(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,padding:0}}>←</button>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:15,fontWeight:700,color:C.white}}>{selectedRecipe.name}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>{selectedRecipe.category}</div>
+                </div>
+              </div>
+              <div style={{flex:1,overflowY:'auto',padding:16}}>
+                <Card sx={{marginBottom:14}}>
+                  <Lbl t="Full Macro Breakdown"/>
+                  <div style={{display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+                    <MacroChip label="cal"  val={selectedRecipe.cal}/>
+                    <MacroChip label="pro"  val={selectedRecipe.pro}  unit="g"/>
+                    <MacroChip label="carb" val={selectedRecipe.carb} unit="g"/>
+                    <MacroChip label="fat"  val={selectedRecipe.fat}  unit="g"/>
+                    <MacroChip label="fib"  val={selectedRecipe.fib}  unit="g"/>
+                  </div>
+                </Card>
+                <button onClick={()=>{
+                  if(onAddRecipeToDiet){
+                    onAddRecipeToDiet({name:selectedRecipe.name,serving:'1 serving',cal:selectedRecipe.cal,pro:selectedRecipe.pro,fat:selectedRecipe.fat,carb:selectedRecipe.carb,fib:selectedRecipe.fib,cat:'Recipes',isRecipe:true})
+                    alert(`${selectedRecipe.name} added to your diet plan!`)
+                  }
+                }}
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:13,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:12}}>
+                  + Pull Into Diet Plan
+                </button>
+                {(hasRecipeAccess||isAdmin||isCoach)?(
+                  <Card>
+                    <Lbl t="Recipe Details"/>
+                    <div style={{fontSize:13,color:C.white,lineHeight:1.7}}>{selectedRecipe.method||'Full instructions in the LOE Recipe Book.'}</div>
+                    <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
+                      style={{display:'block',textAlign:'center',fontSize:12,color:C.gold,textDecoration:'none',padding:'10px',border:`1px solid ${C.gold}33`,borderRadius:8,marginTop:12}}>
+                      View Full Recipe Book →
+                    </a>
+                  </Card>
+                ):(
+                  <div style={{background:'linear-gradient(135deg,#1a1200,#2a1800)',border:`1px solid ${C.gold}33`,borderRadius:12,padding:16}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>🔒 Full Recipe Locked</div>
+                    <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>Macros pulled into your plan above for free. Unlock for full ingredients and instructions.</div>
+                    <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
+                      style={{display:'block',background:C.gold,borderRadius:8,padding:'11px',textAlign:'center',textDecoration:'none',color:C.black,fontWeight:800,fontSize:13}}>
+                      Unlock Full Recipe Book →
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ACCESS MANAGEMENT MODAL (Admin only) ──────────── */}
+      {showAccess&&accessCourse&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setShowAccess(false)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:540,maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:3}}>Manage Access — {accessCourse.title}</div>
+              <div style={{fontSize:11,color:C.muted}}>{accessList.length} users currently have access</div>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+              {/* Bulk grant buttons */}
+              <div style={{background:C.surface,borderRadius:10,padding:'13px 14px',marginBottom:16}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Bulk Grant Access</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                  <button onClick={()=>grantToEveryone(accessCourse)}
+                    style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'8px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                    🌐 All Coaches + All Clients
+                  </button>
+                </div>
+                <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>By Coach</div>
+                {DEMO_COACHES.map(coach=>{
+                  const coachClients = DEMO_CLIENTS.filter(c=>c.coachId===coach.uuid)
+                  return (
+                    <div key={coach.uuid} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
+                      <div>
+                        <div style={{fontSize:12,color:C.white,fontWeight:600}}>{coach.name}</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:1}}>{coachClients.length} client(s)</div>
+                      </div>
+                      <button onClick={()=>grantToCoachClients(coach.uuid, coach.name, accessCourse)}
+                        style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                        Grant to {coach.name} + Clients
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Individual grant */}
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Individual Access</div>
+              {[...DEMO_COACHES,...DEMO_CLIENTS].map(user=>{
+                const hasIt = accessList.find(a=>a.user_id===user.uuid)
+                return (
+                  <div key={user.uuid} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderTop:`1px solid ${C.border}`}}>
+                    <div style={{width:32,height:32,borderRadius:16,background:hasIt?`${C.success}22`:C.surface,border:`1px solid ${hasIt?C.success+'44':C.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:hasIt?C.success:C.muted,flexShrink:0}}>
+                      {user.name[0]}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,color:C.white,fontWeight:500}}>{user.name}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:'capitalize'}}>
+                        {user.role}{user.coachName?` · ${user.coachName}`:''}
+                      </div>
+                    </div>
+                    {hasIt?(
+                      <button onClick={()=>revokeAccess(user.uuid, accessCourse)}
+                        style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'5px 10px',color:C.danger,fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                        Revoke
+                      </button>
+                    ):(
+                      <button onClick={()=>grantAccess(user, accessCourse)}
+                        style={{background:`${C.success}22`,border:`1px solid ${C.success}44`,borderRadius:6,padding:'5px 10px',color:C.success,fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                        Grant
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              <button onClick={()=>setShowAccess(false)}
+                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NEW COURSE MODAL (Admin only) ─────────────────── */}
+      {showNewCourse&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setShowNewCourse(false)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:420,padding:24}}>
+            <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>Create New Course</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:16}}>Course will be saved as a draft. Publish when ready and grant access to coaches and clients.</div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Course Title</div>
+              <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} placeholder="e.g. Gut Health Mastery"
+                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Description</div>
+              <textarea value={newDesc} onChange={e=>setNewDesc(e.target.value)} placeholder="Brief description…" rows={3}
+                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setShowNewCourse(false)}
+                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
+              <button onClick={createCourse} disabled={savingCourse||!newTitle.trim()}
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newTitle.trim()&&!savingCourse?1:.5}}>
+                {savingCourse?'Creating…':'Create Course'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CLIENT PROGRESS MODAL (Coach only) ───────────── */}
+      {showProgress&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setShowProgress(false)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:480,maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:2}}>Client Progress</div>
+              <div style={{fontSize:11,color:C.muted}}>{activeCourse?.title}</div>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+              {clientProgress.length===0?(
+                <div style={{textAlign:'center',padding:30,color:C.muted,fontSize:13}}>
+                  No clients have been granted access to this course yet. Ask admin to grant access.
+                </div>
+              ):clientProgress.map((cp,i)=>(
+                <div key={i} style={{background:C.surface,borderRadius:10,padding:'12px 14px',marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:8}}>
+                    <div style={{width:36,height:36,borderRadius:18,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:C.gold,flexShrink:0}}>
+                      {cp.name[0]}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.white}}>{cp.name}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>Last active: {cp.lastActive}</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:18,fontWeight:800,color:cp.pct>=80?C.success:cp.pct>=40?C.gold:C.muted}}>{cp.pct}%</div>
+                      <div style={{fontSize:10,color:C.muted}}>{cp.done}/{cp.total} modules</div>
+                    </div>
+                  </div>
+                  <div style={{height:6,borderRadius:3,background:C.border}}>
+                    <div style={{width:`${cp.pct}%`,height:'100%',borderRadius:3,background:cp.pct>=80?C.success:cp.pct>=40?C.gold:C.muted,transition:'width .5s'}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              <button onClick={()=>setShowProgress(false)}
+                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── RecipePicker for DietBuilder ──────────────────────────────
+export function RecipePicker({onSelect, onClose}) {
+  const [search,  setSearch]  = useState('')
+  const [recipes, setRecipes] = useState(STATIC_RECIPES)
+  const [loading, setLoading] = useState(false)
+  useEffect(()=>{
+    setLoading(true)
+    fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&range=AT:BA`)
+      .then(r=>r.text()).then(t=>{
+        const json=JSON.parse(t.replace(/^.*?\(/,'').replace(/\);?\s*$/,''))
+        const rows=json?.table?.rows||[]
+        if(rows.length>1){
+          const parsed=rows.slice(1).map(row=>{
+            const c=row.c||[]
+            return{name:c[0]?.v||'',serving:'1 serving',cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,cat:'Recipes',isRecipe:true}
+          }).filter(r=>r.name&&r.cal>0)
+          if(parsed.length>0){const names=new Set(parsed.map(r=>r.name));setRecipes([...parsed,...STATIC_RECIPES.filter(r=>!names.has(r.name)).map(r=>({...r,serving:'1 serving',cat:'Recipes',isRecipe:true}))])}
+        }
+      }).catch(()=>{}).finally(()=>setLoading(false))
+  },[])
+  const filtered=recipes.filter(r=>!search||r.name.toLowerCase().includes(search.toLowerCase()))
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000,padding:16}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div style={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:16,width:'100%',maxWidth:480,maxHeight:'82vh',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'14px 16px 10px',borderBottom:'1px solid #2a2a2a'}}>
+          <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:6}}>🍽 Pull Recipe into Meal</div>
+          <div style={{fontSize:11,color:'#888',marginBottom:8}}>{loading?'Loading from Google Sheets…':`${recipes.length} recipes available`}</div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search recipes…" autoFocus
+            style={{width:'100%',background:'#111',border:'1px solid #2a2a2a',borderRadius:8,padding:'9px 12px',color:'#fff',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'4px 0'}}>
+          {filtered.map((r,i)=>(
+            <button key={i} onClick={()=>onSelect(r)}
+              style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'10px 16px',cursor:'pointer',borderBottom:'1px solid #2a2a2a',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+              onMouseEnter={e=>e.currentTarget.style.background='#ffa60010'}
+              onMouseLeave={e=>e.currentTarget.style.background='none'}>
+              <div>
+                <div style={{fontSize:13,color:'#fff',fontWeight:500}}>{r.name}</div>
+                <div style={{fontSize:10,color:'#888',marginTop:1}}>1 serving · {r.cal} cal · P:{r.pro}g C:{r.carb}g F:{r.fat}g</div>
+              </div>
+              <span style={{color:'#ffa600',fontSize:18,flexShrink:0}}>+</span>
+            </button>
+          ))}
+        </div>
+        <div style={{padding:'10px 16px',borderTop:'1px solid #2a2a2a'}}>
+          <button onClick={onClose} style={{width:'100%',background:'#111',border:'1px solid #2a2a2a',borderRadius:8,padding:10,color:'#888',fontSize:13,cursor:'pointer'}}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}

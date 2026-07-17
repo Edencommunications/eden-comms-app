@@ -18,6 +18,7 @@ import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
 import Notifications from "./components/Notifications";
 import Week4 from "./components/Week4";
+import Week5 from "./components/Week5";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -2338,6 +2339,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"habits",    icon:"habits",    label:"Habits" },
     { key:"labs",      icon:"labs",      label:"Labs" },
     { key:"workout",   icon:"workout",   label:"Workout" },
+    { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
   const coachTabs = [
@@ -2347,12 +2349,14 @@ const AppShell = ({ user, onLogout }) => {
     { key:"habits",    icon:"habits",    label:"Habits" },
     { key:"labs",      icon:"labs",      label:"Labs" },
     { key:"workout",   icon:"workout",   label:"Workout" },
+    { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
   const adminTabs = [
     { key:"home",      icon:"home",      label:"Home" },
     { key:"msgs",      icon:"msg",       label:"Messages" },
     { key:"admin",     icon:"admin",     label:"Admin" },
+    { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
 
@@ -2392,6 +2396,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "habits")    return <HabitTrackerScreen/>;
     if (tab === "workout")   return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="workout"/>;
     if (tab === "admin")     return <AdminDashboard user={user}/>;
+    if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "community") return <CommunityScreen/>;
     return <HomeScreen user={user}/>;
   };
