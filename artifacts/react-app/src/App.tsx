@@ -19,6 +19,7 @@ import DietBuilder from "./components/DietBuilder";
 import Notifications from "./components/Notifications";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
+import Week6 from "./components/Week6";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -2396,7 +2397,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "checkin")   return <CheckInScreen/>;
     if (tab === "habits")    return <HabitTrackerScreen/>;
     if (tab === "workout")   return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="workout"/>;
-    if (tab === "admin")     return <AdminDashboard user={user}/>;
+    if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "community") return <CommunityScreen/>;
     return <HomeScreen user={user}/>;
