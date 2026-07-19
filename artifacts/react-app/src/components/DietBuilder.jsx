@@ -205,7 +205,7 @@ function mealMacros(meal) {
     fat:Math.round(acc.fat+item.food.fat*item.servings),
     carb:Math.round(acc.carb+item.food.carb*item.servings),
     fib:Math.round(acc.fib+item.food.fib*item.servings),
-  },{cal:0,pro:0,fat:0,carb:0,fib:0}))
+  }), {cal:0,pro:0,fat:0,carb:0,fib:0})
 }
 
 function calcBMR(weight,height,age,gender) {
