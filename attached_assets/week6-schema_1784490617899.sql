@@ -1,0 +1,140 @@
+-- ═══════════════════════════════════════════════════════════════
+-- EDEN COMMUNICATIONS — WEEK 6 SCHEMA
+-- COO: Supabase → SQL Editor → New Query → Paste All → Run
+-- ═══════════════════════════════════════════════════════════════
+
+-- ── Organizations (one per company) ──────────────────────────
+CREATE TABLE IF NOT EXISTS organizations (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,
+  slug            TEXT UNIQUE NOT NULL,
+  logo_url        TEXT,
+  brand_color     TEXT DEFAULT '#ffa600',
+  calendar_url    TEXT,
+  instagram_url   TEXT,
+  facebook_url    TEXT,
+  youtube_url     TEXT,
+  tiktok_url      TEXT,
+  website_url     TEXT,
+  is_active       BOOLEAN DEFAULT TRUE,
+  is_white_label  BOOLEAN DEFAULT FALSE,
+  plan            TEXT DEFAULT 'standard',
+  billing_email   TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── User profiles (extends Supabase auth.users) ───────────────
+CREATE TABLE IF NOT EXISTS user_profiles (
+  id              UUID PRIMARY KEY,
+  org_id          UUID REFERENCES organizations(id),
+  email           TEXT UNIQUE NOT NULL,
+  full_name       TEXT,
+  role            TEXT NOT NULL DEFAULT 'client',
+  coach_id        UUID,
+  avatar_url      TEXT,
+  phone           TEXT,
+  check_in_day    TEXT DEFAULT 'Wednesday',
+  is_active       BOOLEAN DEFAULT TRUE,
+  last_seen       TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Consultation records ──────────────────────────────────────
+-- Part 1: Intake (filled once at signup)
+CREATE TABLE IF NOT EXISTS client_intakes (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id       UUID NOT NULL UNIQUE,
+  coach_id        UUID,
+  health_history  TEXT,
+  current_meds    TEXT,
+  conditions      TEXT,
+  goals           TEXT,
+  lifestyle_notes TEXT,
+  call_notes      TEXT,
+  what_brought_in TEXT,
+  start_date      DATE,
+  start_weight    TEXT,
+  start_photos    TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Part 2: Ongoing call notes (one row per call)
+CREATE TABLE IF NOT EXISTS consultation_notes (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id       UUID NOT NULL,
+  coach_id        UUID,
+  call_date       DATE NOT NULL,
+  call_type       TEXT DEFAULT 'Monthly Check-In',
+  summary         TEXT NOT NULL,
+  focus_points    TEXT,
+  action_items    TEXT,
+  next_call_date  DATE,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Check-in day tracking ─────────────────────────────────────
+-- Tracks whether each client has submitted their check-in this cycle
+CREATE TABLE IF NOT EXISTS checkin_status (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id       UUID NOT NULL,
+  coach_id        UUID,
+  check_in_day    TEXT NOT NULL,
+  cycle_date      DATE NOT NULL,
+  submitted       BOOLEAN DEFAULT FALSE,
+  submitted_at    TIMESTAMPTZ,
+  viewed_by_coach BOOLEAN DEFAULT FALSE,
+  viewed_at       TIMESTAMPTZ,
+  UNIQUE(client_id, cycle_date)
+);
+
+-- ── Admin audit log ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id        UUID,
+  actor_name      TEXT,
+  action          TEXT NOT NULL,
+  target_type     TEXT,
+  target_id       UUID,
+  target_name     TEXT,
+  details         JSONB,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Indexes ───────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_profiles_org       ON user_profiles(org_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_coach     ON user_profiles(coach_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_role      ON user_profiles(role);
+CREATE INDEX IF NOT EXISTS idx_consult_client     ON consultation_notes(client_id, call_date DESC);
+CREATE INDEX IF NOT EXISTS idx_checkin_status     ON checkin_status(coach_id, cycle_date DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_actor        ON admin_audit_log(actor_id, created_at DESC);
+
+-- ── Seed Eden org ─────────────────────────────────────────────
+INSERT INTO organizations (id, name, slug, brand_color, is_white_label, plan)
+VALUES (
+  'b0000000-0000-0000-0000-000000000001',
+  'Lifestyle of Eden',
+  'eden',
+  '#ffa600',
+  FALSE,
+  'platform_owner'
+) ON CONFLICT (slug) DO NOTHING;
+
+-- ── Seed demo user profiles ───────────────────────────────────
+INSERT INTO user_profiles (id, org_id, email, full_name, role, check_in_day)
+VALUES
+  ('00000000-0000-0000-0000-000000000001',
+   'b0000000-0000-0000-0000-000000000001',
+   'admin@edencomms.io', 'Eden Admin', 'super_admin', 'Wednesday'),
+  ('414b1fb3-f38c-4480-bdb2-fe7b1d844051',
+   'b0000000-0000-0000-0000-000000000001',
+   'coach@eden.io', 'Coach Marcus', 'coach', 'Wednesday'),
+  ('ece58b33-3f2a-4ce7-bed9-a157c914056c',
+   'b0000000-0000-0000-0000-000000000001',
+   'client@eden.io', 'Jordan Williams', 'client', 'Wednesday')
+ON CONFLICT (id) DO NOTHING;
+
+-- Update Jordan's coach reference
+UPDATE user_profiles
+SET coach_id = '414b1fb3-f38c-4480-bdb2-fe7b1d844051'
+WHERE id = 'ece58b33-3f2a-4ce7-bed9-a157c914056c';
