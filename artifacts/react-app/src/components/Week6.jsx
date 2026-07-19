@@ -105,7 +105,7 @@ function Stat({label,value,color=C.gold,sub}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week6({currentUser}) {
+export default function Week6({currentUser, onNavigate}) {
   const email    = currentUser?.email||''
   const info     = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   const myUUID   = info.uuid
@@ -526,6 +526,7 @@ export default function Week6({currentUser}) {
                       ['📝 Consultation', 'consultation'],
                     ].map(([label,dest])=>(
                       <button key={dest}
+                        onClick={()=>onNavigate&&onNavigate(dest,{email:selectedClient.email,name:selectedClient.name,role:selectedClient.role})}
                         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:12,fontWeight:500,cursor:'pointer',textAlign:'left'}}>
                         {label}
                       </button>
@@ -541,6 +542,7 @@ export default function Week6({currentUser}) {
                       {selectedClient.name} submitted their weekly check-in. View the full Check-In tab to review and respond.
                     </div>
                     <button
+                      onClick={()=>onNavigate&&onNavigate('checkin',{email:selectedClient.email,name:selectedClient.name,role:selectedClient.role})}
                       style={{marginTop:10,background:C.gold,border:'none',borderRadius:6,padding:'6px 14px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
                       Review Check-In →
                     </button>

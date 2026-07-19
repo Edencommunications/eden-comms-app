@@ -2258,6 +2258,7 @@ const WARNING_SECS = 60;               // 60 s to respond before forced logout
 const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
   const [loomMode, setLoomMode] = useState(false);
+  const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
   const isMobile = useIsMobile();
 
   // ── Inactivity auto-logout ────────────────────────────────────────
@@ -2393,12 +2394,17 @@ const AppShell = ({ user, onLogout }) => {
     // Shared screens
     if (tab === "home")      return <HomeScreen user={user}/>;
     if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
-    if (tab === "diet")      return <DietBuilder currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
-    if (tab === "labs")      return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="labs"/>;
+    // When a coach navigates into a client tool, use the selected client as currentUser
+    const toolUser = (user.role === "coach" || user.role === "super_admin") && coachClient
+      ? coachClient
+      : { email: user.email, name: user.name, role: user.role };
+    if (tab === "diet")      return <DietBuilder currentUser={toolUser}/>;
+    if (tab === "labs")      return <Week4 currentUser={toolUser} initialTab="labs"/>;
     if (tab === "checkin")   return <CheckInScreen/>;
     if (tab === "habits")    return <HabitTrackerScreen/>;
-    if (tab === "workout")   return <Week4 currentUser={{ email: user.email, name: user.name, role: user.role }} initialTab="workout"/>;
-    if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
+    if (tab === "workout")   return <Week4 currentUser={toolUser} initialTab="workout"/>;
+    if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
+                                          onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "community") return <CommunityScreen/>;
     return <HomeScreen user={user}/>;
