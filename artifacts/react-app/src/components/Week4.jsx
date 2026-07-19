@@ -168,7 +168,7 @@ function Sel({label,value,onChange,options}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week4({currentUser}) {
+export default function Week4({currentUser, initialTab='labs'}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   const role    = info.role
@@ -180,7 +180,7 @@ export default function Week4({currentUser}) {
   const COACH_UUID  = KNOWN_USERS['coach@eden.io'].uuid
 
   // ── Main tab ──────────────────────────────────────────────
-  const [tab, setTab] = useState('labs')
+  const [tab, setTab] = useState(initialTab)
 
   // ── Labs state ────────────────────────────────────────────
   const [labs,        setLabs]        = useState([])
