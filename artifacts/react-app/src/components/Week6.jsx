@@ -55,7 +55,8 @@ const DEMO_COACHES = [
   { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus',  email:'coach@eden.io',   role:'coach',  checkInDay:'Wednesday', clientCount:1, active:true },
 ]
 const DEMO_CLIENTS = [
-  { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', email:'client@eden.io', role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', coachName:'Coach Marcus', checkInDay:'Wednesday', hasUpdate:true, lastSeen:'Jul 14 2026', active:true },
+  { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', email:'client@eden.io',  role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', coachName:'Coach Marcus', checkInDay:'Wednesday', hasUpdate:true, lastSeen:'Jul 19 2026', active:true },
+  { uuid:'bbbbbbbb-0000-0000-0000-000000000002', name:'Alex Carter',      email:'alex@eden.io',    role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', coachName:'Coach Marcus', checkInDay:'Wednesday', hasUpdate:true, lastSeen:'Jul 19 2026', active:true },
 ]
 const DEMO_ORGS = [
   { id:'b0000000-0000-0000-0000-000000000001', name:'Lifestyle of Eden', slug:'eden', isWhiteLabel:false, plan:'Platform Owner', coachCount:1, clientCount:1, active:true, brandColor:'#ffa600' },
