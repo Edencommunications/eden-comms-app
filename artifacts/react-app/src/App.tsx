@@ -2347,6 +2347,7 @@ const AppShell = ({ user, onLogout }) => {
   const coachTabs = [
     { key:"home",      icon:"home",      label:"Home" },
     { key:"msgs",      icon:"msg",       label:"Messages" },
+    { key:"admin",     icon:"admin",     label:"Clients" },
     { key:"diet",      icon:"diet",      label:"Diet" },
     { key:"habits",    icon:"habits",    label:"Habits" },
     { key:"labs",      icon:"labs",      label:"Labs" },
