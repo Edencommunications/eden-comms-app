@@ -564,10 +564,11 @@ CREATE TABLE IF NOT EXISTS progress_photos (
 -- ── Eden org — insert into BOTH tables ────────────────────────────────────
 -- Your existing user_profiles.company_id FK points to "companies", so that
 -- table must have the row before the user inserts below can succeed.
-INSERT INTO companies (id, name)
+INSERT INTO companies (id, name, slug)
 VALUES (
   'b0000000-0000-0000-0000-000000000001',
-  'Lifestyle of Eden'
+  'Lifestyle of Eden',
+  'eden'
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Also keep the row in organizations (used by Week 6 admin screens).
