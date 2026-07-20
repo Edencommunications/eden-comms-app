@@ -511,6 +511,18 @@ ALTER TABLE user_profiles
   ADD COLUMN IF NOT EXISTS is_online   BOOLEAN     DEFAULT false,
   ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMPTZ DEFAULT now();
 
+-- Drop NOT NULL on full_name if it exists (app uses "name"; full_name may exist
+-- from an earlier schema version with a stricter constraint)
+DO $
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'user_profiles' AND column_name = 'full_name'
+  ) THEN
+    ALTER TABLE user_profiles ALTER COLUMN full_name DROP NOT NULL;
+  END IF;
+END $;
+
 -- organizations
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS is_white_label BOOLEAN DEFAULT false,
