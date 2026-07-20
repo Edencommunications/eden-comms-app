@@ -2259,28 +2259,40 @@ const AdminDashboard = ({ user }:any) => {
 // Clients see: past check-ins (with coach feedback) | coach Loom updates | progress photos
 
 const DEMO_PROGRESS_CHECKINS = [
-  { id:1, submitted_at:'2026-07-09', weight:'148.0', steps:'9,200', heartRate:'62', hrv:'68', bloodPressure:'118/74',
+  { id:1, submitted_at:'2026-07-09', weight:'148.0', temp:'97.6', steps:'9,200', heartRate:'62', hrv:'68', bloodPressure:'118/74',
     energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:92, mood:'Motivated',
+    sleepWindow:'10:30 PM – 6:00 AM', sleepCycles:'5', sleepDisruption:'',
+    bowelCount:'2', bowelType:'Well formed',
     notes:'Feeling good this week! Energy is up and sleep has improved.',
     coach_notes:'Great compliance. Bump protein 10g on high days next week. Keep the morning walks.' },
-  { id:2, submitted_at:'2026-07-02', weight:'149.0', steps:'7,800', heartRate:'68', hrv:'58', bloodPressure:'122/78',
-    energy:6, sleep:5, bloating:6, brainFog:5, hunger:7, stress:7, compliance:85, mood:'Stressed',
+  { id:2, submitted_at:'2026-07-02', weight:'149.0', temp:'97.4', steps:'7,800', heartRate:'68', hrv:'58', bloodPressure:'122/78',
+    energy:6, sleep:5, bloating:6, brainFog:5, sexDrive:5, hunger:7, stress:7, compliance:85, mood:'Stressed',
+    sleepWindow:'11:30 PM – 6:30 AM', sleepCycles:'4', sleepDisruption:'Woke twice around 2 AM — racing thoughts.',
+    bowelCount:'1', bowelType:'Loose',
     notes:'Work has been hectic this week. Missed a couple workouts.',
     coach_notes:'Stress management is the priority right now. Reviewed sleep protocol — add magnesium.' },
-  { id:3, submitted_at:'2026-06-25', weight:'150.0', steps:'8,500', heartRate:'64', hrv:'62', bloodPressure:'120/76',
-    energy:6, sleep:6, bloating:4, brainFog:6, hunger:5, stress:6, compliance:88, mood:'Neutral',
+  { id:3, submitted_at:'2026-06-25', weight:'150.0', temp:'97.8', steps:'8,500', heartRate:'64', hrv:'62', bloodPressure:'120/76',
+    energy:6, sleep:6, bloating:4, brainFog:6, sexDrive:5, hunger:5, stress:6, compliance:88, mood:'Neutral',
+    sleepWindow:'11:00 PM – 6:30 AM', sleepCycles:'4', sleepDisruption:'Mild gut discomfort mid-night.',
+    bowelCount:'2', bowelType:'Well formed',
     notes:'Digestion felt off mid-week. Had some bloating after meals.',
     coach_notes:'Adding digestive enzymes with meals. Will update supplement protocol on our next call.' },
-  { id:4, submitted_at:'2026-06-18', weight:'151.0', steps:'6,200', heartRate:'72', hrv:'52', bloodPressure:'124/80',
-    energy:5, sleep:5, bloating:3, brainFog:4, hunger:8, stress:8, compliance:80, mood:'Tired',
+  { id:4, submitted_at:'2026-06-18', weight:'151.0', temp:'98.1', steps:'6,200', heartRate:'72', hrv:'52', bloodPressure:'124/80',
+    energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:4, hunger:8, stress:8, compliance:80, mood:'Tired',
+    sleepWindow:'12:00 AM – 6:00 AM', sleepCycles:'3–4', sleepDisruption:'Woke multiple times — hotel, noisy environment.',
+    bowelCount:'1', bowelType:'Loose',
     notes:'Rough week — traveled for work, hard to stay on protocol.',
     coach_notes:'Travel protocols reviewed together. Pack snacks, electrolytes, keep the meal timing.' },
-  { id:5, submitted_at:'2026-06-11', weight:'152.0', steps:'10,400', heartRate:'60', hrv:'74', bloodPressure:'116/72',
-    energy:8, sleep:8, bloating:8, brainFog:8, hunger:3, stress:4, compliance:96, mood:'Great',
+  { id:5, submitted_at:'2026-06-11', weight:'152.0', temp:'97.5', steps:'10,400', heartRate:'60', hrv:'74', bloodPressure:'116/72',
+    energy:8, sleep:8, bloating:8, brainFog:8, sexDrive:8, hunger:3, stress:4, compliance:96, mood:'Great',
+    sleepWindow:'10:00 PM – 5:30 AM', sleepCycles:'5', sleepDisruption:'',
+    bowelCount:'2', bowelType:'Well formed',
     notes:'Best week so far! Everything clicked — workouts, sleep, and diet all aligned.',
     coach_notes:'96% compliance is elite. This is your new baseline. Keep this energy going into next week.' },
-  { id:6, submitted_at:'2026-06-04', weight:'152.5', steps:'9,600', heartRate:'63', hrv:'70', bloodPressure:'119/75',
-    energy:7, sleep:7, bloating:7, brainFog:7, hunger:4, stress:5, compliance:90, mood:'Good',
+  { id:6, submitted_at:'2026-06-04', weight:'152.5', temp:'97.7', steps:'9,600', heartRate:'63', hrv:'70', bloodPressure:'119/75',
+    energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:90, mood:'Good',
+    sleepWindow:'10:45 PM – 6:15 AM', sleepCycles:'5', sleepDisruption:'',
+    bowelCount:'2', bowelType:'Well formed',
     notes:'Good week overall. Getting used to the new routine.',
     coach_notes:'Solid. Consistency is building. Stay the course.' },
 ]
@@ -2502,11 +2514,16 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
                 {open && (
                   <div style={{ borderTop:`1px solid ${B.border}`, padding:'14px 16px' }}>
 
-                    {/* Score grid */}
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(80px, 1fr))', gap:8, marginBottom:14 }}>
+                    {/* Score grid — all 7 wellbeing scales */}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(76px, 1fr))', gap:8, marginBottom:14 }}>
                       {([
-                        ['Energy',   ci.energy], ['Sleep',    ci.sleep],  ['Bloating', ci.bloating],
-                        ['Brain Fog',ci.brainFog],['Sex Drive',ci.sexDrive],['Stress', ci.stress ? 10-ci.stress : null],
+                        ['Energy',    ci.energy],
+                        ['Sleep',     ci.sleep],
+                        ['Bloating',  ci.bloating],
+                        ['Brain Fog', ci.brainFog],
+                        ['Sex Drive', ci.sexDrive],
+                        ['Hunger',    ci.hunger ? 10-ci.hunger : null],
+                        ['Stress',    ci.stress  ? 10-ci.stress  : null],
                       ] as [string, number|null][]).map(([l,v]) => v != null && (
                         <div key={l} style={{ background:B.surface, borderRadius:10, padding:'8px 6px', textAlign:'center' }}>
                           <div style={{ fontSize:8, color:B.muted, fontWeight:700, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4, lineHeight:1.2 }}>{l}</div>
@@ -2517,14 +2534,41 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
                     </div>
 
                     {/* Vitals */}
-                    {(ci.heartRate || ci.hrv || ci.steps || ci.bloodPressure || ci.temp) && (
+                    {(ci.weight || ci.temp || ci.heartRate || ci.hrv || ci.steps || ci.bloodPressure) && (
                       <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${B.border}` }}>
-                        {ci.weight      && <span style={{ fontSize:11, color:B.muted }}>⚖️ {ci.weight} lbs</span>}
-                        {ci.heartRate   && <span style={{ fontSize:11, color:B.muted }}>❤️ {ci.heartRate} BPM</span>}
-                        {ci.hrv         && <span style={{ fontSize:11, color:B.muted }}>📡 HRV {ci.hrv}</span>}
-                        {ci.steps       && <span style={{ fontSize:11, color:B.muted }}>👟 {ci.steps} steps</span>}
+                        {ci.weight        && <span style={{ fontSize:11, color:B.muted }}>⚖️ {ci.weight} lbs</span>}
+                        {ci.temp          && <span style={{ fontSize:11, color:B.muted }}>🌡️ {ci.temp}°F</span>}
+                        {ci.heartRate     && <span style={{ fontSize:11, color:B.muted }}>❤️ {ci.heartRate} BPM</span>}
+                        {ci.hrv           && <span style={{ fontSize:11, color:B.muted }}>📡 HRV {ci.hrv}</span>}
+                        {ci.steps         && <span style={{ fontSize:11, color:B.muted }}>👟 {ci.steps} steps</span>}
                         {ci.bloodPressure && <span style={{ fontSize:11, color:B.muted }}>🩺 {ci.bloodPressure}</span>}
-                        {ci.temp        && <span style={{ fontSize:11, color:B.muted }}>🌡 {ci.temp}°F</span>}
+                      </div>
+                    )}
+
+                    {/* Sleep details */}
+                    {(ci.sleepWindow || ci.sleepCycles || ci.sleepDisruption) && (
+                      <div style={{ marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${B.border}` }}>
+                        <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', marginBottom:6 }}>🌙 Sleep Details</div>
+                        <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom: ci.sleepDisruption ? 8 : 0 }}>
+                          {ci.sleepWindow  && <span style={{ fontSize:11, color:B.text }}>🕙 {ci.sleepWindow}</span>}
+                          {ci.sleepCycles  && <span style={{ fontSize:11, color:B.text }}>🔄 {ci.sleepCycles} cycles</span>}
+                        </div>
+                        {ci.sleepDisruption && (
+                          <div style={{ fontSize:11, color:B.muted, fontStyle:'italic', background:B.surface, borderRadius:8, padding:'8px 10px' }}>
+                            {ci.sleepDisruption}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Digestion */}
+                    {(ci.bowelCount || ci.bowelType) && (
+                      <div style={{ marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${B.border}` }}>
+                        <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', marginBottom:6 }}>🫁 Digestion</div>
+                        <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                          {ci.bowelCount && <span style={{ fontSize:11, color:B.text }}>💧 {ci.bowelCount}x daily</span>}
+                          {ci.bowelType  && <span style={{ fontSize:11, color:B.text }}>📊 {ci.bowelType}</span>}
+                        </div>
                       </div>
                     )}
 
