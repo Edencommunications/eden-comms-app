@@ -359,17 +359,20 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
   const [clientRxNotes, setClientRxNotes] = useState('')
 
   // ── Rx / Prescription tracker ─────────────────────────────
+  const todayStr = new Date().toISOString().slice(0,10)
+  const blankRx  = { name:'', dose:'', directions:'', startDate: todayStr }
   const [rxList,       setRxList]       = useState([])
   const [showRxForm,   setShowRxForm]   = useState(false)
-  const [newRx,        setNewRx]        = useState({ name:'', dose:'', directions:'', startDate: new Date().toISOString().slice(0,10) })
+  const [newRx,        setNewRx]        = useState(blankRx)
   const [showTaperFor, setShowTaperFor] = useState(null) // rxId currently adding taper to
   const [newTaper,     setNewTaper]     = useState({ date:'', dose:'', note:'' })
 
+  function openRxForm()  { setNewRx(blankRx); setShowRxForm(true)  }
+  function closeRxForm() { setNewRx(blankRx); setShowRxForm(false) }
   function addRx() {
-    if (!newRx.name.trim()||!newRx.dose.trim()) return
-    setRxList(prev=>[...prev,{ id:Date.now(), ...newRx, tapers:[] }])
-    setNewRx({ name:'', dose:'', directions:'', startDate: new Date().toISOString().slice(0,10) })
-    setShowRxForm(false)
+    if (!newRx.name.trim() || !newRx.dose.trim()) return
+    setRxList(prev => [...prev, { id: Date.now(), ...newRx, tapers: [] }])
+    closeRxForm()
   }
   function removeRx(id) { setRxList(prev=>prev.filter(r=>r.id!==id)) }
   function addTaper(rxId) {
@@ -964,10 +967,13 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
               <Card sx={{marginBottom:12}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
                   <Lbl t="Prescriptions / Medications"/>
-                  <button onClick={()=>setShowRxForm(v=>!v)}
-                    style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                    + Add Rx
-                  </button>
+                  {/* Only opens — never toggles. Cancel/Save close the form. */}
+                  {!showRxForm&&(
+                    <button type="button" onClick={openRxForm}
+                      style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                      + Add Rx
+                    </button>
+                  )}
                 </div>
 
                 {/* Add Rx form */}
@@ -1000,12 +1006,13 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
                         style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
                     </div>
                     <div style={{display:'flex',gap:8}}>
-                      <button onClick={()=>setShowRxForm(false)}
+                      <button type="button" onClick={closeRxForm}
                         style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px',color:C.muted,fontSize:12,cursor:'pointer'}}>
                         Cancel
                       </button>
-                      <button onClick={addRx} disabled={!newRx.name.trim()||!newRx.dose.trim()}
-                        style={{flex:2,background:C.gold,border:'none',borderRadius:7,padding:'8px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:newRx.name.trim()&&newRx.dose.trim()?1:.5}}>
+                      <button type="button" onClick={addRx}
+                        disabled={!newRx.name.trim()||!newRx.dose.trim()}
+                        style={{flex:2,background:C.gold,border:'none',borderRadius:7,padding:'8px',fontWeight:800,color:C.black,fontSize:12,cursor:newRx.name.trim()&&newRx.dose.trim()?'pointer':'default',opacity:newRx.name.trim()&&newRx.dose.trim()?1:.4}}>
                         Save Rx
                       </button>
                     </div>
