@@ -270,6 +270,30 @@ export default function Messaging({ currentUser, loomMode = false }) {
   const [sidebarOpen,  setSidebarOpen]  = useState(false)
   const activeConvo = conversations.find(c => c.id === activeId) || conversations[0]
 
+  // ── Mark-as-unread ────────────────────────────────────────
+  // openedConvos: Set of IDs that have been tapped/clicked this session (auto-clears badge)
+  // markedUnread: Set of IDs manually flagged to revisit later
+  const [openedConvos, setOpenedConvos] = useState(() => new Set([conversations[0].id]))
+  const [markedUnread, setMarkedUnread] = useState(() => new Set())
+
+  function openConvo(id) {
+    setActiveId(id)
+    setOpenedConvos(prev => new Set([...prev, id]))
+    setMarkedUnread(prev => { const n = new Set(prev); n.delete(id); return n })
+    if (isMobile) setSidebarOpen(false)
+  }
+
+  function markCurrentUnread() {
+    setMarkedUnread(prev => new Set([...prev, activeId]))
+    if (isMobile) setSidebarOpen(true)
+  }
+
+  function effectiveUnread(convo) {
+    if (markedUnread.has(convo.id)) return 1
+    if (openedConvos.has(convo.id)) return 0
+    return convo.unread || 0
+  }
+
   // ── Live Supabase messages (Jordan only when connected) ────
   const [liveMessages, setLiveMessages] = useState([])
   const [liveFiles,    setLiveFiles]    = useState([])
@@ -568,7 +592,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
 
             return (
               <button key={convo.id}
-                onClick={() => { setActiveId(convo.id); if (isMobile) setSidebarOpen(false) }}
+                onClick={() => openConvo(convo.id)}
                 style={{
                   width:'100%', display:'flex', alignItems:'center', gap:10,
                   padding:'12px 14px', background: isActive ? `${C.gold}15` : 'transparent',
@@ -609,11 +633,14 @@ export default function Messaging({ currentUser, loomMode = false }) {
                       {snippet}
                     </span>
                     {/* Unread badges hidden for masked entries */}
-                    {!isHidden && convo.unread > 0 && (
+                    {!isHidden && effectiveUnread(convo) > 0 && (
                       <span style={{ flexShrink:0, marginLeft:4, minWidth:18, height:18, borderRadius:9,
-                        background:C.gold, display:'flex', alignItems:'center', justifyContent:'center',
-                        fontSize:10, fontWeight:800, color:C.black, padding:'0 5px' }}>
-                        {convo.unread}
+                        background: markedUnread.has(convo.id) ? '#555' : C.gold,
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        fontSize:10, fontWeight:800,
+                        color: markedUnread.has(convo.id) ? C.white : C.black,
+                        padding:'0 5px' }}>
+                        {markedUnread.has(convo.id) ? '●' : effectiveUnread(convo)}
                       </span>
                     )}
                   </div>
@@ -667,6 +694,23 @@ export default function Messaging({ currentUser, loomMode = false }) {
               Demo preview
             </span>
           )}
+          {/* Mark as unread button — tap to flag this conversation to come back to later */}
+          <button onClick={markCurrentUnread}
+            title="Mark as unread — flag to come back to later"
+            style={{
+              display:'flex', alignItems:'center', gap:4, flexShrink:0,
+              background: markedUnread.has(activeId) ? '#2a2a2a' : 'transparent',
+              border:`1px solid ${markedUnread.has(activeId) ? '#555' : C.border}`,
+              borderRadius:8, padding: isMobile ? '7px 9px' : '6px 12px',
+              cursor:'pointer', color: markedUnread.has(activeId) ? C.white : C.muted,
+              fontSize:11, fontWeight:markedUnread.has(activeId) ? 700 : 400,
+            }}>
+            <span style={{ fontSize:8, lineHeight:1,
+              color: markedUnread.has(activeId) ? '#aaa' : C.muted }}>●</span>
+            {!isMobile && (
+              <span>{markedUnread.has(activeId) ? 'Marked unread' : 'Mark unread'}</span>
+            )}
+          </button>
           {/* Tab buttons */}
           {['chat','files'].map(t => (
             <button key={t} onClick={() => setTab(t)}

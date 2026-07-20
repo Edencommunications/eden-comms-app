@@ -2254,6 +2254,88 @@ const AdminDashboard = ({ user }:any) => {
   );
 };
 
+// ─── BOOKING / BOOK A CALL SCREEN (client sidebar item) ──────────────────────
+function BookingScreen({ currentUser }: { currentUser: any }) {
+  const isCoach = currentUser?.role === 'coach' || currentUser?.role === 'super_admin'
+  const DEFAULT_URL = 'https://links.lifestyleofeden.com/widget/booking/2kKUGzYZqAaNBVpd5uzA'
+  const [url,     setUrl]     = useState(DEFAULT_URL)
+  const [editing, setEditing] = useState(false)
+  const [tempUrl, setTempUrl] = useState('')
+  const isMob = useIsMobile()
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:B.black, overflow:'hidden' }}>
+
+      {/* Header */}
+      <div style={{ padding: isMob ? '10px 14px' : '12px 20px', borderBottom:`1px solid ${B.border}`, flexShrink:0,
+        display:'flex', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:B.white }}>📅 Book a Call</div>
+          <div style={{ fontSize:11, color:B.muted, marginTop:2 }}>Schedule your next coaching session</div>
+        </div>
+        {isCoach && !editing && (
+          <button onClick={() => { setEditing(true); setTempUrl(url) }}
+            style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8,
+              padding:'7px 12px', color:B.muted, fontSize:11, cursor:'pointer', flexShrink:0 }}>
+            ✏️ Update URL
+          </button>
+        )}
+        {isCoach && editing && (
+          <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', width:'100%' }}>
+            <input value={tempUrl} onChange={e => setTempUrl(e.target.value)}
+              placeholder="Paste GHL or Calendly URL…"
+              style={{ flex:1, minWidth:180, background:B.card, border:`1px solid ${B.border}`,
+                borderRadius:8, padding:'8px 10px', color:B.white, fontSize:12, outline:'none' }}/>
+            <button onClick={() => { setUrl(tempUrl.trim()); setEditing(false) }}
+              style={{ background:B.gold, border:'none', borderRadius:8, padding:'8px 14px',
+                fontWeight:700, color:B.black, fontSize:12, cursor:'pointer', flexShrink:0 }}>
+              Save
+            </button>
+            <button onClick={() => setEditing(false)}
+              style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8,
+                padding:'8px 12px', color:B.muted, fontSize:12, cursor:'pointer', flexShrink:0 }}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Iframe */}
+      <div style={{ flex:1, overflow:'hidden', position:'relative' }}>
+        {url ? (
+          <iframe src={url} style={{ width:'100%', height:'100%', border:'none' }}
+            title="Book a Call" allow="camera; microphone; autoplay; encrypted-media"/>
+        ) : (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
+            height:'100%', flexDirection:'column', gap:12 }}>
+            <div style={{ fontSize:48 }}>📅</div>
+            <div style={{ fontSize:15, fontWeight:700, color:B.white }}>No booking link configured</div>
+            {isCoach && <div style={{ fontSize:12, color:B.muted }}>Paste your URL above</div>}
+          </div>
+        )}
+      </div>
+
+      {/* Resource links */}
+      <div style={{ padding:'10px 14px', borderTop:`1px solid ${B.border}`, flexShrink:0,
+        display:'flex', gap:6, flexWrap:'wrap' }}>
+        {[
+          ['Male Blood Work Panel',   'https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN'],
+          ['Female Blood Work Panel', 'https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN'],
+          ['DUTCH Test',              'https://www.practitionerdepot.com/products/dutch-test'],
+          ['GI Map',                  'https://www.practitionerdepot.com/products/gi-map'],
+        ].map(([l, u]) => (
+          <a key={l} href={u} target="_blank" rel="noreferrer"
+            style={{ fontSize:11, color:B.gold, textDecoration:'none',
+              background:`${B.gold}15`, border:`1px solid ${B.gold}33`,
+              borderRadius:6, padding:'4px 10px', whiteSpace:'nowrap' }}>
+            {l} →
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN APP SHELL ───────────────────────────────────────────────────────────
 const IDLE_MS      = 14 * 60 * 1000;  // 14 min idle → show warning
 const WARNING_SECS = 60;               // 60 s to respond before forced logout
@@ -2345,6 +2427,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"habits",    icon:"habits",    label:"Habits" },
     { key:"labs",      icon:"labs",      label:"Labs" },
     { key:"workout",   icon:"workout",   label:"Workout" },
+    { key:"calendar",  icon:"calendar",  label:"Book a Call" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
@@ -2402,6 +2485,7 @@ const AppShell = ({ user, onLogout }) => {
       : { email: user.email, name: user.name, role: user.role };
     if (tab === "diet")         return <DietBuilder currentUser={toolUser}/>;
     if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements"/>;
+    if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
     if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs"/>;
     if (tab === "checkin")      return <CheckInScreen/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
@@ -2491,9 +2575,18 @@ const AppShell = ({ user, onLogout }) => {
 
       {/* Bottom nav — mobile only */}
       {isMobile && (
-        <div style={{ background:B.surface, borderTop:`1px solid ${B.border}`, display:"flex", flexShrink:0, paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ background:B.surface, borderTop:`1px solid ${B.border}`, display:"flex", flexShrink:0,
+          paddingBottom:"env(safe-area-inset-bottom, 0px)", overflowX:"auto",
+          WebkitOverflowScrolling:"touch", scrollbarWidth:"none" }}>
           {tabs.map(t => (
-            <NavTab key={t.key} icon={t.icon} label={t.label} active={tab===t.key} onClick={()=>setTab(t.key)}/>
+            <button key={t.key} onClick={() => setTab(t.key)}
+              style={{ minWidth:60, flex: tabs.length <= 6 ? 1 : undefined,
+                display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+                background:"none", border:"none", cursor:"pointer", padding:"6px 4px 8px", flexShrink:0 }}>
+              <Ic n={t.icon} size={20} c={tab===t.key?B.gold:B.muted}/>
+              <span style={{ fontSize:9, fontWeight:600, color:tab===t.key?B.gold:B.muted,
+                letterSpacing:0.4, textTransform:"uppercase", whiteSpace:"nowrap" }}>{t.label}</span>
+            </button>
           ))}
         </div>
       )}

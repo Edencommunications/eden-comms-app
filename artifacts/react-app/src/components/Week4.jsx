@@ -364,7 +364,6 @@ export default function Week4({currentUser, initialTab='labs'}) {
     ['labs',    '🧪 Labs'],
     ['workout', '💪 Workout'],
     ['cardio',  '🏃 Cardio'],
-    ['calendar','📅 Calendar'],
   ]
 
   // ════════════════════════════════════════════════════════════
