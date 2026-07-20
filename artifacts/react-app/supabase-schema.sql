@@ -561,7 +561,16 @@ CREATE TABLE IF NOT EXISTS progress_photos (
 --     Fixed UUIDs used across all components — must match exactly.
 -- ════════════════════════════════════════════════════════════════════════════
 
--- ── Eden organization ──────────────────────────────────────────────────────
+-- ── Eden org — insert into BOTH tables ────────────────────────────────────
+-- Your existing user_profiles.company_id FK points to "companies", so that
+-- table must have the row before the user inserts below can succeed.
+INSERT INTO companies (id, name)
+VALUES (
+  'b0000000-0000-0000-0000-000000000001',
+  'Lifestyle of Eden'
+) ON CONFLICT (id) DO NOTHING;
+
+-- Also keep the row in organizations (used by Week 6 admin screens).
 INSERT INTO organizations (id, name, slug, brand_color, plan, is_white_label)
 VALUES (
   'b0000000-0000-0000-0000-000000000001',
