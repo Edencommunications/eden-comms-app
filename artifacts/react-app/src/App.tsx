@@ -83,6 +83,7 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
     upload:   <><polyline points="16,16 12,12 8,16" fill="none" stroke={c} strokeWidth="1.8"/><line x1="12" y1="12" x2="12" y2="21" stroke={c} strokeWidth="1.8"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" fill="none" stroke={c} strokeWidth="1.8"/></>,
     shop:     <><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" fill="none" stroke={c} strokeWidth="1.8"/><line x1="3" y1="6" x2="21" y2="6" stroke={c} strokeWidth="1.8"/><path d="M16 10a4 4 0 0 1-8 0" fill="none" stroke={c} strokeWidth="1.8"/></>,
     team:     <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" fill="none" stroke={c} strokeWidth="1.8"/><circle cx="9" cy="7" r="4" fill="none" stroke={c} strokeWidth="1.8"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke={c} strokeWidth="1.8"/></>,
+    progress: <><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></>,
   };
   return <svg width={sz} height={sz} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{d[n]}</svg>;
 };
@@ -2254,6 +2255,445 @@ const AdminDashboard = ({ user }:any) => {
   );
 };
 
+// ─── CLIENT PROGRESS SCREEN ──────────────────────────────────────────────────
+// Clients see: past check-ins (with coach feedback) | coach Loom updates | progress photos
+
+const DEMO_PROGRESS_CHECKINS = [
+  { id:1, submitted_at:'2026-07-09', weight:'148.0', steps:'9,200', heartRate:'62', hrv:'68', bloodPressure:'118/74',
+    energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:92, mood:'Motivated',
+    notes:'Feeling good this week! Energy is up and sleep has improved.',
+    coach_notes:'Great compliance. Bump protein 10g on high days next week. Keep the morning walks.' },
+  { id:2, submitted_at:'2026-07-02', weight:'149.0', steps:'7,800', heartRate:'68', hrv:'58', bloodPressure:'122/78',
+    energy:6, sleep:5, bloating:6, brainFog:5, hunger:7, stress:7, compliance:85, mood:'Stressed',
+    notes:'Work has been hectic this week. Missed a couple workouts.',
+    coach_notes:'Stress management is the priority right now. Reviewed sleep protocol — add magnesium.' },
+  { id:3, submitted_at:'2026-06-25', weight:'150.0', steps:'8,500', heartRate:'64', hrv:'62', bloodPressure:'120/76',
+    energy:6, sleep:6, bloating:4, brainFog:6, hunger:5, stress:6, compliance:88, mood:'Neutral',
+    notes:'Digestion felt off mid-week. Had some bloating after meals.',
+    coach_notes:'Adding digestive enzymes with meals. Will update supplement protocol on our next call.' },
+  { id:4, submitted_at:'2026-06-18', weight:'151.0', steps:'6,200', heartRate:'72', hrv:'52', bloodPressure:'124/80',
+    energy:5, sleep:5, bloating:3, brainFog:4, hunger:8, stress:8, compliance:80, mood:'Tired',
+    notes:'Rough week — traveled for work, hard to stay on protocol.',
+    coach_notes:'Travel protocols reviewed together. Pack snacks, electrolytes, keep the meal timing.' },
+  { id:5, submitted_at:'2026-06-11', weight:'152.0', steps:'10,400', heartRate:'60', hrv:'74', bloodPressure:'116/72',
+    energy:8, sleep:8, bloating:8, brainFog:8, hunger:3, stress:4, compliance:96, mood:'Great',
+    notes:'Best week so far! Everything clicked — workouts, sleep, and diet all aligned.',
+    coach_notes:'96% compliance is elite. This is your new baseline. Keep this energy going into next week.' },
+  { id:6, submitted_at:'2026-06-04', weight:'152.5', steps:'9,600', heartRate:'63', hrv:'70', bloodPressure:'119/75',
+    energy:7, sleep:7, bloating:7, brainFog:7, hunger:4, stress:5, compliance:90, mood:'Good',
+    notes:'Good week overall. Getting used to the new routine.',
+    coach_notes:'Solid. Consistency is building. Stay the course.' },
+]
+
+const DEMO_COACH_UPDATES = [
+  { id:1, call_date:'2026-07-10', call_type:'Monthly Check-In',
+    summary:'Reviewed your July progress. Compliance is strong at 92% average. Weight is trending down exactly 1 lb/week as planned. Energy improvements are notable — this is the protocol working.',
+    focus_points:'Protein timing on high days\nSleep window consistency (10:30 PM target)\nStress management tools added',
+    action_items:'Continue current macros — no changes needed\nAdd magnesium glycinate 400mg before bed\nBook next call by July 24th',
+    loom_url:'', next_call_date:'2026-07-24' },
+  { id:2, call_date:'2026-06-12', call_type:'Strategy Call',
+    summary:'Mid-protocol check-in. Added digestive enzymes to address bloating. Reviewed stress load and adjusted training to 4x/week to reduce cortisol.',
+    focus_points:'Gut health support protocol\nTraining volume reduced to protect recovery\nCortisol and stress management',
+    action_items:'Start digestive enzymes with each meal\nDrop to 4 workouts per week\nTrack sleep disruptions in notes',
+    loom_url:'', next_call_date:'2026-07-10' },
+  { id:3, call_date:'2026-05-01', call_type:'Onboarding Call',
+    summary:'Initial intake and goal-setting. Reviewed health history, set 12-week targets, introduced the full Eden protocol. Starting weight 153.0 lbs, target 143.0 lbs while maintaining performance.',
+    focus_points:'Full protocol overview\nMacro targets and meal timing set\nHabit foundations and morning routine',
+    action_items:'Start tracking macros daily in the app\nBegin 5 AM morning routine\nDrink 1 gallon water daily',
+    loom_url:'', next_call_date:'2026-06-12' },
+]
+
+const DEMO_PROGRESS_PHOTOS = [
+  { id:1, week_label:'Week 12', taken_at:'2026-07-06', photo_url:'', notes:'Front, side, back' },
+  { id:2, week_label:'Week 8',  taken_at:'2026-06-08', photo_url:'', notes:'Front, side, back' },
+  { id:3, week_label:'Week 4',  taken_at:'2026-05-11', photo_url:'', notes:'Front, side, back' },
+  { id:4, week_label:'Week 1',  taken_at:'2026-04-20', photo_url:'', notes:'Starting photos' },
+]
+
+function loomToEmbed(url: string): string {
+  if (!url) return ''
+  // https://www.loom.com/share/XXXX → https://www.loom.com/embed/XXXX
+  return url.replace('loom.com/share/', 'loom.com/embed/')
+}
+
+function scoreCol(v: number): string {
+  return v >= 7 ? B.success : v >= 5 ? B.gold : '#ff6b6b'
+}
+
+function ClientProgressScreen({ currentUser }: { currentUser: any }) {
+  const isMobile = useIsMobile()
+  const [subTab, setSubTab] = useState<'checkins'|'updates'|'photos'>('checkins')
+  const [checkins,  setCheckins]  = useState<any[]|null>(null)
+  const [updates,   setUpdates]   = useState<any[]|null>(null)
+  const [photos,    setPhotos]    = useState<any[]|null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [expanded,  setExpanded]  = useState<number|null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  // Determine UUID — works for demo (Jordan) and live Supabase users
+  // KNOWN_USERS is defined in Messaging.jsx scope; in App.tsx we use the email to query user_profiles
+  const myEmail = currentUser?.email
+
+  useEffect(() => { load() }, [myEmail])
+
+  async function load() {
+    // Try to find UUID from user_profiles
+    let uuid: string|null = null
+    try {
+      const profile = await sbGet('user_profiles', `email=eq.${encodeURIComponent(myEmail||'')}`)
+      uuid = profile?.[0]?.id || null
+    } catch {}
+
+    const [c, u, p] = await Promise.all([
+      uuid ? sbGet('weekly_checkins',   `client_id=eq.${uuid}&order=submitted_at.desc&limit=24`) : Promise.resolve([]),
+      uuid ? sbGet('consultation_notes',`client_id=eq.${uuid}&order=call_date.desc&limit=12`)    : Promise.resolve([]),
+      uuid ? sbGet('progress_photos',   `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)     : Promise.resolve([]),
+    ])
+
+    setCheckins(Array.isArray(c) && c.length ? c : DEMO_PROGRESS_CHECKINS)
+    setUpdates( Array.isArray(u) && u.length ? u : DEMO_COACH_UPDATES)
+    setPhotos(  Array.isArray(p) && p.length ? p : DEMO_PROGRESS_PHOTOS)
+  }
+
+  async function uploadPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Get UUID for storage path
+    let uuid: string|null = null
+    try { const r = await sbGet('user_profiles', `email=eq.${encodeURIComponent(myEmail||'')}`); uuid = r?.[0]?.id || null } catch {}
+    if (!uuid) { alert('Could not identify your account. Please contact support.'); return }
+    setUploading(true)
+    try {
+      const path = `${uuid}/${Date.now()}-${file.name}`
+      const upRes = await fetch(`${SB_URL}/storage/v1/object/progress-photos/${path}`, {
+        method:'POST', headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':file.type }, body:file,
+      })
+      if (!upRes.ok) throw new Error('upload failed')
+      const photoUrl = `${SB_URL}/storage/v1/object/public/progress-photos/${path}`
+      const weekNum = (photos?.length || 0) + 1
+      await sbInsert('progress_photos', {
+        client_id: uuid, week_label: `Week ${weekNum}`,
+        photo_url: photoUrl, file_name: file.name, file_size: file.size,
+        taken_at: new Date().toISOString(),
+      })
+      await load()
+    } catch { alert('Upload failed. Make sure the progress-photos storage bucket exists in Supabase.') }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  // Weight chart data — last 8 entries reversed so oldest → newest
+  const weightData = (checkins || []).slice(0,8).reverse().map((ci:any) => ({
+    date:   (ci.submitted_at||'').slice(5,10),
+    weight: parseFloat(ci.weight) || null,
+  })).filter((d:any) => d.weight)
+
+  // Group photos by week_label
+  const photosByWeek: Record<string,any[]> = {}
+  for (const p of (photos||[])) {
+    const k = p.week_label || 'Uncategorized'
+    if (!photosByWeek[k]) photosByWeek[k] = []
+    photosByWeek[k].push(p)
+  }
+
+  const TABS = [
+    { key:'checkins', label:'📊 Check-ins' },
+    { key:'updates',  label:'🎥 Coach Updates' },
+    { key:'photos',   label:'📸 Photos' },
+  ]
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:B.black, overflow:'hidden' }}>
+
+      {/* Header + sub-tab bar */}
+      <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, flexShrink:0,
+        padding: isMobile ? '14px 16px 0' : '16px 20px 0' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:B.white }}>My Progress</div>
+        <div style={{ fontSize:11, color:B.muted, marginBottom:12 }}>Check-ins · Coach updates · Progress photos</div>
+        <div style={{ display:'flex', gap:0, overflowX:'auto', scrollbarWidth:'none' }}>
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => setSubTab(t.key as any)}
+              style={{ padding:'10px 16px', background:'none', border:'none', flexShrink:0,
+                borderBottom:`2px solid ${subTab===t.key?B.gold:'transparent'}`,
+                color:subTab===t.key?B.gold:B.muted, fontSize:12,
+                fontWeight:subTab===t.key?700:400, cursor:'pointer', whiteSpace:'nowrap' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Scrollable content */}
+      <div style={{ flex:1, overflowY:'auto', padding: isMobile ? '16px 14px 32px' : '20px 20px 32px' }}>
+
+        {/* ── CHECK-INS ──────────────────────────────────────────────── */}
+        {subTab === 'checkins' && (<>
+
+          {/* Weight trend chart */}
+          {weightData.length > 1 && (
+            <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:'14px 16px', marginBottom:16 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:10 }}>⚖️ Weight Trend</div>
+              <ResponsiveContainer width="100%" height={110}>
+                <AreaChart data={weightData} margin={{ top:4, right:4, bottom:0, left:-24 }}>
+                  <defs>
+                    <linearGradient id="wgrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={B.gold} stopOpacity={0.3}/>
+                      <stop offset="100%" stopColor={B.gold} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={B.border} vertical={false}/>
+                  <XAxis dataKey="date" tick={{ fontSize:9, fill:B.muted }} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{ fontSize:9, fill:B.muted }} axisLine={false} tickLine={false} domain={['dataMin - 1','dataMax + 1']}/>
+                  <Tooltip contentStyle={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8, fontSize:11 }} itemStyle={{ color:B.gold }}/>
+                  <Area type="monotone" dataKey="weight" stroke={B.gold} strokeWidth={2} fill="url(#wgrad)" dot={{ fill:B.gold, r:3 }}/>
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Check-in cards */}
+          {checkins === null ? (
+            <div style={{ textAlign:'center', padding:40, color:B.muted }}>Loading…</div>
+          ) : checkins.length === 0 ? (
+            <div style={{ textAlign:'center', padding:40 }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>📋</div>
+              <div style={{ fontSize:14, fontWeight:700, color:B.white, marginBottom:6 }}>No check-ins yet</div>
+              <div style={{ fontSize:12, color:B.muted }}>Submit your first weekly check-in to start tracking.</div>
+            </div>
+          ) : checkins.map((ci:any, idx:number) => {
+            const open = expanded === idx
+            const dt   = ci.submitted_at ? new Date(ci.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''
+            return (
+              <div key={ci.id||idx} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, marginBottom:12, overflow:'hidden' }}>
+
+                {/* Always-visible header row */}
+                <button onClick={() => setExpanded(open ? null : idx)}
+                  style={{ width:'100%', background:'none', border:'none', padding:'14px 16px', cursor:'pointer', textAlign:'left' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:3 }}>
+                        <span style={{ fontSize:13, fontWeight:700, color:B.white }}>{dt}</span>
+                        {ci.weight && <span style={{ fontSize:12, color:B.gold, fontWeight:700 }}>⚖ {ci.weight} lbs</span>}
+                        {ci.compliance != null && (
+                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:20,
+                            background: ci.compliance>=90?`${B.success}22`:ci.compliance>=75?`${B.gold}22`:'#ff444422',
+                            color:      ci.compliance>=90?B.success:ci.compliance>=75?B.gold:'#ff6b6b' }}>
+                            {ci.compliance}% compliance
+                          </span>
+                        )}
+                      </div>
+                      {ci.mood && <div style={{ fontSize:11, color:B.muted }}>Mood: {ci.mood}</div>}
+                    </div>
+                    {/* Mini score circles */}
+                    <div style={{ display:'flex', gap:5, flexShrink:0 }}>
+                      {([['E', ci.energy], ['S', ci.sleep], ['St', ci.stress ? 10 - ci.stress : null]] as [string,number|null][]).map(([l,v]) => v != null && (
+                        <div key={l} style={{ width:30, height:30, borderRadius:15,
+                          background:`${scoreCol(v)}18`, border:`1px solid ${scoreCol(v)}55`,
+                          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+                          <span style={{ fontSize:7, color:scoreCol(v), fontWeight:700, lineHeight:1 }}>{l}</span>
+                          <span style={{ fontSize:9, color:scoreCol(v), fontWeight:800, lineHeight:1 }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <span style={{ color:B.muted, fontSize:14 }}>{open ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+
+                {/* Expanded detail */}
+                {open && (
+                  <div style={{ borderTop:`1px solid ${B.border}`, padding:'14px 16px' }}>
+
+                    {/* Score grid */}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(80px, 1fr))', gap:8, marginBottom:14 }}>
+                      {([
+                        ['Energy',   ci.energy], ['Sleep',    ci.sleep],  ['Bloating', ci.bloating],
+                        ['Brain Fog',ci.brainFog],['Sex Drive',ci.sexDrive],['Stress', ci.stress ? 10-ci.stress : null],
+                      ] as [string, number|null][]).map(([l,v]) => v != null && (
+                        <div key={l} style={{ background:B.surface, borderRadius:10, padding:'8px 6px', textAlign:'center' }}>
+                          <div style={{ fontSize:8, color:B.muted, fontWeight:700, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4, lineHeight:1.2 }}>{l}</div>
+                          <div style={{ fontSize:18, fontWeight:800, color:scoreCol(v), lineHeight:1 }}>{v}</div>
+                          <div style={{ fontSize:8, color:B.muted }}>/ 10</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Vitals */}
+                    {(ci.heartRate || ci.hrv || ci.steps || ci.bloodPressure || ci.temp) && (
+                      <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${B.border}` }}>
+                        {ci.weight      && <span style={{ fontSize:11, color:B.muted }}>⚖️ {ci.weight} lbs</span>}
+                        {ci.heartRate   && <span style={{ fontSize:11, color:B.muted }}>❤️ {ci.heartRate} BPM</span>}
+                        {ci.hrv         && <span style={{ fontSize:11, color:B.muted }}>📡 HRV {ci.hrv}</span>}
+                        {ci.steps       && <span style={{ fontSize:11, color:B.muted }}>👟 {ci.steps} steps</span>}
+                        {ci.bloodPressure && <span style={{ fontSize:11, color:B.muted }}>🩺 {ci.bloodPressure}</span>}
+                        {ci.temp        && <span style={{ fontSize:11, color:B.muted }}>🌡 {ci.temp}°F</span>}
+                      </div>
+                    )}
+
+                    {/* Client notes */}
+                    {ci.notes && (
+                      <div style={{ marginBottom:12 }}>
+                        <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', marginBottom:5 }}>Your Notes</div>
+                        <div style={{ fontSize:12, color:B.text, lineHeight:1.6, background:B.surface, borderRadius:8, padding:'10px 12px' }}>{ci.notes}</div>
+                      </div>
+                    )}
+
+                    {/* Coach feedback */}
+                    {ci.coach_notes && (
+                      <div style={{ borderLeft:`3px solid ${B.gold}`, paddingLeft:12 }}>
+                        <div style={{ fontSize:10, color:B.gold, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', marginBottom:5 }}>💬 Coach Feedback</div>
+                        <div style={{ fontSize:12, color:B.text, lineHeight:1.6 }}>{ci.coach_notes}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </>)}
+
+        {/* ── COACH UPDATES ──────────────────────────────────────────── */}
+        {subTab === 'updates' && (<>
+          <div style={{ fontSize:12, color:B.muted, marginBottom:16 }}>
+            Your coach's notes, action items, and Loom recordings from every call.
+          </div>
+
+          {updates === null ? (
+            <div style={{ textAlign:'center', padding:40, color:B.muted }}>Loading…</div>
+          ) : updates.length === 0 ? (
+            <div style={{ textAlign:'center', padding:40 }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>🎥</div>
+              <div style={{ fontSize:14, fontWeight:700, color:B.white, marginBottom:6 }}>No updates yet</div>
+              <div style={{ fontSize:12, color:B.muted }}>Coach notes and Loom recordings will appear here after each call.</div>
+            </div>
+          ) : updates.map((u:any, idx:number) => {
+            const embed   = loomToEmbed(u.loom_url || u.recording_url || '')
+            const dateStr = u.call_date ? new Date(u.call_date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : ''
+            return (
+              <div key={u.id||idx} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, marginBottom:16, overflow:'hidden' }}>
+
+                {/* Card header */}
+                <div style={{ padding:'14px 16px', borderBottom:`1px solid ${B.border}`,
+                  display:'flex', alignItems:'flex-start', gap:10, flexWrap:'wrap' }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
+                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20,
+                        background:`${B.gold}22`, color:B.gold }}>
+                        {u.call_type || 'Coach Note'}
+                      </span>
+                      <span style={{ fontSize:11, color:B.muted }}>{dateStr}</span>
+                    </div>
+                    {u.next_call_date && (
+                      <div style={{ fontSize:11, color:B.muted }}>
+                        📅 Next call: {new Date(u.next_call_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Loom embed */}
+                {embed && (
+                  <div style={{ position:'relative', paddingBottom:'56.25%', overflow:'hidden', borderBottom:`1px solid ${B.border}` }}>
+                    <iframe src={embed} allowFullScreen title={`Coach update — ${dateStr}`}
+                      style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none' }}/>
+                  </div>
+                )}
+
+                {/* Body */}
+                <div style={{ padding:'14px 16px' }}>
+                  {u.summary && (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:0.8, textTransform:'uppercase', marginBottom:6 }}>Summary</div>
+                      <div style={{ fontSize:13, color:B.text, lineHeight:1.7 }}>{u.summary}</div>
+                    </div>
+                  )}
+                  {u.focus_points && (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:0.8, textTransform:'uppercase', marginBottom:6 }}>Focus Points</div>
+                      {String(u.focus_points).split('\n').filter(Boolean).map((pt:string, i:number) => (
+                        <div key={i} style={{ display:'flex', gap:8, marginBottom:6 }}>
+                          <span style={{ color:B.gold, flexShrink:0, lineHeight:1.5 }}>•</span>
+                          <span style={{ fontSize:12, color:B.text, lineHeight:1.5 }}>{pt}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {u.action_items && (
+                    <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}33`, borderRadius:10, padding:'12px 14px' }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:B.gold, letterSpacing:0.8, textTransform:'uppercase', marginBottom:8 }}>✅ Your Action Items</div>
+                      {String(u.action_items).split('\n').filter(Boolean).map((item:string, i:number) => (
+                        <div key={i} style={{ display:'flex', gap:8, marginBottom:6 }}>
+                          <span style={{ color:B.gold, flexShrink:0, fontSize:12, lineHeight:1.5 }}>→</span>
+                          <span style={{ fontSize:12, color:B.text, lineHeight:1.5 }}>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </>)}
+
+        {/* ── PHOTOS ─────────────────────────────────────────────────── */}
+        {subTab === 'photos' && (<>
+          <input type="file" ref={fileRef} accept="image/*" style={{ display:'none' }} onChange={uploadPhoto}/>
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            style={{ width:'100%', background:'none', border:`2px dashed ${B.gold}66`, borderRadius:12,
+              padding:'18px', color:B.gold, fontSize:13, fontWeight:700,
+              cursor:uploading?'not-allowed':'pointer', marginBottom:6,
+              display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              opacity:uploading?0.5:1 }}>
+            {uploading ? '⏳ Uploading…' : '📸 Upload Progress Photo'}
+          </button>
+          <div style={{ fontSize:11, color:B.muted, textAlign:'center', marginBottom:20 }}>
+            Upload front, side, and back — your coach can see these
+          </div>
+
+          {photos === null ? (
+            <div style={{ textAlign:'center', padding:40, color:B.muted }}>Loading…</div>
+          ) : Object.keys(photosByWeek).length === 0 ? (
+            <div style={{ textAlign:'center', padding:40 }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>📸</div>
+              <div style={{ fontSize:14, fontWeight:700, color:B.white, marginBottom:6 }}>No photos yet</div>
+              <div style={{ fontSize:12, color:B.muted }}>Tap the button above to upload your first progress photos.</div>
+            </div>
+          ) : Object.entries(photosByWeek).map(([week, wPhotos]) => (
+            <div key={week} style={{ marginBottom:22 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:B.white }}>{week}</div>
+                  <div style={{ fontSize:11, color:B.muted }}>
+                    {(wPhotos[0] as any).taken_at ? new Date((wPhotos[0] as any).taken_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''}
+                  </div>
+                </div>
+                <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:20, background:`${B.gold}22`, color:B.gold }}>
+                  {wPhotos.length} photo{wPhotos.length!==1?'s':''}
+                </span>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8 }}>
+                {(wPhotos as any[]).map((p:any, i:number) => (
+                  p.photo_url ? (
+                    <a key={i} href={p.photo_url} target="_blank" rel="noreferrer" style={{ display:'block' }}>
+                      <img src={p.photo_url} alt={`${week} photo ${i+1}`}
+                        style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', borderRadius:10, display:'block', border:`1px solid ${B.border}` }}/>
+                    </a>
+                  ) : (
+                    <div key={i} style={{ aspectRatio:'3/4', background:B.surface, border:`1px solid ${B.border}`,
+                      borderRadius:10, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
+                      <Ic n="photos" size={22} c={B.muted}/>
+                      <span style={{ fontSize:9, color:B.muted }}>{p.notes||'Photo'}</span>
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+          ))}
+        </>)}
+
+      </div>
+    </div>
+  )
+}
+
 // ─── BOOKING / BOOK A CALL SCREEN (client sidebar item) ──────────────────────
 function BookingScreen({ currentUser }: { currentUser: any }) {
   const isCoach = currentUser?.role === 'coach' || currentUser?.role === 'super_admin'
@@ -2428,6 +2868,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"labs",      icon:"labs",      label:"Labs" },
     { key:"workout",   icon:"workout",   label:"Workout" },
     { key:"calendar",  icon:"calendar",  label:"Book a Call" },
+    { key:"progress",  icon:"progress",  label:"My Progress" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
@@ -2486,6 +2927,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "diet")         return <DietBuilder currentUser={toolUser}/>;
     if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements"/>;
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
+    if (tab === "progress")     return <ClientProgressScreen currentUser={toolUser}/>;
     if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs"/>;
     if (tab === "checkin")      return <CheckInScreen/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
