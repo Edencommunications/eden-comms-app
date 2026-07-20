@@ -677,11 +677,19 @@ export default function Messaging({ currentUser, loomMode = false }) {
         <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`,
           padding:'0 12px', display:'flex', alignItems:'center', flexShrink:0, gap:8, height:52 }}>
           {/* Back button — mobile only */}
-          {isMobile && (
+          {/* Back / close button — on mobile shows ← Back, on desktop shows × */}
+          {isMobile ? (
             <button onClick={closeConvo}
               style={{ background:'none', border:'none', color:C.white, fontSize:18, cursor:'pointer',
                 padding:'4px 8px 4px 0', flexShrink:0, display:'flex', alignItems:'center', gap:4 }}>
               ← <span style={{ fontSize:13, fontWeight:600 }}>Back</span>
+            </button>
+          ) : (
+            <button onClick={closeConvo} title="Close conversation"
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:8,
+                color:C.muted, fontSize:16, cursor:'pointer', padding:'4px 10px',
+                flexShrink:0, lineHeight:1, display:'flex', alignItems:'center' }}>
+              ×
             </button>
           )}
           {/* Active client info */}
