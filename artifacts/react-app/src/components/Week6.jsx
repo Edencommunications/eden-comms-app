@@ -526,7 +526,15 @@ export default function Week6({currentUser, onNavigate}) {
                       ['📝 Consultation', 'consultation'],
                     ].map(([label,dest])=>(
                       <button key={dest}
-                        onClick={()=>onNavigate&&onNavigate(dest,{email:selectedClient.email,name:selectedClient.name,role:selectedClient.role})}
+                        onClick={()=>{
+                          if (dest==='consultation') {
+                            // Stay in Week6, just switch to the consultation sub-tab
+                            setTab('consultation')
+                            setSelectedClient(null)
+                          } else {
+                            onNavigate&&onNavigate(dest,{email:selectedClient.email,name:selectedClient.name,role:selectedClient.role})
+                          }
+                        }}
                         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:12,fontWeight:500,cursor:'pointer',textAlign:'left'}}>
                         {label}
                       </button>

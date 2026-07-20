@@ -287,14 +287,14 @@ function ReadOnlyFoodRow({item}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function DietBuilder({currentUser}) {
+export default function DietBuilder({currentUser, initialTab='plan'}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User'}
   const role    = info.role
   const isCoach = role==='coach'||role==='super_admin'
   const isClient= role==='client'
 
-  const [tab,        setTab]        = useState('plan')
+  const [tab,        setTab]        = useState(initialTab)
   const [dayType,    setDayType]    = useState('high')
   const [protocol,   setProtocol]   = useState('Base Diet Protocol Male')
   const [showPicker, setShowPicker] = useState(false)
