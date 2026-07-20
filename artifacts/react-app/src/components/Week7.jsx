@@ -11,9 +11,6 @@ import { useState, useEffect, useRef } from 'react'
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-// Default client-facing booking link (GHL) — coach can update in the app
-const DEFAULT_BOOKING_URL = 'https://links.lifestyleofeden.com/widget/booking/2kKUGzYZqAaNBVpd5uzA'
-
 const DAILY_DOMAIN = 'edencommunications'
 
 const KNOWN_USERS = {
@@ -71,18 +68,6 @@ function Card({children, sx={}}) {
   )
 }
 
-// ── Wearable demo data ────────────────────────────────────────
-const OURA_SAMPLE = {
-  hrv:48, restingHr:58, sleepScore:82, sleepHours:7.4,
-  recoveryScore:null, steps:9840, bodyTemp:97.9,
-  date:'2026-07-14', source:'oura',
-}
-const WHOOP_SAMPLE = {
-  hrv:52, restingHr:56, sleepScore:78, sleepHours:7.1,
-  recoveryScore:71, steps:null, bodyTemp:null,
-  date:'2026-07-14', source:'whoop',
-}
-
 // ════════════════════════════════════════════════════════════════
 // LEFT NAV SIDEBAR ITEM
 // ════════════════════════════════════════════════════════════════
@@ -127,7 +112,7 @@ export default function Week7({ currentUser }) {
   }
 
   // ── Section tab ────────────────────────────────────────────
-  const [section, setSection] = useState('chat') // chat | booking | calendar | huddle | wearables
+  const [section, setSection] = useState('chat') // chat | calendar | huddle
 
   // ── Team Chat state ────────────────────────────────────────
   const [messages, setMessages] = useState([
@@ -151,12 +136,6 @@ export default function Week7({ currentUser }) {
   const bottomRef   = useRef(null)
   const dmBottomRef = useRef(null)
 
-  // ── Booking calendar state ─────────────────────────────────
-  const [bookingUrl,     setBookingUrl]     = useState(DEFAULT_BOOKING_URL)
-  const [editingBooking, setEditingBooking] = useState(false)
-  const [tempBookingUrl, setTempBookingUrl] = useState('')
-  const [bookingSaved,   setBookingSaved]   = useState(false)
-
   // ── My Calendar (Google Calendar embed) ───────────────────
   const [calendarUrl, setCalendarUrl] = useState('https://calendar.google.com/calendar/embed?src=lifestyleofeden%40gmail.com&ctz=America%2FChicago')
   const [editingCal,  setEditingCal]  = useState(false)
@@ -167,13 +146,6 @@ export default function Week7({ currentUser }) {
   const [huddleActive,  setHuddleActive]  = useState(false)
   const [huddleRoomUrl, setHuddleRoomUrl] = useState('')
   const [huddlePinging, setHuddlePinging] = useState(null)
-
-  // ── Wearables state ────────────────────────────────────────
-  const [ouConnected, setOuConnected] = useState(false)
-  const [whConnected, setWhConnected] = useState(false)
-  const [ouData,      setOuData]      = useState(null)
-  const [whData,      setWhData]      = useState(null)
-  const [connecting,  setConnecting]  = useState(null)
 
   // Load saved URLs from Supabase on mount
   useEffect(() => {
@@ -187,7 +159,6 @@ export default function Week7({ currentUser }) {
   async function loadSettings() {
     const data = await dbGet('coach_settings', `user_id=eq.${myUUID}`)
     if (data?.[0]?.calendar_url)  setCalendarUrl(data[0].calendar_url)
-    if (data?.[0]?.booking_url)   setBookingUrl(data[0].booking_url)
   }
 
   async function saveCalendarUrl() {
@@ -202,20 +173,6 @@ export default function Week7({ currentUser }) {
     setEditingCal(false)
     setCalSaved(true)
     setTimeout(() => setCalSaved(false), 3000)
-  }
-
-  async function saveBookingUrl() {
-    if (!tempBookingUrl.trim()) return
-    await fetch(`${SUPABASE_URL}/rest/v1/coach_settings`, {
-      method:'POST',
-      headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({ user_id:myUUID, org_id:orgId, booking_url:tempBookingUrl.trim(), updated_at:new Date().toISOString() }),
-    })
-    setBookingUrl(tempBookingUrl.trim())
-    setTempBookingUrl('')
-    setEditingBooking(false)
-    setBookingSaved(true)
-    setTimeout(() => setBookingSaved(false), 3000)
   }
 
   // ── Chat helpers ───────────────────────────────────────────
@@ -251,7 +208,7 @@ export default function Week7({ currentUser }) {
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name })
   }
 
-  // ── Huddle helpers ─────────────────────────────────────────
+  // ── Huddle helpers ──────────────────────────────────────────
   async function startHuddle() {
     const roomName = `eden-${orgId.slice(0,8)}-${Date.now()}`
     const roomUrl  = `https://${DAILY_DOMAIN}.daily.co/${roomName}`
@@ -271,26 +228,15 @@ export default function Week7({ currentUser }) {
     setTimeout(() => setHuddlePinging(null), 3000)
   }
 
-  // ── Wearable helpers ───────────────────────────────────────
-  async function connectWearable(device) {
-    setConnecting(device)
-    await new Promise(r => setTimeout(r, 1500))
-    if (device === 'oura')  { setOuConnected(true); setOuData(OURA_SAMPLE) }
-    if (device === 'whoop') { setWhConnected(true); setWhData(WHOOP_SAMPLE) }
-    setConnecting(null)
-  }
-
   const dmKey    = dmTarget ? [myUUID, dmTarget.uuid].sort().join('_') : null
   const dmConvo  = dmKey ? (dmMessages[dmKey] || []) : []
   const otherCoaches = DEMO_COACHES.filter(c => c.uuid !== myUUID)
 
   // ─── Sidebar nav items ─────────────────────────────────────
   const NAV = [
-    { key:'chat',      icon:'💬', label:'Team Chat' },
-    { key:'booking',   icon:'📅', label:'Book a Call' },
-    { key:'calendar',  icon:'🗓',  label:'My Calendar' },
-    { key:'huddle',    icon:'🎙',  label:'Huddle',    badge: huddleActive },
-    { key:'wearables', icon:'⌚', label:'Wearables'  },
+    { key:'chat',     icon:'💬', label:'Team Chat'   },
+    { key:'calendar', icon:'🗓',  label:'My Calendar' },
+    { key:'huddle',   icon:'🎙',  label:'Huddle',     badge: huddleActive },
   ]
 
   // ════════════════════════════════════════════════════════════
@@ -558,77 +504,6 @@ export default function Week7({ currentUser }) {
         )}
 
         {/* ══════════════════════════════════════════════════
-            BOOK A CALL — client-facing booking calendar
-            This is what clients use to schedule consultations
-        ══════════════════════════════════════════════════ */}
-        {section==='booking' && (
-          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-            <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:700,color:C.white}}>📅 Book a Call</div>
-                <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                  Client consultation booking — this is the calendar your clients use to schedule with you
-                </div>
-              </div>
-
-              {!editingBooking ? (
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  {bookingSaved && <span style={{fontSize:10,color:C.success,fontWeight:700}}>✓ Saved</span>}
-                  <button onClick={() => { setEditingBooking(true); setTempBookingUrl(bookingUrl) }}
-                    style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 12px',color:C.muted,fontSize:11,cursor:'pointer'}}>
-                    ✏️ Update Booking URL
-                  </button>
-                </div>
-              ) : (
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <input value={tempBookingUrl} onChange={e => setTempBookingUrl(e.target.value)}
-                    placeholder="Paste GHL or Calendly booking URL…"
-                    style={{width:280,background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 10px',color:C.white,fontSize:11,outline:'none'}}/>
-                  <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>
-                    {tempBookingUrl.includes('calendly')?'Calendly':'GHL'} detected
-                  </span>
-                  <button onClick={saveBookingUrl}
-                    style={{background:C.gold,border:'none',borderRadius:7,padding:'6px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
-                    Save
-                  </button>
-                  <button onClick={() => { setEditingBooking(false); setTempBookingUrl('') }}
-                    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 10px',color:C.muted,fontSize:11,cursor:'pointer'}}>
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Info bar — context for the coach */}
-            <div style={{padding:'8px 16px',background:`${C.gold}0a`,borderBottom:`1px solid ${C.gold}22`,flexShrink:0,display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontSize:13}}>💡</span>
-              <span style={{fontSize:11,color:C.muted}}>
-                This booking link is also shown to clients in their <strong style={{color:C.white}}>Check-In</strong> and <strong style={{color:C.white}}>Labs</strong> tabs.
-                Any URL change here updates it everywhere.
-              </span>
-            </div>
-
-            {/* Booking embed */}
-            <div style={{flex:1,overflow:'hidden',position:'relative'}}>
-              {bookingUrl ? (
-                <iframe
-                  src={bookingUrl}
-                  style={{width:'100%',height:'100%',border:'none'}}
-                  title="Client Booking Calendar"
-                  allow="camera; microphone; autoplay; encrypted-media"
-                />
-              ) : (
-                <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',flexDirection:'column',gap:12}}>
-                  <div style={{fontSize:48}}>📅</div>
-                  <div style={{fontSize:15,fontWeight:700,color:C.white}}>No booking link configured</div>
-                  <div style={{fontSize:12,color:C.muted}}>Paste your GHL or Calendly URL above</div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════
             MY CALENDAR — coach's personal Google Calendar
         ══════════════════════════════════════════════════ */}
         {section==='calendar' && (
@@ -780,128 +655,6 @@ export default function Week7({ currentUser }) {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════
-            WEARABLES
-        ══════════════════════════════════════════════════ */}
-        {section==='wearables' && (
-          <div style={{flex:1,overflowY:'auto',padding:16}}>
-            <div style={{padding:'0 0 14px'}}>
-              <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:4}}>⌚ Wearable Devices</div>
-              <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
-                Connect your devices to pull health data automatically into client check-ins.
-              </div>
-            </div>
-
-            {/* Oura Ring */}
-            <Card sx={{marginBottom:12}}>
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:ouConnected?14:0}}>
-                <div style={{width:44,height:44,borderRadius:22,background:'#1a1a2e',border:`2px solid ${ouConnected?C.success:'#444'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>
-                  💍
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:700,color:C.white}}>Oura Ring</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>HRV · Sleep Score · Resting HR · Body Temp · Steps</div>
-                </div>
-                {ouConnected ? (
-                  <span style={{fontSize:10,background:`${C.success}22`,color:C.success,padding:'3px 9px',borderRadius:10,fontWeight:700,flexShrink:0}}>✓ Connected</span>
-                ) : (
-                  <button onClick={() => connectWearable('oura')} disabled={connecting==='oura'}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',opacity:connecting==='oura'?.6:1,flexShrink:0}}>
-                    {connecting==='oura'?'Connecting…':'Connect'}
-                  </button>
-                )}
-              </div>
-
-              {ouConnected && ouData && (
-                <>
-                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Latest Data — {ouData.date}</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(100px,1fr))',gap:8}}>
-                    {[
-                      ['HRV',        ouData.hrv,                       'ms',   '#4FD89A'],
-                      ['Resting HR', ouData.restingHr,                 'bpm',  '#f06060'],
-                      ['Sleep Score',ouData.sleepScore,                '/100', '#6FB8E8'],
-                      ['Sleep',      ouData.sleepHours,                'hrs',  '#D4A8F0'],
-                      ['Steps',      ouData.steps?.toLocaleString(),   '',     '#ffa600'],
-                      ['Body Temp',  ouData.bodyTemp,                  '°F',   '#E8B86D'],
-                    ].map(([l,v,u,col]) => (
-                      <div key={l} style={{background:C.surface,borderRadius:8,padding:'10px 12px',textAlign:'center'}}>
-                        <div style={{fontSize:16,fontWeight:800,color:col}}>{v}{u}</div>
-                        <div style={{fontSize:9,color:C.muted,marginTop:3}}>{l}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <button style={{width:'100%',marginTop:12,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'8px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                    ↻ Sync Latest Data
-                  </button>
-                  <div style={{marginTop:10,padding:'8px 10px',background:`${C.success}11`,border:`1px solid ${C.success}33`,borderRadius:8,fontSize:10,color:C.success}}>
-                    ✓ Data will auto-fill your weekly check-in fields on check-in day
-                  </div>
-                </>
-              )}
-            </Card>
-
-            {/* Whoop */}
-            <Card sx={{marginBottom:12}}>
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:whConnected?14:0}}>
-                <div style={{width:44,height:44,borderRadius:10,background:'#0d0d0d',border:`2px solid ${whConnected?C.success:'#444'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>
-                  ⌚
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:700,color:C.white}}>Whoop</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>HRV · Recovery Score · Sleep · Resting HR</div>
-                </div>
-                {whConnected ? (
-                  <span style={{fontSize:10,background:`${C.success}22`,color:C.success,padding:'3px 9px',borderRadius:10,fontWeight:700,flexShrink:0}}>✓ Connected</span>
-                ) : (
-                  <button onClick={() => connectWearable('whoop')} disabled={connecting==='whoop'}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',opacity:connecting==='whoop'?.6:1,flexShrink:0}}>
-                    {connecting==='whoop'?'Connecting…':'Connect'}
-                  </button>
-                )}
-              </div>
-
-              {whConnected && whData && (
-                <>
-                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Latest Data — {whData.date}</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(100px,1fr))',gap:8}}>
-                    {[
-                      ['HRV',        whData.hrv,           'ms',   '#4FD89A'],
-                      ['Recovery',   whData.recoveryScore, '%',    whData.recoveryScore>=67?'#4FD89A':whData.recoveryScore>=34?'#ffa600':'#f06060'],
-                      ['Resting HR', whData.restingHr,     'bpm',  '#f06060'],
-                      ['Sleep Score',whData.sleepScore,    '/100', '#6FB8E8'],
-                      ['Sleep',      whData.sleepHours,    'hrs',  '#D4A8F0'],
-                    ].map(([l,v,u,col]) => (
-                      <div key={l} style={{background:C.surface,borderRadius:8,padding:'10px 12px',textAlign:'center'}}>
-                        <div style={{fontSize:16,fontWeight:800,color:col}}>{v}{u}</div>
-                        <div style={{fontSize:9,color:C.muted,marginTop:3}}>{l}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <button style={{width:'100%',marginTop:12,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'8px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                    ↻ Sync Latest Data
-                  </button>
-                  <div style={{marginTop:10,padding:'8px 10px',background:`${C.success}11`,border:`1px solid ${C.success}33`,borderRadius:8,fontSize:10,color:C.success}}>
-                    ✓ Data will auto-fill your weekly check-in fields on check-in day
-                  </div>
-                </>
-              )}
-            </Card>
-
-            {/* Apple Watch — coming soon */}
-            <Card sx={{marginBottom:20,opacity:.6}}>
-              <div style={{display:'flex',alignItems:'center',gap:12}}>
-                <div style={{width:44,height:44,borderRadius:10,background:'#1a1a1a',border:'2px solid #333',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>
-                  🍎
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:700,color:C.muted}}>Apple Watch / Apple Health</div>
-                  <div style={{fontSize:11,color:C.dim,marginTop:1}}>Requires the Eden Communications mobile app · Coming in a future update</div>
-                </div>
-                <span style={{fontSize:10,background:`${C.dim}44`,color:C.muted,padding:'3px 9px',borderRadius:10,fontWeight:700,flexShrink:0}}>Soon</span>
-              </div>
-            </Card>
-          </div>
-        )}
 
       </div>
 
