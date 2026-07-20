@@ -129,9 +129,7 @@ export default function Week6({currentUser, onNavigate}) {
 
   // ── Consultation state ────────────────────────────────────
   const [intake, setIntake] = useState({
-    healthHistory:'', currentMeds:'', conditions:'', goals:'',
-    lifestyleNotes:'', callNotes:'', whatBroughtIn:'',
-    startDate:'', startWeight:'', startPhotos:'',
+    notes:'', startDate:'', startWeight:'',
   })
   const setI = k=>v=>setIntake(p=>({...p,[k]:v}))
 
@@ -181,10 +179,12 @@ export default function Week6({currentUser, onNavigate}) {
   async function saveIntake() {
     if (!selectedClient) return
     await dbInsert('client_intakes',{
-      client_id: selectedClient.uuid,
-      coach_id:  myUUID,
-      ...intake,
-      updated_at: new Date().toISOString(),
+      client_id:    selectedClient.uuid,
+      coach_id:     myUUID,
+      call_notes:   intake.notes,
+      start_date:   intake.startDate || null,
+      start_weight: intake.startWeight,
+      updated_at:   new Date().toISOString(),
     })
     alert('Intake saved successfully.')
   }
@@ -710,43 +710,31 @@ export default function Week6({currentUser, onNavigate}) {
 
           {/* Part 1: Intake */}
           <Card sx={{marginBottom:14}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
               <Lbl t="Initial Intake — Onboarding Consultation"/>
               {isClient&&<span style={{fontSize:9,background:`${C.gold}22`,color:C.gold,padding:'2px 7px',borderRadius:10,fontWeight:700,letterSpacing:.5}}>VIEW ONLY</span>}
             </div>
-            <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.5}}>
+            <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.5}}>
               {isCoach||isAdmin
-                ?'Filled once at client onboarding. Reference for all future coaching decisions.'
-                :'Your intake information from your initial onboarding consultation.'}
+                ?'Paste your full onboarding consultation notes from your Google Doc here. Saved once per client.'
+                :'Your intake notes from your initial onboarding consultation.'}
             </div>
 
-            {[
-              ['healthHistory','Health History',   'Previous diagnoses, injuries, surgeries, chronic conditions…','textarea'],
-              ['currentMeds',  'Current Medications','All prescription medications, doses, frequency…','textarea'],
-              ['conditions',   'Conditions / Diagnoses','PCOS, thyroid, adrenal, gut issues, autoimmune, etc…','textarea'],
-              ['goals',        'Client Goals',      '90-day, 6-month, and 1-year goals as stated on call…','textarea'],
-              ['whatBroughtIn','What Brought Them In','Why they signed up, what they have tried before, what is not working…','textarea'],
-              ['lifestyleNotes','Lifestyle Notes',  'Work schedule, family situation, stress levels, sleep habits, activity level…','textarea'],
-              ['callNotes',    'Initial Call Notes','Full notes from the onboarding call…','textarea'],
-              ['startDate',    'Start Date',        '','date'],
-              ['startWeight',  'Starting Weight (lbs)','e.g. 185','text'],
-            ].map(([key,label,placeholder,type])=>(
-              type==='textarea'?(
-                <div key={key} style={{marginBottom:12}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4,display:'flex',justifyContent:'space-between'}}>
-                    {label}
-                  </div>
-                  <textarea value={intake[key]} onChange={e=>isCoach||isAdmin?setI(key)(e.target.value):null}
-                    placeholder={isClient?'':placeholder}
-                    readOnly={isClient}
-                    rows={3}
-                    style={{width:'100%',background:isClient?C.dim:C.surface,border:`1px solid ${isClient?C.dim:C.border}`,borderRadius:8,padding:'9px 12px',color:isClient?C.muted:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit',cursor:isClient?'not-allowed':'text'}}/>
-                </div>
-              ):(
-                <Inp key={key} label={label} value={intake[key]} onChange={isCoach||isAdmin?setI(key):undefined}
-                  type={type} placeholder={placeholder} disabled={isClient}/>
-              )
-            ))}
+            {/* Single paste area */}
+            <textarea
+              value={intake.notes}
+              onChange={e=>isCoach||isAdmin?setI('notes')(e.target.value):null}
+              readOnly={isClient}
+              placeholder={isCoach||isAdmin?'Paste your full onboarding consultation notes here — health history, current medications, conditions, goals, lifestyle, what brought them in, call notes, etc.':''}
+              rows={16}
+              style={{width:'100%',background:isClient?C.dim:C.surface,border:`1px solid ${isClient?C.dim:C.border}`,borderRadius:8,padding:'12px',color:isClient?C.muted:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit',lineHeight:1.7,cursor:isClient?'not-allowed':'text'}}
+            />
+
+            {/* Start date + weight row */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:14}}>
+              <Inp label="Start Date" value={intake.startDate} onChange={isCoach||isAdmin?setI('startDate'):undefined} type="date" disabled={isClient}/>
+              <Inp label="Starting Weight (lbs)" value={intake.startWeight} onChange={isCoach||isAdmin?setI('startWeight'):undefined} placeholder="e.g. 185" disabled={isClient}/>
+            </div>
 
             {(isCoach||isAdmin)&&(
               <button onClick={saveIntake}

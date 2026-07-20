@@ -350,12 +350,37 @@ export default function DietBuilder({currentUser}) {
   const [suppSearch,     setSuppSearch]     = useState('')
   const [suppCategory,   setSuppCategory]   = useState(Object.keys(SUPP_DB)[0])
   const [customSuppText, setCustomSuppText] = useState('')
-  const [rx,             setRx]             = useState('')
   const [coachNotes,     setCoachNotes]     = useState('')
   // Client's own notes on their supplement experience
   const [clientSuppNotes, setClientSuppNotes] = useState('')
   // Client's own prescription notes
   const [clientRxNotes, setClientRxNotes] = useState('')
+
+  // ── Rx / Prescription tracker ─────────────────────────────
+  const [rxList,       setRxList]       = useState([])
+  const [showRxForm,   setShowRxForm]   = useState(false)
+  const [newRx,        setNewRx]        = useState({ name:'', dose:'', directions:'', startDate: new Date().toISOString().slice(0,10) })
+  const [showTaperFor, setShowTaperFor] = useState(null) // rxId currently adding taper to
+  const [newTaper,     setNewTaper]     = useState({ date:'', dose:'', note:'' })
+
+  function addRx() {
+    if (!newRx.name.trim()||!newRx.dose.trim()) return
+    setRxList(prev=>[...prev,{ id:Date.now(), ...newRx, tapers:[] }])
+    setNewRx({ name:'', dose:'', directions:'', startDate: new Date().toISOString().slice(0,10) })
+    setShowRxForm(false)
+  }
+  function removeRx(id) { setRxList(prev=>prev.filter(r=>r.id!==id)) }
+  function addTaper(rxId) {
+    if (!newTaper.date.trim()||!newTaper.dose.trim()) return
+    setRxList(prev=>prev.map(r=>r.id===rxId
+      ?{...r,tapers:[...r.tapers,{id:Date.now(),...newTaper}].sort((a,b)=>a.date.localeCompare(b.date))}
+      :r))
+    setNewTaper({date:'',dose:'',note:''})
+    setShowTaperFor(null)
+  }
+  function removeTaper(rxId,taperId) {
+    setRxList(prev=>prev.map(r=>r.id===rxId?{...r,tapers:r.tapers.filter(t=>t.id!==taperId)}:r))
+  }
 
   const totals = meals.reduce((a,m)=>{
     const mt=mealMacros(m)
@@ -933,13 +958,135 @@ export default function DietBuilder({currentUser}) {
                 </div>
               </Card>
 
+              {/* ── Rx Tracker ── */}
               <Card sx={{marginBottom:12}}>
-                <Lbl t="Prescriptions / Medications"/>
-                <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Coach enters prescription protocol here. Client can add their own notes below.</div>
-                <textarea value={rx} onChange={e=>setRx(e.target.value)}
-                  placeholder="Prescription protocols, HRT, or medications…"
-                  rows={4}
-                  style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                  <Lbl t="Prescriptions / Medications"/>
+                  <button onClick={()=>setShowRxForm(v=>!v)}
+                    style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                    + Add Rx
+                  </button>
+                </div>
+
+                {/* Add Rx form */}
+                {showRxForm&&(
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:14,marginBottom:12}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.gold,marginBottom:10}}>New Prescription / Medication</div>
+                    <div style={{marginBottom:8}}>
+                      <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Medication Name *</div>
+                      <input value={newRx.name} onChange={e=>setNewRx(p=>({...p,name:e.target.value}))}
+                        placeholder="e.g. Testosterone Cypionate, Progesterone, T3…"
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                      <div>
+                        <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Starting Dose *</div>
+                        <input value={newRx.dose} onChange={e=>setNewRx(p=>({...p,dose:e.target.value}))}
+                          placeholder="e.g. 200mg/ml · 0.5ml"
+                          style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                      </div>
+                      <div>
+                        <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Start Date</div>
+                        <input type="date" value={newRx.startDate} onChange={e=>setNewRx(p=>({...p,startDate:e.target.value}))}
+                          style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                      </div>
+                    </div>
+                    <div style={{marginBottom:12}}>
+                      <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Frequency / Directions</div>
+                      <input value={newRx.directions} onChange={e=>setNewRx(p=>({...p,directions:e.target.value}))}
+                        placeholder="e.g. 2x per week — Monday and Thursday"
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                    </div>
+                    <div style={{display:'flex',gap:8}}>
+                      <button onClick={()=>setShowRxForm(false)}
+                        style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px',color:C.muted,fontSize:12,cursor:'pointer'}}>
+                        Cancel
+                      </button>
+                      <button onClick={addRx} disabled={!newRx.name.trim()||!newRx.dose.trim()}
+                        style={{flex:2,background:C.gold,border:'none',borderRadius:7,padding:'8px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:newRx.name.trim()&&newRx.dose.trim()?1:.5}}>
+                        Save Rx
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {rxList.length===0&&!showRxForm&&(
+                  <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'8px 0'}}>Click + Add Rx to enter a prescription or medication protocol.</div>
+                )}
+
+                {/* Rx entries */}
+                {rxList.map(rx=>(
+                  <div key={rx.id} style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:12}}>
+                    {/* Rx header */}
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:700,color:C.white}}>{rx.name}</div>
+                        <div style={{fontSize:12,color:C.gold,marginTop:2}}>{rx.dose}</div>
+                        {rx.directions&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{rx.directions}</div>}
+                        {rx.startDate&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Started: {new Date(rx.startDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
+                      </div>
+                      <button onClick={()=>removeRx(rx.id)}
+                        style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 4px',flexShrink:0}}>×</button>
+                    </div>
+
+                    {/* Taper timeline */}
+                    {rx.tapers.length>0&&(
+                      <div style={{marginLeft:12,marginBottom:8,borderLeft:`2px solid ${C.border}`,paddingLeft:12}}>
+                        <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>Taper Schedule</div>
+                        {rx.tapers.map(t=>(
+                          <div key={t.id} style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:8}}>
+                            <div style={{width:8,height:8,borderRadius:4,background:C.gold,marginTop:4,flexShrink:0}}/>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:11,color:C.white,fontWeight:600}}>{new Date(t.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} — <span style={{color:C.gold}}>{t.dose}</span></div>
+                              {t.note&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{t.note}</div>}
+                            </div>
+                            <button onClick={()=>removeTaper(rx.id,t.id)}
+                              style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:'0 2px',flexShrink:0}}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add taper step */}
+                    {showTaperFor===rx.id?(
+                      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:12,marginTop:8}}>
+                        <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:8,textTransform:'uppercase',letterSpacing:.8}}>Add Taper / Adjustment Step</div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                          <div>
+                            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Effective Date *</div>
+                            <input type="date" value={newTaper.date} onChange={e=>setNewTaper(p=>({...p,date:e.target.value}))}
+                              style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 9px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div>
+                            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>New Dose *</div>
+                            <input value={newTaper.dose} onChange={e=>setNewTaper(p=>({...p,dose:e.target.value}))}
+                              placeholder="e.g. 0.35ml, stop, hold"
+                              style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 9px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                        </div>
+                        <div style={{marginBottom:10}}>
+                          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Notes (optional)</div>
+                          <input value={newTaper.note} onChange={e=>setNewTaper(p=>({...p,note:e.target.value}))}
+                            placeholder="e.g. Reducing due to elevated E2, recheck labs Aug 1"
+                            style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 9px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                        </div>
+                        <div style={{display:'flex',gap:8}}>
+                          <button onClick={()=>setShowTaperFor(null)}
+                            style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
+                          <button onClick={()=>addTaper(rx.id)} disabled={!newTaper.date.trim()||!newTaper.dose.trim()}
+                            style={{flex:2,background:C.gold,border:'none',borderRadius:7,padding:'7px',fontWeight:800,color:C.black,fontSize:11,cursor:'pointer',opacity:newTaper.date.trim()&&newTaper.dose.trim()?1:.5}}>
+                            Save Step
+                          </button>
+                        </div>
+                      </div>
+                    ):(
+                      <button onClick={()=>{ setShowTaperFor(rx.id); setNewTaper({date:'',dose:'',note:''}) }}
+                        style={{fontSize:11,color:C.muted,background:'none',border:`1px dashed ${C.border}`,borderRadius:6,padding:'5px 10px',cursor:'pointer',marginTop:4}}>
+                        + Add Taper / Adjustment Step
+                      </button>
+                    )}
+                  </div>
+                ))}
               </Card>
 
               <Card sx={{marginBottom:12}}>
@@ -993,19 +1140,45 @@ export default function DietBuilder({currentUser}) {
                   style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
               </Card>
 
-              {/* Prescription section — view coach's entry, client adds own notes */}
-              {rx&&(
+              {/* Prescription section — read-only view of coach's Rx tracker */}
+              {rxList.length>0&&(
                 <Card sx={{marginBottom:12}}>
                   <div style={{display:'flex',alignItems:'center',marginBottom:10}}>
                     <Lbl t="Prescriptions / Medications"/>
                     <ReadOnlyBadge/>
                   </div>
-                  <div style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',marginBottom:12}}>{rx}</div>
-                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>My Prescription Notes</div>
-                  <textarea value={clientRxNotes} onChange={e=>setClientRxNotes(e.target.value)}
-                    placeholder="Add any questions or notes about your prescriptions for your coach…"
-                    rows={3}
-                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+
+                  {rxList.map((rx,i)=>(
+                    <div key={rx.id} style={{borderTop:i>0?`1px solid ${C.border}`:undefined,paddingTop:i>0?12:0,marginTop:i>0?12:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:2}}>{rx.name}</div>
+                      <div style={{fontSize:12,color:C.gold,marginBottom:2}}>{rx.dose}</div>
+                      {rx.directions&&<div style={{fontSize:11,color:C.muted,marginBottom:2}}>{rx.directions}</div>}
+                      {rx.startDate&&<div style={{fontSize:10,color:C.muted,marginBottom:6}}>Started: {new Date(rx.startDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
+
+                      {rx.tapers.length>0&&(
+                        <div style={{marginLeft:12,borderLeft:`2px solid ${C.border}`,paddingLeft:12}}>
+                          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>Taper Schedule</div>
+                          {rx.tapers.map(t=>(
+                            <div key={t.id} style={{display:'flex',gap:8,marginBottom:7,alignItems:'flex-start'}}>
+                              <div style={{width:8,height:8,borderRadius:4,background:C.gold,marginTop:4,flexShrink:0}}/>
+                              <div>
+                                <div style={{fontSize:11,color:C.white,fontWeight:600}}>{new Date(t.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} — <span style={{color:C.gold}}>{t.dose}</span></div>
+                                {t.note&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.note}</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>My Prescription Notes</div>
+                    <textarea value={clientRxNotes} onChange={e=>setClientRxNotes(e.target.value)}
+                      placeholder="Add any questions or notes about your prescriptions for your coach…"
+                      rows={3}
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                  </div>
                 </Card>
               )}
 
