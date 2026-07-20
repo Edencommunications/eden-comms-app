@@ -523,6 +523,7 @@ export default function Week6({currentUser, onNavigate}) {
                       ['💊 Supplements',  'supplements'],
                       ['💪 Workout',      'workout'],
                       ['🧪 Labs',         'labs'],
+                      ['⌚ Wearables',    'wearables'],
                       ['📝 Consultation', 'consultation'],
                     ].map(([label,dest])=>(
                       <button key={dest}

@@ -21,6 +21,7 @@ import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
+import Wearables from "./components/Wearables";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -2407,6 +2408,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout"/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
                                           onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}/>;
+    if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
     if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "community") return <CommunityScreen/>;
