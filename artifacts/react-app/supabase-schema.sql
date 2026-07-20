@@ -564,12 +564,17 @@ CREATE TABLE IF NOT EXISTS progress_photos (
 -- ── Eden org — insert into BOTH tables ────────────────────────────────────
 -- Your existing user_profiles.company_id FK points to "companies", so that
 -- table must have the row before the user inserts below can succeed.
+-- Upsert on slug so the row always ends up with the fixed UUID the app expects.
+-- If a "eden" row already exists with a different id, this overwrites it.
 INSERT INTO companies (id, name, slug)
 VALUES (
   'b0000000-0000-0000-0000-000000000001',
   'Lifestyle of Eden',
   'eden'
-) ON CONFLICT (id) DO NOTHING;
+)
+ON CONFLICT (slug) DO UPDATE SET
+  id   = EXCLUDED.id,
+  name = EXCLUDED.name;
 
 -- Also keep the row in organizations (used by Week 6 admin screens).
 INSERT INTO organizations (id, name, slug, brand_color, plan, is_white_label)
