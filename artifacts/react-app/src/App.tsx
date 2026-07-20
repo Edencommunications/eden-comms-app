@@ -20,6 +20,7 @@ import Notifications from "./components/Notifications";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
+import Week7 from "./components/Week7";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -80,6 +81,7 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
     learn:    <><path d="M22 10v6M2 10l10-5 10 5-10 5z" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 12v5c3 3 9 3 12 0v-5" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></>,
     upload:   <><polyline points="16,16 12,12 8,16" fill="none" stroke={c} strokeWidth="1.8"/><line x1="12" y1="12" x2="12" y2="21" stroke={c} strokeWidth="1.8"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" fill="none" stroke={c} strokeWidth="1.8"/></>,
     shop:     <><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" fill="none" stroke={c} strokeWidth="1.8"/><line x1="3" y1="6" x2="21" y2="6" stroke={c} strokeWidth="1.8"/><path d="M16 10a4 4 0 0 1-8 0" fill="none" stroke={c} strokeWidth="1.8"/></>,
+    team:     <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" fill="none" stroke={c} strokeWidth="1.8"/><circle cx="9" cy="7" r="4" fill="none" stroke={c} strokeWidth="1.8"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke={c} strokeWidth="1.8"/></>,
   };
   return <svg width={sz} height={sz} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{d[n]}</svg>;
 };
@@ -2349,6 +2351,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"home",      icon:"home",      label:"Home" },
     { key:"msgs",      icon:"msg",       label:"Messages" },
     { key:"admin",     icon:"admin",     label:"Clients" },
+    { key:"team",      icon:"team",      label:"Team Hub" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
@@ -2356,6 +2359,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"home",      icon:"home",      label:"Home" },
     { key:"msgs",      icon:"msg",       label:"Messages" },
     { key:"admin",     icon:"admin",     label:"Admin" },
+    { key:"team",      icon:"team",      label:"Team Hub" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
@@ -2403,6 +2407,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout"/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
                                           onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}/>;
+    if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "community") return <CommunityScreen/>;
     return <HomeScreen user={user}/>;
