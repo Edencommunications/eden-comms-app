@@ -511,17 +511,11 @@ ALTER TABLE user_profiles
   ADD COLUMN IF NOT EXISTS is_online   BOOLEAN     DEFAULT false,
   ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMPTZ DEFAULT now();
 
--- Drop NOT NULL on full_name if it exists (app uses "name"; full_name may exist
--- from an earlier schema version with a stricter constraint)
-DO $
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'user_profiles' AND column_name = 'full_name'
-  ) THEN
-    ALTER TABLE user_profiles ALTER COLUMN full_name DROP NOT NULL;
-  END IF;
-END $;
+-- full_name may exist from an earlier schema version with a NOT NULL constraint.
+-- Step 1: ensure the column exists (no-op if already there).
+-- Step 2: make it nullable so INSERTs that don't supply it still work.
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE user_profiles ALTER COLUMN full_name DROP NOT NULL;
 
 -- organizations
 ALTER TABLE organizations
