@@ -189,8 +189,9 @@ export default function Week4({currentUser, initialTab='labs'}) {
   const [newComment,  setNewComment]  = useState('')
   const [labFilter,   setLabFilter]   = useState('All')
   const [uploading,   setUploading]   = useState(false)
-  const [newLabNote,  setNewLabNote]  = useState('')
-  const [newLabType,  setNewLabType]  = useState('Blood Work')
+  const [newLabNote,    setNewLabNote]    = useState('')
+  const [newLabType,    setNewLabType]    = useState('Blood Work')
+  const [newLabLoomUrl, setNewLabLoomUrl] = useState('')
   const labFileRef = useRef(null)
 
   // ── Workout state ─────────────────────────────────────────
@@ -262,11 +263,13 @@ export default function Week4({currentUser, initialTab='labs'}) {
         file_name:    file.name,
         file_size:    file.size,
         notes:        newLabNote,
+        loom_url:     newLabLoomUrl||null,
       })
       if (inserted) {
         const arr = Array.isArray(inserted)?inserted:[inserted]
         setLabs(p=>[arr[0],...p])
         setNewLabNote('')
+        setNewLabLoomUrl('')
       }
     } catch(err) {
       console.error('Lab upload error',err)
@@ -276,9 +279,11 @@ export default function Week4({currentUser, initialTab='labs'}) {
         uploaded_by:myUUID, uploader_name:info.name,
         lab_type:newLabType, notes:newLabNote,
         file_name:file.name, file_size:file.size,
+        loom_url:newLabLoomUrl||null,
       })
       loadLabs()
       setNewLabNote('')
+      setNewLabLoomUrl('')
     } finally {
       setUploading(false)
       if (labFileRef.current) labFileRef.current.value=''
@@ -400,6 +405,7 @@ export default function Week4({currentUser, initialTab='labs'}) {
             <div style={{padding:14,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
               <Sel label="Lab Type" value={newLabType} onChange={setNewLabType} options={LAB_TYPES}/>
               <Inp label="Notes (optional)" value={newLabNote} onChange={setNewLabNote} placeholder="e.g. Fasted 12hr before draw"/>
+              <Inp label="Loom Recording URL (optional)" value={newLabLoomUrl} onChange={setNewLabLoomUrl} placeholder="https://www.loom.com/share/…"/>
               <input type="file" ref={labFileRef} onChange={handleLabUpload} style={{display:'none'}}
                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/>
               <button onClick={()=>labFileRef.current?.click()} disabled={uploading}
@@ -490,6 +496,20 @@ export default function Week4({currentUser, initialTab='labs'}) {
                   <div style={{fontSize:13,color:C.white}}>{activeLab.notes}</div>
                 </div>
               )}
+
+              {/* Loom recording embed */}
+              {activeLab.loom_url&&(()=>{
+                const embed = activeLab.loom_url.replace('loom.com/share/','loom.com/embed/')
+                return embed ? (
+                  <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,marginBottom:8}}>🎥 COACH LAB REVIEW</div>
+                    <div style={{position:'relative',paddingBottom:'56.25%',overflow:'hidden',borderRadius:10,border:`1px solid ${C.border}`}}>
+                      <iframe src={embed} allowFullScreen title="Coach lab review"
+                        style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                    </div>
+                  </div>
+                ) : null
+              })()}
 
               {/* Comments */}
               <div style={{flex:1,overflowY:'auto',padding:16}}>

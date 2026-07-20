@@ -2589,13 +2589,27 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
                   </div>
                 </div>
 
-                {/* Loom embed */}
-                {embed && (
-                  <div style={{ position:'relative', paddingBottom:'56.25%', overflow:'hidden', borderBottom:`1px solid ${B.border}` }}>
-                    <iframe src={embed} allowFullScreen title={`Coach update — ${dateStr}`}
-                      style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none' }}/>
-                  </div>
-                )}
+                {/* Loom embed — or placeholder if no recording yet */}
+                <div style={{ borderBottom:`1px solid ${B.border}` }}>
+                  {embed ? (
+                    <div style={{ position:'relative', paddingBottom:'56.25%', overflow:'hidden' }}>
+                      <iframe src={embed} allowFullScreen title={`Coach update — ${dateStr}`}
+                        style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none' }}/>
+                    </div>
+                  ) : (
+                    <div style={{ padding:'18px 16px', display:'flex', alignItems:'center', gap:12, background:B.surface }}>
+                      <div style={{ width:40, height:40, borderRadius:20, background:`${B.gold}22`,
+                        border:`1px solid ${B.gold}44`, display:'flex', alignItems:'center',
+                        justifyContent:'center', fontSize:18, flexShrink:0 }}>🎥</div>
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:700, color:B.muted }}>No recording attached</div>
+                        <div style={{ fontSize:11, color:B.muted, marginTop:2 }}>
+                          Your coach can attach a Loom walk-through to this update — it will play here.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Body */}
                 <div style={{ padding:'14px 16px' }}>

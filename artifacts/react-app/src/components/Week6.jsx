@@ -139,7 +139,7 @@ export default function Week6({currentUser, onNavigate}) {
   const [showNewCall,   setShowNewCall]   = useState(false)
   const [newCall, setNewCall] = useState({
     callDate: new Date().toISOString().slice(0,10),
-    callType:'Monthly Check-In', summary:'', focusPoints:'', actionItems:'', nextCallDate:'',
+    callType:'Monthly Check-In', summary:'', focusPoints:'', actionItems:'', nextCallDate:'', loomUrl:'',
   })
   const setNC = k=>v=>setNewCall(p=>({...p,[k]:v}))
 
@@ -211,9 +211,10 @@ export default function Week6({currentUser, onNavigate}) {
       focus_points:   newCall.focusPoints,
       action_items:   newCall.actionItems,
       next_call_date: newCall.nextCallDate||null,
+      loom_url:       newCall.loomUrl||null,
     })
 
-    setNewCall({callDate:new Date().toISOString().slice(0,10),callType:'Monthly Check-In',summary:'',focusPoints:'',actionItems:'',nextCallDate:''})
+    setNewCall({callDate:new Date().toISOString().slice(0,10),callType:'Monthly Check-In',summary:'',focusPoints:'',actionItems:'',nextCallDate:'',loomUrl:''})
     setShowNewCall(false)
     alert('Call note saved.')
   }
@@ -806,6 +807,21 @@ export default function Week6({currentUser, onNavigate}) {
                   <div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{note.actionItems}</div>
                 </div>
               )}
+
+              {/* Loom recording embed */}
+              {(note.loomUrl||note.loom_url)&&(()=>{
+                const raw = note.loomUrl||note.loom_url||''
+                const embed = raw.replace('loom.com/share/','loom.com/embed/')
+                return embed ? (
+                  <div style={{marginTop:12}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🎥 Loom Recording</div>
+                    <div style={{position:'relative',paddingBottom:'56.25%',overflow:'hidden',borderRadius:10,border:`1px solid ${C.border}`}}>
+                      <iframe src={embed} allowFullScreen title="Loom recording"
+                        style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                    </div>
+                  </div>
+                ) : null
+              })()}
             </Card>
           ))}
         </div>
@@ -878,6 +894,13 @@ export default function Week6({currentUser, onNavigate}) {
                   style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
               </div>
               <Inp label="Next Call Date (optional)" value={newCall.nextCallDate} onChange={setNC('nextCallDate')} type="date"/>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Loom Recording URL (optional)</div>
+                <input value={newCall.loomUrl} onChange={e=>setNC('loomUrl')(e.target.value)}
+                  placeholder="https://www.loom.com/share/…"
+                  style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                <div style={{fontSize:10,color:C.muted,marginTop:4}}>Paste the Loom share link — the client will see the video embedded in their Coach Updates feed.</div>
+              </div>
             </div>
             <div style={{padding:'12px 20px',borderTop:`1px solid ${C.border}`,display:'flex',gap:10,flexShrink:0}}>
               <button onClick={()=>setShowNewCall(false)}
