@@ -464,27 +464,35 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies — allow the anon key to upload and read
-CREATE POLICY IF NOT EXISTS "anon_insert_lab_files"
+-- Drop first so the script is safe to re-run
+DROP POLICY IF EXISTS "anon_insert_lab_files"       ON storage.objects;
+DROP POLICY IF EXISTS "anon_select_lab_files"        ON storage.objects;
+DROP POLICY IF EXISTS "anon_insert_chat_media"       ON storage.objects;
+DROP POLICY IF EXISTS "anon_select_chat_media"       ON storage.objects;
+DROP POLICY IF EXISTS "anon_insert_progress_photos"  ON storage.objects;
+DROP POLICY IF EXISTS "anon_select_progress_photos"  ON storage.objects;
+
+CREATE POLICY "anon_insert_lab_files"
   ON storage.objects FOR INSERT TO anon
   WITH CHECK (bucket_id = 'lab-files');
 
-CREATE POLICY IF NOT EXISTS "anon_select_lab_files"
+CREATE POLICY "anon_select_lab_files"
   ON storage.objects FOR SELECT TO anon
   USING (bucket_id = 'lab-files');
 
-CREATE POLICY IF NOT EXISTS "anon_insert_chat_media"
+CREATE POLICY "anon_insert_chat_media"
   ON storage.objects FOR INSERT TO anon
   WITH CHECK (bucket_id = 'chat-media');
 
-CREATE POLICY IF NOT EXISTS "anon_select_chat_media"
+CREATE POLICY "anon_select_chat_media"
   ON storage.objects FOR SELECT TO anon
   USING (bucket_id = 'chat-media');
 
-CREATE POLICY IF NOT EXISTS "anon_insert_progress_photos"
+CREATE POLICY "anon_insert_progress_photos"
   ON storage.objects FOR INSERT TO anon
   WITH CHECK (bucket_id = 'progress-photos');
 
-CREATE POLICY IF NOT EXISTS "anon_select_progress_photos"
+CREATE POLICY "anon_select_progress_photos"
   ON storage.objects FOR SELECT TO anon
   USING (bucket_id = 'progress-photos');
 

@@ -5,4 +5,4 @@ generated = []
 id = "v0bl7xhuwnh0G32oYWu3v"
 uri = "file://artifacts/react-app/supabase-schema.sql"
 type = "unspecified"
-title = "Eden Communications — Complete Supabase Schema"
+title = "Eden Communications — Complete Supabase Schema (fixed)"
