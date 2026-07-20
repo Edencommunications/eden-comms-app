@@ -590,7 +590,23 @@ VALUES (
 -- ════════════════════════════════════════════════════════════════════════════
 -- 19. ADD COLUMNS (IF YOU ALREADY RAN AN OLDER VERSION OF THIS SCHEMA)
 --     Safe to run even if the columns already exist — IF NOT EXISTS guards them.
+--     These run BEFORE the seed inserts so column references never fail.
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- user_profiles — columns added after initial creation
+ALTER TABLE user_profiles
+  ADD COLUMN IF NOT EXISTS initials    TEXT,
+  ADD COLUMN IF NOT EXISTS coach_id    UUID REFERENCES user_profiles(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS company_id  UUID,
+  ADD COLUMN IF NOT EXISTS is_online   BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMPTZ DEFAULT now();
+
+-- organizations — columns added after initial creation
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS is_white_label BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS billing_email  TEXT,
+  ADD COLUMN IF NOT EXISTS calendar_url   TEXT,
+  ADD COLUMN IF NOT EXISTS created_by     UUID;
 
 -- consultation_notes — loom_url added this session
 ALTER TABLE consultation_notes
@@ -609,6 +625,19 @@ ALTER TABLE weekly_checkins
   ADD COLUMN IF NOT EXISTS "bowelType"       TEXT,
   ADD COLUMN IF NOT EXISTS coach_notes       TEXT,
   ADD COLUMN IF NOT EXISTS coach_reviewed_at TIMESTAMPTZ;
+
+-- progress_photos — may not exist yet
+CREATE TABLE IF NOT EXISTS progress_photos (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id   UUID        REFERENCES user_profiles(id),
+  week_label  TEXT,
+  photo_url   TEXT,
+  file_name   TEXT,
+  file_size   BIGINT,
+  notes       TEXT,
+  taken_at    TIMESTAMPTZ DEFAULT now(),
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
 
 
 -- ════════════════════════════════════════════════════════════════════════════
