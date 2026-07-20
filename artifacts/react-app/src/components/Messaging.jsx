@@ -266,26 +266,27 @@ export default function Messaging({ currentUser, loomMode = false }) {
   const conversations     = dynConversations ?? demoConversations
 
   // ── Conversation selection ────────────────────────────────
-  const [activeId,     setActiveId]     = useState(conversations[0].id)
-  const [sidebarOpen,  setSidebarOpen]  = useState(false)
-  const activeConvo = conversations.find(c => c.id === activeId) || conversations[0]
+  // null = no conversation open (list-only view)
+  const [activeId, setActiveId] = useState(null)
+  const activeConvo = activeId ? (conversations.find(c => c.id === activeId) ?? null) : null
 
   // ── Mark-as-unread ────────────────────────────────────────
-  // openedConvos: Set of IDs that have been tapped/clicked this session (auto-clears badge)
-  // markedUnread: Set of IDs manually flagged to revisit later
-  const [openedConvos, setOpenedConvos] = useState(() => new Set([conversations[0].id]))
+  const [openedConvos, setOpenedConvos] = useState(() => new Set())
   const [markedUnread, setMarkedUnread] = useState(() => new Set())
 
   function openConvo(id) {
     setActiveId(id)
     setOpenedConvos(prev => new Set([...prev, id]))
     setMarkedUnread(prev => { const n = new Set(prev); n.delete(id); return n })
-    if (isMobile) setSidebarOpen(false)
   }
 
+  function closeConvo() { setActiveId(null) }
+
   function markCurrentUnread() {
+    if (!activeId) return
     setMarkedUnread(prev => new Set([...prev, activeId]))
-    if (isMobile) setSidebarOpen(true)
+    // On mobile go back to list so user sees the badge immediately
+    if (isMobile) setActiveId(null)
   }
 
   function effectiveUnread(convo) {
@@ -304,7 +305,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
   const bottomRef = useRef(null)
   const fileRef   = useRef(null)
 
-  const isLive = !!activeConvo.supabaseConvoId
+  const isLive = !!activeConvo?.supabaseConvoId
 
   // ── Load dynamic conversations from Supabase on mount ────────
   useEffect(() => { loadDynamicConversations() }, [email])
@@ -418,7 +419,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
 
       if (convos.length) {
         setDynConversations(convos)
-        setActiveId(convos[0].id)
+        // Don't auto-open — let user choose
       }
     } catch (e) {
       console.warn('Dynamic messaging unavailable — using demo data:', e)
@@ -439,6 +440,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
   }, [activeId])
 
   async function loadLiveMessages() {
+    if (!activeConvo?.supabaseConvoId) return
     const data = await dbGet('messages', `conversation_id=eq.${activeConvo.supabaseConvoId}&order=created_at.asc`)
     if (data) {
       setLiveMessages(data)
@@ -446,6 +448,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
     }
   }
   async function loadLiveFiles() {
+    if (!activeConvo?.supabaseConvoId) return
     const data = await dbGet('conversation_files', `conversation_id=eq.${activeConvo.supabaseConvoId}&order=created_at.desc`)
     if (data) setLiveFiles(data)
   }
@@ -455,12 +458,12 @@ export default function Messaging({ currentUser, loomMode = false }) {
     if (!text || !myProfileId || !isLive) return
     setNewMsg('')
     await dbInsert('messages', {
-      conversation_id: activeConvo.supabaseConvoId,
+      conversation_id: activeConvo?.supabaseConvoId,
       sender_id: myProfileId,
       content: text,
       message_type: 'text',
     })
-    await dbUpdate('conversations', `id=eq.${activeConvo.supabaseConvoId}`, {
+    await dbUpdate('conversations', `id=eq.${activeConvo?.supabaseConvoId}`, {
       last_message: text.slice(0, 80),
       last_message_at: new Date().toISOString(),
     })
@@ -472,7 +475,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
     if (!file || !myProfileId || !isLive) return
     setUploading(true)
     try {
-      const path   = `${activeConvo.supabaseConvoId}/${Date.now()}-${file.name}`
+      const path   = `${activeConvo?.supabaseConvoId}/${Date.now()}-${file.name}`
       const bucket = file.type.startsWith('image/') ? 'chat-media' : 'lab-files'
       const upRes  = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
         method: 'POST',
@@ -484,18 +487,18 @@ export default function Messaging({ currentUser, loomMode = false }) {
       const isImage = file.type.startsWith('image/')
       const fileType = isImage ? 'image' : file.name.toLowerCase().includes('lab') ? 'lab' : 'document'
       await dbInsert('messages', {
-        conversation_id: activeConvo.supabaseConvoId,
+        conversation_id: activeConvo?.supabaseConvoId,
         sender_id: myProfileId,
         content: isImage ? null : file.name,
         message_type: isImage ? 'image' : 'file',
         file_url: fileUrl, file_name: file.name, file_size: file.size, file_type: file.type,
       })
       await dbInsert('conversation_files', {
-        conversation_id: activeConvo.supabaseConvoId,
+        conversation_id: activeConvo?.supabaseConvoId,
         uploaded_by: myProfileId,
         file_url: fileUrl, file_name: file.name, file_size: file.size, file_type: fileType,
       })
-      await dbUpdate('conversations', `id=eq.${activeConvo.supabaseConvoId}`, {
+      await dbUpdate('conversations', `id=eq.${activeConvo?.supabaseConvoId}`, {
         last_message: isImage ? '📷 Photo' : `📎 ${file.name}`,
         last_message_at: new Date().toISOString(),
       })
@@ -511,7 +514,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
 
   // ── Which messages to show ─────────────────────────────────
   // Live for Jordan (coach+client); demo thread for others
-  const displayMessages = isLive ? liveMessages : activeConvo.thread
+  const displayMessages = isLive ? liveMessages : (activeConvo?.thread ?? [])
   const coachUUID = KNOWN_USERS['coach@eden.io'].uuid
   const clientUUID = KNOWN_USERS['client@eden.io'].uuid
 
@@ -523,7 +526,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
   function msgText(msg)  { return isLive ? msg.content  : msg.text }
   function msgTime(msg)  { return isLive ? formatTime(msg.created_at) : msg.time }
   function msgType(msg)  { return isLive ? msg.message_type : 'text' }
-  function otherInitial(){ return activeConvo.initials[0] }
+  function otherInitial(){ return activeConvo?.initials?.[0] ?? '' }
 
   const shownFiles = liveFiles.filter(f => {
     if (fileTab === 'all')       return true
@@ -536,25 +539,22 @@ export default function Messaging({ currentUser, loomMode = false }) {
   // ════════════════════════════════════════════════════════════
   // RENDER
   // ════════════════════════════════════════════════════════════
+  // On mobile: show list panel when no convo open, chat panel when convo open
+  // On desktop: both panels always visible side-by-side
+  const showList  = !isMobile || activeId === null
+  const showChat  = !isMobile || activeId !== null
+
   return (
     <div style={{ display:'flex', height:'100%', background:C.black, overflow:'hidden', position:'relative' }}>
 
-      {/* Mobile sidebar backdrop */}
-      {isMobile && sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:30 }}/>
-      )}
-
       {/* ── LEFT SIDEBAR ──────────────────────────────────────── */}
       <div style={{
-        width: isMobile ? 270 : 250,
-        display:'flex', flexDirection:'column',
-        background:C.surface, borderRight:`1px solid ${C.border}`, flexShrink:0,
-        ...(isMobile ? {
-          position:'fixed', top:0, bottom:0, left:0, zIndex:40,
-          transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
-          transition:'transform 0.25s ease',
-        } : {}),
+        width: isMobile ? '100%' : 250,
+        display: showList ? 'flex' : 'none',
+        flexDirection:'column',
+        background:C.surface,
+        borderRight: isMobile ? 'none' : `1px solid ${C.border}`,
+        flexShrink:0,
       }}>
         {/* Header */}
         <div style={{ padding:'16px 14px 12px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -564,10 +564,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
               {myRole === 'coach' ? `${conversations.length} clients` : 'Coach Marcus · Eden Admin'}
             </div>
           </div>
-          {isMobile && (
-            <button onClick={() => setSidebarOpen(false)}
-              style={{ background:'none', border:'none', color:C.muted, fontSize:22, cursor:'pointer', padding:0 }}>×</button>
-          )}
+          {/* no close button needed — back arrow is in the chat panel */}
         </div>
 
         {/* Loom Mode banner */}
@@ -659,16 +656,32 @@ export default function Messaging({ currentUser, loomMode = false }) {
       </div>
 
       {/* ── RIGHT CONTENT ─────────────────────────────────────── */}
-      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+      <div style={{ flex:1, display: showChat ? 'flex' : 'none', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+
+        {/* No conversation selected — desktop placeholder */}
+        {!activeConvo && (
+          <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+            justifyContent:'center', gap:12, color:C.muted, padding:32 }}>
+            <div style={{ fontSize:48, opacity:0.4 }}>💬</div>
+            <div style={{ fontSize:15, fontWeight:700, color:C.white }}>Select a conversation</div>
+            <div style={{ fontSize:13, color:C.muted, textAlign:'center', maxWidth:240 }}>
+              Choose someone from the list to open the chat
+            </div>
+          </div>
+        )}
+
+        {/* Active conversation UI */}
+        {activeConvo && (<>
 
         {/* Top bar */}
         <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`,
           padding:'0 12px', display:'flex', alignItems:'center', flexShrink:0, gap:8, height:52 }}>
-          {/* Hamburger */}
+          {/* Back button — mobile only */}
           {isMobile && (
-            <button onClick={() => setSidebarOpen(true)}
-              style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:'4px', flexShrink:0 }}>
-              ☰
+            <button onClick={closeConvo}
+              style={{ background:'none', border:'none', color:C.white, fontSize:18, cursor:'pointer',
+                padding:'4px 8px 4px 0', flexShrink:0, display:'flex', alignItems:'center', gap:4 }}>
+              ← <span style={{ fontSize:13, fontWeight:600 }}>Back</span>
             </button>
           )}
           {/* Active client info */}
@@ -896,6 +909,9 @@ export default function Messaging({ currentUser, loomMode = false }) {
             </div>
           </div>
         )}
+
+        </>)}
+        {/* end activeConvo guard */}
       </div>
     </div>
   )
