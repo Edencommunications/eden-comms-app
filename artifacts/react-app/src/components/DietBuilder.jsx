@@ -359,32 +359,64 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
   const [clientRxNotes, setClientRxNotes] = useState('')
 
   // ── Rx / Prescription tracker ─────────────────────────────
-  const todayStr = new Date().toISOString().slice(0,10)
-  const blankRx  = { name:'', dose:'', directions:'', startDate: todayStr }
-  const [rxList,       setRxList]       = useState([])
-  const [showRxForm,   setShowRxForm]   = useState(false)
-  const [newRx,        setNewRx]        = useState(blankRx)
-  const [showTaperFor, setShowTaperFor] = useState(null) // rxId currently adding taper to
-  const [newTaper,     setNewTaper]     = useState({ date:'', dose:'', note:'' })
+  const [rxList,        setRxList]        = useState([])
+  const [showRxForm,    setShowRxForm]    = useState(false)
+  // Fields for the Rx being drafted
+  const [rxName,        setRxName]        = useState('')
+  const [rxDose,        setRxDose]        = useState('')
+  const [rxDirections,  setRxDirections]  = useState('')
+  const [rxStartDate,   setRxStartDate]   = useState('')
+  // Taper steps being drafted inside the add form
+  const [draftTapers,   setDraftTapers]   = useState([])
+  const [showTaperRow,  setShowTaperRow]  = useState(false)
+  const [tapDate,       setTapDate]       = useState('')
+  const [tapDose,       setTapDose]       = useState('')
+  const [tapNote,       setTapNote]       = useState('')
+  // Adding a taper to an already-saved entry
+  const [editTaperFor,  setEditTaperFor]  = useState(null)
+  const [editTapDate,   setEditTapDate]   = useState('')
+  const [editTapDose,   setEditTapDose]   = useState('')
+  const [editTapNote,   setEditTapNote]   = useState('')
 
-  function openRxForm()  { setNewRx(blankRx); setShowRxForm(true)  }
-  function closeRxForm() { setNewRx(blankRx); setShowRxForm(false) }
-  function addRx() {
-    if (!newRx.name.trim() || !newRx.dose.trim()) return
-    setRxList(prev => [...prev, { id: Date.now(), ...newRx, tapers: [] }])
+  function resetRxForm() {
+    setRxName(''); setRxDose(''); setRxDirections(''); setRxStartDate('')
+    setDraftTapers([]); setShowTaperRow(false)
+    setTapDate(''); setTapDose(''); setTapNote('')
+  }
+  function openRxForm()  { resetRxForm(); setShowRxForm(true)  }
+  function closeRxForm() { resetRxForm(); setShowRxForm(false) }
+
+  function addDraftTaperStep() {
+    if (!tapDate.trim() || !tapDose.trim()) return
+    setDraftTapers(prev => [...prev, { id: Date.now(), date: tapDate, dose: tapDose, note: tapNote }]
+      .sort((a,b) => a.date.localeCompare(b.date)))
+    setTapDate(''); setTapDose(''); setTapNote(''); setShowTaperRow(false)
+  }
+  function removeDraftTaper(id) { setDraftTapers(prev => prev.filter(t => t.id !== id)) }
+
+  function saveRx() {
+    if (!rxName.trim() || !rxDose.trim()) return
+    setRxList(prev => [...prev, {
+      id: Date.now(),
+      name: rxName.trim(), dose: rxDose.trim(),
+      directions: rxDirections.trim(), startDate: rxStartDate,
+      tapers: draftTapers,
+    }])
     closeRxForm()
   }
-  function removeRx(id) { setRxList(prev=>prev.filter(r=>r.id!==id)) }
-  function addTaper(rxId) {
-    if (!newTaper.date.trim()||!newTaper.dose.trim()) return
-    setRxList(prev=>prev.map(r=>r.id===rxId
-      ?{...r,tapers:[...r.tapers,{id:Date.now(),...newTaper}].sort((a,b)=>a.date.localeCompare(b.date))}
-      :r))
-    setNewTaper({date:'',dose:'',note:''})
-    setShowTaperFor(null)
+  function removeRx(id) { setRxList(prev => prev.filter(r => r.id !== id)) }
+
+  function saveEditTaper(rxId) {
+    if (!editTapDate.trim() || !editTapDose.trim()) return
+    setRxList(prev => prev.map(r => r.id === rxId ? {
+      ...r,
+      tapers: [...r.tapers, { id: Date.now(), date: editTapDate, dose: editTapDose, note: editTapNote }]
+        .sort((a,b) => a.date.localeCompare(b.date))
+    } : r))
+    setEditTapDate(''); setEditTapDose(''); setEditTapNote(''); setEditTaperFor(null)
   }
-  function removeTaper(rxId,taperId) {
-    setRxList(prev=>prev.map(r=>r.id===rxId?{...r,tapers:r.tapers.filter(t=>t.id!==taperId)}:r))
+  function removeTaper(rxId, tapId) {
+    setRxList(prev => prev.map(r => r.id === rxId ? { ...r, tapers: r.tapers.filter(t => t.id !== tapId) } : r))
   }
 
   const totals = meals.reduce((a,m)=>{
@@ -967,7 +999,6 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
               <Card sx={{marginBottom:12}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
                   <Lbl t="Prescriptions / Medications"/>
-                  {/* Only opens — never toggles. Cancel/Save close the form. */}
                   {!showRxForm&&(
                     <button type="button" onClick={openRxForm}
                       style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
@@ -976,43 +1007,130 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
                   )}
                 </div>
 
-                {/* Add Rx form */}
+                {/* ── Add Rx form ── */}
                 {showRxForm&&(
                   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:14,marginBottom:12}}>
-                    <div style={{fontSize:11,fontWeight:700,color:C.gold,marginBottom:10}}>New Prescription / Medication</div>
-                    <div style={{marginBottom:8}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.gold,marginBottom:12}}>New Prescription / Medication</div>
+
+                    {/* Medication name */}
+                    <div style={{marginBottom:10}}>
                       <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Medication Name *</div>
-                      <input value={newRx.name} onChange={e=>setNewRx(p=>({...p,name:e.target.value}))}
+                      <input
+                        value={rxName}
+                        onChange={e => setRxName(e.target.value)}
                         placeholder="e.g. Testosterone Cypionate, Progesterone, T3…"
-                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}
+                      />
                     </div>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+
+                    {/* Dose + start date */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
                       <div>
                         <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Starting Dose *</div>
-                        <input value={newRx.dose} onChange={e=>setNewRx(p=>({...p,dose:e.target.value}))}
+                        <input
+                          value={rxDose}
+                          onChange={e => setRxDose(e.target.value)}
                           placeholder="e.g. 200mg/ml · 0.5ml"
-                          style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                          style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}
+                        />
                       </div>
                       <div>
                         <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Start Date</div>
-                        <input type="date" value={newRx.startDate} onChange={e=>setNewRx(p=>({...p,startDate:e.target.value}))}
-                          style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                        <input
+                          type="date"
+                          value={rxStartDate}
+                          onChange={e => setRxStartDate(e.target.value)}
+                          style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}
+                        />
                       </div>
                     </div>
-                    <div style={{marginBottom:12}}>
+
+                    {/* Frequency / directions */}
+                    <div style={{marginBottom:14}}>
                       <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Frequency / Directions</div>
-                      <input value={newRx.directions} onChange={e=>setNewRx(p=>({...p,directions:e.target.value}))}
+                      <input
+                        value={rxDirections}
+                        onChange={e => setRxDirections(e.target.value)}
                         placeholder="e.g. 2x per week — Monday and Thursday"
-                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}
+                      />
                     </div>
+
+                    {/* ── Taper schedule (inline, before saving) ── */}
+                    <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginBottom:12}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                        <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.8}}>Taper / Adjustment Schedule</div>
+                        {!showTaperRow&&(
+                          <button type="button" onClick={()=>setShowTaperRow(true)}
+                            style={{background:'none',border:`1px dashed ${C.border}`,borderRadius:6,padding:'3px 9px',color:C.muted,fontSize:11,cursor:'pointer'}}>
+                            + Add Step
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Draft tapers already added */}
+                      {draftTapers.length===0&&!showTaperRow&&(
+                        <div style={{fontSize:11,color:C.dim,fontStyle:'italic'}}>Optional — add dose changes, holds, or stops before saving.</div>
+                      )}
+                      {draftTapers.map(t=>(
+                        <div key={t.id} style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:6}}>
+                          <div style={{width:7,height:7,borderRadius:4,background:C.gold,marginTop:5,flexShrink:0}}/>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11,color:C.white,fontWeight:600}}>
+                              {t.date} — <span style={{color:C.gold}}>{t.dose}</span>
+                            </div>
+                            {t.note&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.note}</div>}
+                          </div>
+                          <button type="button" onClick={()=>removeDraftTaper(t.id)}
+                            style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:'0 2px',flexShrink:0}}>×</button>
+                        </div>
+                      ))}
+
+                      {/* Mini form for a new taper step */}
+                      {showTaperRow&&(
+                        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:10,marginTop:6}}>
+                          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                            <div>
+                              <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Effective Date *</div>
+                              <input type="date" value={tapDate} onChange={e=>setTapDate(e.target.value)}
+                                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                            <div>
+                              <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>New Dose *</div>
+                              <input value={tapDose} onChange={e=>setTapDose(e.target.value)}
+                                placeholder="e.g. 0.35ml, hold, stop"
+                                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                          </div>
+                          <div style={{marginBottom:8}}>
+                            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Note (optional)</div>
+                            <input value={tapNote} onChange={e=>setTapNote(e.target.value)}
+                              placeholder="e.g. Reducing due to elevated E2, recheck labs Aug 1"
+                              style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div style={{display:'flex',gap:8}}>
+                            <button type="button" onClick={()=>{ setShowTaperRow(false); setTapDate(''); setTapDose(''); setTapNote('') }}
+                              style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px',color:C.muted,fontSize:11,cursor:'pointer'}}>
+                              Cancel
+                            </button>
+                            <button type="button" onClick={addDraftTaperStep}
+                              disabled={!tapDate.trim()||!tapDose.trim()}
+                              style={{flex:2,background:tapDate.trim()&&tapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'6px',fontWeight:700,color:C.black,fontSize:11,cursor:tapDate.trim()&&tapDose.trim()?'pointer':'default'}}>
+                              Add Step
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Save / Cancel */}
                     <div style={{display:'flex',gap:8}}>
                       <button type="button" onClick={closeRxForm}
-                        style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px',color:C.muted,fontSize:12,cursor:'pointer'}}>
+                        style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'10px',color:C.muted,fontSize:12,cursor:'pointer'}}>
                         Cancel
                       </button>
-                      <button type="button" onClick={addRx}
-                        disabled={!newRx.name.trim()||!newRx.dose.trim()}
-                        style={{flex:2,background:C.gold,border:'none',borderRadius:7,padding:'8px',fontWeight:800,color:C.black,fontSize:12,cursor:newRx.name.trim()&&newRx.dose.trim()?'pointer':'default',opacity:newRx.name.trim()&&newRx.dose.trim()?1:.4}}>
+                      <button type="button" onClick={saveRx}
+                        style={{flex:2,background:rxName.trim()&&rxDose.trim()?C.gold:'#444',border:'none',borderRadius:7,padding:'10px',fontWeight:800,color:C.black,fontSize:12,cursor:rxName.trim()&&rxDose.trim()?'pointer':'default'}}>
                         Save Rx
                       </button>
                     </div>
@@ -1020,76 +1138,82 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
                 )}
 
                 {rxList.length===0&&!showRxForm&&(
-                  <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'8px 0'}}>Click + Add Rx to enter a prescription or medication protocol.</div>
+                  <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'8px 0'}}>
+                    Click + Add Rx to enter a prescription or medication with optional taper schedule.
+                  </div>
                 )}
 
-                {/* Rx entries */}
+                {/* ── Saved Rx entries ── */}
                 {rxList.map(rx=>(
                   <div key={rx.id} style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:12}}>
-                    {/* Rx header */}
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
                       <div>
                         <div style={{fontSize:14,fontWeight:700,color:C.white}}>{rx.name}</div>
                         <div style={{fontSize:12,color:C.gold,marginTop:2}}>{rx.dose}</div>
                         {rx.directions&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{rx.directions}</div>}
-                        {rx.startDate&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Started: {new Date(rx.startDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
+                        {rx.startDate&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>
+                          Started: {new Date(rx.startDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                        </div>}
                       </div>
-                      <button onClick={()=>removeRx(rx.id)}
+                      <button type="button" onClick={()=>removeRx(rx.id)}
                         style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 4px',flexShrink:0}}>×</button>
                     </div>
 
                     {/* Taper timeline */}
                     {rx.tapers.length>0&&(
-                      <div style={{marginLeft:12,marginBottom:8,borderLeft:`2px solid ${C.border}`,paddingLeft:12}}>
+                      <div style={{marginLeft:10,marginBottom:8,borderLeft:`2px solid ${C.border}`,paddingLeft:10}}>
                         <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>Taper Schedule</div>
                         {rx.tapers.map(t=>(
-                          <div key={t.id} style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:8}}>
-                            <div style={{width:8,height:8,borderRadius:4,background:C.gold,marginTop:4,flexShrink:0}}/>
+                          <div key={t.id} style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:7}}>
+                            <div style={{width:7,height:7,borderRadius:4,background:C.gold,marginTop:4,flexShrink:0}}/>
                             <div style={{flex:1}}>
-                              <div style={{fontSize:11,color:C.white,fontWeight:600}}>{new Date(t.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} — <span style={{color:C.gold}}>{t.dose}</span></div>
-                              {t.note&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{t.note}</div>}
+                              <div style={{fontSize:11,color:C.white,fontWeight:600}}>
+                                {new Date(t.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} — <span style={{color:C.gold}}>{t.dose}</span>
+                              </div>
+                              {t.note&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.note}</div>}
                             </div>
-                            <button onClick={()=>removeTaper(rx.id,t.id)}
+                            <button type="button" onClick={()=>removeTaper(rx.id,t.id)}
                               style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:'0 2px',flexShrink:0}}>×</button>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Add taper step */}
-                    {showTaperFor===rx.id?(
-                      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:12,marginTop:8}}>
+                    {/* Add taper to existing entry */}
+                    {editTaperFor===rx.id?(
+                      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,marginTop:6}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:8,textTransform:'uppercase',letterSpacing:.8}}>Add Taper / Adjustment Step</div>
                         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
                           <div>
-                            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Effective Date *</div>
-                            <input type="date" value={newTaper.date} onChange={e=>setNewTaper(p=>({...p,date:e.target.value}))}
-                              style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 9px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Effective Date *</div>
+                            <input type="date" value={editTapDate} onChange={e=>setEditTapDate(e.target.value)}
+                              style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
                           </div>
                           <div>
-                            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>New Dose *</div>
-                            <input value={newTaper.dose} onChange={e=>setNewTaper(p=>({...p,dose:e.target.value}))}
-                              placeholder="e.g. 0.35ml, stop, hold"
-                              style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 9px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>New Dose *</div>
+                            <input value={editTapDose} onChange={e=>setEditTapDose(e.target.value)}
+                              placeholder="e.g. 0.35ml, hold, stop"
+                              style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
                           </div>
                         </div>
-                        <div style={{marginBottom:10}}>
-                          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Notes (optional)</div>
-                          <input value={newTaper.note} onChange={e=>setNewTaper(p=>({...p,note:e.target.value}))}
+                        <div style={{marginBottom:8}}>
+                          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Note (optional)</div>
+                          <input value={editTapNote} onChange={e=>setEditTapNote(e.target.value)}
                             placeholder="e.g. Reducing due to elevated E2, recheck labs Aug 1"
-                            style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 9px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                            style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
                         </div>
                         <div style={{display:'flex',gap:8}}>
-                          <button onClick={()=>setShowTaperFor(null)}
-                            style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
-                          <button onClick={()=>addTaper(rx.id)} disabled={!newTaper.date.trim()||!newTaper.dose.trim()}
-                            style={{flex:2,background:C.gold,border:'none',borderRadius:7,padding:'7px',fontWeight:800,color:C.black,fontSize:11,cursor:'pointer',opacity:newTaper.date.trim()&&newTaper.dose.trim()?1:.5}}>
+                          <button type="button" onClick={()=>setEditTaperFor(null)}
+                            style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
+                          <button type="button" onClick={()=>saveEditTaper(rx.id)}
+                            disabled={!editTapDate.trim()||!editTapDose.trim()}
+                            style={{flex:2,background:editTapDate.trim()&&editTapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'7px',fontWeight:700,color:C.black,fontSize:11,cursor:editTapDate.trim()&&editTapDose.trim()?'pointer':'default'}}>
                             Save Step
                           </button>
                         </div>
                       </div>
                     ):(
-                      <button onClick={()=>{ setShowTaperFor(rx.id); setNewTaper({date:'',dose:'',note:''}) }}
+                      <button type="button" onClick={()=>{ setEditTaperFor(rx.id); setEditTapDate(''); setEditTapDose(''); setEditTapNote('') }}
                         style={{fontSize:11,color:C.muted,background:'none',border:`1px dashed ${C.border}`,borderRadius:6,padding:'5px 10px',cursor:'pointer',marginTop:4}}>
                         + Add Taper / Adjustment Step
                       </button>
