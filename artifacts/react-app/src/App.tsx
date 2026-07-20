@@ -2390,9 +2390,10 @@ const AppShell = ({ user, onLogout }) => {
     // Shared screens
     if (tab === "home")      return <HomeScreen user={user}/>;
     if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
-    // When a coach navigates into a client tool, use the selected client as currentUser
+    // When a coach navigates into a client tool, pass the client's email/name for
+    // data context but keep the coach's role so components show the editable coach view
     const toolUser = (user.role === "coach" || user.role === "super_admin") && coachClient
-      ? coachClient
+      ? { ...coachClient, role: user.role }
       : { email: user.email, name: user.name, role: user.role };
     if (tab === "diet")         return <DietBuilder currentUser={toolUser}/>;
     if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements"/>;

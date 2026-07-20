@@ -290,7 +290,9 @@ function ReadOnlyFoodRow({item}) {
 export default function DietBuilder({currentUser, initialTab='plan'}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User'}
-  const role    = info.role
+  // Prefer the role passed in currentUser (coach viewing a client's tools)
+  // over the KNOWN_USERS lookup, which would always return 'client' for client emails
+  const role    = currentUser?.role || info.role
   const isCoach = role==='coach'||role==='super_admin'
   const isClient= role==='client'
 
