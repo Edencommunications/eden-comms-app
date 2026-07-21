@@ -1311,6 +1311,59 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div style={{fontSize:11}}>Client check-ins will appear here once submitted. Use "+ Coach Update" to add a standalone note anytime.</div>
                 </div>
               )}
+
+              {/* ── Progress Photos panel (coach view) ── */}
+              <div style={{marginTop:8}}>
+                <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>📸 Progress Photos</div>
+                {clientPhotos===null?(
+                  <div style={{textAlign:'center',padding:32,color:C.muted,fontSize:12}}>Loading photos…</div>
+                ):clientPhotos.length===0?(
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:32,textAlign:'center'}}>
+                    <div style={{fontSize:36,marginBottom:10}}>📸</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:4}}>No photos uploaded yet</div>
+                    <div style={{fontSize:11,color:C.muted}}>Photos the client uploads will appear here, grouped by week.</div>
+                  </div>
+                ):(()=>{
+                  const byWeek={}
+                  for(const p of clientPhotos){
+                    const k=p.week_label||'Uncategorized'
+                    if(!byWeek[k]) byWeek[k]=[]
+                    byWeek[k].push(p)
+                  }
+                  return Object.entries(byWeek).map(([week,wPhotos])=>(
+                    <div key={week} style={{marginBottom:22}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                        <div>
+                          <div style={{fontSize:14,fontWeight:700,color:C.white}}>{week}</div>
+                          <div style={{fontSize:11,color:C.muted}}>
+                            {wPhotos[0]?.taken_at?new Date(wPhotos[0].taken_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}
+                          </div>
+                        </div>
+                        <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:20,background:`${C.gold}22`,color:C.gold}}>
+                          {wPhotos.length} photo{wPhotos.length!==1?'s':''}
+                        </span>
+                      </div>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                        {wPhotos.map((p,i)=>(
+                          p.photo_url?(
+                            <a key={i} href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
+                              <img src={p.photo_url} alt={`${week} photo ${i+1}`}
+                                style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:10,display:'block',border:`1px solid ${C.border}`}}/>
+                            </a>
+                          ):(
+                            <div key={i} style={{aspectRatio:'3/4',background:C.surface,border:`1px solid ${C.border}`,
+                              borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4}}>
+                              <span style={{fontSize:22}}>📸</span>
+                              <span style={{fontSize:9,color:C.muted}}>{p.notes||'Photo'}</span>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                })()}
+              </div>
+
             </div>
           </div>
 
