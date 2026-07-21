@@ -3272,12 +3272,17 @@ const AppShell = ({ user, onLogout }) => {
     const toolUser = (user.role === "coach" || user.role === "super_admin") && coachClient
       ? { ...coachClient, role: user.role }
       : { email: user.email, name: user.name, role: user.role };
-    if (tab === "diet")         return <DietBuilder currentUser={toolUser}/>;
-    if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements"/>;
+    // Resolve CLIENT_ROSTER demo check-in data for whichever client is in context
+    const ciEmail = ((user.role === "coach" || user.role === "super_admin") && coachClient)
+      ? coachClient.email
+      : user.email;
+    const ciDemoCheckins = CLIENT_ROSTER.find(c => c.email === ciEmail)?.checkinHistory ?? [];
+    if (tab === "diet")         return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
+    if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins}/>;
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
     if (tab === "progress")     return <ClientProgressScreen currentUser={toolUser}/>;
     if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs"/>;
-    if (tab === "checkin")      return <CheckInScreen/>;
+    if (tab === "checkin")      return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout"/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}

@@ -5,6 +5,7 @@
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -308,7 +309,7 @@ function ReadOnlyFoodRow({item}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function DietBuilder({currentUser, initialTab='plan'}) {
+export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[]}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User'}
   // Prefer the role passed in currentUser (coach viewing a client's tools)
@@ -353,51 +354,28 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
   })
   const setC = k=>v=>setCi(p=>({...p,[k]:v}))
 
-  // Coach check-in review
-  const [ciHistory,    setCiHistory]    = useState([])
-  const [selectedCi,   setSelectedCi]   = useState(0)
-  const [coachNote,    setCoachNote]    = useState('')
-  const [coachLoom,    setCoachLoom]    = useState('')
-  const [savingReview, setSavingReview] = useState(false)
-  const [reviewSaved,  setReviewSaved]  = useState(false)
+  // Check-in hub state
+  const [localCheckins,    setLocalCheckins]    = useState([])
+  const [expandedCi,       setExpandedCi]       = useState(null)
+  const [editingCi,        setEditingCi]        = useState(null)
+  const [draftNote,        setDraftNote]        = useState('')
+  const [draftLoom,        setDraftLoom]        = useState('')
+  const [coachOnlyUpdates, setCoachOnlyUpdates] = useState([])
+  const [showAddForm,      setShowAddForm]      = useState(false)
+  const [newNote,          setNewNote]          = useState('')
+  const [newLoom,          setNewLoom]          = useState('')
+  const [newDate,          setNewDate]          = useState('2026-07-21')
+  const [clientViewTab,    setClientViewTab]    = useState('history')
 
   useEffect(() => {
-    if (!isCoach) return
-    const clientUuid = KNOWN_USERS['client@eden.io']?.uuid
-    if (!clientUuid) return
-    dbGet('weekly_checkins', `client_id=eq.${clientUuid}&order=submitted_at.desc&limit=16`)
-      .then(rows => {
-        const data = Array.isArray(rows) ? rows : []
-        setCiHistory(data)
-        if (data.length) {
-          setCoachNote(data[0].coach_notes || '')
-          setCoachLoom(data[0].loom_url    || '')
-        }
-      })
-  }, [isCoach])
-
-  function selectCheckin(idx) {
-    setSelectedCi(idx)
-    setCoachNote(ciHistory[idx]?.coach_notes || '')
-    setCoachLoom(ciHistory[idx]?.loom_url    || '')
-    setReviewSaved(false)
-  }
-
-  async function saveCoachReview() {
-    const row = ciHistory[selectedCi]
-    if (!row?.id) return
-    setSavingReview(true)
-    await dbUpdate('weekly_checkins', `id=eq.${row.id}`, {
-      coach_notes:       coachNote.trim(),
-      loom_url:          coachLoom.trim(),
-      coach_reviewed_at: new Date().toISOString(),
-    })
-    setCiHistory(prev => prev.map((r,i) => i===selectedCi
-      ? {...r, coach_notes:coachNote.trim(), loom_url:coachLoom.trim()} : r))
-    setSavingReview(false)
-    setReviewSaved(true)
-    setTimeout(() => setReviewSaved(false), 3000)
-  }
+    setLocalCheckins((demoCheckins||[]).map(ci => ({
+      ...ci,
+      coachNotes: ci.coachNotes || '',
+      coachLoom:  ci.coachLoom  || '',
+    })))
+    setExpandedCi(null)
+    setEditingCi(null)
+  }, [demoCheckins])
 
   // Habits — assigned by coach, frequency filled by client
   const [assignedHabits,   setAssignedHabits]   = useState(MASTER_HABITS.slice(0,8).map(h=>({...h,target:h.defaultTarget})))
@@ -844,277 +822,550 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
         </div>
       )}
 
-      {/* ══ CHECK-IN ══════════════════════════════════════════ */}
+      {/* ══ CHECK-IN HUB ═══════════════════════════════════════ */}
       {tab==='checkin'&&(
-
-        /* ── COACH VIEW — review + respond ───────────────────── */
         isCoach ? (
-          <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
-            {/* Left column: recent check-in list */}
-            <div style={{width:200,flexShrink:0,borderRight:`1px solid ${C.border}`,overflowY:'auto',background:C.surface}}>
-              <div style={{padding:'10px 12px',fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`}}>
-                Recent Check-Ins
+          /* ── COACH VIEW: full check-in hub ─────────────────── */
+          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+
+            {/* Toolbar */}
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
+              <div>
+                <span style={{fontSize:14,fontWeight:800,color:C.white}}>Check-In Hub</span>
+                <span style={{fontSize:11,color:C.muted,marginLeft:10}}>{localCheckins.length} submissions · {coachOnlyUpdates.length} coach updates</span>
               </div>
-              {ciHistory.length===0&&(
-                <div style={{padding:'20px 12px',fontSize:11,color:C.muted,textAlign:'center'}}>
-                  No check-ins yet
-                </div>
-              )}
-              {ciHistory.map((row,idx)=>{
-                const dt=row.submitted_at?new Date(row.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):''
-                const reviewed=!!row.coach_notes||!!row.coach_reviewed_at
-                return (
-                  <button key={row.id||idx} onClick={()=>selectCheckin(idx)}
-                    style={{width:'100%',background:selectedCi===idx?`${C.gold}18`:'none',
-                      border:'none',borderBottom:`1px solid ${C.border}`,
-                      borderLeft:`3px solid ${selectedCi===idx?C.gold:'transparent'}`,
-                      padding:'10px 12px',cursor:'pointer',textAlign:'left'}}>
-                    <div style={{fontSize:12,fontWeight:700,color:selectedCi===idx?C.gold:C.white}}>{dt}</div>
-                    {row.weight&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>⚖ {row.weight} lbs</div>}
-                    {reviewed&&<div style={{fontSize:9,color:C.success,marginTop:3}}>✓ Reviewed</div>}
-                  </button>
-                )
-              })}
+              <button onClick={()=>setShowAddForm(v=>!v)}
+                style={{background:showAddForm?`${C.gold}33`:`${C.gold}18`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'7px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                {showAddForm?'✕ Cancel':'＋ Coach Update'}
+              </button>
             </div>
 
-            {/* Right panel: selected check-in detail + review form */}
-            <div style={{flex:1,overflowY:'auto',padding:16}}>
-              {ciHistory.length===0?(
-                <div style={{textAlign:'center',padding:40,color:C.muted}}>
-                  <div style={{fontSize:32,marginBottom:12}}>📋</div>
-                  <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>No check-ins submitted yet</div>
-                  <div style={{fontSize:11}}>Once the client submits their first weekly check-in it will appear here.</div>
-                </div>
-              ):(()=>{
-                const row=ciHistory[selectedCi]||{}
-                const dt=row.submitted_at?new Date(row.submitted_at).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}):''
-                return (<>
-
-                  {/* Header */}
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:15,fontWeight:800,color:C.white}}>{dt}</div>
-                    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:5,alignItems:'center'}}>
-                      {row.weight&&<span style={{fontSize:12,color:C.gold,fontWeight:700}}>⚖ {row.weight} lbs</span>}
-                      {row.compliance!=null&&(
-                        <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,
-                          background:row.compliance>=90?`${C.success}22`:row.compliance>=75?`${C.gold}22`:'#ff444422',
-                          color:row.compliance>=90?C.success:row.compliance>=75?C.gold:'#ff6b6b'}}>
-                          {row.compliance}% compliance
-                        </span>
-                      )}
-                      {row.mood&&<span style={{fontSize:11,color:C.muted}}>Mood: {row.mood}</span>}
-                    </div>
+            {/* Add standalone coach update form */}
+            {showAddForm&&(
+              <div style={{background:'#111a00',borderBottom:`1px solid ${C.gold}33`,padding:16,flexShrink:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:.8,textTransform:'uppercase',marginBottom:12}}>New Coach Update — no client check-in required</div>
+                <div style={{display:'grid',gridTemplateColumns:'140px 1fr',gap:10,marginBottom:10}}>
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Date</div>
+                    <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)}
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
                   </div>
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Loom URL (optional)</div>
+                    <input value={newLoom} onChange={e=>setNewLoom(e.target.value)} placeholder="https://loom.com/share/..."
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                  </div>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Notes / Update</div>
+                  <textarea value={newNote} onChange={e=>setNewNote(e.target.value)} rows={3}
+                    placeholder="Protocol adjustment, midweek observation, general coaching note…"
+                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                </div>
+                <button onClick={()=>{
+                  if(!newNote.trim()&&!newLoom.trim())return
+                  setCoachOnlyUpdates(p=>[{id:Date.now(),date:newDate,note:newNote.trim(),loom:newLoom.trim()},...p])
+                  setNewNote('');setNewLoom('');setShowAddForm(false)
+                }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  Post Update
+                </button>
+              </div>
+            )}
 
-                  {/* Wellbeing score grid */}
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(80px,1fr))',gap:8,marginBottom:14}}>
-                    {[
-                      ['Energy',   row.energy],
-                      ['Sleep',    row.sleep],
-                      ['Bloating', row.bloating],
-                      ['Brain Fog',row.brainFog],
-                      ['Sex Drive',row.sexDrive],
-                      ['Hunger',   row.hunger   ? 10-row.hunger   : null],
-                      ['Stress',   row.stress   ? 10-row.stress   : null],
-                    ].map(([l,v])=>(
-                      <div key={l} style={{background:C.card,border:`1px solid ${v!=null?scoreColor(v)+'33':C.border}`,borderRadius:10,padding:'9px 6px',textAlign:'center'}}>
-                        <div style={{fontSize:8,color:C.muted,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',marginBottom:4,lineHeight:1.3}}>{l}</div>
-                        {v!=null
-                          ?<><div style={{fontSize:20,fontWeight:800,color:scoreColor(v),lineHeight:1}}>{v}</div><div style={{fontSize:8,color:C.muted}}>/10</div></>
-                          :<div style={{fontSize:16,color:C.border}}>—</div>
-                        }
+            {/* Body */}
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+              {/* Weight + score trend charts */}
+              {localCheckins.length>=2&&(
+                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>📈 Weight Trend</div>
+                  <ResponsiveContainer width="100%" height={110}>
+                    <AreaChart data={[...localCheckins].reverse().map(r=>({
+                      name:r.date.split(' ').slice(0,2).join(' '),
+                      weight:parseFloat(r.weight)||0
+                    }))}>
+                      <defs>
+                        <linearGradient id="wg2" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%"  stopColor={C.gold} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={C.gold} stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="name" tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false}/>
+                      <YAxis domain={['auto','auto']} tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false} width={38}/>
+                      <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,fontSize:11}}
+                        labelStyle={{color:C.muted}} itemStyle={{color:C.gold}}/>
+                      <Area type="monotone" dataKey="weight" stroke={C.gold} fill="url(#wg2)" strokeWidth={2} dot={{fill:C.gold,r:3}}/>
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Score trend chart */}
+              {localCheckins.length>=2&&(
+                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>⚡ Wellbeing Scores</div>
+                  <ResponsiveContainer width="100%" height={110}>
+                    <LineChart data={[...localCheckins].reverse().map(r=>({
+                      name:r.date.split(' ').slice(0,2).join(' '),
+                      Energy:r.energy, Sleep:r.sleep, Bloating:r.bloating,
+                    }))}>
+                      <XAxis dataKey="name" tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false}/>
+                      <YAxis domain={[0,10]} tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false} width={20}/>
+                      <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,fontSize:11}} labelStyle={{color:C.muted}}/>
+                      <Line type="monotone" dataKey="Energy"   stroke={C.gold}    strokeWidth={2} dot={false}/>
+                      <Line type="monotone" dataKey="Sleep"    stroke={C.success} strokeWidth={2} dot={false}/>
+                      <Line type="monotone" dataKey="Bloating" stroke="#8888ff"   strokeWidth={2} dot={false}/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div style={{display:'flex',gap:12,marginTop:6}}>
+                    {[['Energy',C.gold],['Sleep',C.success],['Bloating','#8888ff']].map(([l,col])=>(
+                      <div key={l} style={{display:'flex',alignItems:'center',gap:4}}>
+                        <div style={{width:12,height:2,background:col,borderRadius:2}}/>
+                        <span style={{fontSize:9,color:C.muted}}>{l}</span>
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
 
-                  {/* Vitals */}
-                  {(row.weight||row.temp||row.heartRate||row.hrv||row.steps||row.bloodPressure)&&(
-                    <Card sx={{marginBottom:12}}>
-                      <Lbl t="Vitals"/>
-                      <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
-                        {row.weight       &&<span style={{fontSize:12,color:C.muted}}>⚖️ {row.weight} lbs</span>}
-                        {row.temp         &&<span style={{fontSize:12,color:C.muted}}>🌡️ {row.temp}°F</span>}
-                        {row.heartRate    &&<span style={{fontSize:12,color:C.muted}}>❤️ {row.heartRate} BPM</span>}
-                        {row.hrv          &&<span style={{fontSize:12,color:C.muted}}>📡 HRV {row.hrv}</span>}
-                        {row.steps        &&<span style={{fontSize:12,color:C.muted}}>👟 {row.steps} steps</span>}
-                        {row.bloodPressure&&<span style={{fontSize:12,color:C.muted}}>🩺 {row.bloodPressure}</span>}
-                      </div>
-                    </Card>
-                  )}
+              {/* Combined sorted list: client check-ins + coach-only updates */}
+              {[
+                ...localCheckins.map((ci,i)=>({...ci,_type:'checkin',_idx:i})),
+                ...coachOnlyUpdates.map(u=>({...u,_type:'coach'}))
+              ].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>{
 
-                  {/* Sleep & Digestion */}
-                  {(row.sleepWindow||row.sleepCycles||row.sleepDisruption||row.bowelCount||row.bowelType)&&(
-                    <Card sx={{marginBottom:12}}>
-                      {(row.sleepWindow||row.sleepCycles||row.sleepDisruption)&&(<>
-                        <Lbl t="🌙 Sleep"/>
-                        <div style={{display:'flex',gap:16,flexWrap:'wrap',marginBottom:row.sleepDisruption?8:0}}>
-                          {row.sleepWindow&&<span style={{fontSize:12,color:C.white}}>🕙 {row.sleepWindow}</span>}
-                          {row.sleepCycles&&<span style={{fontSize:12,color:C.white}}>🔄 {row.sleepCycles} cycles</span>}
+                /* ── Coach-only standalone update ── */
+                if(item._type==='coach'){
+                  const loomId=item.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
+                  return (
+                    <div key={`cu-${item.id}`} style={{background:'#111a00',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'2px 8px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>Coach Update</span>
+                          <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
                         </div>
-                        {row.sleepDisruption&&(
-                          <div style={{fontSize:11,color:C.muted,fontStyle:'italic',background:C.black,borderRadius:7,padding:'7px 10px',marginBottom:(row.bowelCount||row.bowelType)?10:0}}>
-                            {row.sleepDisruption}
-                          </div>
-                        )}
-                      </>)}
-                      {(row.bowelCount||row.bowelType)&&(<>
-                        <Lbl t="🫁 Digestion"/>
-                        <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
-                          {row.bowelCount&&<span style={{fontSize:12,color:C.white}}>{row.bowelCount}x daily</span>}
-                          {row.bowelType &&<span style={{fontSize:12,color:C.white}}>{row.bowelType}</span>}
-                        </div>
-                      </>)}
-                    </Card>
-                  )}
-
-                  {/* Client notes */}
-                  {row.notes&&(
-                    <Card sx={{marginBottom:14}}>
-                      <Lbl t="Client Notes"/>
-                      <div style={{fontSize:12,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{row.notes}</div>
-                    </Card>
-                  )}
-
-                  {/* ── COACH REVIEW FORM ─────────────────────── */}
-                  <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:4}}>
-                    <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>
-                      💬 Coach Review
-                    </div>
-
-                    {/* Notes */}
-                    <div style={{marginBottom:12}}>
-                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>
-                        Feedback / Notes for Client
+                        <button onClick={()=>setCoachOnlyUpdates(p=>p.filter(u=>u.id!==item.id))}
+                          style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
                       </div>
-                      <textarea value={coachNote} onChange={e=>setCoachNote(e.target.value)}
-                        placeholder="Great progress this week! Your energy score improved — let's talk about adjusting sleep window…"
-                        rows={4}
-                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:8,
-                          padding:'10px 12px',color:C.white,fontSize:13,outline:'none',
-                          boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
-                    </div>
-
-                    {/* Loom URL */}
-                    <div style={{marginBottom:14}}>
-                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>
-                        Loom Recording URL <span style={{color:C.dim,fontWeight:400,textTransform:'none'}}>(optional — client sees this in My Progress)</span>
-                      </div>
-                      <input value={coachLoom} onChange={e=>setCoachLoom(e.target.value)}
-                        placeholder="https://loom.com/share/..."
-                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:8,
-                          padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-                    </div>
-
-                    {/* Loom preview */}
-                    {coachLoom&&(()=>{
-                      const id=coachLoom.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
-                      return id?(
-                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:10,overflow:'hidden',marginBottom:14}}>
-                          <iframe src={`https://www.loom.com/embed/${id}`} allowFullScreen title="Loom preview"
+                      {item.note&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.note}</p>}
+                      {loomId?(
+                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
+                          <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Loom"
                             style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
                         </div>
-                      ):null
-                    })()}
-
-                    <button onClick={saveCoachReview} disabled={savingReview}
-                      style={{width:'100%',background:reviewSaved?C.success:C.gold,border:'none',borderRadius:10,
-                        padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:savingReview?'wait':'pointer',
-                        transition:'background .3s'}}>
-                      {savingReview?'Saving…':reviewSaved?'✓ Review Saved':'Save Coach Review'}
-                    </button>
-                    <div style={{fontSize:10,color:C.muted,textAlign:'center',marginTop:6}}>
-                      Client sees your notes and Loom in their My Progress → Coach Updates tab
+                      ):item.loom?(
+                        <a href={item.loom} target="_blank" rel="noreferrer"
+                          style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
+                          🎥 Watch Loom
+                        </a>
+                      ):null}
                     </div>
+                  )
+                }
+
+                /* ── Client check-in card ── */
+                const ci=item; const idx=item._idx
+                const isExpanded=expandedCi===idx
+                const isEditing=editingCi===idx
+                const saved=localCheckins[idx]
+                return (
+                  <div key={`ci-${idx}`} style={{background:C.card,border:`1px solid ${isExpanded?C.gold+'55':C.border}`,borderRadius:12,marginBottom:12,overflow:'hidden',transition:'border-color .2s'}}>
+
+                    {/* Collapsed header */}
+                    <button onClick={()=>{setExpandedCi(isExpanded?null:idx);setEditingCi(null)}}
+                      style={{width:'100%',background:'none',border:'none',padding:'12px 16px',cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:12}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                          <span style={{fontSize:13,fontWeight:700,color:isExpanded?C.gold:C.white}}>{ci.date}</span>
+                          {ci.compliance!=null&&(
+                            <span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:20,
+                              background:ci.compliance>=90?`${C.success}22`:ci.compliance>=75?`${C.gold}22`:'#ff444422',
+                              color:ci.compliance>=90?C.success:ci.compliance>=75?C.gold:'#ff6b6b'}}>
+                              {ci.compliance}% compliance
+                            </span>
+                          )}
+                          {ci.mood&&<span style={{fontSize:11,color:C.muted}}>{ci.mood}</span>}
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,marginTop:3}}>
+                          ⚖ {ci.weight} lbs&nbsp;·&nbsp;
+                          {[['E',ci.energy],['Sl',ci.sleep],['Bl',ci.bloating]].filter(([,v])=>v!=null).map(([l,v])=>(
+                            <span key={l} style={{color:scoreColor(v),fontWeight:700,marginRight:8}}>{l}:{v}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                        {saved?.coachNotes&&<span style={{fontSize:9,color:C.success,fontWeight:700}}>✓ Reviewed</span>}
+                        <span style={{color:C.muted,fontSize:12}}>{isExpanded?'▲':'▼'}</span>
+                      </div>
+                    </button>
+
+                    {/* Expanded content */}
+                    {isExpanded&&(
+                      <div style={{borderTop:`1px solid ${C.border}`,padding:16}}>
+
+                        {/* Score grid */}
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(76px,1fr))',gap:7,marginBottom:14}}>
+                          {[['Energy',ci.energy],['Sleep',ci.sleep],['Bloating',ci.bloating],
+                            ['Brain Fog',ci.brainFog],['Sex Drive',ci.sexDrive],
+                            ['Hunger',ci.hunger?10-ci.hunger:null],
+                            ['Stress',ci.stress?10-ci.stress:null],
+                          ].map(([l,v])=>(
+                            <div key={l} style={{background:C.surface,border:`1px solid ${v!=null?scoreColor(v)+'44':C.border}`,borderRadius:10,padding:'9px 6px',textAlign:'center'}}>
+                              <div style={{fontSize:7,color:C.muted,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',marginBottom:4,lineHeight:1.3}}>{l}</div>
+                              {v!=null
+                                ?<><div style={{fontSize:19,fontWeight:800,color:scoreColor(v),lineHeight:1}}>{v}</div><div style={{fontSize:7,color:C.muted}}>/10</div></>
+                                :<div style={{fontSize:14,color:C.border}}>—</div>
+                              }
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Vitals */}
+                        {(ci.weight||ci.temp||ci.heartRate||ci.hrv||ci.steps||ci.bloodPressure)&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                            <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Vitals</div>
+                            <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+                              {ci.weight&&<span style={{fontSize:12,color:C.muted}}>⚖️ {ci.weight} lbs</span>}
+                              {ci.temp&&<span style={{fontSize:12,color:C.muted}}>🌡️ {ci.temp}°F</span>}
+                              {ci.heartRate&&<span style={{fontSize:12,color:C.muted}}>❤️ {ci.heartRate} BPM</span>}
+                              {ci.hrv&&<span style={{fontSize:12,color:C.muted}}>📡 HRV {ci.hrv}</span>}
+                              {ci.steps&&<span style={{fontSize:12,color:C.muted}}>👟 {ci.steps} steps</span>}
+                              {ci.bloodPressure&&<span style={{fontSize:12,color:C.muted}}>🩺 {ci.bloodPressure}</span>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Sleep */}
+                        {(ci.sleepWindow||ci.sleepCycles||ci.sleepDisruption)&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                            <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🌙 Sleep</div>
+                            <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:ci.sleepDisruption?8:0}}>
+                              {ci.sleepWindow&&<span style={{fontSize:12,color:C.white}}>🕙 {ci.sleepWindow}</span>}
+                              {ci.sleepCycles&&<span style={{fontSize:12,color:C.white}}>🔄 {ci.sleepCycles}</span>}
+                            </div>
+                            {ci.sleepDisruption&&(
+                              <div style={{fontSize:11,color:C.muted,fontStyle:'italic',background:C.black,borderRadius:7,padding:'7px 10px'}}>{ci.sleepDisruption}</div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Digestion */}
+                        {(ci.bowelCount||ci.bowelType)&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                            <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🫁 Digestion</div>
+                            <div style={{display:'flex',gap:14}}>
+                              {ci.bowelCount&&<span style={{fontSize:12,color:C.white}}>{ci.bowelCount}x daily</span>}
+                              {ci.bowelType&&<span style={{fontSize:12,color:C.white}}>{ci.bowelType}</span>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Client notes */}
+                        {ci.clientNotes&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:14}}>
+                            <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Client Notes</div>
+                            <div style={{fontSize:12,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{ci.clientNotes}</div>
+                          </div>
+                        )}
+
+                        {/* ── Coach Response ─────────────────────── */}
+                        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                            <span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase'}}>💬 Coach Response</span>
+                            {!isEditing&&(
+                              <button onClick={()=>{setEditingCi(idx);setDraftNote(saved?.coachNotes||'');setDraftLoom(saved?.coachLoom||'')}}
+                                style={{background:`${C.gold}18`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                                ✏ {saved?.coachNotes?'Edit':'Add feedback'}
+                              </button>
+                            )}
+                          </div>
+
+                          {isEditing?(
+                            <div>
+                              <div style={{marginBottom:10}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Notes for Client</div>
+                                <textarea value={draftNote} onChange={e=>setDraftNote(e.target.value)} rows={4}
+                                  placeholder="Great progress this week! Let's adjust the sleep window…"
+                                  style={{width:'100%',background:C.black,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                              </div>
+                              <div style={{marginBottom:12}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Loom URL <span style={{fontWeight:400,textTransform:'none',fontSize:9,color:C.dim}}>(optional)</span></div>
+                                <input value={draftLoom} onChange={e=>setDraftLoom(e.target.value)} placeholder="https://loom.com/share/..."
+                                  style={{width:'100%',background:C.black,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                              </div>
+                              {(()=>{const id=draftLoom.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1];return id?(
+                                <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden',marginBottom:12}}>
+                                  <iframe src={`https://www.loom.com/embed/${id}`} allowFullScreen title="Loom preview"
+                                    style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                                </div>
+                              ):null})()}
+                              <div style={{display:'flex',gap:8}}>
+                                <button onClick={()=>{
+                                  setLocalCheckins(p=>p.map((r,i)=>i===idx?{...r,coachNotes:draftNote.trim(),coachLoom:draftLoom.trim()}:r))
+                                  setEditingCi(null)
+                                }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
+                                  Save
+                                </button>
+                                <button onClick={()=>setEditingCi(null)}
+                                  style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 16px',color:C.muted,fontSize:13,cursor:'pointer'}}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ):(
+                            saved?.coachNotes?(
+                              <div>
+                                <p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{saved.coachNotes}</p>
+                                {(()=>{const id=saved?.coachLoom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1];return id?(
+                                  <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
+                                    <iframe src={`https://www.loom.com/embed/${id}`} allowFullScreen title="Loom"
+                                      style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                                  </div>
+                                ):saved?.coachLoom?(
+                                  <a href={saved.coachLoom} target="_blank" rel="noreferrer"
+                                    style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
+                                    🎥 Watch Loom Review
+                                  </a>
+                                ):null})()}
+                              </div>
+                            ):(
+                              <p style={{fontSize:12,color:C.muted,fontStyle:'italic',margin:0}}>No response yet — click "Add feedback" above.</p>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </>)
-              })()}
+                )
+              })}
+
+              {localCheckins.length===0&&coachOnlyUpdates.length===0&&(
+                <div style={{textAlign:'center',padding:48,color:C.muted}}>
+                  <div style={{fontSize:36,marginBottom:12}}>📋</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>No check-ins yet</div>
+                  <div style={{fontSize:11}}>Client check-ins will appear here once submitted. Use "+ Coach Update" to add a standalone note anytime.</div>
+                </div>
+              )}
             </div>
           </div>
 
-        /* ── CLIENT VIEW — submission form (unchanged) ───────── */
         ) : (
-        <div style={{flex:1,overflowY:'auto',padding:16}}>
-          <div style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderLeft:`3px solid ${C.danger}`,borderRadius:9,padding:'10px 13px',marginBottom:12,fontSize:12,color:C.danger}}>
-            ⚠️ All weekly updates MUST be in before 9 AM CST on your check-in day. Wake up on empty stomach. Include fasted weight + photos.
-          </div>
-          <Card sx={{marginBottom:12}}>
-            <Lbl t="Vitals"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Inp label="Body Weight (lbs)" value={ci.weight} onChange={setC('weight')} placeholder="e.g. 172.4" type="number"/>
-              <Inp label="Body Temperature (°F)" value={ci.temp} onChange={setC('temp')} placeholder="e.g. 97.8" type="number"/>
-              <Inp label="Avg Daily Steps" value={ci.steps} onChange={setC('steps')} placeholder="e.g. 9500" type="number"/>
-              <Inp label="Blood Pressure" value={ci.bp} onChange={setC('bp')} placeholder="e.g. 120/80"/>
-              <Inp label="Morning Heart Rate (BPM)" value={ci.heartRate} onChange={setC('heartRate')} placeholder="e.g. 58" type="number"/>
-              <Inp label="HRV" value={ci.hrv} onChange={setC('hrv')} placeholder="e.g. 72" type="number"/>
+
+          /* ── CLIENT VIEW ────────────────────────────────────── */
+          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+
+            {/* Tab switcher */}
+            <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
+              {[['history','📋 History & Feedback'],['submit','📝 Submit Check-In']].map(([k,l])=>(
+                <button key={k} onClick={()=>setClientViewTab(k)}
+                  style={{flex:1,background:'none',border:'none',borderBottom:`2px solid ${clientViewTab===k?C.gold:'transparent'}`,
+                    padding:'12px 8px',color:clientViewTab===k?C.gold:C.muted,fontSize:12,fontWeight:clientViewTab===k?700:400,cursor:'pointer'}}>
+                  {l}
+                </button>
+              ))}
             </div>
-          </Card>
-          <Card sx={{marginBottom:12}}>
-            <Lbl t="Wellbeing Scales (1–10)"/>
-            {[
-              ['sleep',   'Sleep Quality', '1=awful · 10=perfect'],
-              ['bloating','Bloating',       '1=none · 10=extreme'],
-              ['brainFog','Brain Fog',      '1=none · 10=extreme'],
-              ['sexDrive','Sex Drive',      '1=low · 10=high'],
-              ['energy',  'Energy',         '1=awful · 10=perfect'],
-              ['hunger',  'Hunger',         '1=not hungry · 10=starving'],
-            ].map(([k,l,d])=>(
-              <div key={k} style={{marginBottom:13}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                  <div>
-                    <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.8}}>{l}</span>
-                    <span style={{fontSize:9,color:C.dim,marginLeft:8}}>{d}</span>
+
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+              {/* ─── History tab ─── */}
+              {clientViewTab==='history'&&(<>
+
+                {/* Weight trend chart */}
+                {localCheckins.length>=2&&(
+                  <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>📈 Weight Trend</div>
+                    <ResponsiveContainer width="100%" height={100}>
+                      <AreaChart data={[...localCheckins].reverse().map(r=>({name:r.date.split(' ').slice(0,2).join(' '),weight:parseFloat(r.weight)||0}))}>
+                        <defs>
+                          <linearGradient id="wgc" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor={C.gold} stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor={C.gold} stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="name" tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false}/>
+                        <YAxis domain={['auto','auto']} tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false} width={36}/>
+                        <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,fontSize:11}}
+                          labelStyle={{color:C.muted}} itemStyle={{color:C.gold}}/>
+                        <Area type="monotone" dataKey="weight" stroke={C.gold} fill="url(#wgc)" strokeWidth={2} dot={{fill:C.gold,r:3}}/>
+                      </AreaChart>
+                    </ResponsiveContainer>
                   </div>
-                  <span style={{fontSize:13,fontWeight:700,color:C.gold}}>{ci[k]}/10</span>
+                )}
+
+                {/* Check-in history cards (client view — read-only coach notes) */}
+                {localCheckins.map((ci,idx)=>{
+                  const isExpanded=expandedCi===idx
+                  const loomId=ci.coachLoom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
+                  return (
+                    <div key={idx} style={{background:C.card,border:`1px solid ${isExpanded?C.gold+'55':C.border}`,borderRadius:12,marginBottom:12,overflow:'hidden'}}>
+                      <button onClick={()=>setExpandedCi(isExpanded?null:idx)}
+                        style={{width:'100%',background:'none',border:'none',padding:'12px 16px',cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:10}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <span style={{fontSize:13,fontWeight:700,color:isExpanded?C.gold:C.white}}>{ci.date}</span>
+                          <span style={{fontSize:11,color:C.muted,marginLeft:10}}>⚖ {ci.weight} lbs</span>
+                          {ci.compliance!=null&&<span style={{fontSize:10,color:C.muted,marginLeft:8}}>{ci.compliance}% compliance</span>}
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                          {ci.coachNotes&&<span style={{fontSize:9,color:C.gold,fontWeight:700}}>💬 Coach feedback</span>}
+                          <span style={{color:C.muted,fontSize:12}}>{isExpanded?'▲':'▼'}</span>
+                        </div>
+                      </button>
+
+                      {isExpanded&&(
+                        <div style={{borderTop:`1px solid ${C.border}`,padding:16}}>
+                          {/* Score grid */}
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(76px,1fr))',gap:7,marginBottom:14}}>
+                            {[['Energy',ci.energy],['Sleep',ci.sleep],['Bloating',ci.bloating],
+                              ['Brain Fog',ci.brainFog],['Sex Drive',ci.sexDrive],
+                              ['Hunger',ci.hunger?10-ci.hunger:null],
+                              ['Stress',ci.stress?10-ci.stress:null],
+                            ].map(([l,v])=>(
+                              <div key={l} style={{background:C.surface,border:`1px solid ${v!=null?scoreColor(v)+'44':C.border}`,borderRadius:10,padding:'9px 6px',textAlign:'center'}}>
+                                <div style={{fontSize:7,color:C.muted,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',marginBottom:4,lineHeight:1.3}}>{l}</div>
+                                {v!=null?<><div style={{fontSize:19,fontWeight:800,color:scoreColor(v),lineHeight:1}}>{v}</div><div style={{fontSize:7,color:C.muted}}>/10</div></>:<div style={{fontSize:14,color:C.border}}>—</div>}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Vitals row */}
+                          <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:12}}>
+                            {ci.weight&&<span style={{fontSize:12,color:C.muted}}>⚖️ {ci.weight} lbs</span>}
+                            {ci.temp&&<span style={{fontSize:12,color:C.muted}}>🌡️ {ci.temp}°F</span>}
+                            {ci.heartRate&&<span style={{fontSize:12,color:C.muted}}>❤️ {ci.heartRate} BPM</span>}
+                            {ci.hrv&&<span style={{fontSize:12,color:C.muted}}>📡 HRV {ci.hrv}</span>}
+                            {ci.steps&&<span style={{fontSize:12,color:C.muted}}>👟 {ci.steps} steps</span>}
+                          </div>
+
+                          {/* Client notes */}
+                          {ci.clientNotes&&(
+                            <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',marginBottom:12}}>
+                              <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Your Notes</div>
+                              <div style={{fontSize:12,color:C.white,lineHeight:1.7}}>{ci.clientNotes}</div>
+                            </div>
+                          )}
+
+                          {/* Coach response — read-only */}
+                          {ci.coachNotes?(
+                            <div style={{background:`${C.gold}0d`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'12px 14px'}}>
+                              <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>💬 Coach Marcus</div>
+                              <p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{ci.coachNotes}</p>
+                              {loomId?(
+                                <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
+                                  <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Coach Loom"
+                                    style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                                </div>
+                              ):ci.coachLoom?(
+                                <a href={ci.coachLoom} target="_blank" rel="noreferrer"
+                                  style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
+                                  🎥 Watch Coach Review
+                                </a>
+                              ):null}
+                            </div>
+                          ):(
+                            <div style={{background:C.surface,borderRadius:10,padding:'10px 12px',fontSize:12,color:C.muted,fontStyle:'italic'}}>
+                              Awaiting coach feedback…
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {localCheckins.length===0&&(
+                  <div style={{textAlign:'center',padding:48,color:C.muted}}>
+                    <div style={{fontSize:36,marginBottom:12}}>📋</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>No check-ins yet</div>
+                    <div style={{fontSize:11}}>Submit your first check-in and your coach will respond within 48 hours.</div>
+                  </div>
+                )}
+              </>)}
+
+              {/* ─── Submit tab ─── */}
+              {clientViewTab==='submit'&&(<>
+                <div style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderLeft:`3px solid ${C.danger}`,borderRadius:9,padding:'10px 13px',marginBottom:12,fontSize:12,color:C.danger}}>
+                  ⚠️ All weekly updates MUST be in before 9 AM CST on your check-in day. Wake up on empty stomach. Include fasted weight + photos.
                 </div>
-                <input type="range" min="1" max="10" value={ci[k]} onChange={e=>setC(k)(e.target.value)}
-                  style={{width:'100%',accentColor:C.gold}}/>
-              </div>
-            ))}
-          </Card>
-          <Card sx={{marginBottom:12}}>
-            <Lbl t="Sleep & Digestion"/>
-            <Inp label="Sleep window (falling asleep / waking)" value={ci.wakeTime} onChange={setC('wakeTime')} placeholder="e.g. Asleep 10pm, wake 5am"/>
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Sleep Disruption Notes</div>
-              <textarea value={ci.sleepNotes} onChange={e=>setC('sleepNotes')(e.target.value)} placeholder="Describe disruptions, times, duration…"
-                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="Vitals"/>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                    <Inp label="Body Weight (lbs)" value={ci.weight} onChange={setC('weight')} placeholder="e.g. 172.4" type="number"/>
+                    <Inp label="Body Temperature (°F)" value={ci.temp} onChange={setC('temp')} placeholder="e.g. 97.8" type="number"/>
+                    <Inp label="Avg Daily Steps" value={ci.steps} onChange={setC('steps')} placeholder="e.g. 9500" type="number"/>
+                    <Inp label="Blood Pressure" value={ci.bp} onChange={setC('bp')} placeholder="e.g. 120/80"/>
+                    <Inp label="Morning Heart Rate (BPM)" value={ci.heartRate} onChange={setC('heartRate')} placeholder="e.g. 58" type="number"/>
+                    <Inp label="HRV" value={ci.hrv} onChange={setC('hrv')} placeholder="e.g. 72" type="number"/>
+                  </div>
+                </Card>
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="Wellbeing Scales (1–10)"/>
+                  {[
+                    ['sleep',   'Sleep Quality', '1=awful · 10=perfect'],
+                    ['bloating','Bloating',       '1=none · 10=extreme'],
+                    ['brainFog','Brain Fog',      '1=none · 10=extreme'],
+                    ['sexDrive','Sex Drive',      '1=low · 10=high'],
+                    ['energy',  'Energy',         '1=awful · 10=perfect'],
+                    ['hunger',  'Hunger',         '1=not hungry · 10=starving'],
+                  ].map(([k,l,d])=>(
+                    <div key={k} style={{marginBottom:13}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                        <div>
+                          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.8}}>{l}</span>
+                          <span style={{fontSize:9,color:C.dim,marginLeft:8}}>{d}</span>
+                        </div>
+                        <span style={{fontSize:13,fontWeight:700,color:C.gold}}>{ci[k]}/10</span>
+                      </div>
+                      <input type="range" min="1" max="10" value={ci[k]} onChange={e=>setC(k)(e.target.value)} style={{width:'100%',accentColor:C.gold}}/>
+                    </div>
+                  ))}
+                </Card>
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="Sleep & Digestion"/>
+                  <Inp label="Sleep window (falling asleep / waking)" value={ci.wakeTime} onChange={setC('wakeTime')} placeholder="e.g. Asleep 10pm, wake 5am"/>
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Sleep Disruption Notes</div>
+                    <textarea value={ci.sleepNotes} onChange={e=>setC('sleepNotes')(e.target.value)} placeholder="Describe disruptions, times, duration…"
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                    <Inp label="Avg Daily Bowel Movements" value={ci.bowelCount} onChange={setC('bowelCount')} placeholder="e.g. 2" type="number"/>
+                    <Sel label="Stool Consistency" value={ci.bowelType||''} onChange={setC('bowelType')} options={['','Well formed','Loose','Diarrhea','Constipated','Mixed']}/>
+                  </div>
+                </Card>
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="For Women Only"/>
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Cycle Notes</div>
+                    <textarea value={ci.cycleNotes} onChange={e=>setC('cycleNotes')(e.target.value)}
+                      placeholder="Cycle length, mental symptoms, bloating, PMS, flow (heavy/light)…"
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
+                  </div>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.8}}>Period Pain Level</span>
+                    <span style={{fontSize:13,fontWeight:700,color:C.gold}}>{ci.cyclePain}/10</span>
+                  </div>
+                  <input type="range" min="1" max="10" value={ci.cyclePain} onChange={e=>setC('cyclePain')(e.target.value)} style={{width:'100%',accentColor:C.gold}}/>
+                </Card>
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="Additional Notes"/>
+                  <textarea value={ci.notes} onChange={e=>setC('notes')(e.target.value)}
+                    placeholder="Deviations from plan, how long on current protocol, anything your coach should know…"
+                    rows={4}
+                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                  <div style={{marginTop:10,padding:'8px 10px',background:`${C.gold}11`,border:`1px solid ${C.gold}33`,borderRadius:8,fontSize:11,color:C.muted}}>
+                    📸 Upload progress photos (front, side, back) in the Labs &amp; Photos section
+                  </div>
+                </Card>
+                <button onClick={async()=>{
+                  await dbInsert('weekly_checkins',{client_id:KNOWN_USERS['client@eden.io']?.uuid,coach_id:KNOWN_USERS['coach@eden.io']?.uuid,...ci,submitted_at:new Date().toISOString()})
+                  alert('Check-in submitted! Your coach will review within 48 hours.')
+                }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
+                  Submit Weekly Check-In
+                </button>
+              </>)}
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Inp label="Avg Daily Bowel Movements" value={ci.bowelCount} onChange={setC('bowelCount')} placeholder="e.g. 2" type="number"/>
-              <Sel label="Stool Consistency" value={ci.bowelType||''} onChange={setC('bowelType')} options={['','Well formed','Loose','Diarrhea','Constipated','Mixed']}/>
-            </div>
-          </Card>
-          <Card sx={{marginBottom:12}}>
-            <Lbl t="For Women Only"/>
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Cycle Notes</div>
-              <textarea value={ci.cycleNotes} onChange={e=>setC('cycleNotes')(e.target.value)}
-                placeholder="Cycle length, mental symptoms, bloating, PMS, flow (heavy/light)…"
-                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.8}}>Period Pain Level</span>
-              <span style={{fontSize:13,fontWeight:700,color:C.gold}}>{ci.cyclePain}/10</span>
-            </div>
-            <input type="range" min="1" max="10" value={ci.cyclePain} onChange={e=>setC('cyclePain')(e.target.value)}
-              style={{width:'100%',accentColor:C.gold}}/>
-          </Card>
-          <Card sx={{marginBottom:12}}>
-            <Lbl t="Additional Notes"/>
-            <textarea value={ci.notes} onChange={e=>setC('notes')(e.target.value)}
-              placeholder="Deviations from plan, how long on current protocol, anything your coach should know…"
-              rows={4}
-              style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
-            <div style={{marginTop:10,padding:'8px 10px',background:`${C.gold}11`,border:`1px solid ${C.gold}33`,borderRadius:8,fontSize:11,color:C.muted}}>
-              📸 Upload progress photos (front, side, back) in the Labs &amp; Photos section
-            </div>
-          </Card>
-          <button onClick={async()=>{await dbInsert('weekly_checkins',{client_id:KNOWN_USERS['client@eden.io']?.uuid,coach_id:KNOWN_USERS['coach@eden.io']?.uuid,...ci,submitted_at:new Date().toISOString()});alert('Check-in submitted! Your coach will review within 48 hours.')}}
-            style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
-            Submit Weekly Check-In
-          </button>
-        </div>
+          </div>
         )
       )}
 
