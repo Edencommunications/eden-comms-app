@@ -2364,23 +2364,6 @@ const DEMO_PROGRESS_CHECKINS = [
     coach_notes:'Solid. Consistency is building. Stay the course.' },
 ]
 
-const DEMO_COACH_UPDATES = [
-  { id:1, call_date:'2026-07-10', call_type:'Monthly Check-In',
-    summary:'Reviewed your July progress. Compliance is strong at 92% average. Weight is trending down exactly 1 lb/week as planned. Energy improvements are notable — this is the protocol working.',
-    focus_points:'Protein timing on high days\nSleep window consistency (10:30 PM target)\nStress management tools added',
-    action_items:'Continue current macros — no changes needed\nAdd magnesium glycinate 400mg before bed\nBook next call by July 24th',
-    loom_url:'', next_call_date:'2026-07-24' },
-  { id:2, call_date:'2026-06-12', call_type:'Strategy Call',
-    summary:'Mid-protocol check-in. Added digestive enzymes to address bloating. Reviewed stress load and adjusted training to 4x/week to reduce cortisol.',
-    focus_points:'Gut health support protocol\nTraining volume reduced to protect recovery\nCortisol and stress management',
-    action_items:'Start digestive enzymes with each meal\nDrop to 4 workouts per week\nTrack sleep disruptions in notes',
-    loom_url:'', next_call_date:'2026-07-10' },
-  { id:3, call_date:'2026-05-01', call_type:'Onboarding Call',
-    summary:'Initial intake and goal-setting. Reviewed health history, set 12-week targets, introduced the full Eden protocol. Starting weight 153.0 lbs, target 143.0 lbs while maintaining performance.',
-    focus_points:'Full protocol overview\nMacro targets and meal timing set\nHabit foundations and morning routine',
-    action_items:'Start tracking macros daily in the app\nBegin 5 AM morning routine\nDrink 1 gallon water daily',
-    loom_url:'', next_call_date:'2026-06-12' },
-]
 
 const DEMO_PROGRESS_PHOTOS = [
   { id:1, week_label:'Week 12', taken_at:'2026-07-06', photo_url:'', notes:'Front, side, back' },
@@ -2401,9 +2384,8 @@ function scoreCol(v: number): string {
 
 function ClientProgressScreen({ currentUser }: { currentUser: any }) {
   const isMobile = useIsMobile()
-  const [subTab, setSubTab] = useState<'checkins'|'updates'|'photos'>('checkins')
+  const [subTab, setSubTab] = useState<'checkins'|'photos'>('checkins')
   const [checkins,  setCheckins]  = useState<any[]|null>(null)
-  const [updates,   setUpdates]   = useState<any[]|null>(null)
   const [photos,    setPhotos]    = useState<any[]|null>(null)
   const [uploading, setUploading] = useState(false)
   const [expanded,  setExpanded]  = useState<number|null>(null)
@@ -2440,14 +2422,12 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
       uuid = profile?.[0]?.id || null
     } catch {}
 
-    const [c, u, p] = await Promise.all([
-      uuid ? sbGet('weekly_checkins',   `client_id=eq.${uuid}&order=submitted_at.desc&limit=24`) : Promise.resolve([]),
-      uuid ? sbGet('consultation_notes',`client_id=eq.${uuid}&order=call_date.desc&limit=12`)    : Promise.resolve([]),
-      uuid ? sbGet('progress_photos',   `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)     : Promise.resolve([]),
+    const [c, p] = await Promise.all([
+      uuid ? sbGet('weekly_checkins', `client_id=eq.${uuid}&order=submitted_at.desc&limit=24`) : Promise.resolve([]),
+      uuid ? sbGet('progress_photos', `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)     : Promise.resolve([]),
     ])
 
     setCheckins(Array.isArray(c) && c.length ? c : DEMO_PROGRESS_CHECKINS)
-    setUpdates( Array.isArray(u) && u.length ? u : DEMO_COACH_UPDATES)
     setPhotos(  Array.isArray(p) && p.length ? p : DEMO_PROGRESS_PHOTOS)
   }
 
@@ -2493,7 +2473,6 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
 
   const TABS = [
     { key:'checkins', label:'📊 Check-ins' },
-    { key:'updates',  label:'🎥 Coach Updates' },
     { key:'photos',   label:'📸 Photos' },
   ]
 
@@ -2504,7 +2483,7 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
       <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, flexShrink:0,
         padding: isMobile ? '14px 16px 0' : '16px 20px 0' }}>
         <div style={{ fontSize:16, fontWeight:800, color:B.white }}>My Progress</div>
-        <div style={{ fontSize:11, color:B.muted, marginBottom:12 }}>Check-ins · Coach updates · Progress photos</div>
+        <div style={{ fontSize:11, color:B.muted, marginBottom:12 }}>Check-ins · Progress photos</div>
         <div style={{ display:'flex', gap:0, overflowX:'auto', scrollbarWidth:'none' }}>
           {TABS.map(t => (
             <button key={t.key} onClick={() => setSubTab(t.key as any)}
@@ -2688,102 +2667,6 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
         </>)}
 
         {/* ── COACH UPDATES ──────────────────────────────────────────── */}
-        {subTab === 'updates' && (<>
-          <div style={{ fontSize:12, color:B.muted, marginBottom:16 }}>
-            Your coach's notes, action items, and Loom recordings from every call.
-          </div>
-
-          {updates === null ? (
-            <div style={{ textAlign:'center', padding:40, color:B.muted }}>Loading…</div>
-          ) : updates.length === 0 ? (
-            <div style={{ textAlign:'center', padding:40 }}>
-              <div style={{ fontSize:40, marginBottom:12 }}>🎥</div>
-              <div style={{ fontSize:14, fontWeight:700, color:B.white, marginBottom:6 }}>No updates yet</div>
-              <div style={{ fontSize:12, color:B.muted }}>Coach notes and Loom recordings will appear here after each call.</div>
-            </div>
-          ) : updates.map((u:any, idx:number) => {
-            const embed   = loomToEmbed(u.loom_url || u.recording_url || '')
-            const dateStr = u.call_date ? new Date(u.call_date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : ''
-            return (
-              <div key={u.id||idx} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, marginBottom:16, overflow:'hidden' }}>
-
-                {/* Card header */}
-                <div style={{ padding:'14px 16px', borderBottom:`1px solid ${B.border}`,
-                  display:'flex', alignItems:'flex-start', gap:10, flexWrap:'wrap' }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
-                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20,
-                        background:`${B.gold}22`, color:B.gold }}>
-                        {u.call_type || 'Coach Note'}
-                      </span>
-                      <span style={{ fontSize:11, color:B.muted }}>{dateStr}</span>
-                    </div>
-                    {u.next_call_date && (
-                      <div style={{ fontSize:11, color:B.muted }}>
-                        📅 Next call: {new Date(u.next_call_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Loom embed — or placeholder if no recording yet */}
-                <div style={{ borderBottom:`1px solid ${B.border}` }}>
-                  {embed ? (
-                    <div style={{ position:'relative', paddingBottom:'56.25%', overflow:'hidden' }}>
-                      <iframe src={embed} allowFullScreen title={`Coach update — ${dateStr}`}
-                        style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none' }}/>
-                    </div>
-                  ) : (
-                    <div style={{ padding:'18px 16px', display:'flex', alignItems:'center', gap:12, background:B.surface }}>
-                      <div style={{ width:40, height:40, borderRadius:20, background:`${B.gold}22`,
-                        border:`1px solid ${B.gold}44`, display:'flex', alignItems:'center',
-                        justifyContent:'center', fontSize:18, flexShrink:0 }}>🎥</div>
-                      <div>
-                        <div style={{ fontSize:12, fontWeight:700, color:B.muted }}>No recording attached</div>
-                        <div style={{ fontSize:11, color:B.muted, marginTop:2 }}>
-                          Your coach can attach a Loom walk-through to this update — it will play here.
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Body */}
-                <div style={{ padding:'14px 16px' }}>
-                  {u.summary && (
-                    <div style={{ marginBottom:14 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:0.8, textTransform:'uppercase', marginBottom:6 }}>Summary</div>
-                      <div style={{ fontSize:13, color:B.text, lineHeight:1.7 }}>{u.summary}</div>
-                    </div>
-                  )}
-                  {u.focus_points && (
-                    <div style={{ marginBottom:14 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:0.8, textTransform:'uppercase', marginBottom:6 }}>Focus Points</div>
-                      {String(u.focus_points).split('\n').filter(Boolean).map((pt:string, i:number) => (
-                        <div key={i} style={{ display:'flex', gap:8, marginBottom:6 }}>
-                          <span style={{ color:B.gold, flexShrink:0, lineHeight:1.5 }}>•</span>
-                          <span style={{ fontSize:12, color:B.text, lineHeight:1.5 }}>{pt}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {u.action_items && (
-                    <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}33`, borderRadius:10, padding:'12px 14px' }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:B.gold, letterSpacing:0.8, textTransform:'uppercase', marginBottom:8 }}>✅ Your Action Items</div>
-                      {String(u.action_items).split('\n').filter(Boolean).map((item:string, i:number) => (
-                        <div key={i} style={{ display:'flex', gap:8, marginBottom:6 }}>
-                          <span style={{ color:B.gold, flexShrink:0, fontSize:12, lineHeight:1.5 }}>→</span>
-                          <span style={{ fontSize:12, color:B.text, lineHeight:1.5 }}>{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </>)}
-
         {/* ── PHOTOS ─────────────────────────────────────────────────── */}
         {subTab === 'photos' && (<>
           <input type="file" ref={fileRef} accept="image/*" style={{ display:'none' }} onChange={uploadPhoto}/>
