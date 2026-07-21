@@ -565,11 +565,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [editingCi,        setEditingCi]        = useState(null)
   const [draftNote,        setDraftNote]        = useState('')
   const [draftLoom,        setDraftLoom]        = useState('')
-  const [coachOnlyUpdates, setCoachOnlyUpdates] = useState([])
-  const [showAddForm,      setShowAddForm]      = useState(false)
-  const [newNote,          setNewNote]          = useState('')
-  const [newLoom,          setNewLoom]          = useState('')
-  const [newDate,          setNewDate]          = useState('2026-07-21')
   const [clientViewTab,    setClientViewTab]    = useState('history')
   const [clientPhotos,     setClientPhotos]     = useState(null)
   const [photoUploading,   setPhotoUploading]   = useState(false)
@@ -1078,45 +1073,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
               <div>
                 <span style={{fontSize:14,fontWeight:800,color:C.white}}>Check-In Hub</span>
-                <span style={{fontSize:11,color:C.muted,marginLeft:10}}>{localCheckins.length} submissions · {coachOnlyUpdates.length} coach updates</span>
+                <span style={{fontSize:11,color:C.muted,marginLeft:10}}>{localCheckins.length} submissions · {updates.length} coach updates</span>
               </div>
-              <button onClick={()=>setShowAddForm(v=>!v)}
-                style={{background:showAddForm?`${C.gold}33`:`${C.gold}18`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'7px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                {showAddForm?'✕ Cancel':'＋ Coach Update'}
-              </button>
             </div>
 
-            {/* Add standalone coach update form */}
-            {showAddForm&&(
-              <div style={{background:'#111a00',borderBottom:`1px solid ${C.gold}33`,padding:16,flexShrink:0}}>
-                <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:.8,textTransform:'uppercase',marginBottom:12}}>New Coach Update — no client check-in required</div>
-                <div style={{display:'grid',gridTemplateColumns:'140px 1fr',gap:10,marginBottom:10}}>
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Date</div>
-                    <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)}
-                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Loom URL (optional)</div>
-                    <input value={newLoom} onChange={e=>setNewLoom(e.target.value)} placeholder="https://loom.com/share/..."
-                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-                  </div>
-                </div>
-                <div style={{marginBottom:10}}>
-                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Notes / Update</div>
-                  <textarea value={newNote} onChange={e=>setNewNote(e.target.value)} rows={3}
-                    placeholder="Protocol adjustment, midweek observation, general coaching note…"
-                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
-                </div>
-                <button onClick={()=>{
-                  if(!newNote.trim()&&!newLoom.trim())return
-                  setCoachOnlyUpdates(p=>[{id:Date.now(),date:newDate,note:newNote.trim(),loom:newLoom.trim()},...p])
-                  setNewNote('');setNewLoom('');setShowAddForm(false)
-                }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
-                  Post Update
-                </button>
-              </div>
-            )}
 
             {/* Body */}
             <div style={{flex:1,overflowY:'auto',padding:16}}>
@@ -1124,10 +1084,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* All 9 charts */}
               <CheckInCharts checkins={localCheckins}/>
 
-              {/* Combined sorted list: client check-ins + coach-only updates */}
+              {/* Combined sorted list: client check-ins + coach updates */}
               {[
                 ...localCheckins.map((ci,i)=>({...ci,_type:'checkin',_idx:i})),
-                ...coachOnlyUpdates.map(u=>({...u,_type:'coach'}))
+                ...updates.map(u=>({...u,_type:'coach'}))
               ].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>{
 
                 /* ── Coach-only standalone update ── */
@@ -1140,10 +1100,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'2px 8px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>Coach Update</span>
                           <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
                         </div>
-                        <button onClick={()=>setCoachOnlyUpdates(p=>p.filter(u=>u.id!==item.id))}
+                        <button onClick={()=>setUpdates(p=>p.filter(u=>u.id!==item.id))}
                           style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
                       </div>
-                      {item.note&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.note}</p>}
+                      {(item.text||item.note)&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.text||item.note}</p>}
                       {loomId?(
                         <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
                           <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Loom"
@@ -1366,7 +1326,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )
               })}
 
-              {localCheckins.length===0&&coachOnlyUpdates.length===0&&(
+              {localCheckins.length===0&&updates.length===0&&(
                 <div style={{textAlign:'center',padding:48,color:C.muted}}>
                   <div style={{fontSize:36,marginBottom:12}}>📋</div>
                   <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>No check-ins yet</div>
