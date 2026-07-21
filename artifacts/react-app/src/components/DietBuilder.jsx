@@ -566,6 +566,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [draftNote,        setDraftNote]        = useState('')
   const [draftLoom,        setDraftLoom]        = useState('')
   const [clientViewTab,    setClientViewTab]    = useState('history')
+  const [coachCheckinTab,  setCoachCheckinTab]  = useState('checkins')
   const [clientPhotos,     setClientPhotos]     = useState(null)
   const [photoUploading,   setPhotoUploading]   = useState(false)
   const photoFileRef = useRef(null)
@@ -1056,8 +1057,21 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               </div>
             )}
 
+            {/* Sub-tab bar */}
+            <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
+              {[['checkins','📋 Check-Ins'],['photos','📸 Photos']].map(([k,l])=>(
+                <button key={k} onClick={()=>setCoachCheckinTab(k)}
+                  style={{flex:1,background:'none',border:'none',borderBottom:`2px solid ${coachCheckinTab===k?C.gold:'transparent'}`,
+                    padding:'12px 8px',color:coachCheckinTab===k?C.gold:C.muted,fontSize:12,fontWeight:coachCheckinTab===k?700:400,cursor:'pointer'}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
             {/* Body */}
             <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+              {coachCheckinTab==='checkins'&&<>
 
               {/* All 9 charts */}
               <CheckInCharts checkins={localCheckins}/>
@@ -1312,16 +1326,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </div>
               )}
 
-              {/* ── Progress Photos panel (coach view) ── */}
-              <div style={{marginTop:8}}>
-                <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>📸 Progress Photos</div>
+              </>}
+
+              {/* ── Photos sub-tab ── */}
+              {coachCheckinTab==='photos'&&(<>
                 {clientPhotos===null?(
-                  <div style={{textAlign:'center',padding:32,color:C.muted,fontSize:12}}>Loading photos…</div>
+                  <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:12}}>Loading photos…</div>
                 ):clientPhotos.length===0?(
-                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:32,textAlign:'center'}}>
-                    <div style={{fontSize:36,marginBottom:10}}>📸</div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:4}}>No photos uploaded yet</div>
-                    <div style={{fontSize:11,color:C.muted}}>Photos the client uploads will appear here, grouped by week.</div>
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:40,textAlign:'center'}}>
+                    <div style={{fontSize:40,marginBottom:12}}>📸</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:6}}>No photos uploaded yet</div>
+                    <div style={{fontSize:12,color:C.muted}}>Photos the client uploads will appear here, grouped by week.</div>
                   </div>
                 ):(()=>{
                   const byWeek={}
@@ -1362,7 +1377,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     </div>
                   ))
                 })()}
-              </div>
+              </>)}
 
             </div>
           </div>
