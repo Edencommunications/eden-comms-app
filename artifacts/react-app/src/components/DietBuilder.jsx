@@ -4,7 +4,7 @@
 // Client: view-only on coach content, editable on their own sections
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -553,6 +553,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [newLoom,          setNewLoom]          = useState('')
   const [newDate,          setNewDate]          = useState('2026-07-21')
   const [clientViewTab,    setClientViewTab]    = useState('history')
+  const [clientPhotos,     setClientPhotos]     = useState(null)
+  const [photoUploading,   setPhotoUploading]   = useState(false)
+  const photoFileRef = useRef(null)
 
   useEffect(() => {
     setLocalCheckins((demoCheckins||[]).map(ci => ({
@@ -563,6 +566,43 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setExpandedCi(null)
     setEditingCi(null)
   }, [demoCheckins])
+
+  // Load client's progress photos
+  useEffect(() => {
+    if (role !== 'client') return
+    const uuid = KNOWN_USERS[email]?.uuid
+    if (!uuid) { setClientPhotos([]); return }
+    dbGet('progress_photos', `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)
+      .then(rows => setClientPhotos(Array.isArray(rows) && rows.length ? rows : []))
+      .catch(() => setClientPhotos([]))
+  }, [email, role])
+
+  async function uploadProgressPhoto(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const uuid = KNOWN_USERS[email]?.uuid
+    if (!uuid) { alert('Could not identify your account.'); return }
+    setPhotoUploading(true)
+    try {
+      const path = `${uuid}/${Date.now()}-${file.name}`
+      const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/progress-photos/${path}`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}`, 'Content-Type': file.type },
+        body: file,
+      })
+      if (!upRes.ok) throw new Error('upload failed')
+      const photoUrl = `${SUPABASE_URL}/storage/v1/object/public/progress-photos/${path}`
+      const weekNum  = (clientPhotos?.length || 0) + 1
+      await dbInsert('progress_photos', {
+        client_id: uuid, week_label: `Week ${weekNum}`,
+        photo_url: photoUrl, file_name: file.name, file_size: file.size,
+        taken_at: new Date().toISOString(),
+      })
+      const rows = await dbGet('progress_photos', `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)
+      setClientPhotos(Array.isArray(rows) ? rows : [])
+    } catch { alert('Upload failed. Make sure the progress-photos storage bucket exists in Supabase.') }
+    finally { setPhotoUploading(false); if (photoFileRef.current) photoFileRef.current.value = '' }
+  }
 
   // Habits — assigned by coach, frequency filled by client
   const [assignedHabits,   setAssignedHabits]   = useState(MASTER_HABITS.slice(0,8).map(h=>({...h,target:h.defaultTarget})))
@@ -1294,7 +1334,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
             {/* Tab switcher */}
             <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
-              {[['history','📋 History & Feedback'],['submit','📝 Submit Check-In']].map(([k,l])=>(
+              {[['history','📋 History & Feedback'],['photos','📸 Photos'],['submit','📝 Submit Check-In']].map(([k,l])=>(
                 <button key={k} onClick={()=>setClientViewTab(k)}
                   style={{flex:1,background:'none',border:'none',borderBottom:`2px solid ${clientViewTab===k?C.gold:'transparent'}`,
                     padding:'12px 8px',color:clientViewTab===k?C.gold:C.muted,fontSize:12,fontWeight:clientViewTab===k?700:400,cursor:'pointer'}}>
@@ -1398,6 +1438,70 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div style={{fontSize:11}}>Submit your first check-in and your coach will respond within 48 hours.</div>
                   </div>
                 )}
+              </>)}
+
+              {/* ─── Photos tab ─── */}
+              {clientViewTab==='photos'&&(<>
+                <input type="file" ref={photoFileRef} accept="image/*" style={{display:'none'}} onChange={uploadProgressPhoto}/>
+                <button onClick={()=>photoFileRef.current?.click()} disabled={photoUploading}
+                  style={{width:'100%',background:'none',border:`2px dashed ${C.gold}66`,borderRadius:12,
+                    padding:'18px',color:C.gold,fontSize:13,fontWeight:700,
+                    cursor:photoUploading?'not-allowed':'pointer',marginBottom:6,
+                    display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+                    opacity:photoUploading?0.5:1}}>
+                  {photoUploading?'⏳ Uploading…':'📸 Upload Progress Photo'}
+                </button>
+                <div style={{fontSize:11,color:C.muted,textAlign:'center',marginBottom:20}}>
+                  Upload front, side, and back — your coach can see these
+                </div>
+
+                {clientPhotos===null?(
+                  <div style={{textAlign:'center',padding:40,color:C.muted}}>Loading…</div>
+                ):clientPhotos.length===0?(
+                  <div style={{textAlign:'center',padding:40}}>
+                    <div style={{fontSize:40,marginBottom:12}}>📸</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:6}}>No photos yet</div>
+                    <div style={{fontSize:12,color:C.muted}}>Tap the button above to upload your first progress photos.</div>
+                  </div>
+                ):(()=>{
+                  const byWeek={}
+                  for(const p of clientPhotos){
+                    const k=p.week_label||'Uncategorized'
+                    if(!byWeek[k]) byWeek[k]=[]
+                    byWeek[k].push(p)
+                  }
+                  return Object.entries(byWeek).map(([week,wPhotos])=>(
+                    <div key={week} style={{marginBottom:22}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                        <div>
+                          <div style={{fontSize:14,fontWeight:700,color:C.white}}>{week}</div>
+                          <div style={{fontSize:11,color:C.muted}}>
+                            {wPhotos[0]?.taken_at?new Date(wPhotos[0].taken_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}
+                          </div>
+                        </div>
+                        <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:20,background:`${C.gold}22`,color:C.gold}}>
+                          {wPhotos.length} photo{wPhotos.length!==1?'s':''}
+                        </span>
+                      </div>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                        {wPhotos.map((p,i)=>(
+                          p.photo_url?(
+                            <a key={i} href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
+                              <img src={p.photo_url} alt={`${week} photo ${i+1}`}
+                                style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:10,display:'block',border:`1px solid ${C.border}`}}/>
+                            </a>
+                          ):(
+                            <div key={i} style={{aspectRatio:'3/4',background:C.surface,border:`1px solid ${C.border}`,
+                              borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4}}>
+                              <span style={{fontSize:22}}>📸</span>
+                              <span style={{fontSize:9,color:C.muted}}>{p.notes||'Photo'}</span>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                })()}
               </>)}
 
               {/* ─── Submit tab ─── */}

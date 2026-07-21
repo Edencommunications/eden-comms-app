@@ -3101,7 +3101,6 @@ const AppShell = ({ user, onLogout }) => {
     { key:"labs",      icon:"labs",      label:"Labs" },
     { key:"workout",   icon:"workout",   label:"Workout" },
     { key:"calendar",  icon:"calendar",  label:"Book a Call" },
-    { key:"progress",  icon:"progress",  label:"My Progress" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
@@ -3165,7 +3164,6 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "diet")         return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
     if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins}/>;
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
-    if (tab === "progress")     return <ClientProgressScreen currentUser={toolUser}/>;
     if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs"/>;
     if (tab === "checkin")      return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
