@@ -72,7 +72,7 @@ create policy "Coaches can read all checkins"
   on public.weekly_checkins for select
   using (
     exists (
-      select 1 from public.users
+      select 1 from public.user_profiles
       where id = auth.uid() and role in ('coach','super_admin')
     )
   );
@@ -106,13 +106,13 @@ create policy "Coaches can upsert responses"
   on public.coach_responses for all
   using (
     exists (
-      select 1 from public.users
+      select 1 from public.user_profiles
       where id = auth.uid() and role in ('coach','super_admin')
     )
   )
   with check (
     exists (
-      select 1 from public.users
+      select 1 from public.user_profiles
       where id = auth.uid() and role in ('coach','super_admin')
     )
   );
@@ -148,13 +148,13 @@ create policy "Coaches can manage updates"
   on public.coach_updates for all
   using (
     exists (
-      select 1 from public.users
+      select 1 from public.user_profiles
       where id = auth.uid() and role in ('coach','super_admin')
     )
   )
   with check (
     exists (
-      select 1 from public.users
+      select 1 from public.user_profiles
       where id = auth.uid() and role in ('coach','super_admin')
     )
   );
@@ -200,7 +200,7 @@ create policy "Coaches can read all photos"
   on public.progress_photos for select
   using (
     exists (
-      select 1 from public.users
+      select 1 from public.user_profiles
       where id = auth.uid() and role in ('coach','super_admin')
     )
   );
