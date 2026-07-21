@@ -52,6 +52,22 @@ async function dbUpdate(table, query, body) {
   })
   if (!r.ok) console.error('UPDATE', await r.text())
 }
+async function dbUpsert(table, body, onConflict) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    method:'POST',
+    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}`,
+      'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates,return=minimal' },
+    body:JSON.stringify(body)
+  })
+  if (!r.ok) console.error('UPSERT', await r.text())
+}
+async function dbDelete(table, query) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    method:'DELETE',
+    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}` }
+  })
+  if (!r.ok) console.error('DELETE', await r.text())
+}
 function scoreColor(v) {
   if (v == null) return C.muted
   if (v >= 8) return C.success
@@ -572,24 +588,70 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const photoFileRef = useRef(null)
 
   useEffect(() => {
-    setLocalCheckins((demoCheckins||[]).map(ci => ({
+    // Seed with demo data immediately so the UI isn't blank
+    const demo = (demoCheckins||[]).map(ci => ({
       ...ci,
       coachNotes: ci.coachNotes || '',
       coachLoom:  ci.coachLoom  || '',
-    })))
+    }))
+    setLocalCheckins(demo)
     setExpandedCi(null)
     setEditingCi(null)
-  }, [demoCheckins])
 
-  // Load client's progress photos
+    const uuid = KNOWN_USERS[email]?.uuid
+    if (!uuid) return
+
+    // Fetch real submitted check-ins from DB and merge on top of demo data
+    dbGet('weekly_checkins', `client_id=eq.${uuid}&order=submitted_at.desc&limit=52`)
+      .then(rows => {
+        if (!Array.isArray(rows) || rows.length === 0) return
+        const dbCheckins = rows.map(r => ({
+          date:             new Date(r.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+          weight:           r.weight||'',       temp:             r.temp||'',
+          steps:            r.steps||'',        heartRate:        r.heart_rate||'',
+          hrv:              r.hrv||'',          bloodPressure:    r.blood_pressure||'',
+          energy:           r.energy,           sleep:            r.sleep,
+          bloating:         r.bloating,         brainFog:         r.brain_fog,
+          sexDrive:         r.sex_drive,        hunger:           r.hunger,
+          stress:           r.stress,           compliance:       r.compliance,
+          mood:             r.mood||'',         sleepWindow:      r.sleep_window||'',
+          sleepCycles:      r.sleep_cycles||'', sleepDisruption:  r.sleep_disruption||'',
+          bowelCount:       r.bowel_count||'',  bowelType:        r.bowel_type||'',
+          clientNotes:      r.notes||'',        coachNotes:       '',
+          coachLoom:        '',
+          habits:           r.habits || null,   habitPct:         r.habit_pct,
+          _dbId:            r.id,
+        }))
+        setLocalCheckins(prev => {
+          const dbDates = new Set(dbCheckins.map(c => c.date))
+          const demoOnly = prev.filter(dc => !dbDates.has(dc.date))
+          return [...dbCheckins, ...demoOnly]
+        })
+
+        // Overlay coach responses onto the merged list
+        return dbGet('coach_responses', `client_id=eq.${uuid}&order=updated_at.desc`)
+      })
+      .then(respRows => {
+        if (!Array.isArray(respRows) || respRows.length === 0) return
+        const byDate = {}
+        respRows.forEach(r => { byDate[r.checkin_date] = r })
+        setLocalCheckins(prev => prev.map(ci => {
+          const resp = byDate[ci.date]
+          if (!resp) return ci
+          return { ...ci, coachNotes: resp.coach_notes||ci.coachNotes, coachLoom: resp.coach_loom||ci.coachLoom }
+        }))
+      })
+      .catch(() => {})
+  }, [demoCheckins, email])
+
+  // Load client's progress photos — for both client login and coach viewing a client
   useEffect(() => {
-    if (role !== 'client') return
     const uuid = KNOWN_USERS[email]?.uuid
     if (!uuid) { setClientPhotos([]); return }
     dbGet('progress_photos', `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)
       .then(rows => setClientPhotos(Array.isArray(rows) && rows.length ? rows : []))
       .catch(() => setClientPhotos([]))
-  }, [email, role])
+  }, [email])
 
   async function uploadProgressPhoto(e) {
     const file = e.target.files?.[0]
@@ -626,10 +688,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const setHabitCount = (id,v) => setHabitCounts(p=>({...p,[id]:Math.min(7,Math.max(0,parseInt(v)||0))}))
 
   // Coach-only updates — visible to client in their Check-In history
-  const [coachOnlyUpdates, setCoachOnlyUpdates] = useState([
-    {id:1,date:'Jul 14 2026',note:'Adjusted Meal 3 protein up to 5.5oz. Keep hitting step goal — great progress this week!',loom:''},
-    {id:2,date:'Jul 7 2026',note:'Weekly check-in review + diet update walkthrough',loom:'https://loom.com/share/example'},
-  ])
+  const [coachOnlyUpdates, setCoachOnlyUpdates] = useState([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [newNote,     setNewNote]     = useState('')
   const [newLoom,     setNewLoom]     = useState('')
@@ -752,9 +811,27 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   function addCoachUpdate() {
     if(!newNote.trim()&&!newLoom.trim()) return
-    setCoachOnlyUpdates(p=>[{id:Date.now(),date:newDate,note:newNote.trim(),loom:newLoom.trim()},...p])
+    const clientId = KNOWN_USERS[email]?.uuid
+    const coachId  = KNOWN_USERS['coach@eden.io']?.uuid
+    const entry = {id:Date.now(),date:newDate,note:newNote.trim(),loom:newLoom.trim()}
+    setCoachOnlyUpdates(p=>[entry,...p])
     setNewNote(''); setNewLoom(''); setShowAddForm(false)
+    if (clientId && coachId) {
+      dbInsert('coach_updates',{coach_id:coachId,client_id:clientId,date:newDate,note:entry.note,loom:entry.loom,created_at:new Date().toISOString()})
+        .then(()=> dbGet('coach_updates',`client_id=eq.${clientId}&order=created_at.desc&limit=50`))
+        .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCoachOnlyUpdates(rows.map(r=>({id:r.id,date:r.date,note:r.note||'',loom:r.loom||''}))) })
+        .catch(()=>{})
+    }
   }
+
+  // Load coach_updates from DB on mount
+  useEffect(()=>{
+    const uuid = KNOWN_USERS[email]?.uuid
+    if(!uuid) return
+    dbGet('coach_updates',`client_id=eq.${uuid}&order=created_at.desc&limit=50`)
+      .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCoachOnlyUpdates(rows.map(r=>({id:r.id,date:r.date,note:r.note||'',loom:r.loom||''}))) })
+      .catch(()=>{})
+  },[email])
 
   function toggleHabitAssign(habit) {
     const exists=assignedHabits.find(h=>h.id===habit.id)
@@ -1092,8 +1169,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'2px 8px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>Coach Update</span>
                           <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
                         </div>
-                        <button onClick={()=>setCoachOnlyUpdates(p=>p.filter(u=>u.id!==item.id))}
-                          style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
+                        <button onClick={()=>{
+                          setCoachOnlyUpdates(p=>p.filter(u=>u.id!==item.id))
+                          if(typeof item.id==='string') dbDelete('coach_updates',`id=eq.${item.id}`)
+                        }} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
                       </div>
                       {item.note&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.note}</p>}
                       {loomId?(
@@ -1282,6 +1361,16 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                 <button onClick={()=>{
                                   setLocalCheckins(p=>p.map((r,i)=>i===idx?{...r,coachNotes:draftNote.trim(),coachLoom:draftLoom.trim()}:r))
                                   setEditingCi(null)
+                                  const clientId = KNOWN_USERS[email]?.uuid
+                                  const coachId  = KNOWN_USERS['coach@eden.io']?.uuid
+                                  if(clientId && coachId) {
+                                    dbUpsert('coach_responses',{
+                                      client_id:clientId, coach_id:coachId,
+                                      checkin_date:saved.date,
+                                      coach_notes:draftNote.trim(), coach_loom:draftLoom.trim(),
+                                      updated_at:new Date().toISOString()
+                                    },'client_id,checkin_date')
+                                  }
                                 }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
                                   Save
                                 </button>
@@ -1731,7 +1820,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   </div>
                 </Card>
                 <button onClick={async()=>{
-                  await dbInsert('weekly_checkins',{client_id:KNOWN_USERS['client@eden.io']?.uuid,coach_id:KNOWN_USERS['coach@eden.io']?.uuid,...ci,habits:JSON.stringify(habitCounts),habitPct:habitScore,submitted_at:new Date().toISOString()})
+                  await dbInsert('weekly_checkins',{
+                    client_id:        KNOWN_USERS[email]?.uuid,
+                    coach_id:         KNOWN_USERS['coach@eden.io']?.uuid,
+                    weight:           ci.weight,           temp:             ci.temp,
+                    steps:            ci.steps,            heart_rate:       ci.heartRate,
+                    hrv:              ci.hrv,              blood_pressure:   ci.bloodPressure,
+                    energy:           ci.energy,           sleep:            ci.sleep,
+                    bloating:         ci.bloating,         brain_fog:        ci.brainFog,
+                    sex_drive:        ci.sexDrive,         hunger:           ci.hunger,
+                    stress:           ci.stress,           compliance:       ci.compliance,
+                    mood:             ci.mood,             sleep_window:     ci.sleepWindow,
+                    sleep_cycles:     ci.sleepCycles,      sleep_disruption: ci.sleepDisruption,
+                    bowel_count:      ci.bowelCount,       bowel_type:       ci.bowelType,
+                    notes:            ci.notes,            habits:           habitCounts,
+                    habit_pct:        habitScore,          submitted_at:     new Date().toISOString(),
+                  })
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                 }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
                   Submit Weekly Check-In
