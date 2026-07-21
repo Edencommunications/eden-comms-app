@@ -3212,7 +3212,9 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
     if (tab === "progress")     return <ClientProgressScreen currentUser={toolUser}/>;
     if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs"/>;
-    if (tab === "checkin")      return <CheckInScreen/>;
+    if (tab === "checkin")      return (user.role === "coach" || user.role === "super_admin")
+                                        ? <DietBuilder currentUser={toolUser} initialTab="checkin"/>
+                                        : <CheckInScreen/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout"/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
