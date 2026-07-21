@@ -1089,9 +1089,13 @@ const CLIENT_ROSTER = [
 const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   const isMobile = useIsMobile();
   const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
+  const [localHistory, setLocalHistory] = useState<any[]>(client?.checkinHistory || []);
+  const [editingIdx,   setEditingIdx]   = useState<number|null>(null);
+  const [draftNote,    setDraftNote]    = useState('');
+  const [draftLoom,    setDraftLoom]    = useState('');
   if (!client) return null;
 
-  const history: any[] = client.checkinHistory || [];
+  const history: any[] = localHistory;
   const lastCompleted = history.length > 0 ? history[0].date : client.lastCheckin;
 
   // Oldest→newest for charts (left = past, right = present)
@@ -1357,14 +1361,75 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                       <ScoreChip label="Stress"    val={entry.stress} invert />
                     </div>
 
-                    {/* Notes */}
+                    {/* Client notes */}
                     <div style={{ background:B.bg, borderRadius:8, padding:"9px 11px", marginBottom:7 }}>
                       <p style={{ fontSize:9, color:B.muted, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 4px", fontWeight:700 }}>Client</p>
                       <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6, fontStyle:"italic" }}>"{entry.clientNotes}"</p>
                     </div>
+
+                    {/* Coach notes — inline editable */}
                     <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}33`, borderRadius:8, padding:"9px 11px" }}>
-                      <p style={{ fontSize:9, color:B.gold, textTransform:"uppercase", letterSpacing:.8, margin:"0 0 4px", fontWeight:700 }}>Coach</p>
-                      <p style={{ fontSize:12, color:B.text, margin:0, lineHeight:1.6 }}>{entry.coachNotes}</p>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                        <p style={{ fontSize:9, color:B.gold, textTransform:"uppercase", letterSpacing:.8, margin:0, fontWeight:700 }}>💬 Coach</p>
+                        {editingIdx !== idx && (
+                          <button onClick={()=>{ setEditingIdx(idx); setDraftNote(entry.coachNotes||''); setDraftLoom(entry.loomUrl||''); }}
+                            style={{ background:"none", border:`1px solid ${B.gold}44`, borderRadius:6, padding:"2px 8px",
+                              color:B.gold, fontSize:10, cursor:"pointer", fontWeight:600 }}>
+                            ✏ {entry.coachNotes ? 'Edit' : 'Add feedback'}
+                          </button>
+                        )}
+                      </div>
+
+                      {editingIdx === idx ? (
+                        <>
+                          <textarea value={draftNote} onChange={e=>setDraftNote(e.target.value)}
+                            placeholder="Add your feedback for this check-in week…"
+                            rows={3}
+                            style={{ width:"100%", background:B.bg, border:`1px solid ${B.gold}44`, borderRadius:7,
+                              padding:"8px 10px", color:B.text, fontSize:12, resize:"vertical", outline:"none",
+                              boxSizing:"border-box", fontFamily:"inherit", marginBottom:8 }}/>
+                          <input value={draftLoom} onChange={e=>setDraftLoom(e.target.value)}
+                            placeholder="https://loom.com/share/… (optional Loom for this week)"
+                            style={{ width:"100%", background:B.bg, border:`1px solid ${B.border}`, borderRadius:7,
+                              padding:"7px 10px", color:B.text, fontSize:11, outline:"none",
+                              boxSizing:"border-box", marginBottom:8 }}/>
+                          <div style={{ display:"flex", gap:8 }}>
+                            <button onClick={()=>{
+                                setLocalHistory(prev => prev.map((e:any,i:number) =>
+                                  i===idx ? {...e, coachNotes:draftNote, loomUrl:draftLoom} : e));
+                                setEditingIdx(null);
+                              }}
+                              style={{ flex:1, background:B.gold, border:"none", borderRadius:7, padding:"7px",
+                                color:"#000", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                              Save
+                            </button>
+                            <button onClick={()=>setEditingIdx(null)}
+                              style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:7,
+                                padding:"7px 14px", color:B.muted, fontSize:12, cursor:"pointer" }}>
+                              Cancel
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p style={{ fontSize:12, color: entry.coachNotes ? B.text : B.muted,
+                            fontStyle: entry.coachNotes ? "normal" : "italic", margin:0, lineHeight:1.6 }}>
+                            {entry.coachNotes || "No coach notes yet — click Add feedback to respond."}
+                          </p>
+                          {entry.loomUrl && (
+                            <a href={entry.loomUrl} target="_blank" rel="noreferrer"
+                              style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, background:B.bg,
+                                borderRadius:7, padding:"7px 10px", textDecoration:"none", border:`1px solid ${B.border}` }}>
+                              <span style={{ fontSize:18 }}>▶️</span>
+                              <div>
+                                <div style={{ fontSize:11, color:B.gold, fontWeight:600 }}>Watch Video Review</div>
+                                <div style={{ fontSize:9, color:B.muted, marginTop:1, overflow:"hidden",
+                                  textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:200 }}>{entry.loomUrl}</div>
+                              </div>
+                            </a>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -3212,9 +3277,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
     if (tab === "progress")     return <ClientProgressScreen currentUser={toolUser}/>;
     if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs"/>;
-    if (tab === "checkin")      return (user.role === "coach" || user.role === "super_admin")
-                                        ? <DietBuilder currentUser={toolUser} initialTab="checkin"/>
-                                        : <CheckInScreen/>;
+    if (tab === "checkin")      return <CheckInScreen/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout"/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
