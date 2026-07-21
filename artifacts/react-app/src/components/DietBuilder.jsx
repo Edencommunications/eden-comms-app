@@ -319,6 +319,7 @@ function CheckInCharts({ checkins }) {
     date:      e.date.replace(' 2026',''),
     weight:    parseFloat(e.weight) || 0,
     compliance:e.compliance,
+    habitPct:  typeof e.habitPct === 'number' ? e.habitPct : null,
     energy:    e.energy,
     sleep:     e.sleep,
     bloating:  e.bloating,
@@ -384,6 +385,23 @@ function CheckInCharts({ checkins }) {
           </BarChart>
         </ResponsiveContainer>
       </Panel>
+
+      {/* 2b. Habit Compliance — only if data exists */}
+      {chartData.some(d=>d.habitPct!=null)&&(
+        <Panel title="Habit Compliance (%)">
+          <ResponsiveContainer width="100%" height={130}>
+            <BarChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CT.grid} vertical={false}/>
+              <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+              <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={[0,100]}/>
+              <Tooltip {...CT.tooltip} formatter={v=>[v+'%','Habits']}/>
+              <Bar dataKey="habitPct" radius={[4,4,0,0]}
+                label={{position:'top',fontSize:9,fill:'#4FD89A',formatter:v=>v!=null?v+'%':''}}
+                fill="#4FD89A"/>
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+      )}
 
       {/* 3. Energy · Sleep · Sex Drive */}
       <Panel title="Energy · Sleep · Sex Drive (1–10, higher = better)">
@@ -1240,9 +1258,40 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                         {/* Client notes */}
                         {ci.clientNotes&&(
-                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:14}}>
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
                             <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Client Notes</div>
                             <div style={{fontSize:12,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{ci.clientNotes}</div>
+                          </div>
+                        )}
+
+                        {/* Habit compliance */}
+                        {ci.habits&&Object.keys(ci.habits).length>0&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                              <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>✅ Habits This Week</div>
+                              {ci.habitPct!=null&&(
+                                <span style={{fontSize:11,fontWeight:700,color:ci.habitPct>=85?C.success:ci.habitPct>=60?C.gold:C.danger}}>{ci.habitPct}%</span>
+                              )}
+                            </div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 12px'}}>
+                              {Object.entries(ci.habits).map(([id,count])=>{
+                                const h=MASTER_HABITS.find(x=>x.id===id)
+                                if(!h) return null
+                                const pct=Math.min(100,Math.round(count/h.defaultTarget*100))
+                                const col=pct>=85?C.success:pct>=60?C.gold:C.danger
+                                return (
+                                  <div key={id}>
+                                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                                      <span style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'80%'}}>{h.name}</span>
+                                      <span style={{fontSize:9,fontWeight:700,color:col,flexShrink:0}}>{count}/{h.defaultTarget}</span>
+                                    </div>
+                                    <div style={{height:3,borderRadius:2,background:C.border}}>
+                                      <div style={{width:`${pct}%`,height:'100%',borderRadius:2,background:col}}/>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </div>
                         )}
 
@@ -1397,9 +1446,40 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                           {/* Client notes */}
                           {ci.clientNotes&&(
-                            <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',marginBottom:12}}>
+                            <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',marginBottom:10}}>
                               <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Your Notes</div>
                               <div style={{fontSize:12,color:C.white,lineHeight:1.7}}>{ci.clientNotes}</div>
+                            </div>
+                          )}
+
+                          {/* Habit compliance */}
+                          {ci.habits&&Object.keys(ci.habits).length>0&&(
+                            <div style={{background:C.surface,borderRadius:8,padding:'10px 12px',marginBottom:10}}>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                                <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>✅ Habits This Week</div>
+                                {ci.habitPct!=null&&(
+                                  <span style={{fontSize:11,fontWeight:700,color:ci.habitPct>=85?C.success:ci.habitPct>=60?C.gold:C.danger}}>{ci.habitPct}%</span>
+                                )}
+                              </div>
+                              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 12px'}}>
+                                {Object.entries(ci.habits).map(([id,count])=>{
+                                  const h=MASTER_HABITS.find(x=>x.id===id)
+                                  if(!h) return null
+                                  const pct=Math.min(100,Math.round(count/h.defaultTarget*100))
+                                  const col=pct>=85?C.success:pct>=60?C.gold:C.danger
+                                  return (
+                                    <div key={id}>
+                                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                                        <span style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'80%'}}>{h.name}</span>
+                                        <span style={{fontSize:9,fontWeight:700,color:col,flexShrink:0}}>{count}/{h.defaultTarget}</span>
+                                      </div>
+                                      <div style={{height:3,borderRadius:2,background:C.border}}>
+                                        <div style={{width:`${pct}%`,height:'100%',borderRadius:2,background:col}}/>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
                             </div>
                           )}
 
@@ -1569,6 +1649,40 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   </div>
                   <input type="range" min="1" max="10" value={ci.cyclePain} onChange={e=>setC('cyclePain')(e.target.value)} style={{width:'100%',accentColor:C.gold}}/>
                 </Card>
+                {/* Habits this week */}
+                {assignedHabits.length>0&&(
+                  <Card sx={{marginBottom:12}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                      <Lbl t="Habits This Week"/>
+                      <span style={{fontSize:13,fontWeight:700,color:habitScore>=80?C.success:habitScore>=50?C.gold:C.danger}}>{habitScore}%</span>
+                    </div>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:10}}>How many times did you complete each habit since your last check-in?</div>
+                    {assignedHabits.map(h=>{
+                      const count=habitCounts[h.id]||0
+                      const pct=Math.round(count/h.target*100)
+                      const col=pct>=85?C.success:pct>=60?C.gold:C.danger
+                      return (
+                        <div key={h.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,color:C.white,fontWeight:500,marginBottom:4}}>{h.name}</div>
+                            <div style={{height:3,borderRadius:2,background:C.border}}>
+                              <div style={{width:`${Math.min(100,pct)}%`,height:'100%',borderRadius:2,background:col,transition:'width .2s'}}/>
+                            </div>
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                            <button onClick={()=>setHabitCount(h.id,count-1)} disabled={count<=0}
+                              style={{width:26,height:26,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.white,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:count<=0?.4:1}}>−</button>
+                            <div style={{width:32,textAlign:'center',fontSize:14,fontWeight:700,color:count>=h.target?C.success:C.white}}>{count}</div>
+                            <button onClick={()=>setHabitCount(h.id,count+1)} disabled={count>=7}
+                              style={{width:26,height:26,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.white,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:count>=7?.4:1}}>+</button>
+                            <span style={{fontSize:10,color:C.muted,width:20}}>/{h.target}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </Card>
+                )}
+
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="Additional Notes"/>
                   <textarea value={ci.notes} onChange={e=>setC('notes')(e.target.value)}
@@ -1580,7 +1694,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   </div>
                 </Card>
                 <button onClick={async()=>{
-                  await dbInsert('weekly_checkins',{client_id:KNOWN_USERS['client@eden.io']?.uuid,coach_id:KNOWN_USERS['coach@eden.io']?.uuid,...ci,submitted_at:new Date().toISOString()})
+                  await dbInsert('weekly_checkins',{client_id:KNOWN_USERS['client@eden.io']?.uuid,coach_id:KNOWN_USERS['coach@eden.io']?.uuid,...ci,habits:JSON.stringify(habitCounts),habitPct:habitScore,submitted_at:new Date().toISOString()})
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                 }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
                   Submit Weekly Check-In
