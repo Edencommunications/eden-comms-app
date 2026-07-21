@@ -1690,7 +1690,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     rows={4}
                     style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
                   <div style={{marginTop:10,padding:'8px 10px',background:`${C.gold}11`,border:`1px solid ${C.gold}33`,borderRadius:8,fontSize:11,color:C.muted}}>
-                    📸 Upload progress photos (front, side, back) in the Labs &amp; Photos section
+                    📸 Upload progress photos (front, side, back) in the Photos tab above
                   </div>
                 </Card>
                 <button onClick={async()=>{
