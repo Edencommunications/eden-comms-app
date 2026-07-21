@@ -4,7 +4,7 @@
 // Client: view-only on coach content, editable on their own sections
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -32,6 +32,27 @@ async function dbInsert(table, body) {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
   if (!r.ok) console.error('INSERT', await r.text())
+}
+async function dbGet(table, query='') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}` }
+  })
+  return r.ok ? r.json() : []
+}
+async function dbUpdate(table, query, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    method:'PATCH',
+    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}`,
+      'Content-Type':'application/json', 'Prefer':'return=minimal' },
+    body:JSON.stringify(body)
+  })
+  if (!r.ok) console.error('UPDATE', await r.text())
+}
+function scoreColor(v) {
+  if (v == null) return C.muted
+  if (v >= 8) return C.success
+  if (v >= 5) return C.gold
+  return C.danger
 }
 
 // ── Master habit list ─────────────────────────────────────────
@@ -331,6 +352,52 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
     cycleNotes:'',cyclePain:'5',notes:'',
   })
   const setC = k=>v=>setCi(p=>({...p,[k]:v}))
+
+  // Coach check-in review
+  const [ciHistory,    setCiHistory]    = useState([])
+  const [selectedCi,   setSelectedCi]   = useState(0)
+  const [coachNote,    setCoachNote]    = useState('')
+  const [coachLoom,    setCoachLoom]    = useState('')
+  const [savingReview, setSavingReview] = useState(false)
+  const [reviewSaved,  setReviewSaved]  = useState(false)
+
+  useEffect(() => {
+    if (!isCoach) return
+    const clientUuid = KNOWN_USERS['client@eden.io']?.uuid
+    if (!clientUuid) return
+    dbGet('weekly_checkins', `client_id=eq.${clientUuid}&order=submitted_at.desc&limit=16`)
+      .then(rows => {
+        const data = Array.isArray(rows) ? rows : []
+        setCiHistory(data)
+        if (data.length) {
+          setCoachNote(data[0].coach_notes || '')
+          setCoachLoom(data[0].loom_url    || '')
+        }
+      })
+  }, [isCoach])
+
+  function selectCheckin(idx) {
+    setSelectedCi(idx)
+    setCoachNote(ciHistory[idx]?.coach_notes || '')
+    setCoachLoom(ciHistory[idx]?.loom_url    || '')
+    setReviewSaved(false)
+  }
+
+  async function saveCoachReview() {
+    const row = ciHistory[selectedCi]
+    if (!row?.id) return
+    setSavingReview(true)
+    await dbUpdate('weekly_checkins', `id=eq.${row.id}`, {
+      coach_notes:       coachNote.trim(),
+      loom_url:          coachLoom.trim(),
+      coach_reviewed_at: new Date().toISOString(),
+    })
+    setCiHistory(prev => prev.map((r,i) => i===selectedCi
+      ? {...r, coach_notes:coachNote.trim(), loom_url:coachLoom.trim()} : r))
+    setSavingReview(false)
+    setReviewSaved(true)
+    setTimeout(() => setReviewSaved(false), 3000)
+  }
 
   // Habits — assigned by coach, frequency filled by client
   const [assignedHabits,   setAssignedHabits]   = useState(MASTER_HABITS.slice(0,8).map(h=>({...h,target:h.defaultTarget})))
@@ -777,8 +844,196 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
         </div>
       )}
 
-      {/* ══ CHECK-IN — client owned ═══════════════════════════ */}
+      {/* ══ CHECK-IN ══════════════════════════════════════════ */}
       {tab==='checkin'&&(
+
+        /* ── COACH VIEW — review + respond ───────────────────── */
+        isCoach ? (
+          <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+
+            {/* Left column: recent check-in list */}
+            <div style={{width:200,flexShrink:0,borderRight:`1px solid ${C.border}`,overflowY:'auto',background:C.surface}}>
+              <div style={{padding:'10px 12px',fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`}}>
+                Recent Check-Ins
+              </div>
+              {ciHistory.length===0&&(
+                <div style={{padding:'20px 12px',fontSize:11,color:C.muted,textAlign:'center'}}>
+                  No check-ins yet
+                </div>
+              )}
+              {ciHistory.map((row,idx)=>{
+                const dt=row.submitted_at?new Date(row.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):''
+                const reviewed=!!row.coach_notes||!!row.coach_reviewed_at
+                return (
+                  <button key={row.id||idx} onClick={()=>selectCheckin(idx)}
+                    style={{width:'100%',background:selectedCi===idx?`${C.gold}18`:'none',
+                      border:'none',borderBottom:`1px solid ${C.border}`,
+                      borderLeft:`3px solid ${selectedCi===idx?C.gold:'transparent'}`,
+                      padding:'10px 12px',cursor:'pointer',textAlign:'left'}}>
+                    <div style={{fontSize:12,fontWeight:700,color:selectedCi===idx?C.gold:C.white}}>{dt}</div>
+                    {row.weight&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>⚖ {row.weight} lbs</div>}
+                    {reviewed&&<div style={{fontSize:9,color:C.success,marginTop:3}}>✓ Reviewed</div>}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Right panel: selected check-in detail + review form */}
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+              {ciHistory.length===0?(
+                <div style={{textAlign:'center',padding:40,color:C.muted}}>
+                  <div style={{fontSize:32,marginBottom:12}}>📋</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>No check-ins submitted yet</div>
+                  <div style={{fontSize:11}}>Once the client submits their first weekly check-in it will appear here.</div>
+                </div>
+              ):(()=>{
+                const row=ciHistory[selectedCi]||{}
+                const dt=row.submitted_at?new Date(row.submitted_at).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}):''
+                return (<>
+
+                  {/* Header */}
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:15,fontWeight:800,color:C.white}}>{dt}</div>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:5,alignItems:'center'}}>
+                      {row.weight&&<span style={{fontSize:12,color:C.gold,fontWeight:700}}>⚖ {row.weight} lbs</span>}
+                      {row.compliance!=null&&(
+                        <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,
+                          background:row.compliance>=90?`${C.success}22`:row.compliance>=75?`${C.gold}22`:'#ff444422',
+                          color:row.compliance>=90?C.success:row.compliance>=75?C.gold:'#ff6b6b'}}>
+                          {row.compliance}% compliance
+                        </span>
+                      )}
+                      {row.mood&&<span style={{fontSize:11,color:C.muted}}>Mood: {row.mood}</span>}
+                    </div>
+                  </div>
+
+                  {/* Wellbeing score grid */}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(80px,1fr))',gap:8,marginBottom:14}}>
+                    {[
+                      ['Energy',   row.energy],
+                      ['Sleep',    row.sleep],
+                      ['Bloating', row.bloating],
+                      ['Brain Fog',row.brainFog],
+                      ['Sex Drive',row.sexDrive],
+                      ['Hunger',   row.hunger   ? 10-row.hunger   : null],
+                      ['Stress',   row.stress   ? 10-row.stress   : null],
+                    ].map(([l,v])=>(
+                      <div key={l} style={{background:C.card,border:`1px solid ${v!=null?scoreColor(v)+'33':C.border}`,borderRadius:10,padding:'9px 6px',textAlign:'center'}}>
+                        <div style={{fontSize:8,color:C.muted,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',marginBottom:4,lineHeight:1.3}}>{l}</div>
+                        {v!=null
+                          ?<><div style={{fontSize:20,fontWeight:800,color:scoreColor(v),lineHeight:1}}>{v}</div><div style={{fontSize:8,color:C.muted}}>/10</div></>
+                          :<div style={{fontSize:16,color:C.border}}>—</div>
+                        }
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Vitals */}
+                  {(row.weight||row.temp||row.heartRate||row.hrv||row.steps||row.bloodPressure)&&(
+                    <Card sx={{marginBottom:12}}>
+                      <Lbl t="Vitals"/>
+                      <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+                        {row.weight       &&<span style={{fontSize:12,color:C.muted}}>⚖️ {row.weight} lbs</span>}
+                        {row.temp         &&<span style={{fontSize:12,color:C.muted}}>🌡️ {row.temp}°F</span>}
+                        {row.heartRate    &&<span style={{fontSize:12,color:C.muted}}>❤️ {row.heartRate} BPM</span>}
+                        {row.hrv          &&<span style={{fontSize:12,color:C.muted}}>📡 HRV {row.hrv}</span>}
+                        {row.steps        &&<span style={{fontSize:12,color:C.muted}}>👟 {row.steps} steps</span>}
+                        {row.bloodPressure&&<span style={{fontSize:12,color:C.muted}}>🩺 {row.bloodPressure}</span>}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Sleep & Digestion */}
+                  {(row.sleepWindow||row.sleepCycles||row.sleepDisruption||row.bowelCount||row.bowelType)&&(
+                    <Card sx={{marginBottom:12}}>
+                      {(row.sleepWindow||row.sleepCycles||row.sleepDisruption)&&(<>
+                        <Lbl t="🌙 Sleep"/>
+                        <div style={{display:'flex',gap:16,flexWrap:'wrap',marginBottom:row.sleepDisruption?8:0}}>
+                          {row.sleepWindow&&<span style={{fontSize:12,color:C.white}}>🕙 {row.sleepWindow}</span>}
+                          {row.sleepCycles&&<span style={{fontSize:12,color:C.white}}>🔄 {row.sleepCycles} cycles</span>}
+                        </div>
+                        {row.sleepDisruption&&(
+                          <div style={{fontSize:11,color:C.muted,fontStyle:'italic',background:C.black,borderRadius:7,padding:'7px 10px',marginBottom:(row.bowelCount||row.bowelType)?10:0}}>
+                            {row.sleepDisruption}
+                          </div>
+                        )}
+                      </>)}
+                      {(row.bowelCount||row.bowelType)&&(<>
+                        <Lbl t="🫁 Digestion"/>
+                        <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+                          {row.bowelCount&&<span style={{fontSize:12,color:C.white}}>{row.bowelCount}x daily</span>}
+                          {row.bowelType &&<span style={{fontSize:12,color:C.white}}>{row.bowelType}</span>}
+                        </div>
+                      </>)}
+                    </Card>
+                  )}
+
+                  {/* Client notes */}
+                  {row.notes&&(
+                    <Card sx={{marginBottom:14}}>
+                      <Lbl t="Client Notes"/>
+                      <div style={{fontSize:12,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{row.notes}</div>
+                    </Card>
+                  )}
+
+                  {/* ── COACH REVIEW FORM ─────────────────────── */}
+                  <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:4}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>
+                      💬 Coach Review
+                    </div>
+
+                    {/* Notes */}
+                    <div style={{marginBottom:12}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>
+                        Feedback / Notes for Client
+                      </div>
+                      <textarea value={coachNote} onChange={e=>setCoachNote(e.target.value)}
+                        placeholder="Great progress this week! Your energy score improved — let's talk about adjusting sleep window…"
+                        rows={4}
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:8,
+                          padding:'10px 12px',color:C.white,fontSize:13,outline:'none',
+                          boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                    </div>
+
+                    {/* Loom URL */}
+                    <div style={{marginBottom:14}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>
+                        Loom Recording URL <span style={{color:C.dim,fontWeight:400,textTransform:'none'}}>(optional — client sees this in My Progress)</span>
+                      </div>
+                      <input value={coachLoom} onChange={e=>setCoachLoom(e.target.value)}
+                        placeholder="https://loom.com/share/..."
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:8,
+                          padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                    </div>
+
+                    {/* Loom preview */}
+                    {coachLoom&&(()=>{
+                      const id=coachLoom.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
+                      return id?(
+                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:10,overflow:'hidden',marginBottom:14}}>
+                          <iframe src={`https://www.loom.com/embed/${id}`} allowFullScreen title="Loom preview"
+                            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                        </div>
+                      ):null
+                    })()}
+
+                    <button onClick={saveCoachReview} disabled={savingReview}
+                      style={{width:'100%',background:reviewSaved?C.success:C.gold,border:'none',borderRadius:10,
+                        padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:savingReview?'wait':'pointer',
+                        transition:'background .3s'}}>
+                      {savingReview?'Saving…':reviewSaved?'✓ Review Saved':'Save Coach Review'}
+                    </button>
+                    <div style={{fontSize:10,color:C.muted,textAlign:'center',marginTop:6}}>
+                      Client sees your notes and Loom in their My Progress → Coach Updates tab
+                    </div>
+                  </div>
+                </>)
+              })()}
+            </div>
+          </div>
+
+        /* ── CLIENT VIEW — submission form (unchanged) ───────── */
+        ) : (
         <div style={{flex:1,overflowY:'auto',padding:16}}>
           <div style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderLeft:`3px solid ${C.danger}`,borderRadius:9,padding:'10px 13px',marginBottom:12,fontSize:12,color:C.danger}}>
             ⚠️ All weekly updates MUST be in before 9 AM CST on your check-in day. Wake up on empty stomach. Include fasted weight + photos.
@@ -860,6 +1115,7 @@ export default function DietBuilder({currentUser, initialTab='plan'}) {
             Submit Weekly Check-In
           </button>
         </div>
+        )
       )}
 
       {/* ══ HABITS — assigned by coach, logged by client ═════ */}
