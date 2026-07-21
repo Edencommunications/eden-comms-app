@@ -2340,7 +2340,24 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
   const [photos,    setPhotos]    = useState<any[]|null>(null)
   const [uploading, setUploading] = useState(false)
   const [expanded,  setExpanded]  = useState<number|null>(null)
+  const [modalIdx,  setModalIdx]  = useState<number|null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Close modal on Escape, navigate with arrow keys
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (modalIdx === null) return
+      if (e.key === 'Escape') { setModalIdx(null); return }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        setModalIdx(i => (i !== null && checkins && i < checkins.length - 1) ? i + 1 : i)
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        setModalIdx(i => (i !== null && i > 0) ? i - 1 : i)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [modalIdx, checkins])
 
   // Determine UUID — works for demo (Jordan) and live Supabase users
   // KNOWN_USERS is defined in Messaging.jsx scope; in App.tsx we use the email to query user_profiles
@@ -2478,37 +2495,46 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
               <div key={ci.id||idx} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, marginBottom:12, overflow:'hidden' }}>
 
                 {/* Always-visible header row */}
-                <button onClick={() => setExpanded(open ? null : idx)}
-                  style={{ width:'100%', background:'none', border:'none', padding:'14px 16px', cursor:'pointer', textAlign:'left' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:3 }}>
-                        <span style={{ fontSize:13, fontWeight:700, color:B.white }}>{dt}</span>
-                        {ci.weight && <span style={{ fontSize:12, color:B.gold, fontWeight:700 }}>⚖ {ci.weight} lbs</span>}
-                        {ci.compliance != null && (
-                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:20,
-                            background: ci.compliance>=90?`${B.success}22`:ci.compliance>=75?`${B.gold}22`:'#ff444422',
-                            color:      ci.compliance>=90?B.success:ci.compliance>=75?B.gold:'#ff6b6b' }}>
-                            {ci.compliance}% compliance
-                          </span>
-                        )}
-                      </div>
-                      {ci.mood && <div style={{ fontSize:11, color:B.muted }}>Mood: {ci.mood}</div>}
-                    </div>
-                    {/* Mini score circles */}
-                    <div style={{ display:'flex', gap:5, flexShrink:0 }}>
-                      {([['E', ci.energy], ['S', ci.sleep], ['St', ci.stress ? 10 - ci.stress : null]] as [string,number|null][]).map(([l,v]) => v != null && (
-                        <div key={l} style={{ width:30, height:30, borderRadius:15,
-                          background:`${scoreCol(v)}18`, border:`1px solid ${scoreCol(v)}55`,
-                          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
-                          <span style={{ fontSize:7, color:scoreCol(v), fontWeight:700, lineHeight:1 }}>{l}</span>
-                          <span style={{ fontSize:9, color:scoreCol(v), fontWeight:800, lineHeight:1 }}>{v}</span>
+                <div style={{ display:'flex', alignItems:'stretch' }}>
+                  <button onClick={() => setExpanded(open ? null : idx)}
+                    style={{ flex:1, background:'none', border:'none', padding:'14px 16px', cursor:'pointer', textAlign:'left' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:3 }}>
+                          <span style={{ fontSize:13, fontWeight:700, color:B.white }}>{dt}</span>
+                          {ci.weight && <span style={{ fontSize:12, color:B.gold, fontWeight:700 }}>⚖ {ci.weight} lbs</span>}
+                          {ci.compliance != null && (
+                            <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:20,
+                              background: ci.compliance>=90?`${B.success}22`:ci.compliance>=75?`${B.gold}22`:'#ff444422',
+                              color:      ci.compliance>=90?B.success:ci.compliance>=75?B.gold:'#ff6b6b' }}>
+                              {ci.compliance}% compliance
+                            </span>
+                          )}
                         </div>
-                      ))}
+                        {ci.mood && <div style={{ fontSize:11, color:B.muted }}>Mood: {ci.mood}</div>}
+                      </div>
+                      {/* Mini score circles */}
+                      <div style={{ display:'flex', gap:5, flexShrink:0 }}>
+                        {([['E', ci.energy], ['S', ci.sleep], ['St', ci.stress ? 10 - ci.stress : null]] as [string,number|null][]).map(([l,v]) => v != null && (
+                          <div key={l} style={{ width:30, height:30, borderRadius:15,
+                            background:`${scoreCol(v)}18`, border:`1px solid ${scoreCol(v)}55`,
+                            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+                            <span style={{ fontSize:7, color:scoreCol(v), fontWeight:700, lineHeight:1 }}>{l}</span>
+                            <span style={{ fontSize:9, color:scoreCol(v), fontWeight:800, lineHeight:1 }}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <span style={{ color:B.muted, fontSize:14 }}>{open ? '▲' : '▼'}</span>
                     </div>
-                    <span style={{ color:B.muted, fontSize:14 }}>{open ? '▲' : '▼'}</span>
-                  </div>
-                </button>
+                  </button>
+                  {/* Expand to full-screen button */}
+                  <button onClick={() => setModalIdx(idx)} title="Open full view"
+                    style={{ flexShrink:0, background:'none', border:'none', borderLeft:`1px solid ${B.border}`,
+                      padding:'0 14px', cursor:'pointer', color:B.muted, fontSize:15, display:'flex',
+                      alignItems:'center', gap:4 }}>
+                    <span style={{ fontSize:13 }}>⛶</span>
+                  </button>
+                </div>
 
                 {/* Expanded detail */}
                 {open && (
@@ -2748,6 +2774,205 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
         </>)}
 
       </div>
+
+      {/* ── FULL-SCREEN CHECK-IN MODAL ────────────────────────────────── */}
+      {modalIdx !== null && checkins && checkins[modalIdx] && (() => {
+        const ci  = checkins[modalIdx]
+        const dt  = ci.submitted_at ? new Date(ci.submitted_at).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}) : ''
+        const hasPrev = modalIdx > 0
+        const hasNext = modalIdx < checkins.length - 1
+        return (
+          <div onClick={() => setModalIdx(null)}
+            style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.88)',
+              display:'flex', alignItems:'center', justifyContent:'center', padding: isMobile ? 0 : '16px' }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius: isMobile ? 0 : 18,
+                width:'100%', maxWidth:820, height: isMobile ? '100%' : 'auto', maxHeight: isMobile ? '100%' : '92vh',
+                display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+              {/* Modal header */}
+              <div style={{ padding:'16px 20px', borderBottom:`1px solid ${B.border}`, flexShrink:0,
+                display:'flex', alignItems:'flex-start', gap:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1,
+                    textTransform:'uppercase', marginBottom:4 }}>Weekly Check-In</div>
+                  <div style={{ fontSize:17, fontWeight:800, color:B.white, marginBottom:6 }}>{dt}</div>
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+                    {ci.weight && (
+                      <span style={{ fontSize:13, color:B.gold, fontWeight:700 }}>⚖ {ci.weight} lbs</span>
+                    )}
+                    {ci.compliance != null && (
+                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20,
+                        background: ci.compliance>=90?`${B.success}22`:ci.compliance>=75?`${B.gold}22`:'#ff444422',
+                        color:      ci.compliance>=90?B.success:ci.compliance>=75?B.gold:'#ff6b6b' }}>
+                        {ci.compliance}% compliance
+                      </span>
+                    )}
+                    {ci.mood && (
+                      <span style={{ fontSize:11, color:B.muted }}>Mood: {ci.mood}</span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setModalIdx(null)}
+                  style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8,
+                    width:34, height:34, display:'flex', alignItems:'center', justifyContent:'center',
+                    cursor:'pointer', color:B.muted, fontSize:18, flexShrink:0 }}>×</button>
+              </div>
+
+              {/* Scrollable modal body */}
+              <div style={{ flex:1, overflowY:'auto', padding:'20px' }}>
+
+                {/* Wellbeing score grid — big tiles */}
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:1,
+                    textTransform:'uppercase', marginBottom:12 }}>Wellbeing Scores</div>
+                  <div style={{ display:'grid',
+                    gridTemplateColumns: isMobile ? 'repeat(4, 1fr)' : 'repeat(7, 1fr)', gap:10 }}>
+                    {([
+                      ['Energy',    ci.energy],
+                      ['Sleep',     ci.sleep],
+                      ['Bloating',  ci.bloating],
+                      ['Brain Fog', ci.brainFog],
+                      ['Sex Drive', ci.sexDrive],
+                      ['Hunger',    ci.hunger    ? 10 - ci.hunger    : null],
+                      ['Stress',    ci.stress    ? 10 - ci.stress    : null],
+                    ] as [string,number|null][]).map(([l,v]) => (
+                      <div key={l} style={{ background:B.card, border:`1px solid ${v!=null?`${scoreCol(v as number)}33`:B.border}`,
+                        borderRadius:12, padding:'12px 8px', textAlign:'center' }}>
+                        <div style={{ fontSize:9, color:B.muted, fontWeight:700, letterSpacing:0.5,
+                          textTransform:'uppercase', marginBottom:6, lineHeight:1.3 }}>{l}</div>
+                        {v != null
+                          ? <><div style={{ fontSize:26, fontWeight:800, color:scoreCol(v), lineHeight:1 }}>{v}</div>
+                              <div style={{ fontSize:9, color:B.muted, marginTop:3 }}>/ 10</div></>
+                          : <div style={{ fontSize:18, color:B.border }}>—</div>
+                        }
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Two-column layout for vitals + sleep/digestion on desktop */}
+                <div style={{ display:'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:16, marginBottom:20 }}>
+
+                  {/* Vitals */}
+                  {(ci.weight || ci.temp || ci.heartRate || ci.hrv || ci.steps || ci.bloodPressure) && (
+                    <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12, padding:'14px 16px' }}>
+                      <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:1,
+                        textTransform:'uppercase', marginBottom:12 }}>📊 Vitals</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                        {([
+                          ['⚖️ Weight',    ci.weight     ? `${ci.weight} lbs` : null],
+                          ['🌡️ Temp',      ci.temp       ? `${ci.temp}°F`     : null],
+                          ['❤️ Heart Rate', ci.heartRate  ? `${ci.heartRate} BPM` : null],
+                          ['📡 HRV',        ci.hrv        ? `${ci.hrv}`        : null],
+                          ['👟 Steps',      ci.steps      ? ci.steps           : null],
+                          ['🩺 Blood Pressure', ci.bloodPressure || null],
+                        ] as [string,string|null][]).filter(([,v]) => v).map(([l,v]) => (
+                          <div key={l}>
+                            <div style={{ fontSize:9, color:B.muted, fontWeight:700, letterSpacing:0.5,
+                              textTransform:'uppercase', marginBottom:3 }}>{l}</div>
+                            <div style={{ fontSize:15, fontWeight:700, color:B.white }}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sleep + Digestion */}
+                  {(ci.sleepWindow || ci.sleepCycles || ci.sleepDisruption || ci.bowelCount || ci.bowelType) && (
+                    <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12, padding:'14px 16px' }}>
+                      {(ci.sleepWindow || ci.sleepCycles || ci.sleepDisruption) && (<>
+                        <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:1,
+                          textTransform:'uppercase', marginBottom:10 }}>🌙 Sleep</div>
+                        <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:8 }}>
+                          {ci.sleepWindow  && <div>
+                            <div style={{ fontSize:9, color:B.muted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 }}>Window</div>
+                            <div style={{ fontSize:13, color:B.white, fontWeight:600 }}>{ci.sleepWindow}</div>
+                          </div>}
+                          {ci.sleepCycles  && <div>
+                            <div style={{ fontSize:9, color:B.muted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 }}>Cycles</div>
+                            <div style={{ fontSize:13, color:B.white, fontWeight:600 }}>{ci.sleepCycles}</div>
+                          </div>}
+                        </div>
+                        {ci.sleepDisruption && (
+                          <div style={{ fontSize:12, color:B.muted, fontStyle:'italic',
+                            background:B.surface, borderRadius:8, padding:'8px 10px',
+                            marginBottom: (ci.bowelCount||ci.bowelType) ? 14 : 0 }}>
+                            {ci.sleepDisruption}
+                          </div>
+                        )}
+                      </>)}
+                      {(ci.bowelCount || ci.bowelType) && (<>
+                        <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:1,
+                          textTransform:'uppercase', marginBottom:10,
+                          marginTop: (ci.sleepWindow||ci.sleepCycles||ci.sleepDisruption) ? 14 : 0 }}>🫁 Digestion</div>
+                        <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                          {ci.bowelCount && <div>
+                            <div style={{ fontSize:9, color:B.muted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 }}>Daily BMs</div>
+                            <div style={{ fontSize:15, color:B.white, fontWeight:700 }}>{ci.bowelCount}x</div>
+                          </div>}
+                          {ci.bowelType && <div>
+                            <div style={{ fontSize:9, color:B.muted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 }}>Consistency</div>
+                            <div style={{ fontSize:13, color:B.white, fontWeight:600 }}>{ci.bowelType}</div>
+                          </div>}
+                        </div>
+                      </>)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Notes + Coach feedback */}
+                {ci.notes && (
+                  <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12,
+                    padding:'14px 16px', marginBottom:14 }}>
+                    <div style={{ fontSize:10, color:B.muted, fontWeight:700, letterSpacing:1,
+                      textTransform:'uppercase', marginBottom:8 }}>Client Notes</div>
+                    <div style={{ fontSize:13, color:B.text, lineHeight:1.7 }}>{ci.notes}</div>
+                  </div>
+                )}
+                {ci.coach_notes && (
+                  <div style={{ background:`${B.gold}0d`, border:`1px solid ${B.gold}44`,
+                    borderLeft:`3px solid ${B.gold}`, borderRadius:12, padding:'14px 16px' }}>
+                    <div style={{ fontSize:10, color:B.gold, fontWeight:700, letterSpacing:1,
+                      textTransform:'uppercase', marginBottom:8 }}>💬 Coach Feedback</div>
+                    <div style={{ fontSize:13, color:B.text, lineHeight:1.7 }}>{ci.coach_notes}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal footer — prev / next navigation */}
+              <div style={{ borderTop:`1px solid ${B.border}`, padding:'12px 20px', flexShrink:0,
+                display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                <button onClick={() => setModalIdx(i => i !== null && i > 0 ? i - 1 : i)}
+                  disabled={!hasPrev}
+                  style={{ background: hasPrev ? B.card : 'transparent',
+                    border:`1px solid ${hasPrev ? B.border : 'transparent'}`,
+                    borderRadius:8, padding:'8px 16px', color: hasPrev ? B.white : B.border,
+                    fontSize:12, fontWeight:600, cursor: hasPrev ? 'pointer' : 'default',
+                    display:'flex', alignItems:'center', gap:6 }}>
+                  ← Newer
+                </button>
+                <div style={{ fontSize:11, color:B.muted, textAlign:'center' }}>
+                  {modalIdx + 1} / {checkins.length}
+                  <div style={{ fontSize:10, marginTop:1, color:B.border }}>← → to navigate · Esc to close</div>
+                </div>
+                <button onClick={() => setModalIdx(i => i !== null && checkins && i < checkins.length - 1 ? i + 1 : i)}
+                  disabled={!hasNext}
+                  style={{ background: hasNext ? B.card : 'transparent',
+                    border:`1px solid ${hasNext ? B.border : 'transparent'}`,
+                    borderRadius:8, padding:'8px 16px', color: hasNext ? B.white : B.border,
+                    fontSize:12, fontWeight:600, cursor: hasNext ? 'pointer' : 'default',
+                    display:'flex', alignItems:'center', gap:6 }}>
+                  Older →
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }
