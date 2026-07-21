@@ -5,7 +5,10 @@
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import {
+  AreaChart, Area, LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -302,6 +305,190 @@ function ReadOnlyFoodRow({item}) {
           {item.food.serving} × {item.servings} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g Fib:{Math.round(item.food.fib*item.servings)}g
         </div>
       </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════
+// CHECK-IN CHARTS — full suite matching the home modal
+// ════════════════════════════════════════════════════════════════
+function CheckInCharts({ checkins }) {
+  if (!checkins || checkins.length < 2) return null
+
+  const chartData = [...checkins].reverse().map(e => ({
+    date:      e.date.replace(' 2026',''),
+    weight:    parseFloat(e.weight) || 0,
+    compliance:e.compliance,
+    energy:    e.energy,
+    sleep:     e.sleep,
+    bloating:  e.bloating,
+    brainFog:  e.brainFog,
+    sexDrive:  e.sexDrive,
+    hunger:    e.hunger,
+    stress:    e.stress,
+    steps:     parseInt(String(e.steps||'0').replace(/,/g,'')) || 0,
+    heartRate: parseInt(e.heartRate) || 0,
+    hrv:       parseInt(e.hrv) || 0,
+    temp:      parseFloat(e.temp) || 0,
+  }))
+
+  const CT = {
+    grid: '#2a2a2a', tick: '#666',
+    tooltip: {
+      contentStyle:{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, fontSize:11 },
+      labelStyle:{ color:C.white, fontWeight:700 },
+      itemStyle:{ color:'#ccc' },
+    },
+  }
+
+  const Panel = ({ title, children }) => (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>{title}</div>
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'12px 4px 8px 0' }}>
+        {children}
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      {/* 1. Weight */}
+      <Panel title="Weight (lbs)">
+        <ResponsiveContainer width="100%" height={140}>
+          <AreaChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <defs>
+              <linearGradient id="ciWGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor={C.gold} stopOpacity={0.3}/>
+                <stop offset="95%" stopColor={C.gold} stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={['auto','auto']}/>
+            <Tooltip {...CT.tooltip}/>
+            <Area type="monotone" dataKey="weight" stroke={C.gold} strokeWidth={2} fill="url(#ciWGrad)" dot={{fill:C.gold,r:3}} activeDot={{r:5}}/>
+          </AreaChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 2. Compliance */}
+      <Panel title="Weekly Compliance (%)">
+        <ResponsiveContainer width="100%" height={130}>
+          <BarChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid} vertical={false}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={[60,100]}/>
+            <Tooltip {...CT.tooltip} formatter={v=>[v+'%','Compliance']}/>
+            <Bar dataKey="compliance" fill={C.gold} radius={[4,4,0,0]}
+              label={{position:'top',fontSize:9,fill:C.gold,formatter:v=>v+'%'}}/>
+          </BarChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 3. Energy · Sleep · Sex Drive */}
+      <Panel title="Energy · Sleep · Sex Drive (1–10, higher = better)">
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={[1,10]}/>
+            <Tooltip {...CT.tooltip}/>
+            <Legend wrapperStyle={{fontSize:10,color:C.muted,paddingTop:4}}/>
+            <Line type="monotone" dataKey="energy"   stroke={C.gold}   strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Energy"/>
+            <Line type="monotone" dataKey="sleep"    stroke="#6FB8E8"  strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Sleep"/>
+            <Line type="monotone" dataKey="sexDrive" stroke="#FF7EB3"  strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Sex Drive"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 4. Brain Fog · Bloating */}
+      <Panel title="Brain Fog · Bloating (1–10, higher = better)">
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={[1,10]}/>
+            <Tooltip {...CT.tooltip}/>
+            <Legend wrapperStyle={{fontSize:10,color:C.muted,paddingTop:4}}/>
+            <Line type="monotone" dataKey="brainFog" stroke="#D4A8F0" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Brain Fog"/>
+            <Line type="monotone" dataKey="bloating" stroke={C.success} strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Bloating"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 5. Stress & Hunger */}
+      <Panel title="Stress & Hunger (1–10, lower = better)">
+        <ResponsiveContainer width="100%" height={150}>
+          <LineChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={[1,10]}/>
+            <Tooltip {...CT.tooltip}/>
+            <Legend wrapperStyle={{fontSize:10,color:C.muted,paddingTop:4}}/>
+            <Line type="monotone" dataKey="stress" stroke="#ff5252" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Stress"/>
+            <Line type="monotone" dataKey="hunger" stroke="#FF9E6C" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Hunger"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 6. Daily Steps */}
+      <Panel title="Daily Steps">
+        <ResponsiveContainer width="100%" height={130}>
+          <AreaChart data={chartData} margin={{top:4,right:16,left:-8,bottom:0}}>
+            <defs>
+              <linearGradient id="ciStepsGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor="#6FB8E8" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#6FB8E8" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}
+              tickFormatter={v=>v>=1000?Math.round(v/1000)+'k':String(v)} domain={['auto','auto']}/>
+            <Tooltip {...CT.tooltip} formatter={v=>[Number(v).toLocaleString()+' steps','Steps']}/>
+            <Area type="monotone" dataKey="steps" stroke="#6FB8E8" strokeWidth={2} fill="url(#ciStepsGrad)" dot={{fill:'#6FB8E8',r:3}} activeDot={{r:5}}/>
+          </AreaChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 7. Resting Heart Rate */}
+      <Panel title="Resting Heart Rate (bpm) — lower trend = better">
+        <ResponsiveContainer width="100%" height={130}>
+          <LineChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={['auto','auto']}/>
+            <Tooltip {...CT.tooltip} formatter={v=>[v+' bpm','Heart Rate']}/>
+            <Line type="monotone" dataKey="heartRate" stroke="#ff5252" strokeWidth={2} dot={{fill:'#ff5252',r:3}} activeDot={{r:5}} name="HR (bpm)"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 8. HRV */}
+      <Panel title="HRV — higher trend = better recovery">
+        <ResponsiveContainer width="100%" height={130}>
+          <LineChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={['auto','auto']}/>
+            <Tooltip {...CT.tooltip} formatter={v=>[v,'HRV']}/>
+            <Line type="monotone" dataKey="hrv" stroke={C.success} strokeWidth={2} dot={{fill:C.success,r:3}} activeDot={{r:5}} name="HRV"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      {/* 9. Body Temperature */}
+      <Panel title="Body Temperature (°F)">
+        <ResponsiveContainer width="100%" height={120}>
+          <LineChart data={chartData} margin={{top:4,right:16,left:-20,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CT.grid}/>
+            <XAxis dataKey="date" tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false}/>
+            <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={['auto','auto']}/>
+            <Tooltip {...CT.tooltip} formatter={v=>[v+'°F','Temp']}/>
+            <Line type="monotone" dataKey="temp" stroke="#D4A8F0" strokeWidth={2} dot={{fill:'#D4A8F0',r:3}} activeDot={{r:5}}/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
     </div>
   )
 }
@@ -876,58 +1063,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             {/* Body */}
             <div style={{flex:1,overflowY:'auto',padding:16}}>
 
-              {/* Weight + score trend charts */}
-              {localCheckins.length>=2&&(
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
-                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>📈 Weight Trend</div>
-                  <ResponsiveContainer width="100%" height={110}>
-                    <AreaChart data={[...localCheckins].reverse().map(r=>({
-                      name:r.date.split(' ').slice(0,2).join(' '),
-                      weight:parseFloat(r.weight)||0
-                    }))}>
-                      <defs>
-                        <linearGradient id="wg2" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor={C.gold} stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor={C.gold} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="name" tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false}/>
-                      <YAxis domain={['auto','auto']} tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false} width={38}/>
-                      <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,fontSize:11}}
-                        labelStyle={{color:C.muted}} itemStyle={{color:C.gold}}/>
-                      <Area type="monotone" dataKey="weight" stroke={C.gold} fill="url(#wg2)" strokeWidth={2} dot={{fill:C.gold,r:3}}/>
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-              {/* Score trend chart */}
-              {localCheckins.length>=2&&(
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
-                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>⚡ Wellbeing Scores</div>
-                  <ResponsiveContainer width="100%" height={110}>
-                    <LineChart data={[...localCheckins].reverse().map(r=>({
-                      name:r.date.split(' ').slice(0,2).join(' '),
-                      Energy:r.energy, Sleep:r.sleep, Bloating:r.bloating,
-                    }))}>
-                      <XAxis dataKey="name" tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false}/>
-                      <YAxis domain={[0,10]} tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false} width={20}/>
-                      <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,fontSize:11}} labelStyle={{color:C.muted}}/>
-                      <Line type="monotone" dataKey="Energy"   stroke={C.gold}    strokeWidth={2} dot={false}/>
-                      <Line type="monotone" dataKey="Sleep"    stroke={C.success} strokeWidth={2} dot={false}/>
-                      <Line type="monotone" dataKey="Bloating" stroke="#8888ff"   strokeWidth={2} dot={false}/>
-                    </LineChart>
-                  </ResponsiveContainer>
-                  <div style={{display:'flex',gap:12,marginTop:6}}>
-                    {[['Energy',C.gold],['Sleep',C.success],['Bloating','#8888ff']].map(([l,col])=>(
-                      <div key={l} style={{display:'flex',alignItems:'center',gap:4}}>
-                        <div style={{width:12,height:2,background:col,borderRadius:2}}/>
-                        <span style={{fontSize:9,color:C.muted}}>{l}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* All 9 charts */}
+              <CheckInCharts checkins={localCheckins}/>
 
               {/* Combined sorted list: client check-ins + coach-only updates */}
               {[
@@ -1171,27 +1308,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* ─── History tab ─── */}
               {clientViewTab==='history'&&(<>
 
-                {/* Weight trend chart */}
-                {localCheckins.length>=2&&(
-                  <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>📈 Weight Trend</div>
-                    <ResponsiveContainer width="100%" height={100}>
-                      <AreaChart data={[...localCheckins].reverse().map(r=>({name:r.date.split(' ').slice(0,2).join(' '),weight:parseFloat(r.weight)||0}))}>
-                        <defs>
-                          <linearGradient id="wgc" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%"  stopColor={C.gold} stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor={C.gold} stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <XAxis dataKey="name" tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false}/>
-                        <YAxis domain={['auto','auto']} tick={{fill:C.muted,fontSize:9}} axisLine={false} tickLine={false} width={36}/>
-                        <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,fontSize:11}}
-                          labelStyle={{color:C.muted}} itemStyle={{color:C.gold}}/>
-                        <Area type="monotone" dataKey="weight" stroke={C.gold} fill="url(#wgc)" strokeWidth={2} dot={{fill:C.gold,r:3}}/>
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
+                {/* All 9 charts */}
+                <CheckInCharts checkins={localCheckins}/>
 
                 {/* Check-in history cards (client view — read-only coach notes) */}
                 {localCheckins.map((ci,idx)=>{
