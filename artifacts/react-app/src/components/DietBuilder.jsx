@@ -624,12 +624,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [habitCounts,      setHabitCounts]      = useState({})
   const setHabitCount = (id,v) => setHabitCounts(p=>({...p,[id]:Math.min(7,Math.max(0,parseInt(v)||0))}))
 
-  // Updates — coach posts, client reads
-  const [updates, setUpdates] = useState([
-    {id:1,date:'Jul 14 2026',type:'note',text:'Adjusted Meal 3 protein up to 5.5oz. Keep hitting step goal — great progress this week!',loom:''},
-    {id:2,date:'Jul 7 2026',type:'loom',text:'Weekly check-in review + diet update walkthrough',loom:'https://loom.com/share/example'},
+  // Coach-only updates — visible to client in their Check-In history
+  const [coachOnlyUpdates, setCoachOnlyUpdates] = useState([
+    {id:1,date:'Jul 14 2026',note:'Adjusted Meal 3 protein up to 5.5oz. Keep hitting step goal — great progress this week!',loom:''},
+    {id:2,date:'Jul 7 2026',note:'Weekly check-in review + diet update walkthrough',loom:'https://loom.com/share/example'},
   ])
-  const [newUpdate, setNewUpdate] = useState({text:'',loom:''})
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newNote,     setNewNote]     = useState('')
+  const [newLoom,     setNewLoom]     = useState('')
+  const [newDate,     setNewDate]     = useState('2026-07-21')
 
   // Supplements — coach builds, client views + adds own notes
   const [clientSupps,    setClientSupps]    = useState([])
@@ -746,10 +749,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setClientSupps(p=>p.map(s=>s.id===id?{...s,[field]:val}:s))
   }
 
-  function addUpdate() {
-    if(!newUpdate.text.trim()) return
-    setUpdates(p=>[{id:Date.now(),date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),type:newUpdate.loom?'loom':'note',...newUpdate},...p])
-    setNewUpdate({text:'',loom:''})
+  function addCoachUpdate() {
+    if(!newNote.trim()&&!newLoom.trim()) return
+    setCoachOnlyUpdates(p=>[{id:Date.now(),date:newDate,note:newNote.trim(),loom:newLoom.trim()},...p])
+    setNewNote(''); setNewLoom(''); setShowAddForm(false)
   }
 
   function toggleHabitAssign(habit) {
@@ -777,7 +780,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   const TABS=[
     ['plan','🥗 Meal Plan'],
-    ['updates','📝 Updates'],
     ['calculator','🔢 Calculator'],
     ['checkin','📋 Check-In'],
     ['habits','✅ Habits'],
@@ -937,63 +939,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         </div>
       )}
 
-      {/* ══ UPDATES ══════════════════════════════════════════ */}
-      {tab==='updates'&&(
-        <div style={{flex:1,overflowY:'auto',padding:16}}>
-          {/* Coach: post new update */}
-          {isCoach&&(
-            <Card sx={{marginBottom:14}}>
-              <Lbl t="Post Update to Client"/>
-              <div style={{marginBottom:10}}>
-                <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Update Note</div>
-                <textarea value={newUpdate.text} onChange={e=>setNewUpdate(p=>({...p,text:e.target.value}))}
-                  placeholder="Describe the protocol change, lab feedback, or note for the client…"
-                  rows={3}
-                  style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
-              </div>
-              <Inp label="Loom / Video Link (optional)" value={newUpdate.loom} onChange={v=>setNewUpdate(p=>({...p,loom:v}))} placeholder="https://loom.com/share/..."/>
-              <button onClick={addUpdate}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
-                Post Update
-              </button>
-            </Card>
-          )}
-
-          {/* Client: read-only notice */}
-          {isClient&&(
-            <div style={{background:`${C.gold}12`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:12,color:C.muted}}>
-              📝 Updates from your coach appear here. New updates are highlighted.
-            </div>
-          )}
-
-          <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>
-            {isCoach?'Update History':'Coach Updates'}
-          </div>
-
-          {updates.map(u=>(
-            <Card key={u.id} sx={{marginBottom:10,borderLeft:`3px solid ${u.type==='loom'?C.gold:C.success}`}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                <span style={{fontSize:10,fontWeight:700,color:u.type==='loom'?C.gold:C.success,letterSpacing:.8}}>
-                  {u.type==='loom'?'🎥 VIDEO UPDATE':'📝 PROTOCOL UPDATE'}
-                </span>
-                <span style={{fontSize:10,color:C.muted}}>{u.date}</span>
-              </div>
-              <div style={{fontSize:13,color:C.white,lineHeight:1.6,marginBottom:u.loom?10:0}}>{u.text}</div>
-              {u.loom&&(
-                <a href={u.loom} target="_blank" rel="noreferrer"
-                  style={{display:'flex',alignItems:'center',gap:8,background:C.surface,borderRadius:8,padding:'9px 12px',textDecoration:'none',border:`1px solid ${C.border}`}}>
-                  <span style={{fontSize:20}}>▶️</span>
-                  <div>
-                    <div style={{fontSize:12,color:C.gold,fontWeight:600}}>Watch Video Update</div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:240}}>{u.loom}</div>
-                  </div>
-                </a>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
-
       {/* ══ CALCULATOR — coach only ═══════════════════════════ */}
       {tab==='calculator'&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
@@ -1073,10 +1018,43 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
               <div>
                 <span style={{fontSize:14,fontWeight:800,color:C.white}}>Check-In Hub</span>
-                <span style={{fontSize:11,color:C.muted,marginLeft:10}}>{localCheckins.length} submissions · {updates.length} coach updates</span>
+                <span style={{fontSize:11,color:C.muted,marginLeft:10}}>{localCheckins.length} submissions · {coachOnlyUpdates.length} coach updates</span>
               </div>
+              <button onClick={()=>setShowAddForm(v=>!v)}
+                style={{background:showAddForm?`${C.gold}33`:`${C.gold}18`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'7px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                {showAddForm?'✕ Cancel':'＋ Coach Update'}
+              </button>
             </div>
 
+
+            {/* Add standalone coach update form */}
+            {showAddForm&&(
+              <div style={{background:'#111a00',borderBottom:`1px solid ${C.gold}33`,padding:16,flexShrink:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:.8,textTransform:'uppercase',marginBottom:12}}>New Coach Update — visible to client in their Check-In tab</div>
+                <div style={{display:'grid',gridTemplateColumns:'140px 1fr',gap:10,marginBottom:10}}>
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Date</div>
+                    <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)}
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Loom URL (optional)</div>
+                    <input value={newLoom} onChange={e=>setNewLoom(e.target.value)} placeholder="https://loom.com/share/..."
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                  </div>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Notes / Update</div>
+                  <textarea value={newNote} onChange={e=>setNewNote(e.target.value)} rows={3}
+                    placeholder="Protocol adjustment, midweek observation, general coaching note…"
+                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                </div>
+                <button onClick={addCoachUpdate}
+                  style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  Post Update
+                </button>
+              </div>
+            )}
 
             {/* Body */}
             <div style={{flex:1,overflowY:'auto',padding:16}}>
@@ -1084,10 +1062,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* All 9 charts */}
               <CheckInCharts checkins={localCheckins}/>
 
-              {/* Combined sorted list: client check-ins + coach updates */}
+              {/* Combined sorted list: client check-ins + coach-only updates */}
               {[
                 ...localCheckins.map((ci,i)=>({...ci,_type:'checkin',_idx:i})),
-                ...updates.map(u=>({...u,_type:'coach'}))
+                ...coachOnlyUpdates.map(u=>({...u,_type:'coach'}))
               ].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>{
 
                 /* ── Coach-only standalone update ── */
@@ -1100,10 +1078,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'2px 8px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>Coach Update</span>
                           <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
                         </div>
-                        <button onClick={()=>setUpdates(p=>p.filter(u=>u.id!==item.id))}
+                        <button onClick={()=>setCoachOnlyUpdates(p=>p.filter(u=>u.id!==item.id))}
                           style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
                       </div>
-                      {(item.text||item.note)&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.text||item.note}</p>}
+                      {item.note&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.note}</p>}
                       {loomId?(
                         <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
                           <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Loom"
@@ -1326,7 +1304,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )
               })}
 
-              {localCheckins.length===0&&updates.length===0&&(
+              {localCheckins.length===0&&coachOnlyUpdates.length===0&&(
                 <div style={{textAlign:'center',padding:48,color:C.muted}}>
                   <div style={{fontSize:36,marginBottom:12}}>📋</div>
                   <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>No check-ins yet</div>
@@ -1360,8 +1338,39 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {/* All 9 charts */}
                 <CheckInCharts checkins={localCheckins}/>
 
-                {/* Check-in history cards (client view — read-only coach notes) */}
-                {localCheckins.map((ci,idx)=>{
+                {/* Check-in history cards + coach updates (client view) */}
+                {[
+                  ...localCheckins.map((ci,idx)=>({...ci,_type:'checkin',_idx:idx})),
+                  ...coachOnlyUpdates.map(u=>({...u,_type:'coach'}))
+                ].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>{
+
+                  /* Coach-only update card */
+                  if(item._type==='coach'){
+                    const loomId=item.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
+                    return (
+                      <div key={`cu-${item.id}`} style={{background:'#111a00',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                          <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'2px 8px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>📝 Coach Update</span>
+                          <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
+                        </div>
+                        {item.note&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.note}</p>}
+                        {loomId?(
+                          <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
+                            <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Coach Loom"
+                              style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                          </div>
+                        ):item.loom?(
+                          <a href={item.loom} target="_blank" rel="noreferrer"
+                            style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
+                            🎥 Watch Loom
+                          </a>
+                        ):null}
+                      </div>
+                    )
+                  }
+
+                  /* Client check-in card */
+                  const ci=item; const idx=item._idx
                   const isExpanded=expandedCi===idx
                   const loomId=ci.coachLoom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
                   return (
