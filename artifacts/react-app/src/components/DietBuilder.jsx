@@ -670,17 +670,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [loeEditing, setLoeEditing] = useState(false)
   const saveLoe = (val) => { setLoeContent(val); localStorage.setItem(loeKey, val) }
 
-  // ── Consultations ──────────────────────────────────────────
-  const CONSULT_TYPES = [
-    'Intake / Onboarding','Initial Progress Review','Monthly Check-In Call',
-    'Protocol Adjustment Call','Goal Setting Session','General Coaching Call',
-  ]
-  const [consultations,   setConsultations]   = useState([])
-  const [showConsultForm, setShowConsultForm] = useState(false)
-  const [consultType,     setConsultType]     = useState('Intake / Onboarding')
-  const [consultDate,     setConsultDate]     = useState(new Date().toISOString().slice(0,10))
-  const [consultNotes,    setConsultNotes]    = useState('')
-  const [consultLoom,     setConsultLoom]     = useState('')
+  // ── Consultation data — client receives from coach (Week6 Consultation tab) ──
+  const [clientIntake,  setClientIntake]  = useState({notes:'',startDate:'',startWeight:''})
+  const [callNotesList, setCallNotesList] = useState([])
 
   // ── Notifications ──────────────────────────────────────────
   const [notifications,  setNotifications]  = useState([])
@@ -962,15 +954,20 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .catch(()=>{})
   },[email])
 
-  // Load consultations from DB on mount
+  // Load intake record + call notes (written by coach in Week6 Consultation tab)
   useEffect(()=>{
     const uuid = KNOWN_USERS[email]?.uuid
     if(!uuid) return
-    dbGet('consultations',`client_id=eq.${uuid}&order=created_at.desc&limit=50`)
+    dbGet('client_intakes',`client_id=eq.${uuid}&order=updated_at.desc&limit=1`)
       .then(rows=>{
-        if(Array.isArray(rows)&&rows.length)
-          setConsultations(rows.map(r=>({id:r.id,call_type:r.call_type,date:r.date,notes:r.notes||'',loom:r.loom||''})))
+        if(Array.isArray(rows)&&rows.length){
+          const r=rows[0]
+          setClientIntake({notes:r.call_notes||'',startDate:r.start_date||'',startWeight:r.start_weight||''})
+        }
       }).catch(()=>{})
+    dbGet('consultation_notes',`client_id=eq.${uuid}&order=call_date.desc&limit=50`)
+      .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCallNotesList(rows) })
+      .catch(()=>{})
   },[email])
 
   // Load + poll notifications every 30 s
@@ -1001,27 +998,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     if(uuid) dbUpdate('notifications',`recipient_id=eq.${uuid}&read=eq.false`,{read:true})
   }
 
-  // ── Add consultation (coach only) ─────────────────────────
-  async function addConsultation() {
-    if(!consultNotes.trim()&&!consultLoom.trim()) return
-    const clientId = KNOWN_USERS[email]?.uuid
-    const coachId  = KNOWN_USERS['coach@eden.io']?.uuid
-    const entry = {id:String(Date.now()),call_type:consultType,date:consultDate,notes:consultNotes.trim(),loom:consultLoom.trim()}
-    setConsultations(p=>[entry,...p])
-    setConsultNotes(''); setConsultLoom(''); setShowConsultForm(false)
-    if(clientId&&coachId){
-      await dbInsert('consultations',{
-        coach_id:coachId, client_id:clientId, call_type:consultType,
-        date:consultDate, notes:entry.notes, loom:entry.loom,
-        created_at:new Date().toISOString()
-      })
-      const rows = await dbGet('consultations',`client_id=eq.${clientId}&order=created_at.desc`)
-      if(Array.isArray(rows)&&rows.length)
-        setConsultations(rows.map(r=>({id:r.id,call_type:r.call_type,date:r.date,notes:r.notes||'',loom:r.loom||''})))
-      await insertNotification(clientId, coachId, 'consultation',
-        `📞 Your coach added ${consultType} notes — check the Consultations tab`)
-    }
-  }
 
   // Load assigned recipes from DB
   useEffect(()=>{
@@ -1594,7 +1570,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
             {/* Sub-tab bar */}
             <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
-              {[['checkins','📋 Check-Ins'],['consultations','📞 Consultations'],['photos','📸 Photos']].map(([k,l])=>(
+              {[['checkins','📋 Check-Ins'],['photos','📸 Photos']].map(([k,l])=>(
                 <button key={k} onClick={()=>setCoachCheckinTab(k)}
                   style={{flex:1,background:'none',border:'none',borderBottom:`2px solid ${coachCheckinTab===k?C.gold:'transparent'}`,
                     padding:'12px 8px',color:coachCheckinTab===k?C.gold:C.muted,fontSize:12,fontWeight:coachCheckinTab===k?700:400,cursor:'pointer'}}>
@@ -1942,99 +1918,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               </>)}
 
               {/* ── Consultations sub-tab (coach) ── */}
-              {coachCheckinTab==='consultations'&&(<>
-
-                {/* Add form toggle */}
-                <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
-                  <button onClick={()=>setShowConsultForm(v=>!v)}
-                    style={{background:showConsultForm?`${C.gold}33`:`${C.gold}18`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'7px 16px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                    {showConsultForm?'✕ Cancel':'＋ Add Consultation Notes'}
-                  </button>
-                </div>
-
-                {/* Add form */}
-                {showConsultForm&&(
-                  <div style={{background:'#0d1a0d',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:16}}>
-                    <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:.8,textTransform:'uppercase',marginBottom:12}}>
-                      New Consultation Record — visible to client in their Consultations tab
-                    </div>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                      <div>
-                        <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Call Type</div>
-                        <select value={consultType} onChange={e=>setConsultType(e.target.value)}
-                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}>
-                          {CONSULT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Date</div>
-                        <input type="date" value={consultDate} onChange={e=>setConsultDate(e.target.value)}
-                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-                      </div>
-                    </div>
-                    <div style={{marginBottom:10}}>
-                      <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Consultation Notes</div>
-                      <textarea value={consultNotes} onChange={e=>setConsultNotes(e.target.value)} rows={4}
-                        placeholder="Summary of the call, key takeaways, action items, protocol changes discussed…"
-                        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
-                    </div>
-                    <div style={{marginBottom:12}}>
-                      <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Loom URL <span style={{fontWeight:400,textTransform:'none',fontSize:9,color:C.dim}}>(optional)</span></div>
-                      <input value={consultLoom} onChange={e=>setConsultLoom(e.target.value)} placeholder="https://loom.com/share/..."
-                        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-                    </div>
-                    {(()=>{const id=consultLoom.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1];return id?(
-                      <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden',marginBottom:12}}>
-                        <iframe src={`https://www.loom.com/embed/${id}`} allowFullScreen title="Loom preview"
-                          style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                      </div>
-                    ):null})()}
-                    <button onClick={addConsultation}
-                      style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 24px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
-                      Save Consultation Record
-                    </button>
-                  </div>
-                )}
-
-                {/* Consultation list */}
-                {consultations.length===0?(
-                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:40,textAlign:'center'}}>
-                    <div style={{fontSize:36,marginBottom:10}}>📞</div>
-                    <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:6}}>No consultations recorded yet</div>
-                    <div style={{fontSize:12,color:C.muted}}>Click "+ Add Consultation Notes" to log an intake call, progress review, or any coaching call.</div>
-                  </div>
-                ):consultations.map(c=>{
-                  const loomId=c.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
-                  return (
-                    <div key={c.id} style={{background:'#0d1a0d',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-                        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                          <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'3px 10px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>
-                            📞 {c.call_type}
-                          </span>
-                          <span style={{fontSize:12,fontWeight:700,color:C.white}}>{c.date}</span>
-                        </div>
-                        <button onClick={async()=>{
-                          setConsultations(p=>p.filter(x=>x.id!==c.id))
-                          if(typeof c.id==='string'&&c.id.length>10) await dbDelete('consultations',`id=eq.${c.id}`)
-                        }} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
-                      </div>
-                      {c.notes&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{c.notes}</p>}
-                      {loomId?(
-                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
-                          <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Consultation Loom"
-                            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                        </div>
-                      ):c.loom?(
-                        <a href={c.loom} target="_blank" rel="noreferrer"
-                          style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
-                          🎥 Watch Recording
-                        </a>
-                      ):null}
-                    </div>
-                  )
-                })}
-              </>)}
 
             </div>
           </div>
@@ -2231,40 +2114,107 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )}
               </>)}
 
-              {/* ─── Consultations tab (client, read-only) ─── */}
+              {/* ─── Consultations tab (client, read-only mirror of coach's Week6 Consultation tab) ─── */}
               {clientViewTab==='consultations'&&(<>
-                <div style={{background:`${C.gold}10`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'11px 14px',marginBottom:16,fontSize:12,color:C.muted,lineHeight:1.6}}>
-                  Your coach posts notes here after every call — intake, progress reviews, protocol discussions.
-                  You'll get a notification each time a new record is added.
-                </div>
-                {consultations.length===0?(
-                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:40,textAlign:'center'}}>
-                    <div style={{fontSize:36,marginBottom:10}}>📞</div>
-                    <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:6}}>No consultation notes yet</div>
-                    <div style={{fontSize:12,color:C.muted}}>After your intake call or any coaching session, your coach's notes will appear here.</div>
+
+                {/* ── Intake record ── */}
+                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.white}}>Initial Intake — Onboarding Consultation</div>
+                    <span style={{fontSize:9,background:`${C.gold}22`,color:C.gold,padding:'2px 7px',borderRadius:10,fontWeight:700,letterSpacing:.5}}>VIEW ONLY</span>
                   </div>
-                ):consultations.map(c=>{
-                  const loomId=c.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
-                  return (
-                    <div key={c.id} style={{background:'#0d1a0d',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:10}}>
-                        <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'3px 10px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>
-                          📞 {c.call_type}
-                        </span>
-                        <span style={{fontSize:12,fontWeight:700,color:C.white}}>{c.date}</span>
-                      </div>
-                      {c.notes&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{c.notes}</p>}
-                      {loomId?(
-                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
-                          <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Consultation Loom"
-                            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.5}}>
+                    Your intake notes from your initial onboarding consultation.
+                  </div>
+                  {clientIntake.notes?(
+                    <div style={{background:C.surface,borderRadius:8,padding:'12px',fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>
+                      {clientIntake.notes}
+                    </div>
+                  ):(
+                    <div style={{background:C.surface,borderRadius:8,padding:'20px',textAlign:'center',fontSize:12,color:C.muted}}>
+                      Your coach hasn't added intake notes yet.
+                    </div>
+                  )}
+                  {(clientIntake.startDate||clientIntake.startWeight)&&(
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
+                      {clientIntake.startDate&&(
+                        <div style={{background:C.surface,borderRadius:8,padding:'10px 12px'}}>
+                          <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:3}}>Start Date</div>
+                          <div style={{fontSize:13,color:C.white,fontWeight:600}}>{clientIntake.startDate}</div>
                         </div>
-                      ):c.loom?(
-                        <a href={c.loom} target="_blank" rel="noreferrer"
-                          style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
-                          🎥 Watch Recording
-                        </a>
-                      ):null}
+                      )}
+                      {clientIntake.startWeight&&(
+                        <div style={{background:C.surface,borderRadius:8,padding:'10px 12px'}}>
+                          <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:3}}>Starting Weight</div>
+                          <div style={{fontSize:13,color:C.white,fontWeight:600}}>{clientIntake.startWeight} lbs</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Call notes history ── */}
+                <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:4}}>Call Notes History</div>
+                <div style={{fontSize:10,color:C.muted,marginBottom:12}}>Monthly calls, therapy sessions, strategy calls</div>
+
+                {callNotesList.length===0?(
+                  <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:32,textAlign:'center'}}>
+                    <div style={{fontSize:12,color:C.muted}}>No call notes yet. Your coach will add them after each session.</div>
+                  </div>
+                ):callNotesList.map(note=>{
+                  const raw  = note.loom_url||''
+                  const embed = raw.replace('loom.com/share/','loom.com/embed/')
+                  return (
+                    <div key={note.id} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:12,padding:16,marginBottom:10}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.8,marginBottom:3}}>
+                            {(note.call_type||'').toUpperCase()}
+                          </div>
+                          <div style={{fontSize:11,color:C.muted}}>
+                            {note.call_date?new Date(note.call_date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):''}
+                          </div>
+                        </div>
+                        {note.next_call_date&&(
+                          <div style={{textAlign:'right'}}>
+                            <div style={{fontSize:9,color:C.muted,marginBottom:2}}>NEXT CALL</div>
+                            <div style={{fontSize:11,color:C.success,fontWeight:600}}>
+                              {new Date(note.next_call_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {note.summary&&(
+                        <div style={{marginBottom:10}}>
+                          <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Summary</div>
+                          <div style={{fontSize:13,color:C.white,lineHeight:1.6}}>{note.summary}</div>
+                        </div>
+                      )}
+
+                      {note.focus_points&&(
+                        <div style={{marginBottom:10,background:C.surface,borderRadius:8,padding:'10px 12px'}}>
+                          <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Focus Points</div>
+                          <div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{note.focus_points}</div>
+                        </div>
+                      )}
+
+                      {note.action_items&&(
+                        <div style={{background:`${C.success}11`,border:`1px solid ${C.success}33`,borderRadius:8,padding:'10px 12px',marginBottom:embed?10:0}}>
+                          <div style={{fontSize:9,fontWeight:700,color:C.success,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Action Items</div>
+                          <div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{note.action_items}</div>
+                        </div>
+                      )}
+
+                      {embed&&(
+                        <div style={{marginTop:10}}>
+                          <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🎥 Loom Recording</div>
+                          <div style={{position:'relative',paddingBottom:'56.25%',overflow:'hidden',borderRadius:10,border:`1px solid ${C.border}`}}>
+                            <iframe src={embed} allowFullScreen title="Loom recording"
+                              style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

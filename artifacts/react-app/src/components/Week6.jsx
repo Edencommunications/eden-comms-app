@@ -195,6 +195,14 @@ export default function Week6({currentUser, onNavigate}) {
       start_weight: intake.startWeight,
       updated_at:   new Date().toISOString(),
     })
+    await dbInsert('notifications',{
+      recipient_id: selectedClient.uuid,
+      sender_id:    myUUID,
+      type:         'consultation',
+      message:      '📋 Your coach updated your Intake / Onboarding notes — check the Consultations tab',
+      read:         false,
+      created_at:   new Date().toISOString()
+    })
     alert('Intake saved successfully.')
   }
 
@@ -211,8 +219,9 @@ export default function Week6({currentUser, onNavigate}) {
     }
     setCallNotes(prev=>[note,...prev])
 
+    const _clientId = selectedClient?.uuid || KNOWN_USERS['client@eden.io']?.uuid
     await dbInsert('consultation_notes',{
-      client_id:      selectedClient?.uuid || KNOWN_USERS['client@eden.io']?.uuid,
+      client_id:      _clientId,
       coach_id:       myUUID,
       call_date:      newCall.callDate,
       call_type:      newCall.callType,
@@ -221,6 +230,14 @@ export default function Week6({currentUser, onNavigate}) {
       action_items:   newCall.actionItems,
       next_call_date: newCall.nextCallDate||null,
       loom_url:       newCall.loomUrl||null,
+    })
+    if(_clientId) await dbInsert('notifications',{
+      recipient_id: _clientId,
+      sender_id:    myUUID,
+      type:         'consultation',
+      message:      `📞 Your coach added ${newCall.callType} notes — check the Consultations tab`,
+      read:         false,
+      created_at:   new Date().toISOString()
     })
 
     setNewCall({callDate:new Date().toISOString().slice(0,10),callType:'Monthly Check-In',summary:'',focusPoints:'',actionItems:'',nextCallDate:'',loomUrl:''})
