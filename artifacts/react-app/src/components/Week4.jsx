@@ -929,27 +929,64 @@ Training Principles:
             )}
           </Card>
 
-          {/* Cardio log for client */}
-          {!isCoach&&(
-            <Card sx={{marginBottom:20}}>
-              <Lbl t="This Week's Cardio Log"/>
+          {/* Cardio log — client edits, coach views read-only */}
+          <Card sx={{marginBottom:20}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+              <Lbl t={isCoach?`Client's Week ${activeWeek} Cardio Log`:'This Week\'s Cardio Log'}/>
+              <span style={{fontSize:10,color:C.muted,fontWeight:600,background:C.surface,borderRadius:6,padding:'2px 8px'}}>
+                Week {activeWeek}
+              </span>
+            </div>
+            {!isCoach&&(
               <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Log each cardio session you completed this week</div>
-              {[1,2,3,4,5,6,7].map(day=>(
+            )}
+            {isCoach&&(
+              <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
+                Read-only view of Jordan's submitted log. Use the week selector in the Workout tab sidebar to browse other weeks.
+              </div>
+            )}
+            {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
+              const actKey   = `${activeWeek}_cardio_${day}_activity`
+              const stepsKey = `${activeWeek}_cardio_${day}_steps`
+              const activity = workoutLogs[actKey] || ''
+              const steps    = workoutLogs[stepsKey] || ''
+              const hasEntry = activity || steps
+              return (
                 <div key={day} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
-                  <div style={{width:70,fontSize:11,color:C.muted,fontWeight:600}}>
-                    {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][day-1]}
-                  </div>
-                  <input placeholder="Type + duration (e.g. Walk 45min)"
-                    style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 10px',color:C.white,fontSize:12,outline:'none'}}/>
-                  <input placeholder="Steps" type="number"
-                    style={{width:80,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:12,outline:'none',textAlign:'center'}}/>
+                  <div style={{width:38,fontSize:11,color:C.muted,fontWeight:600,flexShrink:0}}>{day}</div>
+                  {isCoach ? (
+                    hasEntry ? (
+                      <>
+                        <div style={{flex:1,fontSize:12,color:C.white}}>{activity||<span style={{color:C.muted,fontStyle:'italic'}}>—</span>}</div>
+                        <div style={{width:80,textAlign:'center',fontSize:12,color:C.gold,fontWeight:700,flexShrink:0}}>{steps?`${Number(steps).toLocaleString()} steps`:'—'}</div>
+                      </>
+                    ) : (
+                      <div style={{flex:1,fontSize:11,color:C.muted,fontStyle:'italic'}}>No entry</div>
+                    )
+                  ) : (
+                    <>
+                      <input
+                        value={activity}
+                        onChange={e=>setWorkoutLogs(p=>({...p,[actKey]:e.target.value}))}
+                        placeholder="Type + duration (e.g. Walk 45min)"
+                        style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                      <input
+                        value={steps}
+                        onChange={e=>setWorkoutLogs(p=>({...p,[stepsKey]:e.target.value}))}
+                        placeholder="Steps" type="number"
+                        style={{width:80,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:12,outline:'none',textAlign:'center',flexShrink:0}}/>
+                    </>
+                  )}
                 </div>
-              ))}
-              <button style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginTop:12}}>
-                Save Cardio Log
+              )
+            })}
+            {!isCoach&&(
+              <button onClick={saveWorkoutLog} disabled={logSaving}
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginTop:12,opacity:logSaving?.6:1}}>
+                {logSaving?'Saving…':'Save Cardio Log'}
               </button>
-            </Card>
-          )}
+            )}
+          </Card>
 
           {isCoach&&(
             <button onClick={saveWorkoutPlan}
