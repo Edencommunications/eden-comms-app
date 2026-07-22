@@ -1,0 +1,80 @@
+-- ══════════════════════════════════════════════════════════
+-- 1. WORKOUT PLANS
+--    Coach saves the exercise program + cardio protocol here
+-- ══════════════════════════════════════════════════════════
+create table if not exists public.workout_plans (
+  id         uuid primary key default gen_random_uuid(),
+  client_id  uuid not null,
+  coach_id   uuid not null,
+  workouts   jsonb not null default '{}',   -- exercises, principles, cardioWeekStart
+  cardio     jsonb not null default '[]',   -- array of cardio protocol objects
+  updated_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+
+-- Open RLS so the anon key can read/write (matches your fake-auth setup)
+alter table public.workout_plans enable row level security;
+
+drop policy if exists "open" on public.workout_plans;
+create policy "open" on public.workout_plans
+  for all using (true) with check (true);
+
+
+-- ══════════════════════════════════════════════════════════
+-- 2. CLIENT WORKOUT LOGS
+--    Client saves weekly weight/reps + cardio log here
+-- ══════════════════════════════════════════════════════════
+create table if not exists public.client_workout_logs (
+  id         uuid primary key default gen_random_uuid(),
+  client_id  uuid not null,
+  week       integer not null,
+  logs       jsonb not null default '{}',   -- keyed by `{week}_{exId}_{setIdx}` and `{week}_cardio_{Day}_*`
+  saved_at   timestamptz default now(),
+  unique (client_id, week)                  -- required for upsert (merge-duplicates)
+);
+
+alter table public.client_workout_logs enable row level security;
+
+drop policy if exists "open" on public.client_workout_logs;
+create policy "open" on public.client_workout_logs
+  for all using (true) with check (true);
+
+
+-- ══════════════════════════════════════════════════════════
+-- 3. LAB RESULTS  (in case these don't exist yet)
+-- ══════════════════════════════════════════════════════════
+create table if not exists public.lab_results (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   uuid not null,
+  lab_type    text,
+  file_url    text,
+  loom_url    text,
+  notes       text,
+  created_at  timestamptz default now()
+);
+
+alter table public.lab_results enable row level security;
+
+drop policy if exists "open" on public.lab_results;
+create policy "open" on public.lab_results
+  for all using (true) with check (true);
+
+
+-- ══════════════════════════════════════════════════════════
+-- 4. LAB COMMENTS  (coach ↔ client discussion on a lab)
+-- ══════════════════════════════════════════════════════════
+create table if not exists public.lab_comments (
+  id          uuid primary key default gen_random_uuid(),
+  lab_id      uuid not null references public.lab_results(id) on delete cascade,
+  author_id   uuid,
+  author_name text,
+  author_role text,
+  content     text not null,
+  created_at  timestamptz default now()
+);
+
+alter table public.lab_comments enable row level security;
+
+drop policy if exists "open" on public.lab_comments;
+create policy "open" on public.lab_comments
+  for all using (true) with check (true);
