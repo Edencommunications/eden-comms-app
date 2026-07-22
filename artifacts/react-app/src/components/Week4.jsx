@@ -165,6 +165,93 @@ function Sel({label,value,onChange,options}) {
   )
 }
 
+// ── Demo / seed data shown before real DB data is saved ─────────
+const DEMO_WORKOUTS = [
+  {
+    name:'Push Day A', notes:'Focus on mind-muscle connection. Rest 90 sec between working sets.',
+    exercises:[
+      {id:'dpa_bench',    name:'Flat BB Bench Press',            sets:4, reps:'10-12', rest:'90 sec', cues:'Retract scapula, arch naturally, drive chest through the bar', videoLink:''},
+      {id:'dpa_incline',  name:'Incline DB Bench Press',         sets:4, reps:'10-12', rest:'90 sec', cues:'30° incline, squeeze at top, full stretch at bottom',           videoLink:''},
+      {id:'dpa_shoulder', name:'Seated DB Shoulder Press',       sets:4, reps:'10-12', rest:'90 sec', cues:'Stop at 90° on the way down, explosive press up',               videoLink:''},
+      {id:'dpa_lateral',  name:'Single Arm Cable Lateral Raise', sets:3, reps:'12',    rest:'60 sec', cues:'Lead with elbow, slight forward lean, squeeze at top',          videoLink:''},
+      {id:'dpa_tri',      name:'Rope Tricep Pushdown',           sets:4, reps:'12',    rest:'60 sec', cues:'Spread rope at bottom, lock elbows at sides, squeeze triceps',  videoLink:''},
+    ],
+  },
+  {
+    name:'Pull Day A', notes:'Initiate every pull with the lats, not the arms.',
+    exercises:[
+      {id:'pla_pulldown', name:'Wide Grip Lat Pulldown',         sets:4, reps:'10-12', rest:'90 sec', cues:'Pull to upper chest, full stretch at top, lead with elbows', videoLink:''},
+      {id:'pla_cable',    name:'Seated Cable Row',               sets:4, reps:'10-12', rest:'90 sec', cues:'Squeeze shoulder blades together at the end of each rep',    videoLink:''},
+      {id:'pla_row',      name:'BB Bent Over Row',               sets:4, reps:'10-12', rest:'90 sec', cues:'Hinge at hip 45°, pull to lower chest, full ROM each rep',   videoLink:''},
+      {id:'pla_hammer',   name:'DB Hammer Curl',                 sets:3, reps:'12',    rest:'60 sec', cues:'Neutral grip, controlled negative, no swinging',              videoLink:''},
+      {id:'pla_preacher', name:'EZ Bar Preacher Curl',           sets:3, reps:'12',    rest:'60 sec', cues:'Full stretch at bottom, squeeze at top, slow negative',       videoLink:''},
+    ],
+  },
+  {
+    name:'Leg Day A', notes:'Warm up knees thoroughly. Depth is non-negotiable.',
+    exercises:[
+      {id:'lda_squat',  name:'BB Back Squat',          sets:5, reps:'10-12', rest:'2 min',  cues:'Hip crease below knee, knees track over toes, chest up',    videoLink:''},
+      {id:'lda_press',  name:'Leg Press',              sets:4, reps:'10-12', rest:'90 sec', cues:"Full ROM, don't lock knees at top, controlled descent",      videoLink:''},
+      {id:'lda_split',  name:'DB Split Squat',         sets:3, reps:'12',    rest:'90 sec', cues:'Back knee touches lightly, keep torso upright',              videoLink:''},
+      {id:'lda_ext',    name:'Seated Leg Extension',   sets:4, reps:'12',    rest:'60 sec', cues:'Squeeze quad at top, 2-second negative',                    videoLink:''},
+      {id:'lda_thrust', name:'BB Hip Thrust',          sets:4, reps:'10-12', rest:'90 sec', cues:'Drive hips through full extension, pause at top',            videoLink:''},
+    ],
+  },
+  {
+    name:'Push Day B', notes:'Shoulder-dominant day. Volume is key.',
+    exercises:[
+      {id:'pdb_press',   name:'Seated DB Shoulder Press', sets:4, reps:'10-12', rest:'90 sec', cues:'Full ROM, no partial reps, control the descent',        videoLink:''},
+      {id:'pdb_lateral', name:'Standing DB Lateral Raise', sets:4, reps:'12',   rest:'60 sec', cues:'Slight bend at elbow, lead with pinky, pause at top',   videoLink:''},
+      {id:'pdb_incline', name:'Incline BB Bench Press',    sets:4, reps:'10-12', rest:'90 sec', cues:'45° incline, bar to upper chest, explosive press',      videoLink:''},
+      {id:'pdb_skull',   name:'EZ Bar Skullcrusher',       sets:4, reps:'10-12', rest:'60 sec', cues:'Keep elbows tucked, lower to forehead, full extension', videoLink:''},
+    ],
+  },
+  {
+    name:'Pull Day B', notes:'Focus on width and thickness. Control every negative.',
+    exercises:[
+      {id:'plb_narrow',  name:'Narrow Grip Lat Pulldown',      sets:4, reps:'10-12', rest:'90 sec', cues:'Drive elbows to hips, lean back slightly, full stretch', videoLink:''},
+      {id:'plb_tbar',    name:'T-Bar Row',                     sets:4, reps:'10-12', rest:'90 sec', cues:'Chest on pad, elbows wide, row to lower chest',          videoLink:''},
+      {id:'plb_single',  name:'Single Arm Bent Over DB Row',   sets:4, reps:'10-12', rest:'90 sec', cues:'Brace on bench, full stretch, pull to hip',              videoLink:''},
+      {id:'plb_cable',   name:'Cable Bicep Curl',              sets:3, reps:'12',    rest:'60 sec', cues:'Elbows stationary, squeeze peak, controlled negative',    videoLink:''},
+      {id:'plb_incurl',  name:'Incline DB Bicep Curl',         sets:3, reps:'12',    rest:'60 sec', cues:'Full stretch at bottom, supinate at top',                 videoLink:''},
+    ],
+  },
+  {
+    name:'Leg Day B', notes:'Hamstring & posterior chain focus. Never skip calf work.',
+    exercises:[
+      {id:'ldb_hack', name:'Hack Squat',                sets:4, reps:'10-12', rest:'90 sec', cues:'High foot placement for glutes, full depth',              videoLink:''},
+      {id:'ldb_sldl', name:'Stiff Leg Deadlift',        sets:4, reps:'10-12', rest:'90 sec', cues:'Feel the hamstring stretch, hinge not squat, flat back',  videoLink:''},
+      {id:'ldb_curl', name:'Lying Machine Leg Curl',    sets:4, reps:'12',    rest:'60 sec', cues:'Full ROM, squeeze glutes, slow 3-count negative',         videoLink:''},
+      {id:'ldb_calf', name:'Seated Machine Calf Raise', sets:4, reps:'15',    rest:'60 sec', cues:'Full stretch at bottom, pause at top, slow movement',     videoLink:''},
+    ],
+  },
+]
+
+// Week-1 logs shown before the client saves real data (keys match `${week}_${exId}_${setIdx}`)
+const DEMO_LOGS = {
+  // Push Day A — Bench
+  '1_dpa_bench_0':{weight:'135',reps:'12'},'1_dpa_bench_1':{weight:'155',reps:'12'},
+  '1_dpa_bench_2':{weight:'175',reps:'11'},'1_dpa_bench_3':{weight:'185',reps:'10'},
+  // Push Day A — Incline DB
+  '1_dpa_incline_0':{weight:'50',reps:'12'},'1_dpa_incline_1':{weight:'55',reps:'12'},
+  '1_dpa_incline_2':{weight:'60',reps:'11'},'1_dpa_incline_3':{weight:'65',reps:'9'},
+  // Push Day A — Shoulder Press
+  '1_dpa_shoulder_0':{weight:'35',reps:'12'},'1_dpa_shoulder_1':{weight:'40',reps:'12'},
+  '1_dpa_shoulder_2':{weight:'45',reps:'10'},'1_dpa_shoulder_3':{weight:'45',reps:'9'},
+  // Push Day A — Lateral Raise
+  '1_dpa_lateral_0':{weight:'10',reps:'12'},'1_dpa_lateral_1':{weight:'12',reps:'12'},
+  '1_dpa_lateral_2':{weight:'15',reps:'10'},
+  // Push Day A — Tricep Pushdown
+  '1_dpa_tri_0':{weight:'50',reps:'12'},'1_dpa_tri_1':{weight:'55',reps:'12'},
+  '1_dpa_tri_2':{weight:'60',reps:'11'},'1_dpa_tri_3':{weight:'65',reps:'10'},
+  // Cardio log — Week 1
+  '1_cardio_Mon_activity':'Brisk Walk 45min','1_cardio_Mon_steps':'8500',
+  '1_cardio_Tue_activity':'Treadmill 30min', '1_cardio_Tue_steps':'6200',
+  '1_cardio_Wed_activity':'Brisk Walk 45min','1_cardio_Wed_steps':'9100',
+  '1_cardio_Thu_activity':'HIIT 20min',      '1_cardio_Thu_steps':'4500',
+  '1_cardio_Fri_activity':'Brisk Walk 45min','1_cardio_Fri_steps':'8800',
+}
+
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
@@ -206,17 +293,16 @@ Training Principles:
 3. Each set should start with warm-ups leading to the working sets. The last set should push you to absolute failure at 10 to 12 reps.
 4. Increase weight progressively so that if you achieve 12 reps on your last set, increase the weight next session to maintain the challenge.`
 
-  const [workouts,           setWorkouts]           = useState(
-    [1,2,3,4,5,6].map(i=>({name:`Workout ${i}`, exercises:[], notes:''}))
-  )
+  const [workouts,           setWorkouts]           = useState(DEMO_WORKOUTS)
   const [trainingPrinciples, setTrainingPrinciples] = useState(DEFAULT_PRINCIPLES)
   const [activeWorkout,      setActiveWorkout]      = useState(0)
   const [showExPicker,       setShowExPicker]        = useState(false)
   const [exSearch,           setExSearch]            = useState('')
   const [exCategory,         setExCategory]          = useState('Push')
   const [activeWeek,         setActiveWeek]          = useState(1)
-  const [workoutLogs,        setWorkoutLogs]         = useState({})
+  const [workoutLogs,        setWorkoutLogs]         = useState(DEMO_LOGS)
   const [logSaving,          setLogSaving]           = useState(false)
+  const [principlesEditing,  setPrinciplesEditing]   = useState(false)
 
   // ── Cardio state ──────────────────────────────────────────
   const [cardio, setCardio] = useState([
@@ -344,14 +430,15 @@ Training Principles:
 
   // ── Load workout logs for a given week ────────────────────
   async function loadWorkoutLog(week) {
+    const fallback = week === 1 ? DEMO_LOGS : {}
     try {
       const data = await dbGet('client_workout_logs',
         `client_id=eq.${CLIENT_UUID}&week=eq.${week}&limit=1`
       )
-      setWorkoutLogs(data?.[0]?.logs || {})
+      const saved = data?.[0]?.logs
+      setWorkoutLogs((saved && Object.keys(saved).length > 0) ? saved : fallback)
     } catch(e) {
-      // Table may not exist yet — start with empty logs
-      setWorkoutLogs({})
+      setWorkoutLogs(fallback)
     }
   }
 
@@ -689,13 +776,24 @@ Training Principles:
               )}
             </div>
 
-            {/* Training principles — always visible; editable by coach */}
+            {/* Training principles — always visible; coach can toggle edit */}
             <div style={{padding:'14px 16px 0',flexShrink:0}}>
               <div style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,overflow:'hidden'}}>
                 <div style={{padding:'10px 14px 8px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                   <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1}}>LOE TRAINING PRINCIPLES</div>
+                  {isCoach&&(
+                    principlesEditing
+                      ? <button onClick={()=>setPrinciplesEditing(false)}
+                          style={{fontSize:9,padding:'2px 8px',background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:5,color:C.gold,cursor:'pointer',fontWeight:700}}>
+                          ✓ Done
+                        </button>
+                      : <button onClick={()=>setPrinciplesEditing(true)}
+                          style={{fontSize:9,padding:'2px 8px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:'pointer'}}>
+                          ✏️ Edit
+                        </button>
+                  )}
                 </div>
-                {isCoach ? (
+                {(isCoach && principlesEditing) ? (
                   <textarea
                     value={trainingPrinciples}
                     onChange={e=>setTrainingPrinciples(e.target.value)}
