@@ -668,11 +668,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     const uuid = KNOWN_USERS[email]?.uuid
     if (!uuid) return
 
-    // Load assigned update day from user profile
+    // Load assigned update day — DB first, localStorage fallback (bridge until SQL/RLS is live)
     dbGet('user_profiles', `id=eq.${uuid}&select=update_day`)
       .then(rows => {
-        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day)
+        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day) {
           setUpdateDay(rows[0].update_day)
+        } else {
+          const cached = localStorage.getItem(`eden_update_day_${uuid}`)
+          if (cached) setUpdateDay(cached)
+        }
       })
 
     // Fetch real submitted check-ins from DB and merge on top of demo data

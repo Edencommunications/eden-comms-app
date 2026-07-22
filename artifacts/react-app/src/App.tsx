@@ -1111,8 +1111,13 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
     if (!client?.uuid) return;
     sbGet('user_profiles', `id=eq.${client.uuid}&select=update_day`)
       .then((rows: any[]) => {
-        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day)
+        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day) {
           setUpdateDay(rows[0].update_day);
+        } else {
+          // Fallback: localStorage bridge works before SQL/RLS is configured
+          const cached = localStorage.getItem(`eden_update_day_${client.uuid}`);
+          if (cached) setUpdateDay(cached);
+        }
       });
   }, [client?.uuid]);
 
@@ -1235,6 +1240,10 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                   const day = e.target.value;
                   setUpdateDay(day);
                   if (!client.uuid) return;
+                  // Write to localStorage immediately — client reads this as fallback
+                  // until Supabase user_profiles + permissive RLS are live
+                  if (day) localStorage.setItem(`eden_update_day_${client.uuid}`, day);
+                  else localStorage.removeItem(`eden_update_day_${client.uuid}`);
                   setSavingDay(true);
                   await sbPatch('user_profiles', `id=eq.${client.uuid}`, { update_day: day });
                   setSavingDay(false);
