@@ -643,6 +643,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     cycleNotes:'',cyclePain:'5',notes:'',
   })
   const setC = k=>v=>setCi(p=>({...p,[k]:v}))
+  const [protocolDurations, setProtocolDurations] = useState({})  // { protocolName: duration string }
+  const setProtDur = (name,val) => setProtocolDurations(p=>({...p,[name]:val}))
   const [mealNotes, setMealNotes] = useState({})  // per-meal adjustment notes from client, keyed by meal name
 
   // Check-in hub state
@@ -921,7 +923,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setClientSupps(p=>[...p,{...supp,id:Date.now()+'_'+supp.name,customDose:supp.dose,customDir:supp.directions}])
   }
   function addSuppProtocol(cat) {
-    SUPP_DB[cat]?.forEach(s=>addSuppFromDB({...s,category:cat}))
+    // protocolGroup marks these as a full protocol so the UI renders them under a named header
+    SUPP_DB[cat]?.forEach(s=>addSuppFromDB({...s,category:cat,protocolGroup:cat}))
     setShowSuppPicker(false)
   }
   function removeSupp(id) { setClientSupps(p=>p.filter(s=>s.id!==id)) }
@@ -2351,6 +2354,44 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   </div>
                   <input type="range" min="1" max="10" value={ci.cyclePain} onChange={e=>setC('cyclePain')(e.target.value)} style={{width:'100%',accentColor:C.gold}}/>
                 </Card>
+
+                {/* Protocol Duration */}
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="Protocol Duration"/>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.6}}>
+                    For each protocol below, enter how long you have been following it (e.g. "3 weeks", "5 days", "2 months").
+                  </div>
+                  {/* Dynamic rows for each assigned supplement protocol */}
+                  {(()=>{
+                    const assignedProtocols=[...new Set(clientSupps.filter(s=>s.protocolGroup).map(s=>s.protocolGroup))]
+                    // Always include Flush Protocol since it's a common standalone protocol
+                    const allProtocols=assignedProtocols.includes('Flush Protocol')
+                      ? assignedProtocols
+                      : [...assignedProtocols,'Flush Protocol']
+                    return allProtocols.map(proto=>(
+                      <div key={proto} style={{marginBottom:10}}>
+                        <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>{proto}</div>
+                        <input
+                          value={protocolDurations[proto]||''}
+                          onChange={e=>setProtDur(proto,e.target.value)}
+                          placeholder="e.g. 3 weeks, Day 14, Started Jan 6…"
+                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
+                        />
+                      </div>
+                    ))
+                  })()}
+                  {/* Free-text for any other protocol not listed above */}
+                  <div style={{marginTop:8}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>Any other protocol / supplement not listed?</div>
+                    <input
+                      value={protocolDurations['__other']||''}
+                      onChange={e=>setProtDur('__other',e.target.value)}
+                      placeholder="e.g. Thyroid Protocol — 6 weeks, custom detox — 10 days…"
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
+                    />
+                  </div>
+                </Card>
+
                 {/* Habits this week */}
                 {assignedHabits.length>0&&(
                   <Card sx={{marginBottom:12}}>
@@ -2433,6 +2474,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     notes:            ci.notes,            habits:           habitCounts,
                     habit_pct:        habitScore,          submitted_at:     new Date().toISOString(),
                     meal_notes:       Object.keys(mealNotes).some(k=>mealNotes[k]) ? mealNotes : null,
+                    protocol_durations: Object.keys(protocolDurations).some(k=>protocolDurations[k]) ? protocolDurations : null,
                   })
                   const _cId = KNOWN_USERS['coach@eden.io']?.uuid
                   const _clId = KNOWN_USERS[email]?.uuid
@@ -2547,31 +2589,52 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {clientSupps.length===0&&(
                   <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'8px 0'}}>Click + Add Supplements to build this client's protocol</div>
                 )}
-                {clientSupps.map(s=>(
-                  <div key={s.id} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-                      <div>
-                        <div style={{fontSize:13,color:C.white,fontWeight:600}}>{s.name}</div>
-                        {s.category&&<div style={{fontSize:9,color:C.gold,fontWeight:700,letterSpacing:.8,marginTop:2}}>{s.category.toUpperCase()}</div>}
+                {(()=>{
+                  const seenGroups=new Set(); const groups=[]; const ungrouped=[]
+                  clientSupps.forEach(s=>{
+                    if(s.protocolGroup){
+                      if(!seenGroups.has(s.protocolGroup)){seenGroups.add(s.protocolGroup);groups.push({name:s.protocolGroup,items:[]})}
+                      groups.find(g=>g.name===s.protocolGroup).items.push(s)
+                    } else { ungrouped.push(s) }
+                  })
+                  const renderSuppItem=s=>(
+                    <div key={s.id} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                        <div>
+                          <div style={{fontSize:13,color:C.white,fontWeight:600}}>{s.name}</div>
+                          {s.category&&!s.protocolGroup&&<div style={{fontSize:9,color:C.gold,fontWeight:700,letterSpacing:.8,marginTop:2}}>{s.category.toUpperCase()}</div>}
+                        </div>
+                        <button onClick={()=>removeSupp(s.id)}
+                          style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:15,padding:'0 4px',flexShrink:0}}>×</button>
                       </div>
-                      <button onClick={()=>removeSupp(s.id)}
-                        style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:15,padding:'0 4px',flexShrink:0}}>×</button>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                        <div>
+                          <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Dosage</div>
+                          <input value={s.customDose||''} onChange={e=>updateSuppField(s.id,'customDose',e.target.value)}
+                            style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Directions</div>
+                          <input value={s.customDir||''} onChange={e=>updateSuppField(s.id,'customDir',e.target.value)}
+                            style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                        </div>
+                      </div>
+                      {s.code&&<div style={{marginTop:6,fontSize:10,color:C.muted}}>Code: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span>{s.link&&<> · <a href={s.link} target="_blank" rel="noreferrer" style={{color:C.gold}}>Purchase →</a></>}</div>}
                     </div>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                      <div>
-                        <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Dosage</div>
-                        <input value={s.customDose||''} onChange={e=>updateSuppField(s.id,'customDose',e.target.value)}
-                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                  )
+                  return(<>
+                    {groups.map(g=>(
+                      <div key={g.name}>
+                        <div style={{margin:'10px 0 2px',padding:'7px 10px',background:`${C.gold}18`,border:`1px solid ${C.gold}40`,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <div style={{fontSize:11,fontWeight:800,color:C.gold,letterSpacing:.6,textTransform:'uppercase'}}>{g.name}</div>
+                          <div style={{fontSize:9,color:C.muted}}>{g.items.length} supplement{g.items.length!==1?'s':''}</div>
+                        </div>
+                        {g.items.map(renderSuppItem)}
                       </div>
-                      <div>
-                        <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Directions</div>
-                        <input value={s.customDir||''} onChange={e=>updateSuppField(s.id,'customDir',e.target.value)}
-                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-                      </div>
-                    </div>
-                    {s.code&&<div style={{marginTop:6,fontSize:10,color:C.muted}}>Code: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span>{s.link&&<> · <a href={s.link} target="_blank" rel="noreferrer" style={{color:C.gold}}>Purchase →</a></>}</div>}
-                  </div>
-                ))}
+                    ))}
+                    {ungrouped.map(renderSuppItem)}
+                  </>)
+                })()}
                 <div style={{marginTop:12}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Or Paste Custom Protocol</div>
                   <textarea value={customSuppText} onChange={e=>setCustomSuppText(e.target.value)}
@@ -2835,15 +2898,36 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'8px 0'}}>Your supplement protocol will appear here once your coach assigns it.</div>
                 ):(
                   <>
-                    {clientSupps.map(s=>(
-                      <div key={s.id} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:13,color:C.white,fontWeight:600,marginBottom:3}}>{s.name}</div>
-                        <div style={{fontSize:12,color:C.gold}}>{s.customDose}</div>
-                        <div style={{fontSize:11,color:C.muted,marginTop:2}}>{s.customDir}</div>
-                        {s.code&&<div style={{fontSize:10,color:C.muted,marginTop:4}}>Code: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span></div>}
-                        {s.link&&<a href={s.link} target="_blank" rel="noreferrer" style={{fontSize:10,color:C.gold,display:'block',marginTop:2}}>Purchase →</a>}
-                      </div>
-                    ))}
+                    {(()=>{
+                      const seenGroups=new Set(); const groups=[]; const ungrouped=[]
+                      clientSupps.forEach(s=>{
+                        if(s.protocolGroup){
+                          if(!seenGroups.has(s.protocolGroup)){seenGroups.add(s.protocolGroup);groups.push({name:s.protocolGroup,items:[]})}
+                          groups.find(g=>g.name===s.protocolGroup).items.push(s)
+                        } else { ungrouped.push(s) }
+                      })
+                      const renderItem=s=>(
+                        <div key={s.id} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:13,color:C.white,fontWeight:600,marginBottom:3}}>{s.name}</div>
+                          <div style={{fontSize:12,color:C.gold}}>{s.customDose}</div>
+                          <div style={{fontSize:11,color:C.muted,marginTop:2}}>{s.customDir}</div>
+                          {s.code&&<div style={{fontSize:10,color:C.muted,marginTop:4}}>Code: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span></div>}
+                          {s.link&&<a href={s.link} target="_blank" rel="noreferrer" style={{fontSize:10,color:C.gold,display:'block',marginTop:2}}>Purchase →</a>}
+                        </div>
+                      )
+                      return(<>
+                        {groups.map(g=>(
+                          <div key={g.name}>
+                            <div style={{margin:'10px 0 2px',padding:'7px 12px',background:`${C.gold}15`,border:`1px solid ${C.gold}35`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                              <div style={{fontSize:11,fontWeight:800,color:C.gold,letterSpacing:.6,textTransform:'uppercase'}}>{g.name}</div>
+                              <div style={{fontSize:9,color:C.muted}}>{g.items.length} supps</div>
+                            </div>
+                            {g.items.map(renderItem)}
+                          </div>
+                        ))}
+                        {ungrouped.map(renderItem)}
+                      </>)
+                    })()}
                     {customSuppText&&<div style={{fontSize:13,color:C.white,lineHeight:1.7,borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:10,whiteSpace:'pre-wrap'}}>{customSuppText}</div>}
                   </>
                 )}
