@@ -246,12 +246,16 @@ const FOODS = [
   {name:'Magnesium',serving:'1 scoop',cal:5,pro:0,fat:0,carb:1,fib:0,cat:'Supplements'},
   {name:'Water (16oz)',serving:'16oz',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Black Coffee',serving:'240ml',cal:5,pro:0.3,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
+  {name:'Matcha Green Tea',serving:'240ml',cal:5,pro:0.5,fat:0,carb:1,fib:0,cat:'Drinks/Condiments'},
+  {name:'Green Tea',serving:'240ml',cal:2,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Organic Apple Juice',serving:'250ml',cal:115,pro:0.2,fat:0.3,carb:28,fib:0.5,cat:'Drinks/Condiments'},
   {name:'Aloe Vera Juice',serving:'59ml',cal:4,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Beef Bone Broth',serving:'150ml',cal:25,pro:5,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Yellow Mustard',serving:'5g',cal:3,pro:0.2,fat:0.1,carb:0.3,fib:0.1,cat:'Drinks/Condiments'},
   {name:'Hot Sauce',serving:'5g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
   {name:'Salsa',serving:'30g',cal:10,pro:0.4,fat:0,carb:2,fib:0.5,cat:'Drinks/Condiments'},
+  {name:'Himalayan Sea Salt',serving:'1g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
+  {name:'Iodized Sea Salt',serving:'1g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
 ]
 
 const PROTOCOLS = [
@@ -653,6 +657,18 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [photoUploading,   setPhotoUploading]   = useState(false)
   const photoFileRef = useRef(null)
   const [updateDay, setUpdateDay] = useState(null)
+
+  const LOE_DEFAULT = [
+    '• Organic fruits/veg · Grass-fed/finished beef · Wild caught fish · Raw dairy only',
+    '• NO artificial sweeteners — Stevia only · Raw honey only · 6-8g EVOO for cooking',
+    '• Black coffee: 1–2 cups/day max · Must be organic · No coffee after 12 noon',
+    '  May use 4oz of MALK or unsweetened vanilla almond milk as creamer',
+    '• Updates due before 9 AM CST on your assigned update day — fasted weight + photos',
+  ].join('\n')
+  const loeKey = `eden_loe_${KNOWN_USERS[email]?.uuid||email}`
+  const [loeContent, setLoeContent] = useState(()=>localStorage.getItem(loeKey)||LOE_DEFAULT)
+  const [loeEditing, setLoeEditing] = useState(false)
+  const saveLoe = (val) => { setLoeContent(val); localStorage.setItem(loeKey, val) }
 
   useEffect(() => {
     // Seed with demo data immediately so the UI isn't blank
@@ -1067,14 +1083,39 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               <MacroBar label="fib"  val={totals.fib}  target={targets.fib}  unit="g"/>
             </div>
             <div style={{marginTop:12,padding:'9px 12px',background:C.surface,borderRadius:8,borderLeft:`3px solid ${C.gold}`}}>
-              <div style={{fontSize:9,fontWeight:700,color:C.gold,marginBottom:3}}>LOE FOOD QUALITY STANDARDS</div>
-              <div style={{fontSize:10,color:C.muted,lineHeight:1.7}}>
-                • Organic fruits/veg · Grass-fed/finished beef · Wild caught fish · Raw dairy only<br/>
-                • NO artificial sweeteners — Stevia only · Raw honey only · 6-8g EVOO for cooking<br/>
-                • Updates due before 9 AM CST {updateDay
-                  ? <span style={{color:C.gold,fontWeight:700}}>every {updateDay}</span>
-                  : 'on your assigned update day'} — fasted weight + photos
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:.6}}>LOE FOOD QUALITY STANDARDS</div>
+                {isCoach&&(
+                  loeEditing
+                    ? <div style={{display:'flex',gap:6}}>
+                        <button onClick={()=>setLoeEditing(false)}
+                          style={{fontSize:9,padding:'2px 8px',background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:5,color:C.gold,cursor:'pointer',fontWeight:700}}>
+                          ✓ Done
+                        </button>
+                        <button onClick={()=>{setLoeContent(LOE_DEFAULT);localStorage.setItem(loeKey,LOE_DEFAULT);setLoeEditing(false)}}
+                          style={{fontSize:9,padding:'2px 8px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:'pointer'}}>
+                          Reset
+                        </button>
+                      </div>
+                    : <button onClick={()=>setLoeEditing(true)}
+                        style={{fontSize:9,padding:'2px 8px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:'pointer'}}>
+                        ✏️ Edit
+                      </button>
+                )}
               </div>
+              {isCoach&&loeEditing
+                ? <textarea
+                    value={loeContent}
+                    onChange={e=>saveLoe(e.target.value)}
+                    rows={6}
+                    style={{width:'100%',background:C.card,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'8px 10px',
+                      color:C.white,fontSize:10,lineHeight:1.7,resize:'vertical',outline:'none',
+                      fontFamily:'inherit',boxSizing:'border-box'}}
+                  />
+                : <div style={{fontSize:10,color:C.muted,lineHeight:1.8,whiteSpace:'pre-wrap'}}>
+                    {loeContent}
+                  </div>
+              }
             </div>
           </Card>
 
