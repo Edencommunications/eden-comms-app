@@ -900,6 +900,7 @@ const HabitTrackerScreen = () => {
 const CLIENT_ROSTER = [
   {
     name:"Jordan Williams", status:"Active", lastCheckin:"Jul 9", alert:true,
+    uuid:"ece58b33-3f2a-4ce7-bed9-a157c914056c",
     email:"client@eden.io", phone:"(312) 555-0192", startDate:"Mar 4 2026",
     protocol:"Base Diet Protocol Female · 2 High / 2 Low",
     goal:"Fat loss + hormonal balance", currentWeight:"148 lbs", targetWeight:"135 lbs",
@@ -1094,6 +1095,8 @@ const CLIENT_ROSTER = [
   },
 ];
 
+const UPDATE_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
 const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   const isMobile = useIsMobile();
   const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
@@ -1101,6 +1104,18 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   const [editingIdx,   setEditingIdx]   = useState<number|null>(null);
   const [draftNote,    setDraftNote]    = useState('');
   const [draftLoom,    setDraftLoom]    = useState('');
+  const [updateDay,    setUpdateDay]    = useState<string>('');
+  const [savingDay,    setSavingDay]    = useState(false);
+
+  useEffect(() => {
+    if (!client?.uuid) return;
+    sbGet('user_profiles', `id=eq.${client.uuid}&select=update_day`)
+      .then((rows: any[]) => {
+        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day)
+          setUpdateDay(rows[0].update_day);
+      });
+  }, [client?.uuid]);
+
   if (!client) return null;
 
   const history: any[] = localHistory;
@@ -1208,6 +1223,43 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                 <p style={{ fontSize:9, color:B.muted, margin:0 }}>{label}</p>
               </div>
             ))}
+          </div>
+
+          {/* ── Update Day Assignment ── */}
+          <div style={{ background:B.card, border:`1px solid ${updateDay ? B.gold+"55" : B.border}`, borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
+            <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>📅 Update Day</p>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <select
+                value={updateDay}
+                onChange={async e => {
+                  const day = e.target.value;
+                  setUpdateDay(day);
+                  if (!client.uuid) return;
+                  setSavingDay(true);
+                  await sbPatch('user_profiles', `id=eq.${client.uuid}`, { update_day: day });
+                  setSavingDay(false);
+                }}
+                style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px",
+                  color: updateDay ? B.gold : B.muted, fontSize:13, outline:"none", cursor:"pointer" }}>
+                <option value="">— Not assigned yet —</option>
+                {UPDATE_DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              {savingDay
+                ? <span style={{ fontSize:11, color:B.muted, whiteSpace:"nowrap" }}>Saving…</span>
+                : updateDay
+                  ? <span style={{ fontSize:11, color:B.gold, fontWeight:700, whiteSpace:"nowrap" }}>✓ Saved</span>
+                  : null}
+            </div>
+            {updateDay && (
+              <p style={{ fontSize:11, color:B.muted, margin:"8px 0 0", lineHeight:1.5 }}>
+                Client sees <strong style={{ color:B.text }}>every {updateDay}</strong> as their weekly deadline (before 9 AM CST).
+              </p>
+            )}
+            {!client.uuid && (
+              <p style={{ fontSize:10, color:B.muted, margin:"6px 0 0", fontStyle:"italic" }}>
+                Add a uuid to this client's roster entry to enable saving.
+              </p>
+            )}
           </div>
 
           {/* Profile */}

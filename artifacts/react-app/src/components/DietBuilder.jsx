@@ -1801,18 +1801,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* ─── History tab ─── */}
               {clientViewTab==='history'&&(<>
 
-                {/* Update schedule banner */}
-                {updateDay&&(
-                  <div style={{background:`${C.gold}12`,border:`1.5px solid ${C.gold}44`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:.6,textTransform:'uppercase',marginBottom:5}}>📅 Your Update Schedule</div>
-                    <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:3}}>Every {updateDay} — before 9 AM CST</div>
+                {/* Update schedule banner — always visible */}
+                <div style={{background:`${C.gold}12`,border:`1.5px solid ${updateDay?C.gold+'55':C.border}`,borderLeft:`3px solid ${updateDay?C.gold:C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:.6,textTransform:'uppercase',marginBottom:6}}>📅 Your Update Schedule</div>
+                  {updateDay ? (<>
+                    <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:4}}>Every {updateDay} — before 9 AM CST</div>
                     {nextUpdateDate(updateDay)&&(
                       <div style={{fontSize:11,color:C.muted}}>
-                        Next: <span style={{color:C.white,fontWeight:600}}>{nextUpdateDate(updateDay)}</span>
+                        Next deadline: <span style={{color:C.white,fontWeight:600}}>{nextUpdateDate(updateDay)}</span>
                       </div>
                     )}
-                  </div>
-                )}
+                  </>) : (
+                    <div style={{fontSize:13,color:C.muted,lineHeight:1.5}}>
+                      Your coach hasn't assigned your update day yet. <span style={{color:C.white}}>Check back soon.</span>
+                    </div>
+                  )}
+                </div>
 
                 {/* All 9 charts */}
                 <CheckInCharts checkins={localCheckins}/>
