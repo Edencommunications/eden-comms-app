@@ -2418,7 +2418,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <input
                         value={otherProtoDraft.protocol}
                         onChange={e=>setOtherProtoDraft(p=>({...p,protocol:e.target.value}))}
-                        placeholder="Protocol or supplement name…"
+                        placeholder="Supplement protocol name…"
                         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
                       />
                       <div style={{display:'flex',gap:6}}>
