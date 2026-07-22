@@ -34,7 +34,7 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- **Always include Supabase SQL proactively.** Any time a code change touches a new table, adds a column, or introduces a new database interaction, provide the full SQL (CREATE TABLE, RLS enable, open policy) in the same response — never wait to be asked. The user may not know to ask and will miss it.
 
 ## Gotchas
 
