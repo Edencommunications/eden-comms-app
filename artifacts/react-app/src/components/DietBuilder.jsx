@@ -607,6 +607,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const role    = currentUser?.role || info.role
   const isCoach = role==='coach'||role==='super_admin'
   const isClient= role==='client'
+  const isAdmin = role==='super_admin'
 
   const [tab,        setTab]        = useState(initialTab)
   const [dayType,    setDayType]    = useState('high')
@@ -684,6 +685,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const unreadCount = notifications.filter(n=>!n.read).length
 
   useEffect(() => {
+    // Load company-wide habits (available to all coaches)
+    loadCompanyHabits()
+
     // Seed with demo data immediately so the UI isn't blank
     const demo = (demoCheckins||[]).map(ci => ({
       ...ci,
@@ -793,6 +797,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [showHabitPicker,  setShowHabitPicker]  = useState(false)
   const [customHabit,      setCustomHabit]      = useState('')
   const [habitCounts,      setHabitCounts]      = useState({})
+  // Company-wide habits managed by admin only
+  const [companyHabits,    setCompanyHabits]    = useState([])
+  const [newHabitName,     setNewHabitName]     = useState('')
+  const [newHabitTarget,   setNewHabitTarget]   = useState(7)
   const setHabitCount = (id,v) => setHabitCounts(p=>({...p,[id]:Math.min(7,Math.max(0,parseInt(v)||0))}))
 
   // Coach-only updates — visible to client in their Check-In history
@@ -987,6 +995,28 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     const iv = setInterval(load, 30000)
     return ()=>clearInterval(iv)
   },[email])
+
+  // ── Company habits (admin manages, all coaches see) ────────
+  async function loadCompanyHabits() {
+    const data = await dbGet('company_habits','order=created_at.asc')
+    setCompanyHabits((data||[]).map(h=>({id:h.id,name:h.name,defaultTarget:h.default_target,fromDB:true})))
+  }
+  async function addCompanyHabit() {
+    if (!newHabitName.trim()) return
+    const inserted = await dbInsert('company_habits',{
+      name: newHabitName.trim(), default_target: newHabitTarget, created_by: myUUID
+    })
+    if (inserted) {
+      const h = Array.isArray(inserted)?inserted[0]:inserted
+      setCompanyHabits(p=>[...p,{id:h.id,name:h.name,defaultTarget:h.default_target,fromDB:true}])
+      setNewHabitName(''); setNewHabitTarget(7)
+    }
+  }
+  async function removeCompanyHabit(id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/company_habits?id=eq.${id}`,{method:'DELETE',headers:H})
+    setCompanyHabits(p=>p.filter(h=>h.id!==id))
+    setAssignedHabits(p=>p.filter(h=>h.id!==id))
+  }
 
   // ── Notification helpers ───────────────────────────────────
   async function insertNotification(recipientId, senderId, type, message) {
@@ -3148,28 +3178,41 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               <div style={{fontSize:11,color:C.muted}}>Select which habits this client should track this week</div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:'8px 16px'}}>
-              {MASTER_HABITS.map(h=>{
+              {[...MASTER_HABITS,...companyHabits].map(h=>{
                 const assigned=assignedHabits.find(x=>x.id===h.id)
                 return (
-                  <button key={h.id} onClick={()=>toggleHabitAssign(h)}
-                    style={{width:'100%',textAlign:'left',background:assigned?`${C.gold}15`:C.surface,border:`1px solid ${assigned?C.gold:C.border}`,borderRadius:8,padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-                    <span style={{fontSize:16}}>{assigned?'✅':'⬜'}</span>
-                    <div>
-                      <div style={{fontSize:13,color:C.white,fontWeight:assigned?700:400}}>{h.name}</div>
-                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>Default: {h.defaultTarget}x/week</div>
-                    </div>
-                  </button>
+                  <div key={h.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                    <button onClick={()=>toggleHabitAssign(h)}
+                      style={{flex:1,textAlign:'left',background:assigned?`${C.gold}15`:C.surface,border:`1px solid ${assigned?C.gold:C.border}`,borderRadius:8,padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
+                      <span style={{fontSize:16}}>{assigned?'✅':'⬜'}</span>
+                      <div>
+                        <div style={{fontSize:13,color:C.white,fontWeight:assigned?700:400}}>{h.name}</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:1}}>Default: {h.defaultTarget}x/week</div>
+                      </div>
+                    </button>
+                    {isAdmin&&h.fromDB&&(
+                      <button onClick={()=>removeCompanyHabit(h.id)}
+                        style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 8px',color:C.danger,fontSize:11,cursor:'pointer',flexShrink:0}}>✕</button>
+                    )}
+                  </div>
                 )
               })}
-              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:4}}>
-                <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Add Custom Habit</div>
-                <div style={{display:'flex',gap:8}}>
-                  <input value={customHabit} onChange={e=>setCustomHabit(e.target.value)} placeholder="e.g. Infrared sauna 3x/week"
-                    style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
-                  <button onClick={addCustomHabit}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+              {isAdmin&&(
+                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:4}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>⚙️ Add Company-Wide Habit</div>
+                  <div style={{display:'flex',gap:8,marginBottom:6}}>
+                    <input value={newHabitName} onChange={e=>setNewHabitName(e.target.value)} placeholder="e.g. Infrared Sauna"
+                      style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                    <select value={newHabitTarget} onChange={e=>setNewHabitTarget(Number(e.target.value))}
+                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px',color:C.white,fontSize:12,outline:'none',cursor:'pointer'}}>
+                      {[1,2,3,4,5,6,7].map(n=><option key={n} value={n}>{n}x/wk</option>)}
+                    </select>
+                    <button onClick={addCompanyHabit}
+                      style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+                  </div>
+                  <div style={{fontSize:9,color:C.muted}}>This habit will appear for all coaches across the company.</div>
                 </div>
-              </div>
+              )}
             </div>
             <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
               <button onClick={()=>setShowHabitPicker(false)}

@@ -366,6 +366,7 @@ export default function Week4({currentUser, initialTab='labs'}) {
   const myUUID  = info.uuid
   const isCoach  = role==='coach'||role==='super_admin'
   const isClient = role==='client'
+  const isAdmin  = role==='super_admin'
 
   const CLIENT_UUID = KNOWN_USERS['client@eden.io'].uuid
   const COACH_UUID  = KNOWN_USERS['coach@eden.io'].uuid
@@ -414,12 +415,35 @@ Training Principles:
   ])
   // Coach-configurable day the tracking week starts on (default Wed)
   const [cardioWeekStart, setCardioWeekStart] = useState('Wed')
+  // Company-wide cardio types managed by admin only
+  const [companyCardioTypes, setCompanyCardioTypes] = useState([])
+  const [newCardioType,      setNewCardioType]      = useState('')
 
   // ── Calendar state ────────────────────────────────────────
   const [calendarUrl, setCalendarUrl] = useState(DEFAULT_CALENDAR_URL)
 
+  // ── Company cardio types (admin manages, all coaches see) ──
+  async function loadCompanyCardioTypes() {
+    const data = await dbGet('company_cardio_types','order=created_at.asc')
+    setCompanyCardioTypes((data||[]).map(r=>r.name))
+  }
+  async function addCompanyCardioType() {
+    if (!newCardioType.trim()) return
+    await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types`,{
+      method:'POST',
+      headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({name:newCardioType.trim(), created_by:myUUID}),
+    })
+    setCompanyCardioTypes(p=>[...p, newCardioType.trim()])
+    setNewCardioType('')
+  }
+  async function removeCompanyCardioType(name) {
+    await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types?name=eq.${encodeURIComponent(name)}`,{method:'DELETE',headers:H})
+    setCompanyCardioTypes(p=>p.filter(t=>t!==name))
+  }
+
   // ── Load on mount ─────────────────────────────────────────
-  useEffect(()=>{ loadLabs(); loadWorkoutPlan(); loadWeekHistory() },[])
+  useEffect(()=>{ loadLabs(); loadWorkoutPlan(); loadWeekHistory(); loadCompanyCardioTypes() },[])
 
   // Reload logs whenever week changes
   useEffect(()=>{ loadWorkoutLog(activeWeek) },[activeWeek])
@@ -1183,6 +1207,38 @@ Training Principles:
 
           {/* Cardio main content */}
           <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+          {/* Admin-only: manage company-wide cardio types */}
+          {isAdmin&&(
+            <Card sx={{marginBottom:12,borderColor:`${C.gold}44`}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase'}}>⚙️ Company-Wide Cardio Types</span>
+                <span style={{fontSize:9,color:C.muted}}>Visible to all coaches</span>
+              </div>
+              <div style={{display:'flex',gap:8,marginBottom:10}}>
+                <input value={newCardioType} onChange={e=>setNewCardioType(e.target.value)}
+                  placeholder="e.g. Sled Push"
+                  style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                <button onClick={addCompanyCardioType}
+                  style={{background:C.gold,border:'none',borderRadius:6,padding:'7px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+              </div>
+              {companyCardioTypes.length>0&&(
+                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                  {companyCardioTypes.map(t=>(
+                    <div key={t} style={{display:'flex',alignItems:'center',gap:4,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px'}}>
+                      <span style={{fontSize:11,color:C.white}}>{t}</span>
+                      <button onClick={()=>removeCompanyCardioType(t)}
+                        style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {companyCardioTypes.length===0&&(
+                <div style={{fontSize:11,color:C.muted,fontStyle:'italic'}}>No custom types added yet</div>
+              )}
+            </Card>
+          )}
+
           <Card sx={{marginBottom:12}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
               <Lbl t="Cardio Protocol"/>
@@ -1213,7 +1269,7 @@ Training Principles:
               <div key={i} style={{padding:'12px 0',borderTop:`1px solid ${C.border}`}}>
                 {isCoach?(
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                    <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={CARDIO_TYPES}/>
+                    <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={[...CARDIO_TYPES,...companyCardioTypes]}/>
                     <Inp label="Duration" value={c.duration} onChange={v=>updateCardio(i,'duration',v)} placeholder="e.g. 45-60 min"/>
                     <Inp label="Frequency" value={c.frequency} onChange={v=>updateCardio(i,'frequency',v)} placeholder="e.g. Daily"/>
                     <div style={{display:'flex',alignItems:'flex-end',paddingBottom:10}}>
