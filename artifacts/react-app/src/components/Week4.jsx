@@ -654,11 +654,16 @@ Training Principles:
   async function saveWorkoutPlan() {
     // Embed principles + cardioWeekStart inside the workouts JSON blob so no schema change is needed
     const payload = { exercises: workouts, principles: trainingPrinciples, cardioWeekStart }
-    await dbInsert('workout_plans',{
-      client_id:CLIENT_UUID, coach_id:COACH_UUID,
-      workouts:JSON.stringify(payload),
-      cardio:JSON.stringify(cardio),
-      updated_at:new Date().toISOString(),
+    await fetch(`${SUPABASE_URL}/rest/v1/workout_plans`, {
+      method: 'POST',
+      headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({
+        client_id: CLIENT_UUID,
+        coach_id:  COACH_UUID,
+        workouts:  JSON.stringify(payload),
+        cardio:    JSON.stringify(cardio),
+        updated_at: new Date().toISOString(),
+      }),
     })
     alert('Workout plan saved!')
   }
