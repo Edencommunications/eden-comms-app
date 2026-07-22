@@ -670,6 +670,23 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [loeEditing, setLoeEditing] = useState(false)
   const saveLoe = (val) => { setLoeContent(val); localStorage.setItem(loeKey, val) }
 
+  // ── Consultations ──────────────────────────────────────────
+  const CONSULT_TYPES = [
+    'Intake / Onboarding','Initial Progress Review','Monthly Check-In Call',
+    'Protocol Adjustment Call','Goal Setting Session','General Coaching Call',
+  ]
+  const [consultations,   setConsultations]   = useState([])
+  const [showConsultForm, setShowConsultForm] = useState(false)
+  const [consultType,     setConsultType]     = useState('Intake / Onboarding')
+  const [consultDate,     setConsultDate]     = useState(new Date().toISOString().slice(0,10))
+  const [consultNotes,    setConsultNotes]    = useState('')
+  const [consultLoom,     setConsultLoom]     = useState('')
+
+  // ── Notifications ──────────────────────────────────────────
+  const [notifications,  setNotifications]  = useState([])
+  const [showNotifPanel, setShowNotifPanel] = useState(false)
+  const unreadCount = notifications.filter(n=>!n.read).length
+
   useEffect(() => {
     // Seed with demo data immediately so the UI isn't blank
     const demo = (demoCheckins||[]).map(ci => ({
@@ -931,6 +948,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       dbInsert('coach_updates',{coach_id:coachId,client_id:clientId,date:newDate,note:entry.note,loom:entry.loom,created_at:new Date().toISOString()})
         .then(()=> dbGet('coach_updates',`client_id=eq.${clientId}&order=created_at.desc&limit=50`))
         .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCoachOnlyUpdates(rows.map(r=>({id:r.id,date:r.date,note:r.note||'',loom:r.loom||''}))) })
+        .then(()=>insertNotification(clientId, coachId, 'coach_update', '📝 Your coach posted a new update — check your History & Feedback tab'))
         .catch(()=>{})
     }
   }
@@ -943,6 +961,67 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCoachOnlyUpdates(rows.map(r=>({id:r.id,date:r.date,note:r.note||'',loom:r.loom||''}))) })
       .catch(()=>{})
   },[email])
+
+  // Load consultations from DB on mount
+  useEffect(()=>{
+    const uuid = KNOWN_USERS[email]?.uuid
+    if(!uuid) return
+    dbGet('consultations',`client_id=eq.${uuid}&order=created_at.desc&limit=50`)
+      .then(rows=>{
+        if(Array.isArray(rows)&&rows.length)
+          setConsultations(rows.map(r=>({id:r.id,call_type:r.call_type,date:r.date,notes:r.notes||'',loom:r.loom||''})))
+      }).catch(()=>{})
+  },[email])
+
+  // Load + poll notifications every 30 s
+  useEffect(()=>{
+    const uuid = KNOWN_USERS[email]?.uuid
+    if(!uuid) return
+    const load = ()=>
+      dbGet('notifications',`recipient_id=eq.${uuid}&order=created_at.desc&limit=40`)
+        .then(rows=>{ if(Array.isArray(rows)&&rows.length) setNotifications(rows) })
+        .catch(()=>{})
+    load()
+    const iv = setInterval(load, 30000)
+    return ()=>clearInterval(iv)
+  },[email])
+
+  // ── Notification helpers ───────────────────────────────────
+  async function insertNotification(recipientId, senderId, type, message) {
+    if (!recipientId) return
+    await dbInsert('notifications',{
+      recipient_id:recipientId, sender_id:senderId,
+      type, message, read:false, created_at:new Date().toISOString()
+    })
+  }
+
+  function markAllRead() {
+    const uuid = KNOWN_USERS[email]?.uuid
+    setNotifications(p=>p.map(n=>({...n,read:true})))
+    if(uuid) dbUpdate('notifications',`recipient_id=eq.${uuid}&read=eq.false`,{read:true})
+  }
+
+  // ── Add consultation (coach only) ─────────────────────────
+  async function addConsultation() {
+    if(!consultNotes.trim()&&!consultLoom.trim()) return
+    const clientId = KNOWN_USERS[email]?.uuid
+    const coachId  = KNOWN_USERS['coach@eden.io']?.uuid
+    const entry = {id:String(Date.now()),call_type:consultType,date:consultDate,notes:consultNotes.trim(),loom:consultLoom.trim()}
+    setConsultations(p=>[entry,...p])
+    setConsultNotes(''); setConsultLoom(''); setShowConsultForm(false)
+    if(clientId&&coachId){
+      await dbInsert('consultations',{
+        coach_id:coachId, client_id:clientId, call_type:consultType,
+        date:consultDate, notes:entry.notes, loom:entry.loom,
+        created_at:new Date().toISOString()
+      })
+      const rows = await dbGet('consultations',`client_id=eq.${clientId}&order=created_at.desc`)
+      if(Array.isArray(rows)&&rows.length)
+        setConsultations(rows.map(r=>({id:r.id,call_type:r.call_type,date:r.date,notes:r.notes||'',loom:r.loom||''})))
+      await insertNotification(clientId, coachId, 'consultation',
+        `📞 Your coach added ${consultType} notes — check the Consultations tab`)
+    }
+  }
 
   // Load assigned recipes from DB
   useEffect(()=>{
@@ -1043,6 +1122,44 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             {privacyMode?'🎥 Recording':'🎥 Loom Mode'}
           </button>
         )}
+        {/* Notification bell — visible to both coach and client */}
+        <div style={{position:'relative',marginRight:4}}>
+          <button onClick={()=>{ setShowNotifPanel(p=>!p); markAllRead() }}
+            style={{background:'none',border:'none',cursor:'pointer',padding:'6px 8px',position:'relative',lineHeight:1}}>
+            <span style={{fontSize:17}}>🔔</span>
+            {unreadCount>0&&(
+              <span style={{position:'absolute',top:2,right:2,background:C.danger,color:C.white,
+                fontSize:8,fontWeight:700,minWidth:14,height:14,borderRadius:7,
+                display:'flex',alignItems:'center',justifyContent:'center',padding:'0 2px',lineHeight:1}}>
+                {unreadCount>9?'9+':unreadCount}
+              </span>
+            )}
+          </button>
+          {showNotifPanel&&(
+            <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:200,
+              background:C.card,border:`1px solid ${C.border}`,borderRadius:12,
+              width:290,maxHeight:340,overflowY:'auto',boxShadow:'0 8px 32px #000000aa'}}>
+              <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,
+                display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.white}}>Notifications</span>
+                <button onClick={()=>setShowNotifPanel(false)}
+                  style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
+              </div>
+              {notifications.length===0?(
+                <div style={{padding:'24px 14px',textAlign:'center',fontSize:12,color:C.muted}}>No notifications yet</div>
+              ):notifications.map(n=>(
+                <div key={n.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}22`,
+                  background:n.read?'transparent':`${C.gold}0a`}}>
+                  <div style={{fontSize:12,color:n.read?C.muted:C.white,lineHeight:1.5}}>{n.message}</div>
+                  <div style={{fontSize:9,color:C.dim,marginTop:3}}>
+                    {n.created_at?new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {TABS.map(([k,l])=>(
           <button key={k} onClick={()=>setTab(k)}
             style={{padding:'12px 11px',background:'none',border:'none',borderBottom:`2px solid ${tab===k?C.gold:'transparent'}`,color:tab===k?C.gold:C.muted,fontSize:11,fontWeight:tab===k?700:400,cursor:'pointer',whiteSpace:'nowrap'}}>
@@ -1477,7 +1594,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
             {/* Sub-tab bar */}
             <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
-              {[['checkins','📋 Check-Ins'],['photos','📸 Photos']].map(([k,l])=>(
+              {[['checkins','📋 Check-Ins'],['consultations','📞 Consultations'],['photos','📸 Photos']].map(([k,l])=>(
                 <button key={k} onClick={()=>setCoachCheckinTab(k)}
                   style={{flex:1,background:'none',border:'none',borderBottom:`2px solid ${coachCheckinTab===k?C.gold:'transparent'}`,
                     padding:'12px 8px',color:coachCheckinTab===k?C.gold:C.muted,fontSize:12,fontWeight:coachCheckinTab===k?700:400,cursor:'pointer'}}>
@@ -1724,6 +1841,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                       coach_notes:draftNote.trim(), coach_loom:draftLoom.trim(),
                                       updated_at:new Date().toISOString()
                                     },'client_id,checkin_date')
+                                    insertNotification(clientId, coachId, 'coach_response',
+                                      `💬 Your coach reviewed your ${saved.date} check-in — new feedback waiting`)
                                   }
                                 }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
                                   Save
@@ -1822,6 +1941,101 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 })()}
               </>)}
 
+              {/* ── Consultations sub-tab (coach) ── */}
+              {coachCheckinTab==='consultations'&&(<>
+
+                {/* Add form toggle */}
+                <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
+                  <button onClick={()=>setShowConsultForm(v=>!v)}
+                    style={{background:showConsultForm?`${C.gold}33`:`${C.gold}18`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'7px 16px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                    {showConsultForm?'✕ Cancel':'＋ Add Consultation Notes'}
+                  </button>
+                </div>
+
+                {/* Add form */}
+                {showConsultForm&&(
+                  <div style={{background:'#0d1a0d',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:16}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:.8,textTransform:'uppercase',marginBottom:12}}>
+                      New Consultation Record — visible to client in their Consultations tab
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                      <div>
+                        <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Call Type</div>
+                        <select value={consultType} onChange={e=>setConsultType(e.target.value)}
+                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}>
+                          {CONSULT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Date</div>
+                        <input type="date" value={consultDate} onChange={e=>setConsultDate(e.target.value)}
+                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                      </div>
+                    </div>
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Consultation Notes</div>
+                      <textarea value={consultNotes} onChange={e=>setConsultNotes(e.target.value)} rows={4}
+                        placeholder="Summary of the call, key takeaways, action items, protocol changes discussed…"
+                        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                    </div>
+                    <div style={{marginBottom:12}}>
+                      <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Loom URL <span style={{fontWeight:400,textTransform:'none',fontSize:9,color:C.dim}}>(optional)</span></div>
+                      <input value={consultLoom} onChange={e=>setConsultLoom(e.target.value)} placeholder="https://loom.com/share/..."
+                        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                    </div>
+                    {(()=>{const id=consultLoom.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1];return id?(
+                      <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden',marginBottom:12}}>
+                        <iframe src={`https://www.loom.com/embed/${id}`} allowFullScreen title="Loom preview"
+                          style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                      </div>
+                    ):null})()}
+                    <button onClick={addConsultation}
+                      style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 24px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
+                      Save Consultation Record
+                    </button>
+                  </div>
+                )}
+
+                {/* Consultation list */}
+                {consultations.length===0?(
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:40,textAlign:'center'}}>
+                    <div style={{fontSize:36,marginBottom:10}}>📞</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:6}}>No consultations recorded yet</div>
+                    <div style={{fontSize:12,color:C.muted}}>Click "+ Add Consultation Notes" to log an intake call, progress review, or any coaching call.</div>
+                  </div>
+                ):consultations.map(c=>{
+                  const loomId=c.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
+                  return (
+                    <div key={c.id} style={{background:'#0d1a0d',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                          <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'3px 10px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>
+                            📞 {c.call_type}
+                          </span>
+                          <span style={{fontSize:12,fontWeight:700,color:C.white}}>{c.date}</span>
+                        </div>
+                        <button onClick={async()=>{
+                          setConsultations(p=>p.filter(x=>x.id!==c.id))
+                          if(typeof c.id==='string'&&c.id.length>10) await dbDelete('consultations',`id=eq.${c.id}`)
+                        }} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
+                      </div>
+                      {c.notes&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{c.notes}</p>}
+                      {loomId?(
+                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
+                          <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Consultation Loom"
+                            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                        </div>
+                      ):c.loom?(
+                        <a href={c.loom} target="_blank" rel="noreferrer"
+                          style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
+                          🎥 Watch Recording
+                        </a>
+                      ):null}
+                    </div>
+                  )
+                })}
+              </>)}
+
             </div>
           </div>
 
@@ -1832,7 +2046,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
             {/* Tab switcher */}
             <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.surface}}>
-              {[['history','📋 History & Feedback'],['photos','📸 Photos'],['submit','📝 Submit Check-In']].map(([k,l])=>(
+              {[['history','📋 History & Feedback'],['consultations','📞 Consultations'],['photos','📸 Photos'],['submit','📝 Submit Check-In']].map(([k,l])=>(
                 <button key={k} onClick={()=>setClientViewTab(k)}
                   style={{flex:1,background:'none',border:'none',borderBottom:`2px solid ${clientViewTab===k?C.gold:'transparent'}`,
                     padding:'12px 8px',color:clientViewTab===k?C.gold:C.muted,fontSize:12,fontWeight:clientViewTab===k?700:400,cursor:'pointer'}}>
@@ -2015,6 +2229,45 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div style={{fontSize:11}}>Submit your first check-in and your coach will respond within 48 hours.</div>
                   </div>
                 )}
+              </>)}
+
+              {/* ─── Consultations tab (client, read-only) ─── */}
+              {clientViewTab==='consultations'&&(<>
+                <div style={{background:`${C.gold}10`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'11px 14px',marginBottom:16,fontSize:12,color:C.muted,lineHeight:1.6}}>
+                  Your coach posts notes here after every call — intake, progress reviews, protocol discussions.
+                  You'll get a notification each time a new record is added.
+                </div>
+                {consultations.length===0?(
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:40,textAlign:'center'}}>
+                    <div style={{fontSize:36,marginBottom:10}}>📞</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:6}}>No consultation notes yet</div>
+                    <div style={{fontSize:12,color:C.muted}}>After your intake call or any coaching session, your coach's notes will appear here.</div>
+                  </div>
+                ):consultations.map(c=>{
+                  const loomId=c.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
+                  return (
+                    <div key={c.id} style={{background:'#0d1a0d',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                        <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'3px 10px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>
+                          📞 {c.call_type}
+                        </span>
+                        <span style={{fontSize:12,fontWeight:700,color:C.white}}>{c.date}</span>
+                      </div>
+                      {c.notes&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{c.notes}</p>}
+                      {loomId?(
+                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
+                          <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Consultation Loom"
+                            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                        </div>
+                      ):c.loom?(
+                        <a href={c.loom} target="_blank" rel="noreferrer"
+                          style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
+                          🎥 Watch Recording
+                        </a>
+                      ):null}
+                    </div>
+                  )
+                })}
               </>)}
 
               {/* ─── Photos tab ─── */}
@@ -2231,6 +2484,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     habit_pct:        habitScore,          submitted_at:     new Date().toISOString(),
                     meal_notes:       Object.keys(mealNotes).some(k=>mealNotes[k]) ? mealNotes : null,
                   })
+                  const _cId = KNOWN_USERS['coach@eden.io']?.uuid
+                  const _clId = KNOWN_USERS[email]?.uuid
+                  if(_cId&&_clId) insertNotification(_cId, _clId, 'new_checkin',
+                    `📋 Jordan submitted their weekly check-in — review it in the Check-In Hub`)
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                 }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
                   Submit Weekly Check-In

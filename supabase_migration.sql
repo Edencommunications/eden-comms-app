@@ -406,7 +406,72 @@ create policy "Anon update client_access"
   on public.client_access for update using (true) with check (true);
 
 
--- ── 9. STORAGE BUCKET ───────────────────────────────────────
+-- ── 9. CONSULTATIONS ────────────────────────────────────────
+-- Coach posts call notes (intake, reviews, protocol discussions).
+-- Client sees the same records in their Consultations tab.
+
+create table if not exists public.consultations (
+  id          uuid        primary key default gen_random_uuid(),
+  coach_id    uuid        not null references public.user_profiles(id),
+  client_id   uuid        not null references public.user_profiles(id),
+  call_type   text        not null default 'General Coaching Call',
+  date        text        not null,   -- display date, e.g. "2026-07-22"
+  notes       text,
+  loom        text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists consultations_client_idx
+  on public.consultations (client_id, created_at desc);
+
+alter table public.consultations enable row level security;
+
+drop policy if exists "Anon select consultations" on public.consultations;
+drop policy if exists "Anon insert consultations" on public.consultations;
+drop policy if exists "Anon update consultations" on public.consultations;
+drop policy if exists "Anon delete consultations" on public.consultations;
+
+create policy "Anon select consultations" on public.consultations for select using (true);
+create policy "Anon insert consultations" on public.consultations for insert with check (true);
+create policy "Anon update consultations" on public.consultations for update using (true) with check (true);
+create policy "Anon delete consultations" on public.consultations for delete using (true);
+
+
+-- ── 10. NOTIFICATIONS ───────────────────────────────────────
+-- In-app notifications sent between coach and client.
+-- Polled every 30 s by the frontend; marked read on bell open.
+--
+-- type values:
+--   'new_checkin'    — client submitted a weekly check-in (notify coach)
+--   'coach_response' — coach responded to a check-in (notify client)
+--   'coach_update'   — coach posted a standalone update (notify client)
+--   'consultation'   — coach added consultation notes (notify client)
+
+create table if not exists public.notifications (
+  id           uuid        primary key default gen_random_uuid(),
+  recipient_id uuid        not null references public.user_profiles(id),
+  sender_id    uuid        references public.user_profiles(id),
+  type         text        not null,
+  message      text,
+  read         boolean     not null default false,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists notifications_recipient_idx
+  on public.notifications (recipient_id, created_at desc);
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "Anon select notifications" on public.notifications;
+drop policy if exists "Anon insert notifications" on public.notifications;
+drop policy if exists "Anon update notifications" on public.notifications;
+
+create policy "Anon select notifications" on public.notifications for select using (true);
+create policy "Anon insert notifications" on public.notifications for insert with check (true);
+create policy "Anon update notifications" on public.notifications for update using (true) with check (true);
+
+
+-- ── 11. STORAGE BUCKET ───────────────────────────────────────
 -- Create this manually in the Supabase dashboard:
 --   Storage → New Bucket → Name: progress-photos → Public ✓
 --
