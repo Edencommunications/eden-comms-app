@@ -303,6 +303,8 @@ Training Principles:
   const [workoutLogs,        setWorkoutLogs]         = useState(DEMO_LOGS)
   const [logSaving,          setLogSaving]           = useState(false)
   const [principlesEditing,  setPrinciplesEditing]   = useState(false)
+  // weekHistory: [{week, saved_at}] sorted most-recent first
+  const [weekHistory,        setWeekHistory]         = useState([])
 
   // ── Cardio state ──────────────────────────────────────────
   const [cardio, setCardio] = useState([
@@ -313,7 +315,7 @@ Training Principles:
   const [calendarUrl, setCalendarUrl] = useState(DEFAULT_CALENDAR_URL)
 
   // ── Load on mount ─────────────────────────────────────────
-  useEffect(()=>{ loadLabs(); loadWorkoutPlan() },[])
+  useEffect(()=>{ loadLabs(); loadWorkoutPlan(); loadWeekHistory() },[])
 
   // Reload logs whenever week changes
   useEffect(()=>{ loadWorkoutLog(activeWeek) },[activeWeek])
@@ -428,6 +430,21 @@ Training Principles:
     }
   }
 
+  // ── Load saved week history (for dated sidebar) ───────────
+  async function loadWeekHistory() {
+    try {
+      const data = await dbGet('client_workout_logs',
+        `client_id=eq.${CLIENT_UUID}&order=week.desc&select=week,saved_at`
+      )
+      if (data?.length) {
+        setWeekHistory(data)           // most recent first (order=week.desc)
+        setActiveWeek(data[0].week)    // default to most recent saved week
+      }
+    } catch(e) {
+      // table may not exist yet — silently ignore
+    }
+  }
+
   // ── Load workout logs for a given week ────────────────────
   async function loadWorkoutLog(week) {
     const fallback = week === 1 ? DEMO_LOGS : {}
@@ -462,6 +479,7 @@ Training Principles:
         }),
       })
       if (res.ok) {
+        loadWeekHistory()  // refresh dated sidebar
         alert(`✅ Week ${activeWeek} log saved!`)
       } else {
         const err = await res.text()
@@ -747,17 +765,40 @@ Training Principles:
               ))}
             </div>
 
-            {/* Week selector — coach views client progress, client logs their own */}
-            <div style={{padding:12,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-              <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,marginBottom:6}}>
-                {isCoach ? 'VIEW CLIENT WEEK' : 'TRACKING WEEK'}
-              </div>
-              <input type="number" min="1" max="52" value={activeWeek} onChange={e=>setActiveWeek(parseInt(e.target.value)||1)}
-                style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:14,fontWeight:700,outline:'none',textAlign:'center',boxSizing:'border-box'}}/>
-              <div style={{fontSize:9,color:C.muted,marginTop:3,textAlign:'center'}}>
-                {isCoach ? `Client's Week ${activeWeek} Log` : `Week ${activeWeek} of 52`}
-              </div>
-            </div>
+            {/* Week selector — dated list, most recent first */}
+            {(()=>{
+              // Build display list: DB history + current week if not already included
+              const histNums = new Set(weekHistory.map(w=>w.week))
+              const list = [...weekHistory]
+              if (!histNums.has(activeWeek)) list.push({week:activeWeek,saved_at:null})
+              if (list.length===0) list.push({week:1,saved_at:null})
+              list.sort((a,b)=>b.week-a.week)
+              return (
+                <div style={{borderTop:`1px solid ${C.border}`,flexShrink:0,display:'flex',flexDirection:'column',maxHeight:200}}>
+                  <div style={{padding:'8px 12px 4px',fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,flexShrink:0}}>
+                    {isCoach ? 'VIEW CLIENT WEEK' : 'TRACKING WEEK'}
+                  </div>
+                  <div style={{overflowY:'auto',flex:1}}>
+                    {list.map(({week,saved_at})=>{
+                      const active = week===activeWeek
+                      const dateStr = saved_at
+                        ? new Date(saved_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+                        : null
+                      return (
+                        <button key={week} onClick={()=>setActiveWeek(week)}
+                          style={{width:'100%',textAlign:'left',background:active?`${C.gold}18`:C.surface,border:'none',borderLeft:`3px solid ${active?C.gold:'transparent'}`,padding:'7px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:12,fontWeight:active?700:400,color:active?C.gold:C.white}}>Week {week}</div>
+                          {dateStr
+                            ? <div style={{fontSize:9,color:C.muted,marginTop:1}}>{dateStr}</div>
+                            : <div style={{fontSize:9,color:C.muted,fontStyle:'italic',marginTop:1}}>not saved yet</div>
+                          }
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
 
           {/* Workout content */}
@@ -776,9 +817,11 @@ Training Principles:
               )}
             </div>
 
-            {/* Training principles — always visible; coach can toggle edit */}
-            <div style={{padding:'14px 16px 0',flexShrink:0}}>
-              <div style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,overflow:'hidden'}}>
+            {/* Exercise list — Training Principles scrolls with content */}
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+              {/* Training principles card — scrolls with exercises */}
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,overflow:'hidden',marginBottom:16}}>
                 <div style={{padding:'10px 14px 8px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                   <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1}}>LOE TRAINING PRINCIPLES</div>
                   {isCoach&&(
@@ -806,10 +849,7 @@ Training Principles:
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Exercise list */}
-            <div style={{flex:1,overflowY:'auto',padding:16}}>
               {workouts[activeWorkout].exercises.map((ex,ei)=>(
                 <div key={ex.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14,marginBottom:10}}>
                   {/* Exercise header */}
@@ -976,7 +1016,46 @@ Training Principles:
           CARDIO TAB
       ══════════════════════════════════════════════════════ */}
       {tab==='cardio'&&(
-        <div style={{flex:1,overflowY:'auto',padding:16}}>
+        <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+
+          {/* Cardio week selector sidebar */}
+          {(()=>{
+            const histNums = new Set(weekHistory.map(w=>w.week))
+            const list = [...weekHistory]
+            if (!histNums.has(activeWeek)) list.push({week:activeWeek,saved_at:null})
+            if (list.length===0) list.push({week:1,saved_at:null})
+            list.sort((a,b)=>b.week-a.week)
+            return (
+              <div style={{width:160,background:C.surface,borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
+                <div style={{padding:'12px 12px 8px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>
+                    {isCoach ? 'View Week' : 'My Log'}
+                  </div>
+                </div>
+                <div style={{flex:1,overflowY:'auto'}}>
+                  {list.map(({week,saved_at})=>{
+                    const active = week===activeWeek
+                    const dateStr = saved_at
+                      ? new Date(saved_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+                      : null
+                    return (
+                      <button key={week} onClick={()=>setActiveWeek(week)}
+                        style={{width:'100%',textAlign:'left',background:active?`${C.gold}18`:C.surface,border:'none',borderLeft:`3px solid ${active?C.gold:'transparent'}`,padding:'10px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:12,fontWeight:active?700:400,color:active?C.gold:C.white}}>Week {week}</div>
+                        {dateStr
+                          ? <div style={{fontSize:9,color:C.muted,marginTop:1}}>{dateStr}</div>
+                          : <div style={{fontSize:9,color:C.muted,fontStyle:'italic',marginTop:1}}>not saved yet</div>
+                        }
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Cardio main content */}
+          <div style={{flex:1,overflowY:'auto',padding:16}}>
           <Card sx={{marginBottom:12}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
               <Lbl t="Cardio Protocol"/>
@@ -1040,7 +1119,7 @@ Training Principles:
             )}
             {isCoach&&(
               <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
-                Read-only view of Jordan's submitted log. Use the week selector in the Workout tab sidebar to browse other weeks.
+                Read-only view of Jordan's submitted log. Use the week selector in the sidebar to browse other weeks.
               </div>
             )}
             {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
@@ -1092,6 +1171,7 @@ Training Principles:
               Save Cardio Protocol
             </button>
           )}
+          </div>
         </div>
       )}
 
