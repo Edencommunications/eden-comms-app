@@ -62,7 +62,7 @@ const DEMO_ORGS = [
   { id:'b0000000-0000-0000-0000-000000000001', name:'Lifestyle of Eden', slug:'eden', isWhiteLabel:false, plan:'Platform Owner', coachCount:1, clientCount:1, active:true, brandColor:'#ffa600' },
 ]
 
-const CHECK_IN_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday']
+const CHECK_IN_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 const CALL_TYPES = ['Monthly Check-In','Intake / Onboarding','Lab Review','Therapy / Support','Strategy Call','Emergency Call','Other']
 
 // ── Mini UI ───────────────────────────────────────────────────
@@ -174,6 +174,15 @@ export default function Week6({currentUser, onNavigate}) {
   function openClient(client) {
     setSelectedClient(client)
     if (client.hasUpdate) markViewed(client.uuid)
+    // Load saved update_day from DB and sync into local state
+    dbGet('user_profiles', `id=eq.${client.uuid}&select=update_day`)
+      .then(rows => {
+        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day) {
+          const day = rows[0].update_day
+          setClients(prev => prev.map(c => c.uuid === client.uuid ? {...c, checkInDay: day} : c))
+          setSelectedClient(prev => prev?.uuid === client.uuid ? {...prev, checkInDay: day} : prev)
+        }
+      })
   }
 
   async function saveIntake() {
@@ -480,14 +489,15 @@ export default function Week6({currentUser, onNavigate}) {
                     {selectedClient.email} · {isAdmin?`${selectedClient.coachName} · `:''}Check-in: {selectedClient.checkInDay}s
                   </div>
                 </div>
-                {/* Admin: change check-in day */}
-                {isAdmin&&(
+                {/* Coach / Admin: assign or re-assign update day */}
+                {(isAdmin||isCoach)&&(
                   <select
-                    value={selectedClient.checkInDay}
-                    onChange={e=>{
-                      const day=e.target.value
+                    value={selectedClient.checkInDay||'Wednesday'}
+                    onChange={async e=>{
+                      const day = e.target.value
                       setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,checkInDay:day}:c))
                       setSelectedClient(prev=>({...prev,checkInDay:day}))
+                      await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{update_day:day})
                     }}
                     style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
                     {CHECK_IN_DAYS.map(d=><option key={d}>{d}</option>)}
@@ -503,8 +513,9 @@ export default function Week6({currentUser, onNavigate}) {
                     <div style={{fontSize:13,fontWeight:700,color:C.white}}>{selectedClient.lastSeen}</div>
                   </div>
                   <div style={{background:C.surface,borderRadius:8,padding:'10px 14px',flex:1,minWidth:100}}>
-                    <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Check-In Day</div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{selectedClient.checkInDay}</div>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Update Day</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{selectedClient.checkInDay||'Not set'}</div>
+                    <div style={{fontSize:9,color:C.muted,marginTop:2}}>Due before 9 AM CST</div>
                   </div>
                   <div style={{background:C.surface,borderRadius:8,padding:'10px 14px',flex:1,minWidth:100}}>
                     <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Status</div>

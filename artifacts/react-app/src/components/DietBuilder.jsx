@@ -289,6 +289,20 @@ function mealMacros(meal) {
   }), {cal:0,pro:0,fat:0,carb:0,fib:0})
 }
 
+// Return the next calendar date for a given weekday name, e.g. "Wednesday" → "Wednesday, Jul 30"
+function nextUpdateDate(dayName) {
+  if (!dayName) return null
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+  const target = days.indexOf(dayName)
+  if (target < 0) return null
+  const today = new Date()
+  let diff = target - today.getDay()
+  if (diff <= 0) diff += 7
+  const next = new Date(today)
+  next.setDate(today.getDate() + diff)
+  return next.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})
+}
+
 // Parse "4oz"→{amount:4,unit:'oz'}, "184g"→{amount:184,unit:'g'}, "240ml"→{amount:240,unit:'ml'}
 function parseServing(serving='') {
   const m = serving.match(/^([\d.]+)\s*(oz|g|ml|mg)/)
@@ -638,6 +652,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [clientPhotos,     setClientPhotos]     = useState(null)
   const [photoUploading,   setPhotoUploading]   = useState(false)
   const photoFileRef = useRef(null)
+  const [updateDay, setUpdateDay] = useState(null)
 
   useEffect(() => {
     // Seed with demo data immediately so the UI isn't blank
@@ -652,6 +667,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
     const uuid = KNOWN_USERS[email]?.uuid
     if (!uuid) return
+
+    // Load assigned update day from user profile
+    dbGet('user_profiles', `id=eq.${uuid}&select=update_day`)
+      .then(rows => {
+        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day)
+          setUpdateDay(rows[0].update_day)
+      })
 
     // Fetch real submitted check-ins from DB and merge on top of demo data
     dbGet('weekly_checkins', `client_id=eq.${uuid}&order=submitted_at.desc&limit=52`)
@@ -1045,7 +1067,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               <div style={{fontSize:10,color:C.muted,lineHeight:1.7}}>
                 • Organic fruits/veg · Grass-fed/finished beef · Wild caught fish · Raw dairy only<br/>
                 • NO artificial sweeteners — Stevia only · Raw honey only · 6-8g EVOO for cooking<br/>
-                • Updates due before 9 AM CST on your check-in day — fasted weight + photos
+                • Updates due before 9 AM CST {updateDay
+                  ? <span style={{color:C.gold,fontWeight:700}}>every {updateDay}</span>
+                  : 'on your assigned update day'} — fasted weight + photos
               </div>
             </div>
           </Card>
@@ -1777,6 +1801,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* ─── History tab ─── */}
               {clientViewTab==='history'&&(<>
 
+                {/* Update schedule banner */}
+                {updateDay&&(
+                  <div style={{background:`${C.gold}12`,border:`1.5px solid ${C.gold}44`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:.6,textTransform:'uppercase',marginBottom:5}}>📅 Your Update Schedule</div>
+                    <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:3}}>Every {updateDay} — before 9 AM CST</div>
+                    {nextUpdateDate(updateDay)&&(
+                      <div style={{fontSize:11,color:C.muted}}>
+                        Next: <span style={{color:C.white,fontWeight:600}}>{nextUpdateDate(updateDay)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* All 9 charts */}
                 <CheckInCharts checkins={localCheckins}/>
 
@@ -1998,7 +2035,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* ─── Submit tab ─── */}
               {clientViewTab==='submit'&&(<>
                 <div style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderLeft:`3px solid ${C.danger}`,borderRadius:9,padding:'10px 13px',marginBottom:12,fontSize:12,color:C.danger}}>
-                  ⚠️ All weekly updates MUST be in before 9 AM CST on your check-in day. Wake up on empty stomach. Include fasted weight + photos.
+                  ⚠️ All weekly updates MUST be in before 9 AM CST{updateDay
+                    ? <> every <strong>{updateDay}</strong>{nextUpdateDate(updateDay) ? ` (next: ${nextUpdateDate(updateDay)})` : ''}</>
+                    : ' on your assigned update day'}. Wake up on empty stomach. Include fasted weight + photos.
                 </div>
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="Vitals"/>
