@@ -206,7 +206,48 @@ create policy "Coaches can read all photos"
   );
 
 
--- ── 5. STORAGE BUCKET ───────────────────────────────────────
+-- ── 5. CLIENT RECIPES ───────────────────────────────────────
+-- Individual recipes a coach assigns to a specific client.
+-- Client can see these unlocked on their diet screen.
+
+create table if not exists public.client_recipes (
+  id           uuid        primary key default gen_random_uuid(),
+  client_id    uuid        not null,
+  coach_id     uuid        not null,
+  recipe_name  text        not null,
+  recipe_data  jsonb,                   -- full recipe object { name, cal, pro, fat, carb, fib, category }
+  assigned_at  timestamptz not null default now()
+);
+
+create index if not exists client_recipes_client_idx
+  on public.client_recipes (client_id, assigned_at desc);
+
+alter table public.client_recipes enable row level security;
+
+drop policy if exists "Coaches can manage client recipes"  on public.client_recipes;
+drop policy if exists "Clients can read own recipes"       on public.client_recipes;
+
+create policy "Coaches can manage client recipes"
+  on public.client_recipes for all
+  using (
+    exists (
+      select 1 from public.user_profiles
+      where id = auth.uid() and role in ('coach','super_admin')
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.user_profiles
+      where id = auth.uid() and role in ('coach','super_admin')
+    )
+  );
+
+create policy "Clients can read own recipes"
+  on public.client_recipes for select
+  using (auth.uid() = client_id);
+
+
+-- ── 6. STORAGE BUCKET ───────────────────────────────────────
 -- Run this separately if the bucket doesn't exist yet.
 -- Go to: Storage → New Bucket → Name: progress-photos → Public ✓
 

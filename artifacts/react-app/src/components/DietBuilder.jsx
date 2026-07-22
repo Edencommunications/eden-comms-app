@@ -97,6 +97,46 @@ const MASTER_HABITS = [
   {id:'nophone', name:'No Phone First Hour of Day',   defaultTarget:7},
 ]
 
+// ── Recipe Book ──────────────────────────────────────────────
+const RECIPE_BUY = 'https://funnel.lifestyleofeden.com/loe-recipes-5482'
+const RECIPE_CAT_EMOJI = {Breakfast:'🥞',Lunch:'🥗',Dinner:'🍽',Snacks:'🫙',Drinks:'🥤',Desserts:'🍰',Soups:'🍲',Sides:'🥦',Sauces:'🧴'}
+const STATIC_RECIPES = [
+  {name:'Whole Food Protein Pancakes',    cal:270, pro:27,  fat:7,  carb:28, fib:5,  category:'Breakfast'},
+  {name:'Breakfast Tacos',               cal:670, pro:45,  fat:32, carb:49, fib:9,  category:'Breakfast'},
+  {name:"Homemade Superfood Acai Bowl",  cal:230, pro:25,  fat:6,  carb:19, fib:7,  category:'Breakfast'},
+  {name:'Mineral Oat Bowl',              cal:520, pro:18,  fat:23, carb:63, fib:10, category:'Breakfast'},
+  {name:'Ezekiel Burrito Wrap',          cal:490, pro:50,  fat:12, carb:44, fib:12, category:'Lunch'},
+  {name:'Black Bean Quinoa Burger',      cal:170, pro:9,   fat:5,  carb:24, fib:9,  category:'Lunch'},
+  {name:'Recovery Power Bowl',           cal:778, pro:26,  fat:33, carb:106,fib:16, category:'Lunch'},
+  {name:'Quinoa Lentil Power Bowl',      cal:990, pro:41,  fat:35, carb:135,fib:22, category:'Lunch'},
+  {name:'Pesto Chickpea Salad',          cal:400, pro:18,  fat:20, carb:40, fib:12, category:'Lunch'},
+  {name:'Stuffed Peppers',               cal:240, pro:25,  fat:11, carb:12, fib:5,  category:'Dinner'},
+  {name:'Whole Food Taco Soup (Beef)',   cal:395, pro:35,  fat:15, carb:30, fib:10, category:'Soups'},
+  {name:'Whole Food Taco Soup (Chicken)',cal:352, pro:40,  fat:8,  carb:30, fib:9,  category:'Soups'},
+  {name:'Tafu Stir Fry',                cal:450, pro:25,  fat:18, carb:45, fib:7,  category:'Dinner'},
+  {name:'Beef Carpaccio',               cal:400, pro:36,  fat:20, carb:28, fib:2,  category:'Dinner'},
+  {name:'Miso Soup',                     cal:200, pro:15,  fat:8,  carb:12, fib:4,  category:'Soups'},
+  {name:'Avocado Cucumber Lime Salad',   cal:280, pro:3,   fat:26, carb:13, fib:7,  category:'Sides'},
+  {name:'Honey & Thyme Roasted Carrots', cal:205, pro:2,   fat:14, carb:20, fib:5,  category:'Sides'},
+  {name:'Mediterranean Tomato Salad',    cal:150, pro:2,   fat:14, carb:9,  fib:3,  category:'Sides'},
+  {name:'Apple Walnut Slaw',             cal:330, pro:5,   fat:26, carb:22, fib:6,  category:'Sides'},
+  {name:'Banana Date Smoothie',          cal:420, pro:30,  fat:12, carb:55, fib:7,  category:'Drinks'},
+  {name:'Gut Health Hot Chocolate',      cal:145, pro:21,  fat:3,  carb:18, fib:5,  category:'Drinks'},
+  {name:'Whole Food Banana Bread',       cal:250, pro:10,  fat:8,  carb:40, fib:5,  category:'Snacks'},
+  {name:'Date Energy Balls',             cal:88,  pro:1.7, fat:0.8,carb:18, fib:2,  category:'Snacks'},
+  {name:'PB Protein Balls',             cal:89,  pro:3.6, fat:5.5,carb:7,  fib:2,  category:'Snacks'},
+  {name:'Plant-Based Nutella Spread',   cal:152, pro:3,   fat:13, carb:8.5,fib:3,  category:'Snacks'},
+  {name:'PB Cinnamon Muffin',           cal:180, pro:15,  fat:6,  carb:18, fib:5,  category:'Snacks'},
+  {name:'Pumpkin Custard Pie',           cal:233, pro:5.5, fat:2.7,carb:46, fib:5,  category:'Desserts'},
+  {name:'Banana Ice Cream',             cal:315, pro:3.9, fat:1,  carb:81, fib:7,  category:'Desserts'},
+  {name:'Cookie Dough Dip',             cal:166, pro:4.5, fat:5,  carb:27, fib:6,  category:'Desserts'},
+  {name:'Date Caramel Frosting',        cal:136, pro:2,   fat:4.5,carb:24, fib:3,  category:'Desserts'},
+  {name:"Gregor's Pesto Sauce",         cal:320, pro:11,  fat:24, carb:16, fib:5,  category:'Sauces'},
+  {name:'Tahini Lemon Sauce',           cal:92,  pro:2,   fat:6,  carb:9,  fib:3,  category:'Sauces'},
+  {name:'Sweet Potato Chickpea Burger', cal:210, pro:8,   fat:6,  carb:32, fib:9,  category:'Dinner'},
+]
+const RECIPE_CATS = ['All',...[...new Set(STATIC_RECIPES.map(r=>r.category))]]
+
 // ── Supplement database ───────────────────────────────────────
 const SUPP_DB = {
   'Nervous System Regulator':[
@@ -706,6 +746,12 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // Client's own prescription notes
   const [clientRxNotes, setClientRxNotes] = useState('')
 
+  // Recipes — coach assigns individual recipes; client sees preview + buy
+  const [assignedRecipes,  setAssignedRecipes]  = useState([])
+  const [showRecipePicker, setShowRecipePicker] = useState(false)
+  const [recipeFilter,     setRecipeFilter]     = useState('All')
+  const [recipeSearch,     setRecipeSearch]     = useState('')
+
   // ── Rx / Prescription tracker ─────────────────────────────
   const [rxList,        setRxList]        = useState([])
   const [showRxForm,    setShowRxForm]    = useState(false)
@@ -832,6 +878,39 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCoachOnlyUpdates(rows.map(r=>({id:r.id,date:r.date,note:r.note||'',loom:r.loom||''}))) })
       .catch(()=>{})
   },[email])
+
+  // Load assigned recipes from DB
+  useEffect(()=>{
+    const uuid = KNOWN_USERS[email]?.uuid
+    if(!uuid) return
+    dbGet('client_recipes',`client_id=eq.${uuid}&order=assigned_at.desc`)
+      .then(rows=>{
+        if(!Array.isArray(rows)) return
+        setAssignedRecipes(rows.map(r=>{
+          const d = typeof r.recipe_data==='string' ? JSON.parse(r.recipe_data) : (r.recipe_data||{})
+          return {...d, recipe_name:r.recipe_name, db_id:r.id}
+        }))
+      })
+      .catch(()=>{})
+  },[email])
+
+  async function assignRecipe(recipe) {
+    const uuid    = KNOWN_USERS[email]?.uuid
+    const coachId = KNOWN_USERS['coach@eden.io']?.uuid
+    if(!uuid||!coachId) return
+    setAssignedRecipes(p=>[...p,{...recipe,db_id:null}])
+    await dbInsert('client_recipes',{client_id:uuid,coach_id:coachId,recipe_name:recipe.name,recipe_data:recipe,assigned_at:new Date().toISOString()})
+    const rows = await dbGet('client_recipes',`client_id=eq.${uuid}&order=assigned_at.desc`)
+    if(Array.isArray(rows)) setAssignedRecipes(rows.map(r=>{
+      const d = typeof r.recipe_data==='string' ? JSON.parse(r.recipe_data) : (r.recipe_data||{})
+      return {...d, recipe_name:r.recipe_name, db_id:r.id}
+    }))
+  }
+
+  async function removeRecipe(dbId, recipeName) {
+    setAssignedRecipes(p=>p.filter(r=>r.db_id!==dbId&&r.name!==recipeName))
+    if(dbId) await dbDelete('client_recipes',`id=eq.${dbId}`)
+  }
 
   function toggleHabitAssign(habit) {
     const exists=assignedHabits.find(h=>h.id===habit.id)
@@ -1001,17 +1080,123 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
           {isCoach&&(
             <button onClick={async()=>{await dbInsert('diet_plans',{client_id:KNOWN_USERS['client@eden.io']?.uuid,coach_id:KNOWN_USERS['coach@eden.io']?.uuid,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});alert('Diet plan saved!')}}
-              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20}}>
+              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
           )}
 
-          {/* Recipe upsell for clients */}
+          {/* ── Coach: assign individual recipes ── */}
+          {isCoach&&(
+            <div style={{marginBottom:24}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.white}}>🍽 Recipes for This Client</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>Share individual recipes from your full recipe book</div>
+                </div>
+                <button onClick={()=>setShowRecipePicker(true)}
+                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'7px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                  ＋ Assign Recipe
+                </button>
+              </div>
+              {assignedRecipes.length===0?(
+                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:24,textAlign:'center'}}>
+                  <div style={{fontSize:28,marginBottom:8}}>📖</div>
+                  <div style={{fontSize:12,color:C.muted,lineHeight:1.6}}>No recipes assigned yet.<br/>Click <strong style={{color:C.white}}>＋ Assign Recipe</strong> to share specific recipes with this client.</div>
+                </div>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {assignedRecipes.map((r,i)=>(
+                    <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 14px',display:'flex',alignItems:'center',gap:12}}>
+                      <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                      </div>
+                      <button onClick={()=>removeRecipe(r.db_id, r.name||r.recipe_name)}
+                        style={{background:'none',border:'none',color:C.muted,fontSize:20,cursor:'pointer',padding:'0 4px',flexShrink:0,lineHeight:1}}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Client: recipe preview + purchase ── */}
           {isClient&&(
-            <div style={{background:'linear-gradient(135deg,#1a1200,#2a1800)',border:`1px solid ${C.gold}33`,borderRadius:12,padding:16,marginBottom:24}}>
-              <div style={{fontWeight:700,fontSize:13,color:C.white,marginBottom:5}}>🍽 Eden Recipe Book</div>
-              <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Unlock 100+ clean eating recipes aligned with your protocol.</div>
-              <button style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 18px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Unlock Recipe Book</button>
+            <div style={{marginBottom:24}}>
+
+              {/* Coach-assigned recipes — fully unlocked */}
+              {assignedRecipes.length>0&&(
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>📌 Your Recipes from Coach</div>
+                  {assignedRecipes.map((r,i)=>(
+                    <div key={i} style={{background:'#0d1a00',border:`1px solid ${C.gold}44`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+                      <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                      </div>
+                      <span style={{fontSize:9,fontWeight:700,padding:'3px 9px',borderRadius:20,background:`${C.gold}22`,color:C.gold,flexShrink:0}}>✓ Unlocked</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Full recipe book — locked preview */}
+              <div style={{background:'linear-gradient(160deg,#0d1200,#1a1500)',border:`1px solid ${C.gold}33`,borderRadius:14,overflow:'hidden'}}>
+                {/* Header */}
+                <div style={{padding:'14px 16px 10px',borderBottom:`1px solid ${C.gold}22`}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                    <div style={{fontSize:14,fontWeight:800,color:C.white}}>📖 Eden Recipe Book</div>
+                    <span style={{fontSize:9,fontWeight:700,padding:'3px 10px',borderRadius:20,background:`${C.gold}22`,color:C.gold}}>{STATIC_RECIPES.length} Recipes</span>
+                  </div>
+                  <div style={{fontSize:11,color:C.muted}}>{RECIPE_CATS.length-1} categories · whole food · aligned with your protocol</div>
+                </div>
+
+                {/* Category pills */}
+                <div style={{padding:'10px 16px',display:'flex',flexWrap:'wrap',gap:6,borderBottom:`1px solid ${C.gold}22`}}>
+                  {RECIPE_CATS.filter(c=>c!=='All').map(cat=>(
+                    <span key={cat} style={{fontSize:10,padding:'3px 10px',borderRadius:20,background:C.surface,border:`1px solid ${C.border}`,color:C.muted}}>
+                      {RECIPE_CAT_EMOJI[cat]||''} {cat} ({STATIC_RECIPES.filter(r=>r.category===cat).length})
+                    </span>
+                  ))}
+                </div>
+
+                {/* Locked recipe list */}
+                <div style={{maxHeight:260,overflowY:'auto'}}>
+                  {STATIC_RECIPES.map((r,i)=>{
+                    const unlocked = assignedRecipes.some(a=>(a.name||a.recipe_name)===r.name)
+                    return (
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderBottom:`1px solid ${C.border}22`}}>
+                        <span style={{fontSize:14,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:unlocked?700:500,color:unlocked?C.gold:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name}</div>
+                          <div style={{fontSize:10,color:C.muted}}>{r.category}</div>
+                        </div>
+                        {unlocked?(
+                          <span style={{fontSize:9,fontWeight:700,color:C.gold,flexShrink:0}}>✓ Unlocked</span>
+                        ):(
+                          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                            <span style={{fontSize:10,color:C.muted}}>{r.cal} cal</span>
+                            <span style={{fontSize:12,color:C.border}}>🔒</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Purchase CTA */}
+                <div style={{padding:16,textAlign:'center',borderTop:`1px solid ${C.gold}22`}}>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.6}}>
+                    Full macros, ingredients &amp; step-by-step instructions<br/>for all {STATIC_RECIPES.length} whole food recipes
+                  </div>
+                  <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
+                    style={{display:'block',background:C.gold,borderRadius:10,padding:'12px 0',fontWeight:800,color:C.black,fontSize:14,textDecoration:'none',textAlign:'center'}}>
+                    🍽 Get the Full Recipe Book
+                  </a>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -2432,6 +2617,68 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       )}
 
       {/* ── Supplement picker modal (coach only) ─────────────── */}
+      {/* ── Recipe Picker Modal ────────────────────────────────── */}
+      {showRecipePicker&&isCoach&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:200,display:'flex',flexDirection:'column'}}>
+          <div style={{flex:1,background:C.black,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            {/* Header */}
+            <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:800,color:C.white}}>🍽 Assign a Recipe</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{assignedRecipes.length} assigned · tap to add</div>
+              </div>
+              <button onClick={()=>setShowRecipePicker(false)} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>×</button>
+            </div>
+            {/* Search */}
+            <div style={{padding:'10px 16px',flexShrink:0}}>
+              <input value={recipeSearch} onChange={e=>setRecipeSearch(e.target.value)} placeholder="Search recipes…"
+                style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            {/* Category tabs */}
+            <div style={{display:'flex',overflowX:'auto',padding:'0 16px 10px',gap:6,flexShrink:0}}>
+              {RECIPE_CATS.map(cat=>(
+                <button key={cat} onClick={()=>setRecipeFilter(cat)}
+                  style={{background:recipeFilter===cat?C.gold:C.surface,border:`1px solid ${recipeFilter===cat?C.gold:C.border}`,borderRadius:20,padding:'5px 14px',
+                    color:recipeFilter===cat?C.black:C.muted,fontSize:11,fontWeight:recipeFilter===cat?700:400,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                  {cat==='All'?`All (${STATIC_RECIPES.length})`:`${RECIPE_CAT_EMOJI[cat]||''} ${cat} (${STATIC_RECIPES.filter(r=>r.category===cat).length})`}
+                </button>
+              ))}
+            </div>
+            {/* Recipe list */}
+            <div style={{flex:1,overflowY:'auto',padding:'0 16px 8px'}}>
+              {STATIC_RECIPES
+                .filter(r=>(recipeFilter==='All'||r.category===recipeFilter)&&(!recipeSearch||r.name.toLowerCase().includes(recipeSearch.toLowerCase())))
+                .map((r,i)=>{
+                  const already = assignedRecipes.some(a=>(a.name||a.recipe_name)===r.name)
+                  return (
+                    <div key={i} onClick={()=>{ if(!already) assignRecipe(r) }}
+                      style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderBottom:`1px solid ${C.border}`,cursor:already?'default':'pointer'}}>
+                      <span style={{fontSize:24,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:already?C.gold:C.white}}>{r.name}</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                      </div>
+                      {already?(
+                        <span style={{fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}>✓ Assigned</span>
+                      ):(
+                        <span style={{fontSize:18,color:C.gold,flexShrink:0,lineHeight:1}}>+</span>
+                      )}
+                    </div>
+                  )
+                })
+              }
+            </div>
+            {/* Footer */}
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              <button onClick={()=>setShowRecipePicker(false)}
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:'11px 0',fontWeight:800,color:C.black,fontSize:14,cursor:'pointer'}}>
+                Done — {assignedRecipes.length} recipe{assignedRecipes.length!==1?'s':''} assigned
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSuppPicker&&isCoach&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget)setShowSuppPicker(false)}}>
