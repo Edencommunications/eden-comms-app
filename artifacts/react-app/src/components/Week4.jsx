@@ -197,17 +197,26 @@ export default function Week4({currentUser, initialTab='labs'}) {
   const labFileRef = useRef(null)
 
   // ── Workout state ─────────────────────────────────────────
-  const [workouts,      setWorkouts]      = useState(
-    [1,2,3,4,5,6].map(i=>({
-      name:`Workout ${i}`, exercises:[], notes:'',
-    }))
+  const DEFAULT_PRINCIPLES = `I firmly believe in high-intensity training. Here's how we do it:
+
+Training Principles:
+
+1. Aim for 3, 4, or 5 sets of 10 to 12 reps for each exercise. Train heavy and with intensity.
+2. The goal is to stimulate your muscles sufficiently to maximize nutrient absorption from your diet.
+3. Each set should start with warm-ups leading to the working sets. The last set should push you to absolute failure at 10 to 12 reps.
+4. Increase weight progressively so that if you achieve 12 reps on your last set, increase the weight next session to maintain the challenge.`
+
+  const [workouts,           setWorkouts]           = useState(
+    [1,2,3,4,5,6].map(i=>({name:`Workout ${i}`, exercises:[], notes:''}))
   )
-  const [activeWorkout, setActiveWorkout] = useState(0)
-  const [showExPicker,  setShowExPicker]  = useState(false)
-  const [exSearch,      setExSearch]      = useState('')
-  const [exCategory,    setExCategory]    = useState('Push')
-  const [activeWeek,    setActiveWeek]    = useState(1)
-  const [workoutLogs,   setWorkoutLogs]   = useState({})
+  const [trainingPrinciples, setTrainingPrinciples] = useState(DEFAULT_PRINCIPLES)
+  const [activeWorkout,      setActiveWorkout]      = useState(0)
+  const [showExPicker,       setShowExPicker]        = useState(false)
+  const [exSearch,           setExSearch]            = useState('')
+  const [exCategory,         setExCategory]          = useState('Push')
+  const [activeWeek,         setActiveWeek]          = useState(1)
+  const [workoutLogs,        setWorkoutLogs]         = useState({})
+  const [logSaving,          setLogSaving]           = useState(false)
 
   // ── Cardio state ──────────────────────────────────────────
   const [cardio, setCardio] = useState([
@@ -217,8 +226,11 @@ export default function Week4({currentUser, initialTab='labs'}) {
   // ── Calendar state ────────────────────────────────────────
   const [calendarUrl, setCalendarUrl] = useState(DEFAULT_CALENDAR_URL)
 
-  // ── Load labs on mount ────────────────────────────────────
-  useEffect(()=>{ loadLabs() },[])
+  // ── Load on mount ─────────────────────────────────────────
+  useEffect(()=>{ loadLabs(); loadWorkoutPlan() },[])
+
+  // Reload logs whenever week changes
+  useEffect(()=>{ loadWorkoutLog(activeWeek) },[activeWeek])
 
   async function loadLabs() {
     const data = await dbGet('lab_results',
@@ -308,6 +320,77 @@ export default function Week4({currentUser, initialTab='labs'}) {
     }
   }
 
+  // ── Load workout plan from DB ─────────────────────────────
+  async function loadWorkoutPlan() {
+    const data = await dbGet('workout_plans',
+      `client_id=eq.${CLIENT_UUID}&order=created_at.desc&limit=1`
+    )
+    if (data?.[0]) {
+      try {
+        const raw = JSON.parse(data[0].workouts)
+        // Support both old (array) and new ({exercises,principles}) format
+        if (Array.isArray(raw)) {
+          setWorkouts(raw)
+        } else {
+          if (raw.exercises) setWorkouts(raw.exercises)
+          if (raw.principles) setTrainingPrinciples(raw.principles)
+        }
+      } catch(e) {}
+      try {
+        if (data[0].cardio) setCardio(JSON.parse(data[0].cardio))
+      } catch(e) {}
+    }
+  }
+
+  // ── Load workout logs for a given week ────────────────────
+  async function loadWorkoutLog(week) {
+    try {
+      const data = await dbGet('client_workout_logs',
+        `client_id=eq.${CLIENT_UUID}&week=eq.${week}&limit=1`
+      )
+      setWorkoutLogs(data?.[0]?.logs || {})
+    } catch(e) {
+      // Table may not exist yet — start with empty logs
+      setWorkoutLogs({})
+    }
+  }
+
+  // ── Save workout log to DB (upsert by client+week) ────────
+  async function saveWorkoutLog() {
+    setLogSaving(true)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/client_workout_logs`, {
+        method: 'POST',
+        headers: {
+          'apikey':        SUPABASE_ANON,
+          'Authorization': `Bearer ${SUPABASE_ANON}`,
+          'Content-Type':  'application/json',
+          'Prefer':        'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({
+          client_id: CLIENT_UUID,
+          week:      activeWeek,
+          logs:      workoutLogs,
+          saved_at:  new Date().toISOString(),
+        }),
+      })
+      if (res.ok) {
+        alert(`✅ Week ${activeWeek} log saved!`)
+      } else {
+        const err = await res.text()
+        if (err.includes('does not exist')) {
+          alert(`Week ${activeWeek} log saved locally.\n\n⚠️ To enable cross-device sync, ask your admin to run the client_workout_logs SQL.`)
+        } else {
+          alert(`Week ${activeWeek} log saved locally.`)
+        }
+      }
+    } catch(e) {
+      alert(`Week ${activeWeek} log saved locally.`)
+    } finally {
+      setLogSaving(false)
+    }
+  }
+
   // ── Workout builder ───────────────────────────────────────
   function addExercise(name) {
     setWorkouts(p=>p.map((w,i)=>i===activeWorkout
@@ -342,9 +425,11 @@ export default function Week4({currentUser, initialTab='labs'}) {
   }
 
   async function saveWorkoutPlan() {
+    // Embed principles inside the workouts JSON blob so no schema change is needed
+    const payload = { exercises: workouts, principles: trainingPrinciples }
     await dbInsert('workout_plans',{
       client_id:CLIENT_UUID, coach_id:COACH_UUID,
-      workouts:JSON.stringify(workouts),
+      workouts:JSON.stringify(payload),
       cardio:JSON.stringify(cardio),
       updated_at:new Date().toISOString(),
     })
@@ -575,15 +660,17 @@ export default function Week4({currentUser, initialTab='labs'}) {
               ))}
             </div>
 
-            {/* Week selector for client logging */}
-            {!isCoach&&(
-              <div style={{padding:12,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-                <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,marginBottom:6}}>TRACKING WEEK</div>
-                <input type="number" min="1" max="52" value={activeWeek} onChange={e=>setActiveWeek(parseInt(e.target.value)||1)}
-                  style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:14,fontWeight:700,outline:'none',textAlign:'center',boxSizing:'border-box'}}/>
-                <div style={{fontSize:9,color:C.muted,marginTop:3,textAlign:'center'}}>Week {activeWeek} of 52</div>
+            {/* Week selector — coach views client progress, client logs their own */}
+            <div style={{padding:12,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,marginBottom:6}}>
+                {isCoach ? 'VIEW CLIENT WEEK' : 'TRACKING WEEK'}
               </div>
-            )}
+              <input type="number" min="1" max="52" value={activeWeek} onChange={e=>setActiveWeek(parseInt(e.target.value)||1)}
+                style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:14,fontWeight:700,outline:'none',textAlign:'center',boxSizing:'border-box'}}/>
+              <div style={{fontSize:9,color:C.muted,marginTop:3,textAlign:'center'}}>
+                {isCoach ? `Client's Week ${activeWeek} Log` : `Week ${activeWeek} of 52`}
+              </div>
+            </div>
           </div>
 
           {/* Workout content */}
@@ -602,20 +689,26 @@ export default function Week4({currentUser, initialTab='labs'}) {
               )}
             </div>
 
-            {/* Training principles note */}
-            {workouts[activeWorkout].exercises.length===0&&(
-              <div style={{padding:16,flexShrink:0}}>
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,padding:'12px 14px'}}>
-                  <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,marginBottom:6}}>LOE TRAINING PRINCIPLES</div>
-                  <div style={{fontSize:11,color:C.muted,lineHeight:1.7}}>
-                    • Aim for 3, 4, or 5 sets of 10-12 reps. Train heavy with intensity.<br/>
-                    • Each set should start with warm-ups leading to working sets.<br/>
-                    • Last set should push to absolute failure at 10-12 reps.<br/>
-                    • Increase weight progressively — if you hit 12 reps, go heavier next session.
-                  </div>
+            {/* Training principles — always visible; editable by coach */}
+            <div style={{padding:'14px 16px 0',flexShrink:0}}>
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,overflow:'hidden'}}>
+                <div style={{padding:'10px 14px 8px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1}}>LOE TRAINING PRINCIPLES</div>
                 </div>
+                {isCoach ? (
+                  <textarea
+                    value={trainingPrinciples}
+                    onChange={e=>setTrainingPrinciples(e.target.value)}
+                    rows={8}
+                    style={{width:'100%',background:'transparent',border:'none',borderTop:`1px solid ${C.border}`,padding:'10px 14px',color:C.white,fontSize:11,lineHeight:1.7,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}
+                  />
+                ) : (
+                  <div style={{padding:'0 14px 12px',fontSize:11,color:C.muted,lineHeight:1.8,whiteSpace:'pre-wrap'}}>
+                    {trainingPrinciples}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Exercise list */}
             <div style={{flex:1,overflowY:'auto',padding:16}}>
@@ -671,9 +764,39 @@ export default function Week4({currentUser, initialTab='labs'}) {
                   )}
 
                   {/* Set info row */}
-                  <div style={{fontSize:11,color:C.muted,marginBottom:isCoach?0:10}}>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>
                     {ex.sets} sets · {ex.reps} reps · Rest: {ex.rest}
                   </div>
+
+                  {/* Coach: read-only view of client's logged sets for selected week */}
+                  {isCoach&&(()=>{
+                    const numSets = parseInt(ex.sets)||4
+                    const hasData = Array(numSets).fill(0).some((_,si)=>{
+                      const l = workoutLogs[`${activeWeek}_${ex.id}_${si}`]
+                      return l?.weight||l?.reps
+                    })
+                    return (
+                      <div style={{marginTop:4,padding:'8px 10px',background:C.surface,borderRadius:8}}>
+                        <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,marginBottom:6}}>
+                          WEEK {activeWeek} CLIENT LOG {hasData?'':'— No data yet'}
+                        </div>
+                        {hasData&&(
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                            {Array(numSets).fill(0).map((_,si)=>{
+                              const l = workoutLogs[`${activeWeek}_${ex.id}_${si}`]||{weight:'',reps:''}
+                              return (
+                                <div key={si} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',minWidth:72,textAlign:'center'}}>
+                                  <div style={{fontSize:8,color:C.muted,fontWeight:700,marginBottom:3}}>SET {si+1}</div>
+                                  <div style={{fontSize:11,fontWeight:700,color:C.gold}}>{l.weight||'—'} lb</div>
+                                  <div style={{fontSize:10,color:C.white}}>{l.reps||'—'} reps</div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* Client: log sets */}
                   {!isCoach&&(
@@ -741,9 +864,9 @@ export default function Week4({currentUser, initialTab='labs'}) {
               )}
 
               {!isCoach&&(
-                <button onClick={()=>alert(`Week ${activeWeek} log saved!`)}
-                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20}}>
-                  Save Week {activeWeek} Log
+                <button onClick={saveWorkoutLog} disabled={logSaving}
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20,opacity:logSaving?.6:1}}>
+                  {logSaving?'Saving…':`Save Week ${activeWeek} Log`}
                 </button>
               )}
             </div>
