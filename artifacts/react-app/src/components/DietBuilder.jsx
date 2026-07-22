@@ -645,6 +645,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const setC = k=>v=>setCi(p=>({...p,[k]:v}))
   const [protocolDurations, setProtocolDurations] = useState({})  // { protocolName: duration string }
   const setProtDur = (name,val) => setProtocolDurations(p=>({...p,[name]:val}))
+  const [otherProtocols, setOtherProtocols] = useState([])        // [{id,protocol,duration}] — user-added list
+  const [otherProtoDraft, setOtherProtoDraft] = useState({protocol:'',duration:''})
   const [mealNotes, setMealNotes] = useState({})  // per-meal adjustment notes from client, keyed by meal name
 
   // Check-in hub state
@@ -2361,14 +2363,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.6}}>
                     For each protocol below, enter how long you have been following it (e.g. "3 weeks", "5 days", "2 months").
                   </div>
-                  {/* Dynamic rows for each assigned supplement protocol */}
+
+                  {/* Assigned supplement protocol rows (auto-populated from coach assignments) */}
                   {(()=>{
                     const assignedProtocols=[...new Set(clientSupps.filter(s=>s.protocolGroup).map(s=>s.protocolGroup))]
-                    // Always include Flush Protocol since it's a common standalone protocol
-                    const allProtocols=assignedProtocols.includes('Flush Protocol')
-                      ? assignedProtocols
-                      : [...assignedProtocols,'Flush Protocol']
-                    return allProtocols.map(proto=>(
+                    return assignedProtocols.map(proto=>(
                       <div key={proto} style={{marginBottom:10}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>{proto}</div>
                         <input
@@ -2380,15 +2379,78 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       </div>
                     ))
                   })()}
-                  {/* Free-text for any other protocol not listed above */}
-                  <div style={{marginTop:8}}>
-                    <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>Any other protocol / supplement not listed?</div>
+
+                  {/* Flush Protocol — diet-based, always shown */}
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>
+                      If on the Specific Diet &ldquo;Flush Protocol&rdquo;
+                    </div>
                     <input
-                      value={protocolDurations['__other']||''}
-                      onChange={e=>setProtDur('__other',e.target.value)}
-                      placeholder="e.g. Thyroid Protocol — 6 weeks, custom detox — 10 days…"
+                      value={protocolDurations['Flush Protocol']||''}
+                      onChange={e=>setProtDur('Flush Protocol',e.target.value)}
+                      placeholder="e.g. 3 weeks, Day 14, Started Jan 6…"
                       style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
                     />
+                  </div>
+
+                  {/* Other protocols — list builder, one line per protocol */}
+                  <div style={{marginTop:4}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>
+                      Any Other Protocol / Supplement Not Listed?
+                    </div>
+
+                    {/* Submitted entries */}
+                    {otherProtocols.map(entry=>(
+                      <div key={entry.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:6}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <span style={{fontSize:12,fontWeight:700,color:C.gold}}>{entry.protocol}</span>
+                          <span style={{fontSize:12,color:C.muted}}> — </span>
+                          <span style={{fontSize:12,color:C.white}}>{entry.duration}</span>
+                        </div>
+                        <button
+                          onClick={()=>setOtherProtocols(p=>p.filter(e=>e.id!==entry.id))}
+                          style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:15,padding:'0 2px',flexShrink:0,lineHeight:1}}>×</button>
+                      </div>
+                    ))}
+
+                    {/* Draft inputs */}
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      <input
+                        value={otherProtoDraft.protocol}
+                        onChange={e=>setOtherProtoDraft(p=>({...p,protocol:e.target.value}))}
+                        placeholder="Protocol or supplement name…"
+                        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
+                      />
+                      <div style={{display:'flex',gap:6}}>
+                        <input
+                          value={otherProtoDraft.duration}
+                          onChange={e=>setOtherProtoDraft(p=>({...p,duration:e.target.value}))}
+                          onKeyDown={e=>{
+                            if(e.key==='Enter'&&otherProtoDraft.protocol.trim()&&otherProtoDraft.duration.trim()){
+                              setOtherProtocols(p=>[...p,{id:Date.now(),protocol:otherProtoDraft.protocol.trim(),duration:otherProtoDraft.duration.trim()}])
+                              setOtherProtoDraft({protocol:'',duration:''})
+                            }
+                          }}
+                          placeholder="How long (e.g. 3 weeks, Day 14)…"
+                          style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
+                        />
+                        <button
+                          onClick={()=>{
+                            if(!otherProtoDraft.protocol.trim()||!otherProtoDraft.duration.trim()) return
+                            setOtherProtocols(p=>[...p,{id:Date.now(),protocol:otherProtoDraft.protocol.trim(),duration:otherProtoDraft.duration.trim()}])
+                            setOtherProtoDraft({protocol:'',duration:''})
+                          }}
+                          style={{
+                            background:otherProtoDraft.protocol.trim()&&otherProtoDraft.duration.trim()?C.gold:'#333',
+                            border:'none',borderRadius:8,padding:'8px 14px',
+                            color:otherProtoDraft.protocol.trim()&&otherProtoDraft.duration.trim()?C.black:C.muted,
+                            fontWeight:800,fontSize:12,cursor:otherProtoDraft.protocol.trim()&&otherProtoDraft.duration.trim()?'pointer':'default',
+                            whiteSpace:'nowrap',flexShrink:0,
+                          }}>
+                          + Add
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </Card>
 
@@ -2474,7 +2536,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     notes:            ci.notes,            habits:           habitCounts,
                     habit_pct:        habitScore,          submitted_at:     new Date().toISOString(),
                     meal_notes:       Object.keys(mealNotes).some(k=>mealNotes[k]) ? mealNotes : null,
-                    protocol_durations: Object.keys(protocolDurations).some(k=>protocolDurations[k]) ? protocolDurations : null,
+                    protocol_durations: (Object.keys(protocolDurations).some(k=>protocolDurations[k])||otherProtocols.length>0)
+                      ? {...protocolDurations, __others: otherProtocols.length>0 ? otherProtocols : undefined}
+                      : null,
                   })
                   const _cId = KNOWN_USERS['coach@eden.io']?.uuid
                   const _clId = KNOWN_USERS[email]?.uuid
