@@ -57,7 +57,9 @@ create policy "Anon update user_profiles"
 -- Known demo users. Jordan is assigned Wednesday.
 -- on conflict = safe to re-run without wiping existing data.
 
-insert into public.user_profiles (id, email, name, initials, role, update_day, company_id)
+-- company_id left null — avoids FK violation if you already have a companies table.
+-- Set it to your real company UUID after running this script if needed.
+insert into public.user_profiles (id, email, name, initials, role, update_day)
 values
   (
     '414b1fb3-f38c-4480-bdb2-fe7b1d844051',
@@ -65,8 +67,7 @@ values
     'Coach Marcus',
     'CM',
     'coach',
-    null,
-    'aaaaaaaa-0000-0000-0000-000000000001'
+    null
   ),
   (
     'ece58b33-3f2a-4ce7-bed9-a157c914056c',
@@ -74,8 +75,7 @@ values
     'Jordan Williams',
     'JW',
     'client',
-    'Wednesday',                   -- ← Jordan's assigned check-in day
-    'aaaaaaaa-0000-0000-0000-000000000001'
+    'Wednesday'    -- ← Jordan's assigned check-in day
   )
 on conflict (id) do update
   set
@@ -83,7 +83,6 @@ on conflict (id) do update
     name       = excluded.name,
     initials   = excluded.initials,
     role       = excluded.role,
-    company_id = excluded.company_id,
     -- Only overwrite update_day when the seed value is not null,
     -- so a coach's live assignment is never clobbered by a re-run.
     update_day = coalesce(public.user_profiles.update_day, excluded.update_day);
