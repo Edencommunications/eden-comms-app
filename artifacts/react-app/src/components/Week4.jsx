@@ -227,6 +227,14 @@ const DEMO_WORKOUTS = [
   },
 ]
 
+// Day ordering helpers
+const ALL_DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+function orderedDays(startDay) {
+  const i = ALL_DAYS.indexOf(startDay)
+  if (i < 0) return ALL_DAYS
+  return [...ALL_DAYS.slice(i), ...ALL_DAYS.slice(0, i)]
+}
+
 // 6 weeks of progressive demo logs (keys: `${week}_${exId}_${setIdx}` and cardio)
 function makeLogs(w, bench, inc, sho, lat, tri, cardio) {
   const k = (id,i) => `${w}_${id}_${i}`
@@ -404,6 +412,8 @@ Training Principles:
   const [cardio, setCardio] = useState([
     {type:'Brisk Walk', duration:'45-60 min', frequency:'Daily', notes:'Fasted morning walk preferred'},
   ])
+  // Coach-configurable day the tracking week starts on (default Wed)
+  const [cardioWeekStart, setCardioWeekStart] = useState('Wed')
 
   // ── Calendar state ────────────────────────────────────────
   const [calendarUrl, setCalendarUrl] = useState(DEFAULT_CALENDAR_URL)
@@ -510,12 +520,13 @@ Training Principles:
     if (data?.[0]) {
       try {
         const raw = JSON.parse(data[0].workouts)
-        // Support both old (array) and new ({exercises,principles}) format
+        // Support both old (array) and new ({exercises,principles,cardioWeekStart}) format
         if (Array.isArray(raw)) {
           setWorkouts(raw)
         } else {
           if (raw.exercises) setWorkouts(raw.exercises)
           if (raw.principles) setTrainingPrinciples(raw.principles)
+          if (raw.cardioWeekStart) setCardioWeekStart(raw.cardioWeekStart)
         }
       } catch(e) {}
       try {
@@ -641,8 +652,8 @@ Training Principles:
   }
 
   async function saveWorkoutPlan() {
-    // Embed principles inside the workouts JSON blob so no schema change is needed
-    const payload = { exercises: workouts, principles: trainingPrinciples }
+    // Embed principles + cardioWeekStart inside the workouts JSON blob so no schema change is needed
+    const payload = { exercises: workouts, principles: trainingPrinciples, cardioWeekStart }
     await dbInsert('workout_plans',{
       client_id:CLIENT_UUID, coach_id:COACH_UUID,
       workouts:JSON.stringify(payload),
@@ -1170,12 +1181,27 @@ Training Principles:
           <Card sx={{marginBottom:12}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
               <Lbl t="Cardio Protocol"/>
-              {isCoach&&(
-                <button onClick={addCardio}
-                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                  + Add Cardio
-                </button>
-              )}
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                {isCoach&&(
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:10,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>Week starts</span>
+                    <select
+                      value={cardioWeekStart}
+                      onChange={e=>setCardioWeekStart(e.target.value)}
+                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.white,fontSize:11,cursor:'pointer',outline:'none'}}>
+                      {ALL_DAYS.map(d=>(
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {isCoach&&(
+                  <button onClick={addCardio}
+                    style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                    + Add Cardio
+                  </button>
+                )}
+              </div>
             </div>
 
             {cardio.map((c,i)=>(
@@ -1233,7 +1259,7 @@ Training Principles:
                 Read-only view of Jordan's submitted log. Use the week selector in the sidebar to browse other weeks.
               </div>
             )}
-            {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
+            {orderedDays(cardioWeekStart).map(day=>{
               const actKey   = `${activeWeek}_cardio_${day}_activity`
               const stepsKey = `${activeWeek}_cardio_${day}_steps`
               const activity = workoutLogs[actKey] || ''
