@@ -22,6 +22,7 @@ import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
 import Wearables from "./components/Wearables";
+import InstallBanner from "./components/InstallBanner";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -3388,6 +3389,7 @@ export default function App() {
   return (
     <AuthContext.Provider value={{ user, logout:()=>setUser(null) }}>
       <AppShell user={user} onLogout={()=>setUser(null)}/>
+      <InstallBanner />
     </AuthContext.Provider>
   );
 }
