@@ -530,14 +530,18 @@ Training Principles:
       const data = await dbGet('client_workout_logs',
         `client_id=eq.${CLIENT_UUID}&order=week.desc&select=week,saved_at`
       )
-      if (data?.length) {
-        setWeekHistory(data)           // most recent first (order=week.desc)
-        setActiveWeek(data[0].week)    // default to most recent saved week
-      } else {
-        // No DB rows yet — show 6 weeks of demo history
-        setWeekHistory(DEMO_WEEK_HISTORY)
-        setActiveWeek(6)
+      // Always show all 6 demo weeks; swap in real DB dates where they exist
+      const dbMap = new Map((data||[]).map(r=>[r.week, r.saved_at]))
+      const merged = DEMO_WEEK_HISTORY.map(({week,saved_at})=>({
+        week, saved_at: dbMap.has(week) ? dbMap.get(week) : saved_at
+      }))
+      // Append any DB weeks beyond the demo range (week > 6)
+      for (const r of (data||[])) {
+        if (!merged.find(m=>m.week===r.week)) merged.push(r)
       }
+      merged.sort((a,b)=>b.week-a.week)
+      setWeekHistory(merged)
+      setActiveWeek(merged[0].week)
     } catch(e) {
       // table may not exist yet — fall back to demo history
       setWeekHistory(DEMO_WEEK_HISTORY)
@@ -547,15 +551,22 @@ Training Principles:
 
   // ── Load workout logs for a given week ────────────────────
   async function loadWorkoutLog(week) {
-    const fallback = DEMO_WEEK_LOGS[week] || {}
+    const demo = DEMO_WEEK_LOGS[week] || {}
     try {
       const data = await dbGet('client_workout_logs',
         `client_id=eq.${CLIENT_UUID}&week=eq.${week}&limit=1`
       )
       const saved = data?.[0]?.logs
-      setWorkoutLogs((saved && Object.keys(saved).length > 0) ? saved : fallback)
+      if (saved && Object.keys(saved).length > 0) {
+        // If saved log has no cardio keys, supplement with demo cardio so the
+        // Cardio tab always shows data for all 6 weeks
+        const hasCardio = Object.keys(saved).some(k=>k.includes('_cardio_'))
+        setWorkoutLogs(hasCardio ? saved : {...demo, ...saved})
+      } else {
+        setWorkoutLogs(demo)
+      }
     } catch(e) {
-      setWorkoutLogs(fallback)
+      setWorkoutLogs(demo)
     }
   }
 
