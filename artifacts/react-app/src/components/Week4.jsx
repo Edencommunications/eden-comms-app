@@ -171,7 +171,9 @@ function Sel({label,value,onChange,options}) {
 export default function Week4({currentUser, initialTab='labs'}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
-  const role    = info.role
+  // Prefer the role passed in currentUser (App.tsx sets role:user.role on toolUser so a coach
+  // viewing a client still sees coach controls), fall back to KNOWN_USERS lookup.
+  const role    = currentUser?.role || info.role
   const myUUID  = info.uuid
   const isCoach  = role==='coach'||role==='super_admin'
   const isClient = role==='client'
@@ -739,7 +741,8 @@ export default function Week4({currentUser, initialTab='labs'}) {
               )}
 
               {!isCoach&&(
-                <button style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20}}>
+                <button onClick={()=>alert(`Week ${activeWeek} log saved!`)}
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20}}>
                   Save Week {activeWeek} Log
                 </button>
               )}
