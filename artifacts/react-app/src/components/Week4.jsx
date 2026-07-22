@@ -227,30 +227,124 @@ const DEMO_WORKOUTS = [
   },
 ]
 
-// Week-1 logs shown before the client saves real data (keys match `${week}_${exId}_${setIdx}`)
-const DEMO_LOGS = {
-  // Push Day A — Bench
-  '1_dpa_bench_0':{weight:'135',reps:'12'},'1_dpa_bench_1':{weight:'155',reps:'12'},
-  '1_dpa_bench_2':{weight:'175',reps:'11'},'1_dpa_bench_3':{weight:'185',reps:'10'},
-  // Push Day A — Incline DB
-  '1_dpa_incline_0':{weight:'50',reps:'12'},'1_dpa_incline_1':{weight:'55',reps:'12'},
-  '1_dpa_incline_2':{weight:'60',reps:'11'},'1_dpa_incline_3':{weight:'65',reps:'9'},
-  // Push Day A — Shoulder Press
-  '1_dpa_shoulder_0':{weight:'35',reps:'12'},'1_dpa_shoulder_1':{weight:'40',reps:'12'},
-  '1_dpa_shoulder_2':{weight:'45',reps:'10'},'1_dpa_shoulder_3':{weight:'45',reps:'9'},
-  // Push Day A — Lateral Raise
-  '1_dpa_lateral_0':{weight:'10',reps:'12'},'1_dpa_lateral_1':{weight:'12',reps:'12'},
-  '1_dpa_lateral_2':{weight:'15',reps:'10'},
-  // Push Day A — Tricep Pushdown
-  '1_dpa_tri_0':{weight:'50',reps:'12'},'1_dpa_tri_1':{weight:'55',reps:'12'},
-  '1_dpa_tri_2':{weight:'60',reps:'11'},'1_dpa_tri_3':{weight:'65',reps:'10'},
-  // Cardio log — Week 1
-  '1_cardio_Mon_activity':'Brisk Walk 45min','1_cardio_Mon_steps':'8500',
-  '1_cardio_Tue_activity':'Treadmill 30min', '1_cardio_Tue_steps':'6200',
-  '1_cardio_Wed_activity':'Brisk Walk 45min','1_cardio_Wed_steps':'9100',
-  '1_cardio_Thu_activity':'HIIT 20min',      '1_cardio_Thu_steps':'4500',
-  '1_cardio_Fri_activity':'Brisk Walk 45min','1_cardio_Fri_steps':'8800',
+// 6 weeks of progressive demo logs (keys: `${week}_${exId}_${setIdx}` and cardio)
+function makeLogs(w, bench, inc, sho, lat, tri, cardio) {
+  const k = (id,i) => `${w}_${id}_${i}`
+  return {
+    // Push Day A — Bench
+    [k('dpa_bench',0)]:{weight:bench[0],reps:'12'}, [k('dpa_bench',1)]:{weight:bench[1],reps:'12'},
+    [k('dpa_bench',2)]:{weight:bench[2],reps:'11'}, [k('dpa_bench',3)]:{weight:bench[3],reps:bench[3]>=200?'10':'11'},
+    // Incline DB
+    [k('dpa_incline',0)]:{weight:inc[0],reps:'12'}, [k('dpa_incline',1)]:{weight:inc[1],reps:'12'},
+    [k('dpa_incline',2)]:{weight:inc[2],reps:'11'}, [k('dpa_incline',3)]:{weight:inc[3],reps:'9'},
+    // Shoulder Press
+    [k('dpa_shoulder',0)]:{weight:sho[0],reps:'12'}, [k('dpa_shoulder',1)]:{weight:sho[1],reps:'12'},
+    [k('dpa_shoulder',2)]:{weight:sho[2],reps:'11'}, [k('dpa_shoulder',3)]:{weight:sho[3],reps:'9'},
+    // Lateral Raise (3 sets)
+    [k('dpa_lateral',0)]:{weight:lat[0],reps:'12'}, [k('dpa_lateral',1)]:{weight:lat[1],reps:'12'},
+    [k('dpa_lateral',2)]:{weight:lat[2],reps:'10'},
+    // Tricep Pushdown
+    [k('dpa_tri',0)]:{weight:tri[0],reps:'12'}, [k('dpa_tri',1)]:{weight:tri[1],reps:'12'},
+    [k('dpa_tri',2)]:{weight:tri[2],reps:'11'}, [k('dpa_tri',3)]:{weight:tri[3],reps:'10'},
+    // Pull Day A — Pulldown
+    [k('pla_pulldown',0)]:{weight:String(+bench[0]-15),reps:'12'}, [k('pla_pulldown',1)]:{weight:String(+bench[1]-15),reps:'12'},
+    [k('pla_pulldown',2)]:{weight:String(+bench[2]-15),reps:'10'}, [k('pla_pulldown',3)]:{weight:String(+bench[3]-15),reps:'9'},
+    // Pull Day A — Cable Row
+    [k('pla_cable',0)]:{weight:String(+bench[0]-20),reps:'12'}, [k('pla_cable',1)]:{weight:String(+bench[1]-20),reps:'12'},
+    [k('pla_cable',2)]:{weight:String(+bench[2]-20),reps:'11'}, [k('pla_cable',3)]:{weight:String(+bench[3]-20),reps:'10'},
+    // Pull Day A — Bent Over Row
+    [k('pla_row',0)]:{weight:String(+bench[0]+10),reps:'12'}, [k('pla_row',1)]:{weight:String(+bench[1]+10),reps:'12'},
+    [k('pla_row',2)]:{weight:String(+bench[2]+10),reps:'10'}, [k('pla_row',3)]:{weight:String(+bench[3]+10),reps:'9'},
+    // Pull Day A — Hammer Curl
+    [k('pla_hammer',0)]:{weight:'35',reps:'12'}, [k('pla_hammer',1)]:{weight:'40',reps:'12'},
+    [k('pla_hammer',2)]:{weight:'45',reps:'10'},
+    // Pull Day A — Preacher Curl
+    [k('pla_preacher',0)]:{weight:tri[0],reps:'12'}, [k('pla_preacher',1)]:{weight:tri[1],reps:'12'},
+    [k('pla_preacher',2)]:{weight:tri[2],reps:'10'},
+    // Leg Day A — Squat
+    [k('lda_squat',0)]:{weight:'135',reps:'12'}, [k('lda_squat',1)]:{weight:String(+bench[1]+10),reps:'12'},
+    [k('lda_squat',2)]:{weight:String(+bench[2]+10),reps:'11'}, [k('lda_squat',3)]:{weight:String(+bench[3]+20),reps:'10'},
+    [k('lda_squat',4)]:{weight:String(+bench[3]+30),reps:'9'},
+    // Leg Press
+    [k('lda_press',0)]:{weight:'270',reps:'12'}, [k('lda_press',1)]:{weight:String(270+w*10),reps:'12'},
+    [k('lda_press',2)]:{weight:String(310+w*10),reps:'11'}, [k('lda_press',3)]:{weight:String(330+w*10),reps:'10'},
+    // Split Squat
+    [k('lda_split',0)]:{weight:inc[0],reps:'12'}, [k('lda_split',1)]:{weight:inc[1],reps:'12'},
+    [k('lda_split',2)]:{weight:inc[2],reps:'10'},
+    // Leg Ext
+    [k('lda_ext',0)]:{weight:'90',reps:'12'}, [k('lda_ext',1)]:{weight:String(90+w*5),reps:'12'},
+    [k('lda_ext',2)]:{weight:String(100+w*5),reps:'11'}, [k('lda_ext',3)]:{weight:String(110+w*5),reps:'10'},
+    // Hip Thrust
+    [k('lda_thrust',0)]:{weight:String(+bench[1]+30),reps:'12'}, [k('lda_thrust',1)]:{weight:String(+bench[2]+30),reps:'12'},
+    [k('lda_thrust',2)]:{weight:String(+bench[3]+30),reps:'11'}, [k('lda_thrust',3)]:{weight:String(+bench[3]+40),reps:'10'},
+    // Cardio
+    [`${w}_cardio_Mon_activity`]:cardio.mon, [`${w}_cardio_Mon_steps`]:cardio.monS,
+    [`${w}_cardio_Tue_activity`]:cardio.tue, [`${w}_cardio_Tue_steps`]:cardio.tueS,
+    [`${w}_cardio_Wed_activity`]:cardio.wed, [`${w}_cardio_Wed_steps`]:cardio.wedS,
+    [`${w}_cardio_Thu_activity`]:cardio.thu, [`${w}_cardio_Thu_steps`]:cardio.thuS,
+    [`${w}_cardio_Fri_activity`]:cardio.fri, [`${w}_cardio_Fri_steps`]:cardio.friS,
+    ...(cardio.sat ? {[`${w}_cardio_Sat_activity`]:cardio.sat,[`${w}_cardio_Sat_steps`]:cardio.satS} : {}),
+  }
 }
+
+const DEMO_WEEK_LOGS = {
+  1: makeLogs(1,
+    ['135','155','175','185'], ['50','55','60','65'],
+    ['35','40','45','45'],     ['10','12','15'],
+    ['50','55','60','65'],
+    {mon:'Brisk Walk 45min',monS:'8500', tue:'Treadmill 30min',tueS:'6200',
+     wed:'Brisk Walk 45min',wedS:'9100', thu:'HIIT 20min',thuS:'4500',
+     fri:'Brisk Walk 45min',friS:'8800'}),
+  2: makeLogs(2,
+    ['135','160','180','190'], ['50','55','65','65'],
+    ['35','40','45','50'],     ['12','12','15'],
+    ['55','60','60','70'],
+    {mon:'Brisk Walk 50min',monS:'9200', tue:'Treadmill 35min',tueS:'6800',
+     wed:'Brisk Walk 45min',wedS:'9400', thu:'HIIT 25min',thuS:'5100',
+     fri:'Brisk Walk 50min',friS:'9000'}),
+  3: makeLogs(3,
+    ['145','165','185','190'], ['55','60','65','70'],
+    ['40','40','50','50'],     ['12','15','15'],
+    ['55','60','65','70'],
+    {mon:'Brisk Walk 50min',monS:'9500', tue:'Treadmill 35min',tueS:'7000',
+     wed:'Brisk Walk 50min',wedS:'9800', thu:'HIIT 25min',thuS:'5300',
+     fri:'Brisk Walk 50min',friS:'9200',
+     sat:'Light Walk 30min', satS:'4200'}),
+  4: makeLogs(4,
+    ['145','165','185','195'], ['55','60','65','70'],
+    ['40','45','50','50'],     ['12','15','15'],
+    ['60','65','65','70'],
+    {mon:'Brisk Walk 55min',monS:'10100', tue:'Treadmill 40min',tueS:'7400',
+     wed:'Brisk Walk 55min',wedS:'10400', thu:'HIIT 30min',thuS:'5800',
+     fri:'Brisk Walk 55min',friS:'10000',
+     sat:'Light Walk 30min', satS:'4500'}),
+  5: makeLogs(5,
+    ['155','170','190','200'], ['55','60','70','70'],
+    ['40','45','50','55'],     ['12','15','15'],
+    ['60','65','70','75'],
+    {mon:'Brisk Walk 60min',monS:'10800', tue:'Treadmill 40min',tueS:'7800',
+     wed:'Brisk Walk 60min',wedS:'11200', thu:'HIIT 30min',thuS:'6200',
+     fri:'Brisk Walk 60min',friS:'10600',
+     sat:'Light Walk 35min', satS:'5000'}),
+  6: makeLogs(6,
+    ['155','175','195','205'], ['60','65','70','75'],
+    ['45','45','50','55'],     ['15','15','20'],
+    ['60','65','70','75'],
+    {mon:'Brisk Walk 60min',monS:'11500', tue:'Treadmill 45min',tueS:'8200',
+     wed:'Brisk Walk 60min',wedS:'11800', thu:'HIIT 35min',thuS:'6600',
+     fri:'Brisk Walk 60min',friS:'11200',
+     sat:'Light Walk 40min', satS:'5500'}),
+}
+
+// Sidebar week history — shown when DB table does not yet exist
+const DEMO_WEEK_HISTORY = [
+  {week:6, saved_at:'2025-02-10T09:00:00Z'},
+  {week:5, saved_at:'2025-02-03T09:00:00Z'},
+  {week:4, saved_at:'2025-01-27T09:00:00Z'},
+  {week:3, saved_at:'2025-01-20T09:00:00Z'},
+  {week:2, saved_at:'2025-01-13T09:00:00Z'},
+  {week:1, saved_at:'2025-01-06T09:00:00Z'},
+]
 
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
@@ -300,7 +394,7 @@ Training Principles:
   const [exSearch,           setExSearch]            = useState('')
   const [exCategory,         setExCategory]          = useState('Push')
   const [activeWeek,         setActiveWeek]          = useState(1)
-  const [workoutLogs,        setWorkoutLogs]         = useState(DEMO_LOGS)
+  const [workoutLogs,        setWorkoutLogs]         = useState(DEMO_WEEK_LOGS[6]||{})
   const [logSaving,          setLogSaving]           = useState(false)
   const [principlesEditing,  setPrinciplesEditing]   = useState(false)
   // weekHistory: [{week, saved_at}] sorted most-recent first
@@ -439,15 +533,21 @@ Training Principles:
       if (data?.length) {
         setWeekHistory(data)           // most recent first (order=week.desc)
         setActiveWeek(data[0].week)    // default to most recent saved week
+      } else {
+        // No DB rows yet — show 6 weeks of demo history
+        setWeekHistory(DEMO_WEEK_HISTORY)
+        setActiveWeek(6)
       }
     } catch(e) {
-      // table may not exist yet — silently ignore
+      // table may not exist yet — fall back to demo history
+      setWeekHistory(DEMO_WEEK_HISTORY)
+      setActiveWeek(6)
     }
   }
 
   // ── Load workout logs for a given week ────────────────────
   async function loadWorkoutLog(week) {
-    const fallback = week === 1 ? DEMO_LOGS : {}
+    const fallback = DEMO_WEEK_LOGS[week] || {}
     try {
       const data = await dbGet('client_workout_logs',
         `client_id=eq.${CLIENT_UUID}&week=eq.${week}&limit=1`
