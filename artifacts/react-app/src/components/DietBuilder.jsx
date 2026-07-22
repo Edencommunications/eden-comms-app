@@ -614,6 +614,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     cycleNotes:'',cyclePain:'5',notes:'',
   })
   const setC = k=>v=>setCi(p=>({...p,[k]:v}))
+  const [mealNotes, setMealNotes] = useState({})  // per-meal adjustment notes from client, keyed by meal name
 
   // Check-in hub state
   const [localCheckins,    setLocalCheckins]    = useState([])
@@ -660,6 +661,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           clientNotes:      r.notes||'',        coachNotes:       '',
           coachLoom:        '',
           habits:           r.habits || null,   habitPct:         r.habit_pct,
+          mealNotes:        r.meal_notes || null,
           _dbId:            r.id,
         }))
         setLocalCheckins(prev => {
@@ -902,7 +904,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setAssignedRecipes(p=>[...p,{...recipe,meal_name:mealName,db_id:null}])
     await dbInsert('client_recipes',{client_id:uuid,coach_id:coachId,recipe_name:recipe.name,recipe_data:recipe,meal_name:mealName,assigned_at:new Date().toISOString()})
     const rows = await dbGet('client_recipes',`client_id=eq.${uuid}&order=assigned_at.desc`)
-    if(Array.isArray(rows)) setAssignedRecipes(rows.map(r=>{
+    // Only overwrite state if DB returned real rows (dbGet returns [] on error — must guard against wiping optimistic update)
+    if(Array.isArray(rows) && rows.length > 0) setAssignedRecipes(rows.map(r=>{
       const d = typeof r.recipe_data==='string' ? JSON.parse(r.recipe_data) : (r.recipe_data||{})
       return {...d, recipe_name:r.recipe_name, meal_name:r.meal_name||'', db_id:r.id}
     }))
@@ -1098,7 +1101,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {/* Client: adjustment note per meal */}
                 {isClient&&(
                   <div style={{marginTop:8}}>
-                    <textarea placeholder="Note any adjustments you made to this meal this week…"
+                    <textarea
+                      value={mealNotes[meal.name]||''}
+                      onChange={e=>setMealNotes(p=>({...p,[meal.name]:e.target.value}))}
+                      placeholder="Note any adjustments you made to this meal this week…"
                       style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:44,fontFamily:'inherit'}}/>
                   </div>
                 )}
@@ -1506,6 +1512,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
                             <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Client Notes</div>
                             <div style={{fontSize:12,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{ci.clientNotes}</div>
+                          </div>
+                        )}
+
+                        {/* Meal adjustment notes from client */}
+                        {ci.mealNotes&&Object.keys(ci.mealNotes).some(k=>ci.mealNotes[k])&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                            <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>🍽 Meal Adjustments</div>
+                            {Object.entries(ci.mealNotes).filter(([,v])=>v).map(([mealName,note])=>(
+                              <div key={mealName} style={{marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${C.border}`}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:.5,marginBottom:3}}>{mealName}</div>
+                                <div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{note}</div>
+                              </div>
+                            ))}
                           </div>
                         )}
 
@@ -2049,6 +2068,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     bowel_count:      ci.bowelCount,       bowel_type:       ci.bowelType,
                     notes:            ci.notes,            habits:           habitCounts,
                     habit_pct:        habitScore,          submitted_at:     new Date().toISOString(),
+                    meal_notes:       Object.keys(mealNotes).some(k=>mealNotes[k]) ? mealNotes : null,
                   })
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                 }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>

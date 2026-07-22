@@ -46,8 +46,12 @@ create table if not exists public.weekly_checkins (
 
   -- Habits (JSON object of { habitId: count })
   habits           jsonb,
-  habit_pct        int2
+  habit_pct        int2,
+  meal_notes       jsonb    -- per-meal adjustment notes from client, e.g. {"Meal 1":"skipped carbs"}
 );
+
+-- If you already ran the previous migration, add the column with:
+-- alter table public.weekly_checkins add column if not exists meal_notes jsonb;
 
 -- Index for fast client lookups
 create index if not exists weekly_checkins_client_idx
