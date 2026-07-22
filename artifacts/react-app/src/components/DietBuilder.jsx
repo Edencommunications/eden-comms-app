@@ -289,6 +289,15 @@ function mealMacros(meal) {
   }), {cal:0,pro:0,fat:0,carb:0,fib:0})
 }
 
+// Parse "4oz"→{amount:4,unit:'oz'}, "184g"→{amount:184,unit:'g'}, "240ml"→{amount:240,unit:'ml'}
+function parseServing(serving='') {
+  const m = serving.match(/^([\d.]+)\s*(oz|g|ml|mg)/)
+  if (m) return { amount: parseFloat(m[1]), unit: m[2] }
+  const m2 = serving.match(/^([\d.]+)\s*(.+)/)
+  if (m2) return { amount: parseFloat(m2[1]), unit: m2[2].trim() }
+  return { amount: 1, unit: serving }
+}
+
 function calcBMR(weight,height,age,gender) {
   const w=parseFloat(weight)*0.453592, h=parseFloat(height)*2.54, a=parseFloat(age)
   if(!w||!h||!a) return 0
@@ -353,12 +362,14 @@ function Card({children,sx={}}) {
 
 // ── View-only food row (client sees this instead of editable row) ──
 function ReadOnlyFoodRow({item}) {
+  const ps = parseServing(item.food.serving)
+  const actualAmt = Math.round(item.servings * ps.amount * 10) / 10
   return (
     <div style={{padding:'7px 0',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
         <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-          {item.food.serving} × {item.servings} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g Fib:{Math.round(item.food.fib*item.servings)}g
+          {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g Fib:{Math.round(item.food.fib*item.servings)}g
         </div>
       </div>
     </div>
@@ -817,8 +828,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   const totals = meals.reduce((a,m)=>{
-    const mt=mealMacros(m)
-    return {cal:a.cal+mt.cal,pro:a.pro+mt.pro,fat:a.fat+mt.fat,carb:a.carb+mt.carb,fib:a.fib+mt.fib}
+    const mt = mealMacros(m)
+    const rs = assignedRecipes.filter(r=>(r.meal_name||'')=== m.name).reduce((ra,r)=>({
+      cal: ra.cal+(r.cal||0)*(r.servings||1), pro: ra.pro+(r.pro||0)*(r.servings||1),
+      fat: ra.fat+(r.fat||0)*(r.servings||1), carb:ra.carb+(r.carb||0)*(r.servings||1),
+      fib: ra.fib+(r.fib||0)*(r.servings||1),
+    }),{cal:0,pro:0,fat:0,carb:0,fib:0})
+    return {
+      cal: a.cal+mt.cal+Math.round(rs.cal), pro: a.pro+mt.pro+Math.round(rs.pro),
+      fat: a.fat+mt.fat+Math.round(rs.fat), carb:a.carb+mt.carb+Math.round(rs.carb),
+      fib: a.fib+mt.fib+Math.round(rs.fib),
+    }
   },{cal:0,pro:0,fat:0,carb:0,fib:0})
 
   function addFood(food) {
@@ -912,8 +932,16 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   async function removeRecipe(dbId, recipeName) {
-    setAssignedRecipes(p=>p.filter(r=>r.db_id!==dbId&&r.name!==recipeName))
+    setAssignedRecipes(p=>p.filter(r=>r.db_id!==dbId&&(r.name||r.recipe_name)!==recipeName))
     if(dbId) await dbDelete('client_recipes',`id=eq.${dbId}`)
+  }
+
+  function updateRecipeServings(dbId, recipeName, newServings) {
+    const s = Math.max(0.25, Math.round((parseFloat(newServings)||1)*4)/4)  // snap to 0.25
+    setAssignedRecipes(p=>p.map(r=>
+      (r.db_id===dbId||(r.db_id==null&&(r.name||r.recipe_name)===recipeName))
+        ? {...r, servings:s} : r
+    ))
   }
 
   function toggleHabitAssign(habit) {
@@ -1024,14 +1052,23 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
           {/* Meals */}
           {meals.map((meal,mi)=>{
-            const mt=mealMacros(meal)
+            const mt = mealMacros(meal)
+            const mealRecs = assignedRecipes.filter(r=>(r.meal_name||'')=== meal.name)
+            const recM = mealRecs.reduce((a,r)=>({
+              cal: a.cal+(r.cal||0)*(r.servings||1), pro: a.pro+(r.pro||0)*(r.servings||1),
+              fat: a.fat+(r.fat||0)*(r.servings||1), carb:a.carb+(r.carb||0)*(r.servings||1),
+            }),{cal:0,pro:0,fat:0,carb:0})
+            const totalMt = {
+              cal: mt.cal+Math.round(recM.cal), pro: mt.pro+Math.round(recM.pro),
+              fat: mt.fat+Math.round(recM.fat), carb:mt.carb+Math.round(recM.carb),
+            }
             return (
               <Card key={mi} sx={{marginBottom:10}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
                   <div style={{fontWeight:700,fontSize:14,color:C.white}}>{meal.name}</div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:11,color:C.gold,fontWeight:600}}>{mt.cal} cal</span>
-                    <span style={{fontSize:10,color:C.muted}}>P:{mt.pro}g C:{mt.carb}g F:{mt.fat}g</span>
+                    <span style={{fontSize:11,color:C.gold,fontWeight:600}}>{totalMt.cal} cal</span>
+                    <span style={{fontSize:10,color:C.muted}}>P:{totalMt.pro}g C:{totalMt.carb}g F:{totalMt.fat}g</span>
                     {/* + Food button — coach only */}
                     {isCoach&&(
                       <button onClick={()=>{setActiveMeal(mi);setShowPicker(true)}}
@@ -1048,23 +1085,30 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   </div>
                 ):meal.foods.map((item,fi)=>(
                   isCoach?(
-                    // Coach: full editable row
-                    <div key={fi} style={{padding:'7px 0',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
-                        <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                          {item.food.serving} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g
+                    // Coach: full editable row with actual unit input
+                    (()=>{
+                      const ps = parseServing(item.food.serving)
+                      const actualAmt = Math.round(item.servings * ps.amount * 10) / 10
+                      const step = ps.unit==='g'||ps.unit==='ml'?5:ps.unit==='oz'?0.5:0.25
+                      return (
+                        <div key={fi} style={{padding:'7px 0',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
+                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                              {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g
+                            </div>
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                            <input type="number" min={step} step={step} value={actualAmt}
+                              onChange={e=>{const v=parseFloat(e.target.value);if(v>0)updateServings(mi,fi,v/ps.amount)}}
+                              style={{width:54,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.white,fontSize:12,outline:'none',textAlign:'center'}}/>
+                            <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{ps.unit}</span>
+                            <button onClick={()=>removeFood(mi,fi)}
+                              style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 2px',marginLeft:2}}>×</button>
+                          </div>
                         </div>
-                      </div>
-                      <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-                        <span style={{fontSize:10,color:C.muted}}>×</span>
-                        <input type="number" min="0.25" step="0.25" value={item.servings}
-                          onChange={e=>updateServings(mi,fi,e.target.value)}
-                          style={{width:46,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.white,fontSize:12,outline:'none',textAlign:'center'}}/>
-                        <button onClick={()=>removeFood(mi,fi)}
-                          style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 2px'}}>×</button>
-                      </div>
-                    </div>
+                      )
+                    })()
                   ):(
                     // Client: view only row
                     <ReadOnlyFoodRow key={fi} item={item}/>
@@ -1077,37 +1121,45 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   if(mealRecipes.length===0) return null
                   return (
                     <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${C.gold}33`}}>
-                      {mealRecipes.map((r,ri)=>(
-                        <div key={ri} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',
-                          borderBottom:ri<mealRecipes.length-1?`1px solid ${C.border}22`:'none'}}>
-                          <span style={{fontSize:18,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:700,color:C.gold,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
-                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>{r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                      {mealRecipes.map((r,ri)=>{
+                        const s = r.servings||1
+                        const rName = r.name||r.recipe_name
+                        return (
+                          <div key={ri} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',
+                            borderBottom:ri<mealRecipes.length-1?`1px solid ${C.border}22`:'none'}}>
+                            <span style={{fontSize:18,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,fontWeight:700,color:C.gold,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{rName}</div>
+                              <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                                {s!==1&&<span style={{color:C.gold,marginRight:3}}>×{s}</span>}
+                                {Math.round((r.cal||0)*s)} cal · P:{Math.round((r.pro||0)*s)}g · C:{Math.round((r.carb||0)*s)}g · F:{Math.round((r.fat||0)*s)}g
+                              </div>
+                            </div>
+                            {isCoach&&(
+                              <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button onClick={()=>updateRecipeServings(r.db_id,rName,s-0.25)} disabled={s<=0.25}
+                                  style={{width:22,height:22,borderRadius:5,border:`1px solid ${C.border}`,background:C.surface,color:C.white,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:s<=0.25?0.4:1,padding:0,lineHeight:1}}>−</button>
+                                <span style={{fontSize:11,fontWeight:700,color:C.white,width:26,textAlign:'center'}}>{s}</span>
+                                <button onClick={()=>updateRecipeServings(r.db_id,rName,s+0.25)}
+                                  style={{width:22,height:22,borderRadius:5,border:`1px solid ${C.border}`,background:C.surface,color:C.white,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1}}>+</button>
+                                <span style={{fontSize:9,color:C.muted,marginRight:4}}>srv</span>
+                                <button onClick={()=>removeRecipe(r.db_id,rName)}
+                                  style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',padding:'0 2px',lineHeight:1}}>×</button>
+                              </div>
+                            )}
+                            {isClient&&(
+                              <span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:20,background:`${C.gold}22`,color:C.gold,flexShrink:0}}>
+                                {s!==1?`×${s} `:''}Recipe
+                              </span>
+                            )}
                           </div>
-                          {isCoach&&(
-                            <button onClick={()=>removeRecipe(r.db_id,r.name||r.recipe_name)}
-                              style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',padding:'0 4px',flexShrink:0,lineHeight:1}}>×</button>
-                          )}
-                          {isClient&&(
-                            <span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:20,background:`${C.gold}22`,color:C.gold,flexShrink:0}}>Recipe</span>
-                          )}
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )
                 })()}
 
-                {/* Client: adjustment note per meal */}
-                {isClient&&(
-                  <div style={{marginTop:8}}>
-                    <textarea
-                      value={mealNotes[meal.name]||''}
-                      onChange={e=>setMealNotes(p=>({...p,[meal.name]:e.target.value}))}
-                      placeholder="Note any adjustments you made to this meal this week…"
-                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:44,fontFamily:'inherit'}}/>
-                  </div>
-                )}
+{/* meal notes now live in the Check-In > Submit tab */}
               </Card>
             )
           })}
@@ -2052,6 +2104,27 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     📸 Upload progress photos (front, side, back) in the Photos tab above
                   </div>
                 </Card>
+
+                {/* Meal adjustment notes — one textarea per meal */}
+                {meals.length>0&&(
+                  <Card sx={{marginBottom:12}}>
+                    <Lbl t="🍽 Meal Adjustments This Week"/>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.6}}>
+                      Did you swap anything, skip a meal, or adjust portions? Let your coach know below. Fill this out as close to your check-in as possible.
+                    </div>
+                    {meals.map((meal,mi)=>(
+                      <div key={mi} style={{marginBottom:mi<meals.length-1?14:0}}>
+                        <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:5}}>{meal.name}</div>
+                        <textarea
+                          value={mealNotes[meal.name]||''}
+                          onChange={e=>setMealNotes(p=>({...p,[meal.name]:e.target.value}))}
+                          placeholder={`Any changes to ${meal.name} this week…`}
+                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:48,fontFamily:'inherit'}}/>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+
                 <button onClick={async()=>{
                   await dbInsert('weekly_checkins',{
                     client_id:        KNOWN_USERS[email]?.uuid,
