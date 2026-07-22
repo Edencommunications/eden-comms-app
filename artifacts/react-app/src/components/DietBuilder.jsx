@@ -751,6 +751,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [showRecipePicker, setShowRecipePicker] = useState(false)
   const [recipeFilter,     setRecipeFilter]     = useState('All')
   const [recipeSearch,     setRecipeSearch]     = useState('')
+  const [pendingRecipe,    setPendingRecipe]    = useState(null)  // recipe waiting for meal selection
 
   // ── Rx / Prescription tracker ─────────────────────────────
   const [rxList,        setRxList]        = useState([])
@@ -888,22 +889,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         if(!Array.isArray(rows)) return
         setAssignedRecipes(rows.map(r=>{
           const d = typeof r.recipe_data==='string' ? JSON.parse(r.recipe_data) : (r.recipe_data||{})
-          return {...d, recipe_name:r.recipe_name, db_id:r.id}
+          return {...d, recipe_name:r.recipe_name, meal_name:r.meal_name||'', db_id:r.id}
         }))
       })
       .catch(()=>{})
   },[email])
 
-  async function assignRecipe(recipe) {
+  async function assignRecipe(recipe, mealName) {
     const uuid    = KNOWN_USERS[email]?.uuid
     const coachId = KNOWN_USERS['coach@eden.io']?.uuid
     if(!uuid||!coachId) return
-    setAssignedRecipes(p=>[...p,{...recipe,db_id:null}])
-    await dbInsert('client_recipes',{client_id:uuid,coach_id:coachId,recipe_name:recipe.name,recipe_data:recipe,assigned_at:new Date().toISOString()})
+    setAssignedRecipes(p=>[...p,{...recipe,meal_name:mealName,db_id:null}])
+    await dbInsert('client_recipes',{client_id:uuid,coach_id:coachId,recipe_name:recipe.name,recipe_data:recipe,meal_name:mealName,assigned_at:new Date().toISOString()})
     const rows = await dbGet('client_recipes',`client_id=eq.${uuid}&order=assigned_at.desc`)
     if(Array.isArray(rows)) setAssignedRecipes(rows.map(r=>{
       const d = typeof r.recipe_data==='string' ? JSON.parse(r.recipe_data) : (r.recipe_data||{})
-      return {...d, recipe_name:r.recipe_name, db_id:r.id}
+      return {...d, recipe_name:r.recipe_name, meal_name:r.meal_name||'', db_id:r.id}
     }))
   }
 
@@ -1067,6 +1068,33 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   )
                 ))}
 
+                {/* Recipes assigned to this meal */}
+                {(()=>{
+                  const mealRecipes = assignedRecipes.filter(r=>(r.meal_name||'')=== meal.name)
+                  if(mealRecipes.length===0) return null
+                  return (
+                    <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${C.gold}33`}}>
+                      {mealRecipes.map((r,ri)=>(
+                        <div key={ri} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',
+                          borderBottom:ri<mealRecipes.length-1?`1px solid ${C.border}22`:'none'}}>
+                          <span style={{fontSize:18,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:700,color:C.gold,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
+                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>{r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                          </div>
+                          {isCoach&&(
+                            <button onClick={()=>removeRecipe(r.db_id,r.name||r.recipe_name)}
+                              style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',padding:'0 4px',flexShrink:0,lineHeight:1}}>×</button>
+                          )}
+                          {isClient&&(
+                            <span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:20,background:`${C.gold}22`,color:C.gold,flexShrink:0}}>Recipe</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
                 {/* Client: adjustment note per meal */}
                 {isClient&&(
                   <div style={{marginTop:8}}>
@@ -1111,6 +1139,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
                         <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                        {r.meal_name&&<div style={{fontSize:10,color:C.gold,marginTop:3,fontWeight:600}}>📍 {r.meal_name}</div>}
                       </div>
                       <button onClick={()=>removeRecipe(r.db_id, r.name||r.recipe_name)}
                         style={{background:'none',border:'none',color:C.muted,fontSize:20,cursor:'pointer',padding:'0 4px',flexShrink:0,lineHeight:1}}>×</button>
@@ -2620,14 +2649,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       {/* ── Recipe Picker Modal ────────────────────────────────── */}
       {showRecipePicker&&isCoach&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:200,display:'flex',flexDirection:'column'}}>
-          <div style={{flex:1,background:C.black,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{flex:1,background:C.black,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
             {/* Header */}
             <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
               <div>
                 <div style={{fontSize:14,fontWeight:800,color:C.white}}>🍽 Assign a Recipe</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{assignedRecipes.length} assigned · tap to add</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{assignedRecipes.length} assigned · tap a recipe then choose the meal</div>
               </div>
-              <button onClick={()=>setShowRecipePicker(false)} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>×</button>
+              <button onClick={()=>{setShowRecipePicker(false);setPendingRecipe(null)}} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>×</button>
             </div>
             {/* Search */}
             <div style={{padding:'10px 16px',flexShrink:0}}>
@@ -2650,16 +2679,21 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 .filter(r=>(recipeFilter==='All'||r.category===recipeFilter)&&(!recipeSearch||r.name.toLowerCase().includes(recipeSearch.toLowerCase())))
                 .map((r,i)=>{
                   const already = assignedRecipes.some(a=>(a.name||a.recipe_name)===r.name)
+                  const isPending = pendingRecipe?.name===r.name
                   return (
-                    <div key={i} onClick={()=>{ if(!already) assignRecipe(r) }}
-                      style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderBottom:`1px solid ${C.border}`,cursor:already?'default':'pointer'}}>
+                    <div key={i} onClick={()=>{ if(!already) setPendingRecipe(r) }}
+                      style={{display:'flex',alignItems:'center',gap:12,borderBottom:`1px solid ${C.border}`,
+                        cursor:already?'default':'pointer',background:isPending?`${C.gold}11`:'none',
+                        margin:'0 -16px',padding:'12px 16px'}}>
                       <span style={{fontSize:24,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:already?C.gold:C.white}}>{r.name}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:already?C.gold:isPending?C.gold:C.white}}>{r.name}</div>
                         <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
                       </div>
                       {already?(
                         <span style={{fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}>✓ Assigned</span>
+                      ):isPending?(
+                        <span style={{fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}>↓ Pick meal</span>
                       ):(
                         <span style={{fontSize:18,color:C.gold,flexShrink:0,lineHeight:1}}>+</span>
                       )}
@@ -2670,11 +2704,38 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             </div>
             {/* Footer */}
             <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-              <button onClick={()=>setShowRecipePicker(false)}
+              <button onClick={()=>{setShowRecipePicker(false);setPendingRecipe(null)}}
                 style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:'11px 0',fontWeight:800,color:C.black,fontSize:14,cursor:'pointer'}}>
                 Done — {assignedRecipes.length} recipe{assignedRecipes.length!==1?'s':''} assigned
               </button>
             </div>
+
+            {/* ── Meal chooser sheet — slides up when a recipe is tapped ── */}
+            {pendingRecipe&&(
+              <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',alignItems:'flex-end',zIndex:10}}>
+                <div style={{background:C.black,width:'100%',borderTop:`2px solid ${C.gold}`,borderRadius:'16px 16px 0 0',padding:'20px 16px 24px',maxHeight:'70vh',overflowY:'auto'}}>
+                  <div style={{width:36,height:4,background:C.border,borderRadius:2,margin:'0 auto 16px'}}/>
+                  <div style={{fontSize:14,fontWeight:800,color:C.white,marginBottom:4}}>Which meal?</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:16,display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:18}}>{RECIPE_CAT_EMOJI[pendingRecipe.category]||'🍽'}</span>
+                    <span>{pendingRecipe.name} · {pendingRecipe.cal} cal</span>
+                  </div>
+                  {meals.map((meal,mi)=>(
+                    <button key={mi} onClick={()=>{assignRecipe(pendingRecipe,meal.name);setPendingRecipe(null)}}
+                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,
+                        padding:'12px 16px',color:C.white,fontSize:13,fontWeight:600,cursor:'pointer',
+                        textAlign:'left',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span>{meal.name}</span>
+                      <span style={{fontSize:10,color:C.muted}}>{mealMacros(meal).cal} cal currently</span>
+                    </button>
+                  ))}
+                  <button onClick={()=>setPendingRecipe(null)}
+                    style={{width:'100%',background:'none',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 0',color:C.muted,fontSize:13,cursor:'pointer',marginTop:4}}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

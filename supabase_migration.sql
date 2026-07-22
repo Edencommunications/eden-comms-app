@@ -216,8 +216,12 @@ create table if not exists public.client_recipes (
   coach_id     uuid        not null,
   recipe_name  text        not null,
   recipe_data  jsonb,                   -- full recipe object { name, cal, pro, fat, carb, fib, category }
+  meal_name    text,                    -- which meal this recipe is slotted into, e.g. "Meal 2"
   assigned_at  timestamptz not null default now()
 );
+
+-- If you already ran the previous migration, add the column with:
+-- alter table public.client_recipes add column if not exists meal_name text;
 
 create index if not exists client_recipes_client_idx
   on public.client_recipes (client_id, assigned_at desc);
