@@ -3085,6 +3085,12 @@ const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
   const [loomMode, setLoomMode] = useState(false);
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
+  const [splitView,   setSplitView]   = useState(false);
+  const [leftPanel,   setLeftPanel]   = useState('checkin');
+  const [rightPanel,  setRightPanel]  = useState('msgs');
+  const [splitRatio,  setSplitRatio]  = useState(50); // % for left panel
+  const splitDragging = useRef(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
   // ── Inactivity auto-logout ────────────────────────────────────────
@@ -3201,6 +3207,58 @@ const AppShell = ({ user, onLogout }) => {
              : isStaff                     ? staffTabs
              : clientTabs;
 
+  const SPLIT_PANELS = [
+    { key:'msgs',    label:'Messages',  icon:'chat' },
+    { key:'checkin', label:'Check-in',  icon:'assignment' },
+    { key:'diet',    label:'Diet',      icon:'restaurant' },
+    { key:'workout', label:'Program',   icon:'fitness_center' },
+    { key:'labs',    label:'Labs',      icon:'biotech' },
+  ];
+
+  const renderPanel = (panelTab: string) => {
+    const toolUser = (user.role === 'coach' || user.role === 'super_admin') && coachClient
+      ? { ...coachClient, role: user.role }
+      : { email: user.email, name: user.name, role: user.role };
+    const ciEmail = ((user.role === 'coach' || user.role === 'super_admin') && coachClient)
+      ? coachClient.email : user.email;
+    const ciDemoCheckins = CLIENT_ROSTER.find((c:any) => c.email === ciEmail)?.checkinHistory ?? [];
+    if (panelTab === 'msgs')    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
+    if (panelTab === 'diet')    return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
+    if (panelTab === 'checkin') return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
+    if (panelTab === 'workout') return <Week4 currentUser={toolUser} initialTab="workout"/>;
+    if (panelTab === 'labs')    return <Week4 currentUser={toolUser} initialTab="labs"/>;
+    return null;
+  };
+
+  const PanelPicker = ({ value, onChange }: { value: string; onChange: (v:string) => void }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:2, padding:'6px 10px', background:B.surface, borderBottom:`1px solid ${B.border}`, flexShrink:0, overflowX:'auto' }}>
+      {SPLIT_PANELS.map(p => (
+        <button key={p.key} onClick={() => onChange(p.key)}
+          style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:6, border:'none',
+            background: value===p.key ? `${B.gold}22` : 'transparent',
+            borderBottom: value===p.key ? `2px solid ${B.gold}` : '2px solid transparent',
+            cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+          <Ic n={p.icon} size={13} c={value===p.key ? B.gold : B.muted}/>
+          <span style={{ fontSize:11, fontWeight: value===p.key ? 700 : 400, color: value===p.key ? B.gold : B.muted }}>{p.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  const handleSplitDividerMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    splitDragging.current = true;
+    const onMove = (ev: MouseEvent) => {
+      if (!splitDragging.current || !splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const ratio = Math.min(75, Math.max(25, ((ev.clientX - rect.left) / rect.width) * 100));
+      setSplitRatio(ratio);
+    };
+    const onUp = () => { splitDragging.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   const renderScreen = () => {
     // Super admin
     if (user.role === "super_admin") {
@@ -3257,6 +3315,21 @@ const AppShell = ({ user, onLogout }) => {
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
+          {/* Split View toggle — coach/admin, desktop only */}
+          {(user.role === "coach" || user.role === "super_admin") && !isMobile && (
+            <button onClick={() => setSplitView(v => !v)}
+              title={splitView ? "Exit Split View" : "Split View — see two panels side by side"}
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
+                background: splitView ? `${B.gold}22` : "transparent",
+                border:`1.5px solid ${splitView ? B.gold : B.border}`,
+                borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
+              <span style={{ fontSize:15 }}>⊟</span>
+              <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase",
+                color: splitView ? B.gold : B.muted }}>
+                {splitView ? "Split ON" : "Split"}
+              </span>
+            </button>
+          )}
           {/* Loom Mode toggle — coach only, persists across all tabs */}
           {user.role === "coach" && (
             <button onClick={() => setLoomMode(v => !v)}
@@ -3315,7 +3388,25 @@ const AppShell = ({ user, onLogout }) => {
 
         {/* Main content area */}
         <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", background:B.black }}>
-          {renderScreen()}
+          {splitView && !isMobile ? (
+            <div ref={splitContainerRef} style={{ display:'flex', flex:1, overflow:'hidden', height:'100%' }}>
+              {/* Left panel */}
+              <div style={{ width:`${splitRatio}%`, display:'flex', flexDirection:'column', overflow:'hidden', borderRight:`1px solid ${B.border}` }}>
+                <PanelPicker value={leftPanel} onChange={setLeftPanel}/>
+                <div style={{ flex:1, overflow:'hidden' }}>{renderPanel(leftPanel)}</div>
+              </div>
+              {/* Drag divider */}
+              <div onMouseDown={handleSplitDividerMouseDown}
+                style={{ width:5, background:B.border, cursor:'col-resize', flexShrink:0, transition:'background 0.15s' }}
+                onMouseEnter={e=>(e.currentTarget.style.background=B.gold)}
+                onMouseLeave={e=>(e.currentTarget.style.background=B.border)}/>
+              {/* Right panel */}
+              <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                <PanelPicker value={rightPanel} onChange={setRightPanel}/>
+                <div style={{ flex:1, overflow:'hidden' }}>{renderPanel(rightPanel)}</div>
+              </div>
+            </div>
+          ) : renderScreen()}
         </div>
       </div>
 
