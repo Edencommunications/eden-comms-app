@@ -708,11 +708,9 @@ Training Principles:
 
   const filteredLabs = labFilter==='All'?labs:labs.filter(l=>l.lab_type===labFilter)
 
-  const TABS = [
-    ['labs',    '🧪 Labs'],
-    ['workout', '💪 Workout'],
-    ['cardio',  '🏃 Cardio'],
-  ]
+  const TABS = initialTab === 'labs'
+    ? [['labs',    '🧪 Labs']]
+    : [['workout', '💪 Workout'], ['cardio', '🏃 Cardio']]
 
   // ════════════════════════════════════════════════════════════
   // RENDER
