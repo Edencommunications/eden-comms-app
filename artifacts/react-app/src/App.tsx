@@ -1198,16 +1198,19 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
           </div>
         </div>
         {/* Action buttons — pinned below header, no scroll needed */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:"10px 16px", borderBottom:`1px solid ${B.border}`, flexShrink:0 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, padding:"10px 16px", borderBottom:`1px solid ${B.border}`, flexShrink:0 }}>
           {[
             { label:"📋 Diet Plan",    color:B.gold,    bg:`${B.gold}22`,    border:`1px solid ${B.gold}44`,    tab:"diet" },
             { label:"💬 Message",      color:"#4FD89A", bg:"#4FD89A22",      border:"1px solid #4FD89A44",      tab:"msgs" },
             { label:"🧪 Labs",         color:"#D4A8F0", bg:"#D4A8F022",      border:"1px solid #D4A8F044",      tab:"labs" },
-            { label:"📊 Check-In Log", color:"#6FB8E8", bg:"#6FB8E822",      border:"1px solid #6FB8E844",      tab:"checkin" },
+            { label:"📊 Check-In",     color:"#6FB8E8", bg:"#6FB8E822",      border:"1px solid #6FB8E844",      tab:"checkin" },
+            { label:"💊 Supplements",  color:"#f0a060", bg:"#f0a06022",      border:"1px solid #f0a06044",      tab:"supplements" },
+            { label:"💪 Workout",      color:"#f06060", bg:"#f0606022",      border:"1px solid #f0606044",      tab:"workout" },
+            { label:"⌚ Wearables",    color:"#88ddaa", bg:"#88ddaa22",      border:"1px solid #88ddaa44",      tab:"wearables" },
           ].map(({label,color,bg,border,tab})=>(
             <button key={label}
-              onClick={()=>{ onClose(); onNavigate?.(tab) }}
-              style={{ background:bg, border, borderRadius:10, padding:"10px 8px", color, fontWeight:700, fontSize:12, cursor:"pointer" }}>
+              onClick={()=>{ onClose(); onNavigate?.(tab, { email:client.email, name:client.name, role:'client' }) }}
+              style={{ background:bg, border, borderRadius:10, padding:"10px 8px", color, fontWeight:700, fontSize:11, cursor:"pointer" }}>
               {label}
             </button>
           ))}
@@ -3085,12 +3088,20 @@ const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
   const [loomMode, setLoomMode] = useState(false);
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
-  const [splitView,   setSplitView]   = useState(false);
-  const [leftPanel,   setLeftPanel]   = useState('checkin');
-  const [rightPanel,  setRightPanel]  = useState('msgs');
-  const [splitRatio,  setSplitRatio]  = useState(50); // % for left panel
+  const [splitView,        setSplitView]        = useState(false);
+  const [leftPanel,        setLeftPanel]        = useState('checkin');
+  const [rightPanel,       setRightPanel]       = useState('msgs');
+  const [splitRatio,       setSplitRatio]       = useState(50);
+  const [clientNavSource,  setClientNavSource]  = useState<string>('admin'); // where to go on back
   const splitDragging = useRef(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
+
+  // Helper: navigate into a client tool, remembering where we came from
+  const openClientTool = (dest: string, client: any, source = 'admin') => {
+    setCoachClient(client);
+    setTab(dest);
+    setClientNavSource(source);
+  };
   const isMobile = useIsMobile();
 
   // ── Inactivity auto-logout ────────────────────────────────────────
@@ -3266,7 +3277,7 @@ const AppShell = ({ user, onLogout }) => {
     }
     // Coach
     if (user.role === "coach") {
-      if (tab === "home") return <CoachDashboard user={user} onNavigate={setTab} loomMode={loomMode} setLoomMode={setLoomMode}/>;
+      if (tab === "home") return <CoachDashboard user={user} onNavigate={(dest:string, client?:any) => openClientTool(dest, client, 'home')} loomMode={loomMode} setLoomMode={setLoomMode}/>;
     }
     // Staff (VA, head coach, etc.)
     if (isStaff) {
@@ -3382,6 +3393,34 @@ const AppShell = ({ user, onLogout }) => {
                 <p style={{ fontSize:9, color:B.gold, margin:0, fontWeight:700, letterSpacing:0.8 }}>LIFESTYLE OF EDEN</p>
                 <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>Powered by Eden Comms</p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Client context bar — coach inside a client tool */}
+        {coachClient && ['diet','supplements','checkin','workout','labs','wearables'].includes(tab) && !splitView && (
+          <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding:"6px 12px", display:"flex", alignItems:"center", gap:8, flexShrink:0, overflowX:"auto" }}>
+            <button onClick={()=>{ setTab(clientNavSource); setCoachClient(null); }}
+              style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", color:B.gold, fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0, padding:"4px 8px", borderRadius:6, whiteSpace:"nowrap" }}>
+              <Ic n="back" size={14} c={B.gold}/> Back
+            </button>
+            <div style={{ width:1, height:20, background:B.border, flexShrink:0 }}/>
+            <div style={{ fontSize:12, fontWeight:700, color:B.text, flexShrink:0, whiteSpace:"nowrap" }}>{coachClient.name}</div>
+            <div style={{ width:1, height:20, background:B.border, flexShrink:0 }}/>
+            <div style={{ display:"flex", gap:4, overflowX:"auto" }}>
+              {[
+                { t:"diet",         l:"📋 Diet"       },
+                { t:"checkin",      l:"📊 Check-In"   },
+                { t:"supplements",  l:"💊 Supps"      },
+                { t:"workout",      l:"💪 Workout"    },
+                { t:"labs",         l:"🧪 Labs"       },
+                { t:"wearables",    l:"⌚ Wearables"  },
+              ].map(({t,l})=>(
+                <button key={t} onClick={()=>setTab(t)}
+                  style={{ background: tab===t ? `${B.gold}22` : "transparent", border:`1px solid ${tab===t ? B.gold : "transparent"}`, borderRadius:6, padding:"3px 10px", color: tab===t ? B.gold : B.muted, fontSize:11, fontWeight: tab===t ? 700 : 400, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                  {l}
+                </button>
+              ))}
             </div>
           </div>
         )}
