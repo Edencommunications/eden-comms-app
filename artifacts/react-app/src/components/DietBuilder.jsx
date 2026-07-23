@@ -599,7 +599,7 @@ function CheckInCharts({ checkins }) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[]}) {
+export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[], onBack}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User'}
   // Prefer the role passed in currentUser (coach viewing a client's tools)
@@ -1126,6 +1126,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         <div style={{flex:1,paddingRight:8}}>
           <div style={{fontSize:13,fontWeight:700,color:C.white}}>{isCoach?`Diet Builder — Jordan Williams`:'My Diet Plan'}</div>
           <div style={{fontSize:10,color:C.muted,marginTop:1}}>{protocol}</div>
+          {onBack&&(
+            <button onClick={onBack} style={{background:'none',border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',gap:3,marginTop:3}}>
+              <span style={{fontSize:11,color:C.gold}}>← Back</span>
+            </button>
+          )}
         </div>
         {isCoach&&(
           <button onClick={()=>setPrivacyMode(p=>!p)} title="Hide client roster for Loom recording"

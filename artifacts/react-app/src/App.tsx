@@ -3298,13 +3298,14 @@ const AppShell = ({ user, onLogout }) => {
       ? coachClient.email
       : user.email;
     const ciDemoCheckins = CLIENT_ROSTER.find(c => c.email === ciEmail)?.checkinHistory ?? [];
-    if (tab === "diet")         return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
-    if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins}/>;
+    const onBack = coachClient ? () => { setTab(clientNavSource); setCoachClient(null); } : undefined;
+    if (tab === "diet")         return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins} onBack={onBack}/>;
+    if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
-    if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs"/>;
-    if (tab === "checkin")      return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
+    if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs" onBack={onBack}/>;
+    if (tab === "checkin")      return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
-    if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout"/>;
+    if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout" onBack={onBack}/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
                                           onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}/>;
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
@@ -3319,13 +3320,6 @@ const AppShell = ({ user, onLogout }) => {
       {/* Top bar */}
       <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding:"8px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          {coachClient && ['diet','supplements','checkin','workout','labs','wearables'].includes(tab) && (
-            <button onClick={()=>{ setTab(clientNavSource); setCoachClient(null); }}
-              style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 6px 4px 2px", display:"flex", alignItems:"center" }}
-              title="Back">
-              <Ic n="back" size={20} c={B.gold}/>
-            </button>
-          )}
           <HoneycombLogo size={30}/>
           <div>
             <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>Eden Communications</p>

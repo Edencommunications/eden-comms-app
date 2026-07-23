@@ -357,7 +357,7 @@ const DEMO_WEEK_HISTORY = [
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week4({currentUser, initialTab='labs'}) {
+export default function Week4({currentUser, initialTab='labs', onBack}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   // Prefer the role passed in currentUser (App.tsx sets role:user.role on toolUser so a coach
@@ -724,6 +724,11 @@ Training Principles:
           <div style={{fontSize:13,fontWeight:700,color:C.white}}>
             {isCoach?'Client Tools — Jordan Williams':'My Tools'}
           </div>
+          {onBack&&(
+            <button onClick={onBack} style={{background:'none',border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',gap:3,marginTop:2}}>
+              <span style={{fontSize:11,color:C.gold}}>← Back</span>
+            </button>
+          )}
         </div>
         {TABS.map(([k,l])=>(
           <button key={k} onClick={()=>setTab(k)}
