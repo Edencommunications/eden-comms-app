@@ -3298,7 +3298,7 @@ const AppShell = ({ user, onLogout }) => {
       ? coachClient.email
       : user.email;
     const ciDemoCheckins = CLIENT_ROSTER.find(c => c.email === ciEmail)?.checkinHistory ?? [];
-    const onBack = coachClient ? () => { setTab(clientNavSource); setCoachClient(null); } : undefined;
+    const onBack = coachClient ? () => { setTab(clientNavSource); } : undefined;
     if (tab === "diet")         return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
