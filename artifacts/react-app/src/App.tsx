@@ -3397,31 +3397,14 @@ const AppShell = ({ user, onLogout }) => {
           </div>
         )}
 
-        {/* Client context bar — coach inside a client tool */}
+        {/* Back button — coach inside a client tool */}
         {coachClient && ['diet','supplements','checkin','workout','labs','wearables'].includes(tab) && !splitView && (
-          <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding:"6px 12px", display:"flex", alignItems:"center", gap:8, flexShrink:0, overflowX:"auto" }}>
+          <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding:"6px 14px", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
             <button onClick={()=>{ setTab(clientNavSource); setCoachClient(null); }}
-              style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", color:B.gold, fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0, padding:"4px 8px", borderRadius:6, whiteSpace:"nowrap" }}>
+              style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", color:B.gold, fontSize:12, fontWeight:700, cursor:"pointer", padding:0 }}>
               <Ic n="back" size={14} c={B.gold}/> Back
             </button>
-            <div style={{ width:1, height:20, background:B.border, flexShrink:0 }}/>
-            <div style={{ fontSize:12, fontWeight:700, color:B.text, flexShrink:0, whiteSpace:"nowrap" }}>{coachClient.name}</div>
-            <div style={{ width:1, height:20, background:B.border, flexShrink:0 }}/>
-            <div style={{ display:"flex", gap:4, overflowX:"auto" }}>
-              {[
-                { t:"diet",         l:"📋 Diet"       },
-                { t:"checkin",      l:"📊 Check-In"   },
-                { t:"supplements",  l:"💊 Supps"      },
-                { t:"workout",      l:"💪 Workout"    },
-                { t:"labs",         l:"🧪 Labs"       },
-                { t:"wearables",    l:"⌚ Wearables"  },
-              ].map(({t,l})=>(
-                <button key={t} onClick={()=>setTab(t)}
-                  style={{ background: tab===t ? `${B.gold}22` : "transparent", border:`1px solid ${tab===t ? B.gold : "transparent"}`, borderRadius:6, padding:"3px 10px", color: tab===t ? B.gold : B.muted, fontSize:11, fontWeight: tab===t ? 700 : 400, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
-                  {l}
-                </button>
-              ))}
-            </div>
+            <span style={{ fontSize:11, color:B.muted }}>/ {coachClient.name}</span>
           </div>
         )}
 
