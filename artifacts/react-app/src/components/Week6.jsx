@@ -159,6 +159,22 @@ export default function Week6({currentUser, onNavigate}) {
   })
   const setNO = k=>v=>setNewOrg(p=>({...p,[k]:v}))
 
+  // ── Admin org context (loaded from Supabase) ─────────────
+  const [adminCompanyId,  setAdminCompanyId]  = useState(null)
+  const [adminProfileId,  setAdminProfileId]  = useState(null)
+  const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
+
+  useEffect(()=>{
+    if (!isAdmin) return
+    dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,company_id`)
+      .then(rows=>{
+        if (Array.isArray(rows)&&rows[0]) {
+          setAdminCompanyId(rows[0].company_id||null)
+          setAdminProfileId(rows[0].id||null)
+        }
+      }).catch(()=>{})
+  },[email])
+
   // ── Audit log ─────────────────────────────────────────────
   const [auditLog, setAuditLog] = useState([
     {id:1,actor:'Eden Admin',action:'Granted course access',target:'Jordan Williams',detail:'The Mind Of A CEO',time:'Jul 14 2026 9:02 AM'},
@@ -247,25 +263,57 @@ export default function Week6({currentUser, onNavigate}) {
 
   async function addUser() {
     if (!newUser.name.trim()||!newUser.email.trim()) return
-    const user = {
-      uuid:         'new_'+Date.now(),
-      name:         newUser.name,
-      email:        newUser.email,
-      role:         newUser.role,
-      coachId:      newUser.coachId,
-      coachName:    DEMO_COACHES.find(c=>c.uuid===newUser.coachId)?.name||'',
-      checkInDay:   newUser.checkInDay,
-      hasUpdate:    false,
-      lastSeen:     'Never',
-      active:       true,
+    const initials = newUser.name.trim().split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
+    const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
+
+    // Write to Supabase user_profiles so the record is ready for real auth
+    let profileId = null
+    try {
+      const payload = {
+        name:       newUser.name.trim(),
+        email:      newUser.email.trim().toLowerCase(),
+        role:       newUser.role,
+        initials,
+        company_id: adminCompanyId||null,
+        update_day: newUser.role==='client'?newUser.checkInDay:null,
+      }
+      const result = await dbInsert('user_profiles', payload)
+      profileId = Array.isArray(result)?result[0]?.id:result?.id
+    } catch(e) { /* DB write failed — user still added to local state */ }
+
+    // If client, create a client_access record linking to their coach
+    if (newUser.role==='client' && newUser.coachId && profileId && adminCompanyId) {
+      try {
+        await dbInsert('client_access',{
+          company_id:  adminCompanyId,
+          staff_id:    newUser.coachId,
+          client_id:   profileId,
+          permissions: {messages:true,diet:true,labs:true,workout:true,checkins:true,habits:true},
+          assigned_by: adminProfileId||null,
+        })
+      } catch(e) {}
     }
-    if (newUser.role==='client') setClients(prev=>[...prev,user])
+
+    // Add to local demo list
+    const localUser = {
+      uuid:       profileId||'local_'+Date.now(),
+      name:       newUser.name.trim(),
+      email:      newUser.email.trim().toLowerCase(),
+      role:       newUser.role,
+      coachId:    newUser.coachId,
+      coachName:  DEMO_COACHES.find(c=>c.uuid===newUser.coachId)?.name||'',
+      checkInDay: newUser.checkInDay,
+      hasUpdate:  false,
+      lastSeen:   'Never',
+      active:     true,
+    }
+    if (newUser.role==='client') setClients(prev=>[...prev,localUser])
+
+    // Show setup instructions card
+    setLastAdded({ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role, tempPass })
+    setAuditLog(prev=>[{id:Date.now(),actor:info.name,action:`Added ${newUser.role}`,target:newUser.name,detail:newUser.email,time:new Date().toLocaleString()},...prev])
     setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday'})
     setShowNewUser(false)
-
-    // Log action
-    setAuditLog(prev=>[{id:Date.now(),actor:info.name,action:`Added ${newUser.role}`,target:newUser.name,detail:newUser.email,time:new Date().toLocaleString()},...prev])
-    alert(`${newUser.name} added. Send them their login credentials manually until auto-auth is live in production.`)
   }
 
   async function createOrg() {
@@ -628,12 +676,14 @@ export default function Week6({currentUser, onNavigate}) {
                 {/* Coach's clients */}
                 {coachClients.length>0&&(
                   <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Clients</div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Clients — click to open</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                       {coachClients.map(c=>(
-                        <span key={c.uuid} style={{fontSize:11,background:c.hasUpdate?`${C.gold}22`:C.surface,border:`1px solid ${c.hasUpdate?C.gold+'44':C.border}`,borderRadius:6,padding:'3px 10px',color:c.hasUpdate?C.gold:C.white}}>
+                        <button key={c.uuid}
+                          onClick={()=>{ openClient(c); setTab('clients') }}
+                          style={{fontSize:11,background:c.hasUpdate?`${C.gold}22`:C.surface,border:`1px solid ${c.hasUpdate?C.gold+'44':C.border}`,borderRadius:6,padding:'4px 10px',color:c.hasUpdate?C.gold:C.white,cursor:'pointer'}}>
                           {c.name}{c.hasUpdate?' 🔔':''}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -855,6 +905,44 @@ export default function Week6({currentUser, onNavigate}) {
         </div>
       )}
 
+      {/* ── Last Added — Setup Instructions Card ─────────── */}
+      {lastAdded&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setLastAdded(null)}}>
+          <div style={{background:C.card,border:`1px solid ${C.gold}55`,borderRadius:16,width:'100%',maxWidth:440,padding:24}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>✅ User Added Successfully</div>
+            <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>{lastAdded.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:16,textTransform:'capitalize'}}>{lastAdded.role.replace(/_/g,' ')} · {lastAdded.email}</div>
+
+            <div style={{background:C.surface,borderRadius:10,padding:'14px 16px',marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Send These Credentials</div>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                <span style={{fontSize:12,color:C.muted}}>Email</span>
+                <span style={{fontSize:12,color:C.white,fontWeight:600}}>{lastAdded.email}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between'}}>
+                <span style={{fontSize:12,color:C.muted}}>Temp Password</span>
+                <span style={{fontSize:12,color:C.gold,fontWeight:700,fontFamily:'monospace'}}>{lastAdded.tempPass}</span>
+              </div>
+            </div>
+
+            <div style={{background:`${C.success}11`,border:`1px solid ${C.success}33`,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.success,marginBottom:6}}>📋 What To Do</div>
+              <div style={{fontSize:11,color:C.muted,lineHeight:1.7}}>
+                1. Their profile is saved in Supabase — ready for real auth when you enable it.<br/>
+                2. To give them access <em>now</em>: send them these credentials and have a developer add them to <code style={{color:C.gold}}>DEMO_USERS</code> in App.tsx.<br/>
+                3. Once Supabase Auth is live, they'll get a proper invite link instead.
+              </div>
+            </div>
+
+            <button onClick={()=>setLastAdded(null)}
+              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+              Got It
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Add User Modal ────────────────────────────────── */}
       {showNewUser&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
@@ -864,7 +952,7 @@ export default function Week6({currentUser, onNavigate}) {
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>They will receive login credentials manually until auto-auth is configured in production.</div>
             <Inp label="Full Name" value={newUser.name} onChange={setNU('name')} placeholder="e.g. Sarah Johnson"/>
             <Inp label="Email Address" value={newUser.email} onChange={setNU('email')} placeholder="e.g. sarah@email.com" type="email"/>
-            <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','va']}/>
+            <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','head_coach','va']}/>
             {newUser.role==='client'&&(
               <>
                 <Sel label="Assign to Coach" value={newUser.coachId||''} onChange={setNU('coachId')}
