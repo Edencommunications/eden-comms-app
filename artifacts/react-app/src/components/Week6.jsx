@@ -105,7 +105,7 @@ function Stat({label,value,color=C.gold,sub}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week6({currentUser, onNavigate}) {
+export default function Week6({currentUser, onNavigate, initialClient}) {
   const email    = currentUser?.email||''
   const info     = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   const myUUID   = info.uuid
@@ -117,7 +117,7 @@ export default function Week6({currentUser, onNavigate}) {
 
   // ── Client list state ─────────────────────────────────────
   const [clients,        setClients]        = useState(DEMO_CLIENTS)
-  const [selectedClient, setSelectedClient] = useState(null)
+  const [selectedClient, setSelectedClient] = useState(initialClient||null)
   const [clientSearch,   setClientSearch]   = useState('')
   const [filterCoach,    setFilterCoach]    = useState('All Coaches')
 

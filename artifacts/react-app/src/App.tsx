@@ -3307,7 +3307,8 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "habits")       return <HabitTrackerScreen/>;
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout" onBack={onBack}/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
-                                          onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}/>;
+                                          onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}
+                                          initialClient={coachClient}/>;
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
     if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
