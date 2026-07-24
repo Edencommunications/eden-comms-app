@@ -358,6 +358,15 @@ const DEMO_WEEK_HISTORY = [
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function Week4({currentUser, initialTab='labs', onBack}) {
+  const [adminLabDocs, setAdminLabDocs] = React.useState([])
+  React.useEffect(()=>{
+    const em = currentUser?.email||''
+    if (!em) return
+    dbGet('user_profiles',`email=eq.${encodeURIComponent(em)}&select=id`)
+      .then(rows=>{ const uuid=rows?.[0]?.id; if (!uuid) return null; return dbGet('client_documents',`client_id=eq.${uuid}&doc_type=eq.lab&order=created_at.desc`) })
+      .then(rows=>{ if (rows) setAdminLabDocs(Array.isArray(rows)?rows:[]) })
+      .catch(()=>{})
+  },[currentUser?.email])
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   // Prefer the role passed in currentUser (App.tsx sets role:user.role on toolUser so a coach
@@ -772,9 +781,22 @@ Training Principles:
 
             {/* Lab list */}
             <div style={{flex:1,overflowY:'auto'}}>
-              {filteredLabs.length===0&&(
+              {filteredLabs.length===0&&adminLabDocs.length===0&&(
                 <div style={{padding:24,textAlign:'center',color:C.muted,fontSize:13}}>
                   No lab results yet. Upload your first one above.
+                </div>
+              )}
+              {adminLabDocs.length>0&&(
+                <div style={{borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{padding:'8px 14px 4px',fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase'}}>📎 From Admin</div>
+                  {adminLabDocs.map(doc=>(
+                    <div key={doc.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,background:C.surface}}>
+                      <div style={{fontSize:13,fontWeight:600,color:C.white}}>🧪 {doc.title}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:2}}>{doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}</div>
+                      {doc.content&&<div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5}}>{doc.content}</div>}
+                      {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.gold,marginTop:4,display:'block',fontWeight:700}}>View File →</a>}
+                    </div>
+                  ))}
                 </div>
               )}
               {filteredLabs.map(lab=>(

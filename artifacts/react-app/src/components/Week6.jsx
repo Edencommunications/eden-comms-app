@@ -43,6 +43,9 @@ async function dbInsert(table, body) {
   if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
+async function dbDelete(table, params) {
+  try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:SB_H}) } catch {}
+}
 async function dbUpdate(table, params, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     method:'PATCH', headers:H, body:JSON.stringify(body)
@@ -164,6 +167,11 @@ export default function Week6({currentUser, onNavigate, initialClient}) {
   const [adminProfileId,  setAdminProfileId]  = useState(null)
   const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
 
+  // ── Admin Documents ───────────────────────────────────────
+  const [adminDocs,   setAdminDocs]   = useState([])
+  const [showAddDoc,  setShowAddDoc]  = useState(false)
+  const [newDoc,      setNewDoc]      = useState({doc_type:'note',title:'',content:'',file_url:''})
+
   useEffect(()=>{
     if (!isAdmin) return
     dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,company_id`)
@@ -174,6 +182,39 @@ export default function Week6({currentUser, onNavigate, initialClient}) {
         }
       }).catch(()=>{})
   },[email])
+
+  // Load admin docs when selected client changes
+  useEffect(()=>{
+    if (!selectedClient?.uuid){ setAdminDocs([]); return }
+    dbGet('client_documents',`client_id=eq.${selectedClient.uuid}&order=created_at.desc`)
+      .then(rows=>setAdminDocs(Array.isArray(rows)?rows:[]))
+      .catch(()=>{})
+  },[selectedClient?.uuid])
+
+  const docTypeIcon = t=>({lab:'🧪',form:'📋',note:'📝',document:'📄'}[t]||'📄')
+
+  async function addAdminDoc() {
+    if (!newDoc.title.trim()||!selectedClient?.uuid) return
+    const result = await dbInsert('client_documents',{
+      client_id:     selectedClient.uuid,
+      company_id:    adminCompanyId||null,
+      added_by_id:   adminProfileId||null,
+      added_by_name: info.name,
+      doc_type:      newDoc.doc_type,
+      title:         newDoc.title.trim(),
+      content:       newDoc.content.trim()||null,
+      file_url:      newDoc.file_url.trim()||null,
+    })
+    const inserted = Array.isArray(result)?result[0]:result
+    if (inserted) setAdminDocs(prev=>[inserted,...prev])
+    setNewDoc({doc_type:'note',title:'',content:'',file_url:''})
+    setShowAddDoc(false)
+  }
+
+  async function deleteAdminDoc(id) {
+    await dbDelete('client_documents',`id=eq.${id}`)
+    setAdminDocs(prev=>prev.filter(d=>d.id!==id))
+  }
 
   // ── Audit log ─────────────────────────────────────────────
   const [auditLog, setAuditLog] = useState([
@@ -620,6 +661,42 @@ export default function Week6({currentUser, onNavigate, initialClient}) {
                   </div>
                 </Card>
 
+                {/* Admin Documents — admin can push, coach reads */}
+                {(isAdmin||isCoach)&&(
+                  <Card sx={{marginBottom:14}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                      <Lbl t="📎 Documents & Forms"/>
+                      {isAdmin&&(
+                        <button onClick={()=>setShowAddDoc(true)}
+                          style={{background:C.gold,border:'none',borderRadius:6,padding:'4px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
+                          + Add
+                        </button>
+                      )}
+                    </div>
+                    {adminDocs.length===0?(
+                      <div style={{textAlign:'center',padding:'12px 0',color:C.muted,fontSize:12}}>
+                        {isAdmin?'No documents yet — click + Add to push a lab, form, or note':'No documents from admin yet'}
+                      </div>
+                    ):adminDocs.map(doc=>(
+                      <div key={doc.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
+                        <span style={{fontSize:18,flexShrink:0}}>{docTypeIcon(doc.doc_type)}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:700,color:C.white}}>{doc.title}</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:'capitalize'}}>
+                            {doc.doc_type} · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}
+                          </div>
+                          {doc.content&&<div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5}}>{doc.content}</div>}
+                          {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.gold,marginTop:4,display:'block'}}>View File →</a>}
+                        </div>
+                        {isAdmin&&(
+                          <button onClick={()=>deleteAdminDoc(doc.id)}
+                            style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,padding:0,lineHeight:1,flexShrink:0}}>×</button>
+                        )}
+                      </div>
+                    ))}
+                  </Card>
+                )}
+
                 {/* Recent check-in summary */}
                 {selectedClient.hasUpdate&&(
                   <div style={{background:`${C.gold}12`,border:`1px solid ${C.gold}44`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
@@ -939,6 +1016,35 @@ export default function Week6({currentUser, onNavigate, initialClient}) {
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
               Got It
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Document Modal ───────────────────────────── */}
+      {showAddDoc&&isAdmin&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setShowAddDoc(false)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:420,padding:24}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:4}}>Add Document</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:16}}>For {selectedClient?.name} — visible to their coach and to them in the app</div>
+            <Sel label="Type" value={newDoc.doc_type} onChange={v=>setNewDoc(p=>({...p,doc_type:v}))}
+              options={['note','form','lab','document']}/>
+            <Inp label="Title *" value={newDoc.title} onChange={v=>setNewDoc(p=>({...p,title:v}))}
+              placeholder="e.g. GI Map Results · July 2026"/>
+            <Inp label="Content / Notes" value={newDoc.content} onChange={v=>setNewDoc(p=>({...p,content:v}))}
+              placeholder="Summary, instructions, or any relevant notes…" multiline/>
+            <Inp label="File URL (optional)" value={newDoc.file_url} onChange={v=>setNewDoc(p=>({...p,file_url:v}))}
+              placeholder="https://drive.google.com/…"/>
+            <div style={{display:'flex',gap:10,marginTop:6}}>
+              <button onClick={()=>setShowAddDoc(false)}
+                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:12,color:C.muted,fontWeight:700,fontSize:13,cursor:'pointer'}}>
+                Cancel
+              </button>
+              <button onClick={addAdminDoc}
+                style={{flex:2,background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+                Save & Push to Client
+              </button>
+            </div>
           </div>
         </div>
       )}

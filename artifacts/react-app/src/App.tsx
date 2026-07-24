@@ -446,7 +446,27 @@ const HomeScreen = ({ user }) => {
 };
 
 // ─── COMMUNITY / CONNECT SCREEN ──────────────────────────────────────────────
-const CommunityScreen = () => {
+const CS_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co';
+const CS_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU';
+const CS_H    = { 'apikey':CS_ANON, 'Authorization':`Bearer ${CS_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=representation' };
+async function csGet(table:string, q='') { try { const r=await fetch(`${CS_URL}/rest/v1/${table}?${q}`,{headers:CS_H}); return r.ok?r.json():[] } catch { return [] } }
+async function csUpsert(table:string, body:any, id?:string) {
+  const url = id ? `${CS_URL}/rest/v1/${table}?id=eq.${id}` : `${CS_URL}/rest/v1/${table}`;
+  const method = id ? 'PATCH' : 'POST';
+  try { const r=await fetch(url,{method,headers:CS_H,body:JSON.stringify(body)}); return r.ok?(await r.text()?r.json():null):null } catch { return null }
+}
+
+const DEFAULT_SOCIALS = [
+  { emoji:"🎙", label:"Spotify Podcast", sub:"Full show · all episodes",  url:"https://open.spotify.com/show/0hEI4GF66eXXMSxlgmbVUP",  accent:"#1DB954", bg:"#1DB95418" },
+  { emoji:"📺", label:"YouTube",         sub:"@lifestyleofeden3879",       url:"https://www.youtube.com/@lifestyleofeden3879",            accent:"#FF0000", bg:"#FF000018" },
+  { emoji:"📸", label:"Instagram",       sub:"@nicktofficial",             url:"https://www.instagram.com/nicktofficial/",                accent:"#E1306C", bg:"#E1306C18" },
+  { emoji:"👥", label:"Facebook",        sub:"Lifestyle of Eden Page",     url:"https://www.facebook.com/profile.php?id=61587350518067",  accent:"#1877F2", bg:"#1877F218" },
+  { emoji:"🌐", label:"Website",         sub:"lifestyleofeden.com",        url:"https://lifestyleofeden.com",                            accent:B.gold,    bg:`${B.gold}18` },
+  { emoji:"🛍", label:"Eden Clothing",   sub:"Shop the brand",             url:"https://lifestyle-of-eden.myshopify.com/",               accent:B.gold,    bg:`${B.gold}18` },
+];
+
+const CommunityScreen = ({ user }:any) => {
+  const isAdmin = user?.role === 'super_admin';
   const PILLARS = [
     { n:"1 · Nutrition",                   url:"https://open.spotify.com/episode/1AvDa6x3tU9jORoGSxMdBL?si=hzNiIFHcQIqoYaC5H-TrVg&nd=1&dlsi=e7f414423b2140dd" },
     { n:"2 · Community & Stress",          url:"https://open.spotify.com/episode/7D7p0ma4hRq0n8AGExlDaY?si=o6qTlhF6RPm7HgrleNmnHw&nd=1&dlsi=c794e85544654521" },
@@ -456,14 +476,36 @@ const CommunityScreen = () => {
     { n:"6 · Autophagy / mTOR Balance",    url:"https://open.spotify.com/episode/2TARseWW2DXvi9JJ8J4wZa?si=3OQxs1AJQeeikjfsE9VGUw&nd=1&dlsi=8c1cece953ca41d2" },
     { n:"7 · Sleep & Circadian Alignment", url:"https://open.spotify.com/episode/3HndjaiJHVctnn3uXuvb4J?si=dSpzHtIDRfWqduVASsWpiw&nd=1&dlsi=25e8f1d81d414c9c" },
   ];
-  const SOCIALS = [
-    { emoji:"🎙", label:"Spotify Podcast", sub:"Full show · all episodes",  url:"https://open.spotify.com/show/0hEI4GF66eXXMSxlgmbVUP",                     accent:"#1DB954", bg:"#1DB95418" },
-    { emoji:"📺", label:"YouTube",         sub:"@lifestyleofeden3879",       url:"https://www.youtube.com/@lifestyleofeden3879",                              accent:"#FF0000", bg:"#FF000018" },
-    { emoji:"📸", label:"Instagram",       sub:"@nicktofficial",             url:"https://www.instagram.com/nicktofficial/",                                  accent:"#E1306C", bg:"#E1306C18" },
-    { emoji:"👥", label:"Facebook",        sub:"Lifestyle of Eden Page",     url:"https://www.facebook.com/profile.php?id=61587350518067",                    accent:"#1877F2", bg:"#1877F218" },
-    { emoji:"🌐", label:"Website",         sub:"lifestyleofeden.com",        url:"https://lifestyleofeden.com",                                               accent:B.gold,    bg:`${B.gold}18` },
-    { emoji:"🛍", label:"Eden Clothing",   sub:"Shop the brand",             url:"https://lifestyle-of-eden.myshopify.com/",                                  accent:B.gold,    bg:`${B.gold}18` },
-  ];
+
+  const [socials,     setSocials]     = useState<any[]>(DEFAULT_SOCIALS);
+  const [rowId,       setRowId]       = useState<string|null>(null);
+  const [editing,     setEditing]     = useState(false);
+  const [draft,       setDraft]       = useState<any[]>(DEFAULT_SOCIALS);
+
+  useEffect(()=>{
+    csGet('company_social_links','limit=1').then((rows:any[])=>{
+      if (rows?.[0]?.links?.length) {
+        setSocials(rows[0].links);
+        setDraft(rows[0].links);
+        setRowId(rows[0].id);
+      }
+    });
+  },[]);
+
+  const updateDraft = (i:number, field:string, val:string) =>
+    setDraft(prev => prev.map((s,idx)=> idx===i ? {...s,[field]:val} : s));
+
+  const saveLinks = async () => {
+    setSocials(draft);
+    setEditing(false);
+    if (rowId) {
+      await csUpsert('company_social_links', {links:draft, updated_at:new Date().toISOString()}, rowId);
+    } else {
+      const res:any = await csUpsert('company_social_links', {links:draft});
+      if (res?.[0]?.id) setRowId(res[0].id);
+    }
+  };
+
   return (
     <Screen>
       {/* Hero */}
@@ -475,17 +517,57 @@ const CommunityScreen = () => {
 
       {/* Social platform cards */}
       <div style={{ padding:"16px 20px 0" }}>
-        <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>Follow &amp; Subscribe</p>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+          <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>Follow &amp; Subscribe</p>
+          {isAdmin && !editing && (
+            <button onClick={()=>{ setDraft(socials); setEditing(true); }}
+              style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:6, padding:"3px 10px", color:B.gold, fontSize:11, fontWeight:700, cursor:"pointer" }}>
+              ✏️ Edit Links
+            </button>
+          )}
+        </div>
+
+        {/* Admin edit panel */}
+        {editing && isAdmin && (
+          <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:16, marginBottom:14 }}>
+            <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 12px" }}>Edit Follow &amp; Subscribe Links</p>
+            {draft.map((s:any, i:number) => (
+              <div key={i} style={{ borderBottom:`1px solid ${B.border}`, paddingBottom:12, marginBottom:12 }}>
+                <div style={{ display:"flex", gap:8, marginBottom:6 }}>
+                  <input value={s.emoji} onChange={e=>updateDraft(i,'emoji',e.target.value)}
+                    style={{ width:48, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 8px", color:B.text, fontSize:16, textAlign:"center", outline:"none" }}/>
+                  <input value={s.label} onChange={e=>updateDraft(i,'label',e.target.value)}
+                    placeholder="Label" style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:13, outline:"none" }}/>
+                </div>
+                <input value={s.sub} onChange={e=>updateDraft(i,'sub',e.target.value)}
+                  placeholder="Subtitle / handle" style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box", marginBottom:6 }}/>
+                <input value={s.url} onChange={e=>updateDraft(i,'url',e.target.value)}
+                  placeholder="https://…" style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box" }}/>
+              </div>
+            ))}
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>setEditing(false)}
+                style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px", color:B.muted, fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveLinks}
+                style={{ flex:2, background:B.gold, border:"none", borderRadius:8, padding:"9px", fontWeight:800, color:"#000", fontSize:12, cursor:"pointer" }}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          {SOCIALS.map(({ emoji, label, sub, url, accent, bg }) => (
+          {socials.map(({ emoji, label, sub, url, accent, bg }:any) => (
             <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
-              <div style={{ background:bg, border:`1px solid ${accent}44`, borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column", gap:6, height:"100%", boxSizing:"border-box" }}>
+              <div style={{ background:bg||`${B.gold}18`, border:`1px solid ${(accent||B.gold)}44`, borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column", gap:6, height:"100%", boxSizing:"border-box" }}>
                 <span style={{ fontSize:24 }}>{emoji}</span>
                 <div>
                   <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:"0 0 2px" }}>{label}</p>
                   <p style={{ fontSize:10, color:B.muted, margin:0, lineHeight:1.4 }}>{sub}</p>
                 </div>
-                <span style={{ fontSize:11, color:accent, fontWeight:700, marginTop:"auto" }}>Open →</span>
+                <span style={{ fontSize:11, color:accent||B.gold, fontWeight:700, marginTop:"auto" }}>Open →</span>
               </div>
             </a>
           ))}
@@ -3312,7 +3394,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
     if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
-    if (tab === "community") return <CommunityScreen/>;
+    if (tab === "community") return <CommunityScreen user={user}/>;
     return <HomeScreen user={user}/>;
   };
 

@@ -600,6 +600,15 @@ function CheckInCharts({ checkins }) {
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[], onBack}) {
+  const [adminFormDocs, setAdminFormDocs] = React.useState([])
+  React.useEffect(()=>{
+    const em = currentUser?.email||''
+    if (!em) return
+    dbGet('user_profiles',`email=eq.${encodeURIComponent(em)}&select=id`)
+      .then(rows=>{ const uuid=rows?.[0]?.id; if (!uuid) return null; return dbGet('client_documents',`client_id=eq.${uuid}&doc_type=in.(note,form,document)&order=created_at.desc`) })
+      .then(rows=>{ if (rows) setAdminFormDocs(Array.isArray(rows)?rows:[]) })
+      .catch(()=>{})
+  },[currentUser?.email])
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User'}
   // Prefer the role passed in currentUser (coach viewing a client's tools)
@@ -2258,6 +2267,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     </div>
                   )
                 })}
+                {adminFormDocs.length>0&&(
+                  <div style={{marginTop:16}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>📎 Documents from Admin</div>
+                    {adminFormDocs.map(doc=>(
+                      <div key={doc.id} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:12,padding:14,marginBottom:8}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                          <span style={{fontSize:14}}>{{note:'📝',form:'📋',document:'📄'}[doc.doc_type]||'📄'}</span>
+                          <div style={{fontSize:12,fontWeight:700,color:C.white}}>{doc.title}</div>
+                        </div>
+                        <div style={{fontSize:10,color:C.muted,marginBottom:6,textTransform:'capitalize'}}>{doc.doc_type} · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}</div>
+                        {doc.content&&<div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{doc.content}</div>}
+                        {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.gold,marginTop:6,display:'block',fontWeight:700}}>View File →</a>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>)}
 
               {/* ─── Photos tab ─── */}
