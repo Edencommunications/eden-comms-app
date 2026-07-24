@@ -223,6 +223,90 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     {id:3,actor:'Jordan Williams',action:'Submitted check-in',target:'Self',detail:'Week of Jul 13',time:'Jul 13 2026 7:58 AM'},
   ])
 
+  // ── Client lifecycle management (all persisted to localStorage) ──
+  // Keyed by client email so the LoginScreen can read the same store.
+  const [deactivatedMap, setDeactivatedMap] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('eden_deactivated_clients') || '{}') } catch { return {} }
+  })
+  // Maps clientEmail → newCoachUuid after a transfer
+  const [clientCoachMap, setClientCoachMap] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('eden_client_coach_map') || '{}') } catch { return {} }
+  })
+  // Array of removed coach UUIDs
+  const [removedCoaches, setRemovedCoaches] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('eden_removed_coaches') || '[]') } catch { return [] }
+  })
+  const [archiveOpen,       setArchiveOpen]       = useState(false)
+  const [showTransferModal, setShowTransferModal]  = useState(false)  // coach removal modal
+  const [pendingRemoval,    setPendingRemoval]     = useState(null)   // coach being removed
+  const [transferTargetId,  setTransferTargetId]   = useState('')
+
+  // ── Lifecycle helpers ─────────────────────────────────────────
+  function isDeactivated(client) { return !!deactivatedMap[client.email] }
+
+  function effectiveCoachId(client) {
+    return clientCoachMap[client.email] || client.coachId
+  }
+  function effectiveCoachName(client) {
+    const cid = effectiveCoachId(client)
+    return DEMO_COACHES.find(c=>c.uuid===cid)?.name || client.coachName || 'Unassigned'
+  }
+
+  function addAudit(actor, action, target, detail) {
+    setAuditLog(prev=>[{
+      id: Date.now(), actor, action, target, detail,
+      time: new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
+    }, ...prev])
+  }
+
+  function deactivateClient(client) {
+    const next = { ...deactivatedMap, [client.email]: { at: new Date().toISOString(), name: client.name, coachName: effectiveCoachName(client) } }
+    setDeactivatedMap(next)
+    localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
+    addAudit('Eden Admin','Deactivated client',client.name,'Account deactivated — data preserved, coach still has full access')
+    if (selectedClient?.uuid === client.uuid) setSelectedClient({ ...client, _deactivated: true })
+  }
+
+  function reactivateClient(client) {
+    const next = { ...deactivatedMap }
+    delete next[client.email]
+    setDeactivatedMap(next)
+    localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
+    addAudit('Eden Admin','Reactivated client',client.name,'Account restored — client can now log in again')
+    setSelectedClient({ ...client, _deactivated: false })
+  }
+
+  function transferClient(clientEmail, newCoachUuid) {
+    const next = { ...clientCoachMap, [clientEmail]: newCoachUuid }
+    setClientCoachMap(next)
+    localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
+  }
+
+  function confirmRemoveCoach(coach) {
+    const available = DEMO_COACHES.filter(c=>c.uuid!==coach.uuid&&!removedCoaches.includes(c.uuid))
+    setPendingRemoval(coach)
+    setTransferTargetId(available[0]?.uuid||'')
+    setShowTransferModal(true)
+  }
+
+  function executeRemoveCoach() {
+    if (!pendingRemoval) return
+    const activeCoachClients = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
+    const targetCoach = DEMO_COACHES.find(c=>c.uuid===transferTargetId)
+    activeCoachClients.forEach(c=>{
+      if (transferTargetId) {
+        transferClient(c.email, transferTargetId)
+        addAudit('Eden Admin','Transferred client',c.name,`→ ${targetCoach?.name||'New Coach'}`)
+      }
+    })
+    const next = [...removedCoaches, pendingRemoval.uuid]
+    setRemovedCoaches(next)
+    localStorage.setItem('eden_removed_coaches', JSON.stringify(next))
+    addAudit('Eden Admin','Removed coach',pendingRemoval.name,`${activeCoachClients.length} client${activeCoachClients.length!==1?'s':''} transferred`)
+    setShowTransferModal(false)
+    setPendingRemoval(null)
+  }
+
   function markViewed(clientId) {
     setClients(prev=>prev.map(c=>c.uuid===clientId?{...c,hasUpdate:false}:c))
     setSelectedClient(prev=>prev?.uuid===clientId?{...prev,hasUpdate:false}:prev)
@@ -385,16 +469,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     alert(`${newOrg.name} organization created. Now add their admin user using the + Add User button.`)
   }
 
-  // ── Filtered client list ──────────────────────────────────
+  // ── Filtered client lists (active vs archived) ───────────
   const filteredClients = clients.filter(c=>{
+    if (isDeactivated(c)) return false  // active only
     const ms = !clientSearch||c.name.toLowerCase().includes(clientSearch.toLowerCase())||c.email.toLowerCase().includes(clientSearch.toLowerCase())
-    const mc = filterCoach==='All Coaches'||c.coachName===filterCoach
+    const mc = filterCoach==='All Coaches'||effectiveCoachName(c)===filterCoach
     return ms&&mc
   }).sort((a,b)=>{
-    // Unviewed updates first, then most recent
     if (a.hasUpdate && !b.hasUpdate) return -1
     if (!a.hasUpdate && b.hasUpdate) return 1
     return 0
+  })
+
+  const archivedClients = clients.filter(c=>{
+    if (!isDeactivated(c)) return false
+    const ms = !clientSearch||c.name.toLowerCase().includes(clientSearch.toLowerCase())||c.email.toLowerCase().includes(clientSearch.toLowerCase())
+    const mc = filterCoach==='All Coaches'||effectiveCoachName(c)===filterCoach
+    return ms&&mc
   })
 
   const TABS_ADMIN = [
@@ -618,6 +709,33 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 )
               })}
             </div>
+
+            {/* ── Archived / Deactivated clients ─────────────────── */}
+            {archivedClients.length>0&&(
+              <div style={{borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                <button onClick={()=>setArchiveOpen(v=>!v)}
+                  style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',background:C.surface,border:'none',padding:'10px 14px',cursor:'pointer'}}>
+                  <span style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>
+                    🗄 Archived Clients ({archivedClients.length})
+                  </span>
+                  <span style={{fontSize:14,color:C.muted,transform:archiveOpen?'rotate(0)':'rotate(-90deg)',transition:'transform .2s'}}>▾</span>
+                </button>
+                {archiveOpen&&archivedClients.map(client=>(
+                  <div key={client.uuid} style={{borderTop:`1px solid ${C.border}`,position:'relative'}}>
+                    <button onClick={()=>openClient(client)}
+                      style={{width:'100%',textAlign:'left',background:selectedClient?.uuid===client.uuid?`${C.dim}33`:C.surface,border:'none',padding:'10px 14px 10px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,opacity:0.7}}>
+                      <div style={{width:32,height:32,borderRadius:16,background:C.dim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.muted,flexShrink:0}}>
+                        {client.name[0]}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+                        <div style={{fontSize:9,color:C.danger,fontWeight:700,marginTop:2}}>● DEACTIVATED · {effectiveCoachName(client)}</div>
+                      </div>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Client detail panel */}
@@ -667,6 +785,66 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     </div>
                   </div>
                 </div>
+
+                {/* Account Status — admin can deactivate / reactivate */}
+                {isAdmin&&(
+                  <Card sx={{marginBottom:14,border:`1px solid ${isDeactivated(selectedClient)?C.danger+'55':C.border}`}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div>
+                        <Lbl t="Account Status"/>
+                        {isDeactivated(selectedClient)?(
+                          <div>
+                            <span style={{fontSize:11,background:`${C.danger}22`,color:C.danger,padding:'3px 9px',borderRadius:10,fontWeight:700}}>● DEACTIVATED</span>
+                            <div style={{fontSize:10,color:C.muted,marginTop:4}}>
+                              Client cannot log in. All data is preserved and still visible here.
+                            </div>
+                          </div>
+                        ):(
+                          <div>
+                            <span style={{fontSize:11,background:`${C.success}22`,color:C.success,padding:'3px 9px',borderRadius:10,fontWeight:700}}>● ACTIVE</span>
+                            <div style={{fontSize:10,color:C.muted,marginTop:4}}>
+                              Client has full login access and can submit check-ins.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {isDeactivated(selectedClient)?(
+                        <div style={{display:'flex',flexDirection:'column',gap:6,alignItems:'flex-end'}}>
+                          <button onClick={()=>reactivateClient(selectedClient)}
+                            style={{background:C.success,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+                            ✓ Reactivate
+                          </button>
+                          {isAdmin&&(
+                            <div style={{fontSize:9,color:C.muted,textAlign:'right',maxWidth:140}}>
+                              Restores login access. All past data remains intact.
+                            </div>
+                          )}
+                        </div>
+                      ):(
+                        <button onClick={()=>{if(window.confirm(`Deactivate ${selectedClient.name}? They won't be able to log in, but all their data stays here.`)) deactivateClient(selectedClient)}}
+                          style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.danger,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+                          Deactivate
+                        </button>
+                      )}
+                    </div>
+                    {isDeactivated(selectedClient)&&(
+                      <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:'uppercase',fontWeight:700,marginBottom:6}}>Transfer to Coach</div>
+                        <div style={{display:'flex',gap:8}}>
+                          <select
+                            defaultValue=""
+                            onChange={e=>{ if(e.target.value){ transferClient(selectedClient.email,e.target.value); setSelectedClient(prev=>({...prev,coachName:DEMO_COACHES.find(c=>c.uuid===e.target.value)?.name||prev.coachName})) }}}
+                            style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}>
+                            <option value="">Current: {effectiveCoachName(selectedClient)}</option>
+                            {DEMO_COACHES.filter(c=>!removedCoaches.includes(c.uuid)).map(c=>(
+                              <option key={c.uuid} value={c.uuid}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                )}
 
                 {/* Quick navigation to client tools */}
                 <Card sx={{marginBottom:14}}>
@@ -767,36 +945,63 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </button>
           </div>
           {DEMO_COACHES.map(coach=>{
-            const coachClients = DEMO_CLIENTS.filter(c=>c.coachId===coach.uuid)
-            const pending      = coachClients.filter(c=>c.hasUpdate).length
+            const isRemoved    = removedCoaches.includes(coach.uuid)
+            const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
+            const activeClients   = coachClients.filter(c=>!isDeactivated(c))
+            const archivedByCoach = coachClients.filter(c=>isDeactivated(c))
+            const pending      = activeClients.filter(c=>c.hasUpdate).length
             return (
-              <Card key={coach.uuid} sx={{marginBottom:10}}>
+              <Card key={coach.uuid} sx={{marginBottom:10,opacity:isRemoved?0.55:1,border:`1px solid ${isRemoved?C.danger+'33':C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:12}}>
-                  <div style={{width:44,height:44,borderRadius:22,background:`${C.gold}22`,border:`2px solid ${C.gold}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:C.gold,flexShrink:0}}>
+                  <div style={{width:44,height:44,borderRadius:22,background:isRemoved?`${C.danger}15`:`${C.gold}22`,border:`2px solid ${isRemoved?C.danger+'33':C.gold+'44'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:isRemoved?C.danger:C.gold,flexShrink:0}}>
                     {coach.name[0]}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:14,fontWeight:700,color:C.white}}>{coach.name}</div>
+                    <div style={{fontSize:14,fontWeight:700,color:isRemoved?C.muted:C.white}}>{coach.name}</div>
                     <div style={{fontSize:11,color:C.muted,marginTop:2}}>{coach.email}</div>
                     <div style={{display:'flex',gap:12,marginTop:5}}>
-                      <span style={{fontSize:10,color:C.gold,fontWeight:600}}>{coachClients.length} client{coachClients.length!==1?'s':''}</span>
-                      {pending>0&&<span style={{fontSize:10,color:C.danger,fontWeight:600}}>{pending} pending update{pending!==1?'s':''}</span>}
+                      <span style={{fontSize:10,color:C.gold,fontWeight:600}}>{activeClients.length} active client{activeClients.length!==1?'s':''}</span>
+                      {archivedByCoach.length>0&&<span style={{fontSize:10,color:C.muted,fontWeight:600}}>{archivedByCoach.length} archived</span>}
+                      {pending>0&&<span style={{fontSize:10,color:C.danger,fontWeight:600}}>{pending} pending</span>}
                     </div>
                   </div>
-                  <div style={{display:'flex',gap:6}}>
-                    <span style={{fontSize:10,background:`${C.success}22`,color:C.success,padding:'3px 8px',borderRadius:10,fontWeight:700}}>ACTIVE</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}>
+                    <span style={{fontSize:10,background:isRemoved?`${C.danger}22`:`${C.success}22`,color:isRemoved?C.danger:C.success,padding:'3px 8px',borderRadius:10,fontWeight:700}}>
+                      {isRemoved?'REMOVED':'ACTIVE'}
+                    </span>
+                    {!isRemoved&&(
+                      <button onClick={()=>confirmRemoveCoach(coach)}
+                        style={{fontSize:10,background:'none',border:`1px solid ${C.danger}44`,borderRadius:6,padding:'3px 8px',color:C.danger,cursor:'pointer',fontWeight:600,whiteSpace:'nowrap'}}>
+                        Remove Coach
+                      </button>
+                    )}
                   </div>
                 </div>
-                {/* Coach's clients */}
-                {coachClients.length>0&&(
+                {/* Coach's active clients */}
+                {activeClients.length>0&&(
                   <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Clients — click to open</div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Active Clients — click to open</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {coachClients.map(c=>(
+                      {activeClients.map(c=>(
                         <button key={c.uuid}
                           onClick={()=>{ openClient(c); setTab('clients') }}
                           style={{fontSize:11,background:c.hasUpdate?`${C.gold}22`:C.surface,border:`1px solid ${c.hasUpdate?C.gold+'44':C.border}`,borderRadius:6,padding:'4px 10px',color:c.hasUpdate?C.gold:C.white,cursor:'pointer'}}>
                           {c.name}{c.hasUpdate?' 🔔':''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Archived clients under this coach */}
+                {archivedByCoach.length>0&&(
+                  <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🗄 Archived / Deactivated</div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {archivedByCoach.map(c=>(
+                        <button key={c.uuid}
+                          onClick={()=>{ openClient(c); setTab('clients') }}
+                          style={{fontSize:11,background:`${C.danger}11`,border:`1px solid ${C.danger}33`,borderRadius:6,padding:'4px 10px',color:C.muted,cursor:'pointer'}}>
+                          {c.name} ✕
                         </button>
                       ))}
                     </div>
@@ -1203,6 +1408,75 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <button onClick={createOrg} disabled={!newOrg.name.trim()}
                 style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newOrg.name.trim()?1:.5}}>
                 Create Organization
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          COACH REMOVAL + CLIENT TRANSFER MODAL
+      ══════════════════════════════════════════════════════ */}
+      {showTransferModal&&pendingRemoval&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:16}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:24,width:'100%',maxWidth:440}}>
+            <div style={{fontSize:16,fontWeight:800,color:C.white,marginBottom:4}}>Remove Coach: {pendingRemoval.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:20,lineHeight:1.5}}>
+              This coach will be marked as removed. Choose what happens to their active clients below.
+            </div>
+
+            {(()=>{
+              const activeC    = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
+              const archivedC  = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&isDeactivated(c))
+              const available  = DEMO_COACHES.filter(c=>c.uuid!==pendingRemoval.uuid&&!removedCoaches.includes(c.uuid))
+              return (
+                <>
+                  {activeC.length>0?(
+                    <div style={{marginBottom:16}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>
+                        Active Clients ({activeC.length}) — Transfer To
+                      </div>
+                      <select value={transferTargetId} onChange={e=>setTransferTargetId(e.target.value)}
+                        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',marginBottom:8}}>
+                        {available.length===0&&<option value="">No other coaches available</option>}
+                        {available.map(c=><option key={c.uuid} value={c.uuid}>{c.name}</option>)}
+                      </select>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {activeC.map(c=>(
+                          <span key={c.uuid} style={{fontSize:10,background:`${C.gold}15`,border:`1px solid ${C.gold}33`,borderRadius:6,padding:'3px 9px',color:C.gold}}>
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{marginBottom:16,background:C.surface,borderRadius:8,padding:'10px 14px'}}>
+                      <div style={{fontSize:12,color:C.muted}}>No active clients to transfer.</div>
+                    </div>
+                  )}
+
+                  {archivedC.length>0&&(
+                    <div style={{marginBottom:16,background:`${C.dim}44`,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>
+                        🗄 Deactivated Clients ({archivedC.length}) — Stored in Admin Archive
+                      </div>
+                      <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
+                        All data preserved. You can view, transfer, or reactivate these clients at any time from the Clients tab.
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+
+            <div style={{display:'flex',gap:10,marginTop:6}}>
+              <button onClick={()=>{setShowTransferModal(false);setPendingRemoval(null)}}
+                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                Cancel
+              </button>
+              <button onClick={executeRemoveCoach}
+                style={{flex:2,background:C.danger,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.white,fontSize:13,cursor:'pointer'}}>
+                Confirm Remove Coach
               </button>
             </div>
           </div>

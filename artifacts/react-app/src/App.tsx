@@ -197,6 +197,17 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
     setTimeout(() => {
       const user = DEMO_USERS[email.toLowerCase()];
       if (user && user.password === pass) {
+        // Block deactivated client accounts
+        if (user.role === 'client') {
+          try {
+            const deactivated = JSON.parse(localStorage.getItem('eden_deactivated_clients') || '{}');
+            if (deactivated[email.toLowerCase()]) {
+              setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
+              setLoading(false);
+              return;
+            }
+          } catch {}
+        }
         onLogin({ email, ...user });
       } else {
         setError("Invalid email or password.");
