@@ -728,8 +728,9 @@ Training Principles:
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:C.black,overflow:'hidden'}}>
 
       {/* ── Tab bar ───────────────────────────────────────── */}
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 16px',display:'flex',alignItems:'center',flexShrink:0}}>
-        <div style={{flex:1}}>
+      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        {/* ── top row: title ────────────────────────────────── */}
+        <div style={{padding:'8px 16px 4px'}}>
           <div style={{fontSize:13,fontWeight:700,color:C.white}}>
             {isCoach?'Client Tools — Jordan Williams':'My Tools'}
           </div>
@@ -739,12 +740,23 @@ Training Principles:
             </button>
           )}
         </div>
-        {TABS.map(([k,l])=>(
-          <button key={k} onClick={()=>setTab(k)}
-            style={{padding:'13px 14px',background:'none',border:'none',borderBottom:`2px solid ${tab===k?C.gold:'transparent'}`,color:tab===k?C.gold:C.muted,fontSize:12,fontWeight:tab===k?700:400,cursor:'pointer',whiteSpace:'nowrap'}}>
-            {l}
-          </button>
-        ))}
+        {/* ── scrollable tab row ────────────────────────────── */}
+        <div style={{display:'flex',overflowX:'auto',WebkitOverflowScrolling:'touch',scrollbarWidth:'none',msOverflowStyle:'none',padding:'0 8px'}}>
+          {TABS.map(([k,l])=>(
+            <button key={k} onClick={()=>setTab(k)}
+              style={{
+                flexShrink:0, padding:'8px 14px', border:'none',
+                borderBottom:`3px solid ${tab===k?C.gold:'transparent'}`,
+                color:tab===k?C.white:C.muted,
+                fontSize:12, fontWeight:tab===k?700:500,
+                cursor:'pointer', whiteSpace:'nowrap',
+                background:tab===k?`${C.gold}18`:'none',
+                transition:'all 0.15s',
+              }}>
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════
