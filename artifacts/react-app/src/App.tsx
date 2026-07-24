@@ -1872,6 +1872,8 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
   const [resolved, setResolved]             = useState<Record<string,Set<string>>>({});
   const [checkinDeadline, setCheckinDeadline] = useState("09:00");
   const clients = CLIENT_ROSTER;
+  // Guard: ensure loomFeatured is always a Set regardless of how the prop arrives
+  const featuredSet: Set<string> = (loomFeatured instanceof Set) ? loomFeatured : new Set();
 
   function resolveItem(email: string, reason: string) {
     setResolved(prev => {
@@ -1895,7 +1897,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
     byDay[day].push(c);
   });
 
-  const isFeatured      = (c: any)            => loomFeatured.has(c.name);
+  const isFeatured      = (c: any)            => featuredSet.has(c.name);
   const displayName     = (c: any, i: number) => (loomMode && !isFeatured(c)) ? `Client ${String.fromCharCode(65+i)}` : c.name;
   const displayProtocol = (c: any)            => (loomMode && !isFeatured(c)) ? "Protocol hidden" : c.protocol;
   const displayCheckin  = (c: any)            => (loomMode && !isFeatured(c)) ? "—" : c.lastCheckin;
@@ -1913,8 +1915,8 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
           <div style={{ marginTop:10, padding:"6px 12px", background:"#ff525218", border:"1px solid #ff525244", borderRadius:8 }}>
             <p style={{ fontSize:11, color:"#ff5252", margin:0, fontWeight:600 }}>
               🔴 Loom Mode active —{" "}
-              {loomFeatured.size > 0
-                ? `${loomFeatured.size} client${loomFeatured.size>1?'s':''} visible, all others hidden`
+              {featuredSet.size > 0
+                ? `${featuredSet.size} client${featuredSet.size>1?'s':''} visible, all others hidden`
                 : "all client names hidden"}
             </p>
           </div>
