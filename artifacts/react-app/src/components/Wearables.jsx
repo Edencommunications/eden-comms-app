@@ -13,6 +13,11 @@ const C = {
   muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
 }
 
+// ── Supabase (food log persistence) ──────────────────────────
+const SB_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
+const SB_HEADERS = { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, 'Content-Type': 'application/json' }
+
 const KNOWN_USERS = {
   'client@eden.io':     { uuid:'c1000000-0000-0000-0000-000000000001', name:'Jordan Williams' },
   'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus'   },
@@ -357,8 +362,9 @@ export default function Wearables({ currentUser }) {
   const [noteSaved,    setNoteSaved]    = useState(false)
 
   // ── Persistent food log ──────────────────────────────────────
-  // Key is based on the client's email so coach and client views share the same store.
-  // Falls back to demo seed entries only when the store is empty (first launch).
+  // Primary store: Supabase `food_log_entries` table (syncs across all devices —
+  // client logs on phone, coach sees on computer). Falls back to localStorage
+  // if the table doesn't exist yet or the network is down.
   const seedLog    = DEMO_WEARABLE_DATA[clientUUID]?.foodLog ?? []
   const storageKey = `eden_foodlog_${(clientUUID || email).replace(/[^a-z0-9]/gi, '_')}`
 
@@ -372,8 +378,24 @@ export default function Wearables({ currentUser }) {
     } catch {}
     return seedLog
   })
+  const [dbMode, setDbMode] = useState(false) // true once the Supabase table responds
 
-  // Persist every change to localStorage — unlimited entries, survives refresh
+  // Load from database on mount — database wins when available
+  useEffect(() => {
+    if (!clientUUID) return
+    fetch(`${SB_URL}/rest/v1/food_log_entries?client_id=eq.${clientUUID}&order=date.desc,id.desc`, { headers: SB_HEADERS })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(rows => {
+        if (!Array.isArray(rows)) return
+        setDbMode(true)
+        if (rows.length > 0) {
+          setFoodEntries(rows.map(r => ({ id: r.id, date: r.date, meal: r.meal, description: r.description, calories: r.calories })))
+        }
+      })
+      .catch(() => {}) // table missing or offline → stay in localStorage mode
+  }, [clientUUID])
+
+  // Persist every change to localStorage as a same-device cache
   const isFirstRender = useRef(true)
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
@@ -396,12 +418,32 @@ export default function Wearables({ currentUser }) {
   }
 
   function handleAddFood(entry) {
-    const newEntry = { ...entry, id: nextIdRef.current++ }
-    setFoodEntries(prev => [newEntry, ...prev])
+    if (dbMode && clientUUID) {
+      // Insert into database and use its returned id
+      fetch(`${SB_URL}/rest/v1/food_log_entries`, {
+        method: 'POST',
+        headers: { ...SB_HEADERS, Prefer: 'return=representation' },
+        body: JSON.stringify({ client_id: clientUUID, date: entry.date, meal: entry.meal, description: entry.description, calories: entry.calories }),
+      })
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(rows => {
+          const row = Array.isArray(rows) ? rows[0] : rows
+          setFoodEntries(prev => [{ id: row.id, date: row.date, meal: row.meal, description: row.description, calories: row.calories }, ...prev])
+        })
+        .catch(() => {
+          // DB write failed → keep the entry locally so nothing is lost
+          setFoodEntries(prev => [{ ...entry, id: nextIdRef.current++ }, ...prev])
+        })
+      return
+    }
+    setFoodEntries(prev => [{ ...entry, id: nextIdRef.current++ }, ...prev])
   }
 
   function handleDeleteFood(id) {
     setFoodEntries(prev => prev.filter(e => e.id !== id))
+    if (dbMode && clientUUID) {
+      fetch(`${SB_URL}/rest/v1/food_log_entries?id=eq.${id}&client_id=eq.${clientUUID}`, { method: 'DELETE', headers: SB_HEADERS }).catch(() => {})
+    }
   }
 
   const DEVICES = [
