@@ -753,7 +753,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const isAdmin = myRole === 'super_admin' || myRole === 'company_admin'
 
   const demoConversations = myRole === 'coach' ? DEMO_CLIENTS : [CLIENT_COACH_CONVO, ADMIN_CONVO]
-  const conversations     = dynConversations ?? demoConversations
+  // For coach: only switch to Supabase-loaded convos if they're richer than the demo set.
+  // A partial load (e.g. only Jordan is in the DB) must not replace the other demo clients.
+  const conversations = myRole === 'coach'
+    ? (dynConversations && dynConversations.length > DEMO_CLIENTS.length ? dynConversations : DEMO_CLIENTS)
+    : (dynConversations ?? demoConversations)
 
   // ── Conversation selection ────────────────────────────────
   // null = no conversation open (list-only view)
@@ -1003,8 +1007,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   }
 
   // ── Which messages to show ─────────────────────────────────
-  // Live for Jordan (coach+client); demo thread for others
-  const displayMessages = isLive ? liveMessages : (activeConvo?.thread ?? [])
+  // Live for Jordan when messages exist in Supabase; otherwise fall back to demo thread so
+  // the conversation is never blank (Supabase messages table may not be seeded yet).
+  const displayMessages = isLive && liveMessages.length > 0
+    ? liveMessages
+    : (activeConvo?.thread ?? [])
   const coachUUID = KNOWN_USERS['coach@eden.io'].uuid
   const clientUUID = KNOWN_USERS['client@eden.io'].uuid
 
