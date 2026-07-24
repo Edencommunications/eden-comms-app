@@ -3523,7 +3523,6 @@ const AppShell = ({ user, onLogout }) => {
     { key:"msgs",      icon:"msg",       label:"Messages" },
     { key:"diet",      icon:"diet",      label:"Diet" },
     { key:"checkin",   icon:"checkin",   label:"Check In" },
-    { key:"habits",    icon:"habits",    label:"Habits" },
     { key:"labs",      icon:"labs",      label:"Labs" },
     { key:"workout",   icon:"workout",   label:"Workout" },
     { key:"wearables", icon:"watch",     label:"Wearables" },
