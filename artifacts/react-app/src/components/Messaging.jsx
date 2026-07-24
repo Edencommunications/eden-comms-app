@@ -209,6 +209,319 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB'
 }
 
+// ── Demo coaches + clients for broadcast targeting ────────────
+const BROADCAST_COACHES = [
+  {
+    id: '414b1fb3-f38c-4480-bdb2-fe7b1d844051',
+    name: 'Coach Marcus',
+    clients: [
+      { id: 'c-jordan', name: 'Jordan Williams', checkInDay: 'Wednesday' },
+      { id: 'c-alex',   name: 'Alex Carter',     checkInDay: 'Wednesday' },
+      { id: 'c-taylor', name: 'Taylor Reyes',    checkInDay: 'Friday'    },
+      { id: 'c-sam',    name: 'Sam Thompson',    checkInDay: 'Monday'    },
+    ],
+  },
+]
+
+// ── Broadcast Composer ────────────────────────────────────────
+function BroadcastComposer({ onClose, senderName }) {
+  const [audienceType,    setAudienceType]    = useState('company_wide')
+  const [selectedCoachId, setSelectedCoachId] = useState('')
+  const [selectedDay,     setSelectedDay]     = useState('')
+  const [selectedClients, setSelectedClients] = useState(new Set())
+  const [message,         setMessage]         = useState('')
+  const [sending,         setSending]         = useState(false)
+  const [sent,            setSent]            = useState(false)
+  const [history,         setHistory]         = useState([])
+  const [view,            setView]            = useState('compose') // 'compose' | 'history'
+
+  useEffect(() => { loadHistory() }, [])
+
+  async function loadHistory() {
+    try {
+      const rows = await dbGet('broadcast_messages', 'order=sent_at.desc&limit=30')
+      if (rows) setHistory(rows)
+    } catch {}
+  }
+
+  const coach = BROADCAST_COACHES.find(c => c.id === selectedCoachId)
+
+  const availableDays = coach
+    ? [...new Set(coach.clients.map(c => c.checkInDay))].sort()
+    : []
+
+  const filteredClients = (() => {
+    if (!coach) return []
+    if (audienceType === 'coach_day' && selectedDay)
+      return coach.clients.filter(c => c.checkInDay === selectedDay)
+    return coach.clients
+  })()
+
+  function toggleClient(id) {
+    setSelectedClients(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+
+  function audienceLabel() {
+    switch (audienceType) {
+      case 'company_wide': return '🌐 Everyone — all coaches & their clients'
+      case 'coaches_only': return '👨‍💼 Coaches only'
+      case 'coach_roster': return coach ? `All clients of ${coach.name} (${coach.clients.length} clients)` : '— pick a coach —'
+      case 'coach_day':    return (coach && selectedDay) ? `${coach.name} · ${selectedDay} clients (${filteredClients.length})` : '— pick coach & day —'
+      case 'individuals':  return selectedClients.size > 0
+        ? `${selectedClients.size} selected: ${[...selectedClients].map(id => coach?.clients.find(c=>c.id===id)?.name).filter(Boolean).join(', ')}`
+        : '— pick coach, then select clients —'
+      default: return ''
+    }
+  }
+
+  function isReady() {
+    if (!message.trim()) return false
+    if (audienceType === 'company_wide' || audienceType === 'coaches_only') return true
+    if (!selectedCoachId) return false
+    if (audienceType === 'coach_roster') return true
+    if (audienceType === 'coach_day') return !!selectedDay
+    if (audienceType === 'individuals') return selectedClients.size > 0
+    return false
+  }
+
+  async function send() {
+    if (!isReady()) return
+    setSending(true)
+    try {
+      await dbInsert('broadcast_messages', {
+        sent_by_name:  senderName || 'Admin',
+        audience_type: audienceType,
+        audience_label: audienceLabel(),
+        coach_id:      selectedCoachId || null,
+        check_in_day:  selectedDay     || null,
+        recipient_ids: JSON.stringify([...selectedClients]),
+        message:       message.trim(),
+        sent_at:       new Date().toISOString(),
+      })
+      setSent(true)
+      await loadHistory()
+    } catch {
+      alert('Could not save — run the broadcast_messages SQL in Supabase first.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  function reset() {
+    setAudienceType('company_wide'); setSelectedCoachId(''); setSelectedDay('')
+    setSelectedClients(new Set()); setMessage(''); setSent(false)
+    setView('compose')
+  }
+
+  const aud = [
+    { key:'company_wide', icon:'🌐', label:'Everyone',         sub:'All coaches + their clients' },
+    { key:'coaches_only', icon:'👨‍💼', label:'Coaches only',     sub:'Just the coaching team' },
+    { key:'coach_roster', icon:'👥', label:'One coach\'s roster', sub:'All clients under a specific coach' },
+    { key:'coach_day',    icon:'📅', label:'By check-in day',  sub:'Clients on a specific update day' },
+    { key:'individuals',  icon:'✅', label:'Specific clients', sub:'Hand-pick clients from a roster' },
+  ]
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:C.black, overflow:'hidden' }}>
+
+      {/* Header */}
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:'12px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:18, cursor:'pointer', padding:'2px 6px 2px 0', lineHeight:1 }}>←</button>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:C.white }}>📢 Broadcast Message</div>
+            <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Send to a targeted group</div>
+          </div>
+        </div>
+        <button onClick={() => setView(v => v === 'history' ? 'compose' : 'history')}
+          style={{ background:view==='history'?`${C.gold}22`:'#1a1a1a', border:`1px solid ${view==='history'?C.gold:C.border}`,
+            borderRadius:8, padding:'6px 12px', color:view==='history'?C.gold:C.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+          {view === 'history' ? '✏️ Compose' : '📋 Sent History'}
+        </button>
+      </div>
+
+      {/* ── Sent History ── */}
+      {view === 'history' && (
+        <div style={{ flex:1, overflowY:'auto', padding:16 }}>
+          {history.length === 0 ? (
+            <div style={{ textAlign:'center', padding:40, color:C.muted }}>No broadcasts sent yet</div>
+          ) : history.map((b,i) => (
+            <div key={b.id||i} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:C.gold, background:`${C.gold}18`, border:`1px solid ${C.gold}33`, borderRadius:6, padding:'2px 8px' }}>
+                  {b.audience_label || b.audience_type}
+                </span>
+                <span style={{ fontSize:10, color:C.muted }}>{b.sent_at ? new Date(b.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}</span>
+              </div>
+              <div style={{ fontSize:13, color:C.white, lineHeight:1.5, marginBottom:4 }}>{b.message}</div>
+              <div style={{ fontSize:10, color:C.muted }}>Sent by {b.sent_by_name}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Compose view ── */}
+      {view === 'compose' && !sent && (
+        <div style={{ flex:1, overflowY:'auto', padding:16 }}>
+
+          {/* Audience */}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:10 }}>1 · Choose Audience</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {aud.map(a => (
+                <button key={a.key} onClick={() => { setAudienceType(a.key); setSelectedCoachId(''); setSelectedDay(''); setSelectedClients(new Set()) }}
+                  style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:`2px solid ${audienceType===a.key ? C.gold : C.border}`,
+                    background: audienceType===a.key ? `${C.gold}12` : C.card, cursor:'pointer', textAlign:'left' }}>
+                  <span style={{ fontSize:20, flexShrink:0 }}>{a.icon}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color: audienceType===a.key ? C.gold : C.white }}>{a.label}</div>
+                    <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{a.sub}</div>
+                  </div>
+                  {audienceType===a.key && <span style={{ color:C.gold, fontSize:16, flexShrink:0 }}>✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Coach picker */}
+          {['coach_roster','coach_day','individuals'].includes(audienceType) && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>2 · Select Coach</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {BROADCAST_COACHES.map(c => (
+                  <button key={c.id} onClick={() => { setSelectedCoachId(c.id); setSelectedDay(''); setSelectedClients(new Set()) }}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:10,
+                      border:`2px solid ${selectedCoachId===c.id ? C.gold : C.border}`,
+                      background: selectedCoachId===c.id ? `${C.gold}12` : C.card, cursor:'pointer', textAlign:'left' }}>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color: selectedCoachId===c.id ? C.gold : C.white }}>{c.name}</div>
+                      <div style={{ fontSize:11, color:C.muted }}>{c.clients.length} clients</div>
+                    </div>
+                    {selectedCoachId===c.id && <span style={{ color:C.gold }}>✓</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Day picker */}
+          {audienceType === 'coach_day' && selectedCoachId && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>3 · Check-In Day</div>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                {availableDays.map(d => (
+                  <button key={d} onClick={() => setSelectedDay(d)}
+                    style={{ padding:'8px 16px', borderRadius:20, border:`2px solid ${selectedDay===d ? C.gold : C.border}`,
+                      background: selectedDay===d ? `${C.gold}18` : C.card, color: selectedDay===d ? C.gold : C.muted,
+                      fontWeight: selectedDay===d ? 700 : 400, fontSize:12, cursor:'pointer' }}>
+                    {d}
+                    <span style={{ fontSize:10, marginLeft:6, color:C.muted }}>
+                      ({coach?.clients.filter(c=>c.checkInDay===d).length})
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {selectedDay && (
+                <div style={{ marginTop:10, padding:'8px 12px', background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:8 }}>
+                  <div style={{ fontSize:11, color:C.gold, fontWeight:600, marginBottom:4 }}>Recipients:</div>
+                  <div style={{ fontSize:12, color:C.white }}>
+                    {filteredClients.map(c => c.name).join(', ')}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Individual picker */}
+          {audienceType === 'individuals' && selectedCoachId && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase' }}>3 · Select Clients</div>
+                <button onClick={() => {
+                  if (selectedClients.size === coach?.clients.length) setSelectedClients(new Set())
+                  else setSelectedClients(new Set(coach?.clients.map(c=>c.id)))
+                }} style={{ background:'none', border:'none', color:C.gold, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                  {selectedClients.size === coach?.clients.length ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {coach?.clients.map(cl => (
+                  <button key={cl.id} onClick={() => toggleClient(cl.id)}
+                    style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:10,
+                      border:`2px solid ${selectedClients.has(cl.id) ? C.gold : C.border}`,
+                      background: selectedClients.has(cl.id) ? `${C.gold}12` : C.card, cursor:'pointer', textAlign:'left' }}>
+                    <div style={{ width:20, height:20, borderRadius:4, border:`2px solid ${selectedClients.has(cl.id) ? C.gold : C.border}`,
+                      background: selectedClients.has(cl.id) ? C.gold : 'transparent', flexShrink:0,
+                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:C.black, fontWeight:800 }}>
+                      {selectedClients.has(cl.id) ? '✓' : ''}
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color: selectedClients.has(cl.id) ? C.gold : C.white }}>{cl.name}</div>
+                      <div style={{ fontSize:11, color:C.muted }}>Check-in: {cl.checkInDay}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Audience summary chip */}
+          {isReady() && (
+            <div style={{ marginBottom:16, padding:'8px 12px', background:`${C.gold}12`, border:`1px solid ${C.gold}44`, borderRadius:8 }}>
+              <div style={{ fontSize:11, color:C.gold, fontWeight:600 }}>📢 {audienceLabel()}</div>
+            </div>
+          )}
+
+          {/* Message */}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>
+              {['coach_roster','coach_day','individuals'].includes(audienceType) ? '4' : '2'} · Message
+            </div>
+            <textarea value={message} onChange={e=>setMessage(e.target.value)} rows={5}
+              placeholder="Type your broadcast message here…"
+              style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 14px',
+                color:C.white, fontSize:13, outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'inherit', lineHeight:1.6 }}/>
+            <div style={{ textAlign:'right', fontSize:10, color:C.muted, marginTop:4 }}>{message.length} chars</div>
+          </div>
+
+          {/* Send button */}
+          <button onClick={send} disabled={!isReady() || sending}
+            style={{ width:'100%', background: isReady() ? C.gold : '#2a2a2a', border:'none', borderRadius:12,
+              padding:'14px', fontWeight:800, color: isReady() ? C.black : C.muted, fontSize:15,
+              cursor: isReady() ? 'pointer' : 'not-allowed', marginBottom:16, opacity: sending ? 0.7 : 1 }}>
+            {sending ? 'Sending…' : '📢 Send Broadcast'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Success state ── */}
+      {view === 'compose' && sent && (
+        <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:32, gap:16 }}>
+          <div style={{ fontSize:56 }}>✅</div>
+          <div style={{ fontSize:18, fontWeight:800, color:C.white }}>Broadcast Sent</div>
+          <div style={{ fontSize:13, color:C.muted, textAlign:'center', maxWidth:280, lineHeight:1.6 }}>
+            Your message has been delivered to <span style={{ color:C.gold, fontWeight:700 }}>{audienceLabel()}</span>.
+          </div>
+          <div style={{ display:'flex', gap:10, marginTop:8 }}>
+            <button onClick={reset}
+              style={{ background:C.gold, border:'none', borderRadius:10, padding:'12px 24px', fontWeight:800, color:C.black, fontSize:14, cursor:'pointer' }}>
+              Send Another
+            </button>
+            <button onClick={() => setView('history')}
+              style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 24px', color:C.muted, fontSize:14, cursor:'pointer' }}>
+              View History
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Multi-tenant helpers ──────────────────────────────────────
 function makeInitials(name = '') {
   return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '??'
@@ -261,6 +574,10 @@ export default function Messaging({ currentUser, loomMode = false }) {
   // Falls back to hardcoded demo data when user_profiles isn't set up yet.
   const [dynConversations, setDynConversations] = useState(null) // null = not loaded
   const [myProfileId,      setMyProfileId]      = useState(myUUID)
+
+  const [showBroadcast, setShowBroadcast] = useState(false)
+
+  const isAdmin = myRole === 'super_admin' || myRole === 'company_admin'
 
   const demoConversations = myRole === 'coach' ? DEMO_CLIENTS : [CLIENT_COACH_CONVO, ADMIN_CONVO]
   const conversations     = dynConversations ?? demoConversations
@@ -557,14 +874,22 @@ export default function Messaging({ currentUser, loomMode = false }) {
         flexShrink:0,
       }}>
         {/* Header */}
-        <div style={{ padding:'16px 14px 12px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ padding:'12px 14px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <div style={{ fontSize:15, fontWeight:700, color:C.white }}>Messages</div>
             <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>
-              {myRole === 'coach' ? `${conversations.length} clients` : 'Coach Marcus · Eden Admin'}
+              {myRole === 'coach' ? `${conversations.length} clients` : isAdmin ? 'All staff & clients' : 'Coach Marcus · Eden Admin'}
             </div>
           </div>
-          {/* no close button needed — back arrow is in the chat panel */}
+          {/* Broadcast button — admin only */}
+          {isAdmin && (
+            <button onClick={() => { setShowBroadcast(true); setActiveId(null) }}
+              style={{ background:showBroadcast?C.gold:`${C.gold}22`, border:`1px solid ${showBroadcast?C.gold:C.gold+'55'}`,
+                borderRadius:8, padding:'6px 10px', color:showBroadcast?C.black:C.gold,
+                fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+              📢 Broadcast
+            </button>
+          )}
         </div>
 
         {/* Loom Mode banner */}
@@ -656,10 +981,15 @@ export default function Messaging({ currentUser, loomMode = false }) {
       </div>
 
       {/* ── RIGHT CONTENT ─────────────────────────────────────── */}
-      <div style={{ flex:1, display: showChat ? 'flex' : 'none', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+      <div style={{ flex:1, display: (showChat || (showBroadcast && !isMobile)) ? 'flex' : 'none', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+
+        {/* Broadcast Composer — full right panel on desktop, full screen on mobile */}
+        {showBroadcast && (
+          <BroadcastComposer senderName={myName} onClose={() => setShowBroadcast(false)} />
+        )}
 
         {/* No conversation selected — desktop placeholder */}
-        {!activeConvo && (
+        {!showBroadcast && !activeConvo && (
           <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
             justifyContent:'center', gap:12, color:C.muted, padding:32 }}>
             <div style={{ fontSize:48, opacity:0.4 }}>💬</div>
@@ -667,11 +997,18 @@ export default function Messaging({ currentUser, loomMode = false }) {
             <div style={{ fontSize:13, color:C.muted, textAlign:'center', maxWidth:240 }}>
               Choose someone from the list to open the chat
             </div>
+            {isAdmin && (
+              <button onClick={() => setShowBroadcast(true)}
+                style={{ marginTop:8, background:`${C.gold}22`, border:`1px solid ${C.gold}55`,
+                  borderRadius:10, padding:'10px 20px', color:C.gold, fontSize:13, fontWeight:700, cursor:'pointer' }}>
+                📢 Send a Broadcast Message
+              </button>
+            )}
           </div>
         )}
 
         {/* Active conversation UI */}
-        {activeConvo && (<>
+        {!showBroadcast && activeConvo && (<>
 
         {/* Top bar */}
         <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`,
