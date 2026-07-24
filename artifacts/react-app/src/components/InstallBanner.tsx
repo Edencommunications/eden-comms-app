@@ -38,6 +38,15 @@ function isMobile(): boolean {
   return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
 }
 
+const INSTALLED_KEY = 'eden-pwa-installed'
+
+function markInstalled() {
+  try { localStorage.setItem(INSTALLED_KEY, '1') } catch {}
+}
+function wasInstalled() {
+  try { return localStorage.getItem(INSTALLED_KEY) === '1' } catch { return false }
+}
+
 export default function InstallBanner() {
   const [visible,   setVisible]   = useState(false)   // show full banner
   const [collapsed, setCollapsed] = useState(false)   // show mini pill
@@ -45,8 +54,8 @@ export default function InstallBanner() {
   const deferredRef = useRef<any>(null)
 
   useEffect(() => {
-    // Never show if already installed or not on a mobile device
-    if (isStandalone() || !isMobile()) return
+    // Never show if already installed (standalone mode OR user previously confirmed)
+    if (isStandalone() || wasInstalled() || !isMobile()) return
 
     setIos(isIOS())
     setVisible(true)
@@ -60,6 +69,7 @@ export default function InstallBanner() {
 
     // Hide permanently if the user installs via the browser's own UI
     const onInstalled = () => {
+      markInstalled()
       setVisible(false)
       setCollapsed(false)
     }
@@ -84,6 +94,7 @@ export default function InstallBanner() {
       deferredRef.current.prompt()
       const { outcome } = await deferredRef.current.userChoice
       if (outcome === 'accepted') {
+        markInstalled()
         setVisible(false)
         setCollapsed(false)
       }
@@ -178,7 +189,7 @@ export default function InstallBanner() {
             </div>
             {/* Dismiss once-installed — user taps after doing it */}
             <button
-              onClick={() => { setVisible(false); setCollapsed(false) }}
+              onClick={() => { markInstalled(); setVisible(false); setCollapsed(false) }}
               style={{
                 width: '100%', background: `${GOLD}22`, border: `1px solid ${GOLD}55`,
                 borderRadius: 10, padding: '11px', color: GOLD, fontSize: 13,
