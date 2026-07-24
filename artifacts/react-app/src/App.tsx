@@ -1895,9 +1895,10 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, followedUp, s
     byDay[day].push(c);
   });
 
-  const displayName     = (c: any, i: number) => loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name;
-  const displayProtocol = (c: any)            => loomMode ? "Protocol hidden" : c.protocol;
-  const displayCheckin  = (c: any)            => loomMode ? "—" : c.lastCheckin;
+  const isFeatured      = (c: any)            => loomFeatured.has(c.name);
+  const displayName     = (c: any, i: number) => (loomMode && !isFeatured(c)) ? `Client ${String.fromCharCode(65+i)}` : c.name;
+  const displayProtocol = (c: any)            => (loomMode && !isFeatured(c)) ? "Protocol hidden" : c.protocol;
+  const displayCheckin  = (c: any)            => (loomMode && !isFeatured(c)) ? "—" : c.lastCheckin;
 
   const missingClients = clients.filter(c => isMissingCheckin(c));
 
@@ -1910,7 +1911,12 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, followedUp, s
         <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden · {clients.length} active clients</p>
         {loomMode && (
           <div style={{ marginTop:10, padding:"6px 12px", background:"#ff525218", border:"1px solid #ff525244", borderRadius:8 }}>
-            <p style={{ fontSize:11, color:"#ff5252", margin:0, fontWeight:600 }}>🔴 Loom Mode active — client names hidden across all tabs</p>
+            <p style={{ fontSize:11, color:"#ff5252", margin:0, fontWeight:600 }}>
+              🔴 Loom Mode active —{" "}
+              {loomFeatured.size > 0
+                ? `${loomFeatured.size} client${loomFeatured.size>1?'s':''} visible, all others hidden`
+                : "all client names hidden"}
+            </p>
           </div>
         )}
       </div>
@@ -3426,7 +3432,8 @@ const WARNING_SECS = 60;               // 60 s to respond before forced logout
 
 const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
-  const [loomMode, setLoomMode] = useState(false);
+  const [loomMode,     setLoomMode]     = useState(false);
+  const [loomFeatured, setLoomFeatured] = useState<Set<string>>(new Set());
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
   const [followedUp, setFollowedUp]   = useState<Set<string>>(new Set());
   const [splitView,        setSplitView]        = useState(false);
@@ -3574,7 +3581,7 @@ const AppShell = ({ user, onLogout }) => {
     const ciEmail = ((user.role === 'coach' || user.role === 'super_admin') && coachClient)
       ? coachClient.email : user.email;
     const ciDemoCheckins = CLIENT_ROSTER.find((c:any) => c.email === ciEmail)?.checkinHistory ?? [];
-    if (panelTab === 'msgs')    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
+    if (panelTab === 'msgs')    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
     if (panelTab === 'diet')    return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
     if (panelTab === 'checkin') return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
     if (panelTab === 'workout') return <Week4 currentUser={toolUser} initialTab="workout"/>;
@@ -3623,12 +3630,12 @@ const AppShell = ({ user, onLogout }) => {
     // Staff (VA, head coach, etc.)
     if (isStaff) {
       if (tab === "home") return <StaffClientPanel user={user}/>;
-      if (tab === "msgs") return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
+      if (tab === "msgs") return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
       return <StaffClientPanel user={user}/>;
     }
     // Shared screens
     if (tab === "home")      return <HomeScreen user={user}/>;
-    if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode}/>;
+    if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
     // When a coach navigates into a client tool, pass the client's email/name for
     // data context but keep the coach's role so components show the editable coach view
     const toolUser = (user.role === "coach" || user.role === "super_admin") && coachClient
@@ -3649,7 +3656,9 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout" onBack={onBack}/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
                                           onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}
-                                          initialClient={coachClient}/>;
+                                          initialClient={coachClient}
+                                          loomFeatured={loomFeatured}
+                                          setLoomFeatured={setLoomFeatured}/>;
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
     if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;

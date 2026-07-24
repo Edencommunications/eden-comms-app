@@ -734,7 +734,7 @@ async function findOrCreateConvo(aId, bId, companyId) {
 // MAIN COMPONENT
 // Props: currentUser = { email, name, role }
 // ════════════════════════════════════════════════════════════════
-export default function Messaging({ currentUser, loomMode = false }) {
+export default function Messaging({ currentUser, loomMode = false, loomFeatured = new Set() }) {
   const isMobile = useIsMobile()
 
   const email    = currentUser?.email || ''
@@ -1080,7 +1080,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
             const isActive  = convo.id === activeId
             // In Loom Mode: active conversation always shows real name;
             // all others are anonymised so they can't be read on camera
-            const isHidden  = loomMode && myRole === 'coach' && !isActive
+            const isHidden  = loomMode && myRole === 'coach' && !isActive && !loomFeatured.has(convo.name)
             const label     = isHidden ? `Client ${String.fromCharCode(65 + i)}` : convo.name
             const snippet   = isHidden ? '···' : convo.lastMessage
             const avatarTxt = isHidden ? String.fromCharCode(65 + i) : convo.initials
