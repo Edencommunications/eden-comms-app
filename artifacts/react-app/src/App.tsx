@@ -1013,7 +1013,7 @@ const CLIENT_ROSTER = [
     tags:["Gut Protocol","Nervous System","Thyroid"],
     notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
     checkInDay:"Wednesday", nextCheckin:"Jul 16", pendingLabs:true,
-    alertReasons:["Lab results not yet submitted by client — remind them to upload","Stress score elevated last 2 check-ins"],
+    alertReasons:["Stress score elevated last 2 check-ins"],
     checkinHistory:[
       { date:"Jul 9 2026",  weight:"148.0", temp:"97.8", steps:"9,200", heartRate:"62", hrv:"68", bloodPressure:"118/74",
         energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:92, mood:"Motivated",
@@ -1160,7 +1160,7 @@ const CLIENT_ROSTER = [
     tags:["5R Gut Protocol","Methylation Protocol"],
     notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
     checkInDay:"Wednesday", nextCheckin:"Overdue", pendingLabs:true,
-    alertReasons:["Check-in overdue — last submitted Jun 30","GI Map results not yet submitted by client","Elevated stress score 3 weeks in a row"],
+    alertReasons:["Check-in overdue — last submitted Jun 30","Elevated stress score 3 weeks in a row"],
     checkinHistory:[
       { date:"Jun 30 2026", weight:"191.0", temp:"97.4", steps:"6,800", heartRate:"72", hrv:"52", bloodPressure:"134/86",
         energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:4, hunger:6, stress:7, compliance:78, mood:"Frustrated",
@@ -1858,7 +1858,7 @@ function isMissingCheckin(c: any): boolean {
 }
 
 // ── Coach Dashboard ───────────────────────────────────────────────────────────
-const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
+const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, followedUp, setFollowedUp }) => {
   const isMobile = useIsMobile();
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [rosterOpen,     setRosterOpen]     = useState(true);
@@ -1867,7 +1867,6 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
   // Track resolved alert reasons per client email
   const [resolved, setResolved]             = useState<Record<string,Set<string>>>({});
   const [checkinDeadline, setCheckinDeadline] = useState("09:00");
-  const [followedUp,     setFollowedUp]       = useState<Set<string>>(new Set());
   const clients = CLIENT_ROSTER;
 
   function resolveItem(email: string, reason: string) {
@@ -3425,6 +3424,7 @@ const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
   const [loomMode, setLoomMode] = useState(false);
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
+  const [followedUp, setFollowedUp]   = useState<Set<string>>(new Set());
   const [splitView,        setSplitView]        = useState(false);
   const [leftPanel,        setLeftPanel]        = useState('checkin');
   const [rightPanel,       setRightPanel]       = useState('msgs');
@@ -3614,7 +3614,7 @@ const AppShell = ({ user, onLogout }) => {
     }
     // Coach
     if (user.role === "coach") {
-      if (tab === "home") return <CoachDashboard user={user} onNavigate={(dest:string, client?:any) => openClientTool(dest, client, 'home')} loomMode={loomMode} setLoomMode={setLoomMode}/>;
+      if (tab === "home") return <CoachDashboard user={user} onNavigate={(dest:string, client?:any) => openClientTool(dest, client, 'home')} loomMode={loomMode} setLoomMode={setLoomMode} followedUp={followedUp} setFollowedUp={setFollowedUp}/>;
     }
     // Staff (VA, head coach, etc.)
     if (isStaff) {

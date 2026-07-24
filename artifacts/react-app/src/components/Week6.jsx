@@ -576,7 +576,9 @@ export default function Week6({currentUser, onNavigate, initialClient}) {
                     <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {isAdmin?client.coachName+' · ':''}{client.checkInDay}s
                     </div>
-                    {client.hasUpdate&&<div style={{fontSize:9,color:C.gold,fontWeight:700,marginTop:2}}>● CHECK-IN PENDING REVIEW</div>}
+                    {client.hasUpdate
+                      ? <div style={{fontSize:9,color:C.gold,fontWeight:700,marginTop:2}}>● CHECK-IN PENDING REVIEW</div>
+                      : <div style={{fontSize:9,color:C.success,fontWeight:700,marginTop:2}}>● ACTIVE</div>}
                   </div>
                 </button>
               ))}
@@ -615,8 +617,8 @@ export default function Week6({currentUser, onNavigate, initialClient}) {
                 {/* Quick stats */}
                 <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
                   <div style={{background:C.surface,borderRadius:8,padding:'10px 14px',flex:1,minWidth:100}}>
-                    <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Last Seen</div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.white}}>{selectedClient.lastSeen}</div>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Last Check-In</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.white}}>{selectedClient.lastSeen||'—'}</div>
                   </div>
                   <div style={{background:C.surface,borderRadius:8,padding:'10px 14px',flex:1,minWidth:100}}>
                     <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Update Day</div>
