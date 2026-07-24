@@ -108,7 +108,7 @@ function Stat({label,value,color=C.gold,sub}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week6({currentUser, onNavigate, initialClient, loomFeatured = new Set(), setLoomFeatured = () => {}}) {
+export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}}) {
   const email    = currentUser?.email||''
   const info     = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   const myUUID   = info.uuid
@@ -562,8 +562,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomFeatu
               {filteredClients.length===0&&(
                 <div style={{padding:24,textAlign:'center',color:C.muted,fontSize:13}}>No clients found</div>
               )}
-              {filteredClients.map(client=>{
+              {filteredClients.map((client, idx)=>{
                 const featured = loomFeatured.has(client.name)
+                const hidden   = loomMode && !featured
+                const dispName = hidden ? `Client ${String.fromCharCode(65 + idx)}` : client.name
+                const dispInitial = hidden ? '?' : client.name[0]
                 function toggleFeatured(e) {
                   e.stopPropagation()
                   setLoomFeatured(prev => {
@@ -578,19 +581,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomFeatu
                     <button onClick={()=>openClient(client)}
                       style={{width:'100%',textAlign:'left',background:selectedClient?.uuid===client.uuid?`${C.gold}15`:client.hasUpdate?`${C.gold}08`:C.surface,border:'none',borderLeft:`3px solid ${selectedClient?.uuid===client.uuid?C.gold:client.hasUpdate?C.gold+'88':'transparent'}`,padding:'11px 13px 11px 42px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
                       <div style={{width:36,height:36,borderRadius:18,background:client.hasUpdate?C.gold:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:client.hasUpdate?C.black:C.gold,flexShrink:0,position:'relative'}}>
-                        {client.name[0]}
-                        {client.hasUpdate&&(
+                        {dispInitial}
+                        {!hidden && client.hasUpdate&&(
                           <div style={{position:'absolute',top:-3,right:-3,width:10,height:10,borderRadius:5,background:C.danger,border:`2px solid ${C.black}`}}/>
                         )}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:client.hasUpdate?700:500,color:selectedClient?.uuid===client.uuid?C.gold:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+                        <div style={{fontSize:12,fontWeight:client.hasUpdate?700:500,color:selectedClient?.uuid===client.uuid?C.gold:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dispName}</div>
                         <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                          {isAdmin?client.coachName+' · ':''}{client.checkInDay}s
+                          {!hidden && isAdmin ? client.coachName+' · ' : ''}{hidden ? '—' : client.checkInDay+'s'}
                         </div>
-                        {client.hasUpdate
+                        {!hidden && (client.hasUpdate
                           ? <div style={{fontSize:9,color:C.gold,fontWeight:700,marginTop:2}}>● CHECK-IN PENDING REVIEW</div>
-                          : <div style={{fontSize:9,color:C.success,fontWeight:700,marginTop:2}}>● ACTIVE</div>}
+                          : <div style={{fontSize:9,color:C.success,fontWeight:700,marginTop:2}}>● ACTIVE</div>)}
                       </div>
                     </button>
                     {/* Loom visibility checkbox */}

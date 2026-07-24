@@ -3659,6 +3659,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}
                                           onNavigate={(dest:string, client:any) => { setCoachClient(client); setTab(dest); }}
                                           initialClient={coachClient}
+                                          loomMode={loomMode}
                                           loomFeatured={loomFeatured}
                                           setLoomFeatured={setLoomFeatured}/>;
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
