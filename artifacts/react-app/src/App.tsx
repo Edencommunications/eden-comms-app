@@ -3637,7 +3637,7 @@ const AppShell = ({ user, onLogout }) => {
     }
     // Shared screens
     if (tab === "home")      return <HomeScreen user={user}/>;
-    if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
+    if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured} initialConvoName={coachClient?.name}/>;
     // When a coach navigates into a client tool, pass the client's email/name for
     // data context but keep the coach's role so components show the editable coach view
     const toolUser = (user.role === "coach" || user.role === "super_admin") && coachClient

@@ -734,7 +734,7 @@ async function findOrCreateConvo(aId, bId, companyId) {
 // MAIN COMPONENT
 // Props: currentUser = { email, name, role }
 // ════════════════════════════════════════════════════════════════
-export default function Messaging({ currentUser, loomMode = false, loomFeatured = new Set() }) {
+export default function Messaging({ currentUser, loomMode = false, loomFeatured = new Set(), initialConvoName = null }) {
   const isMobile = useIsMobile()
 
   const email    = currentUser?.email || ''
@@ -764,6 +764,14 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // null = no conversation open (list-only view)
   const [activeId, setActiveId] = useState(null)
   const activeConvo = activeId ? (conversations.find(c => c.id === activeId) ?? null) : null
+
+  // ── Auto-open a specific conversation when navigated here from Follow Up ──
+  // Runs whenever conversations list is ready or the target name changes.
+  useEffect(() => {
+    if (!initialConvoName) return
+    const match = conversations.find(c => c.name === initialConvoName)
+    if (match) openConvo(match.id)
+  }, [initialConvoName, conversations.length])
 
   // ── Mark-as-unread ────────────────────────────────────────
   const [openedConvos, setOpenedConvos] = useState(() => new Set())
