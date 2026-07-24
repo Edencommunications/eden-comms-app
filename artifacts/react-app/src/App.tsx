@@ -1012,7 +1012,8 @@ const CLIENT_ROSTER = [
     height:"5'5\"", age:29, gender:"Female",
     tags:["Gut Protocol","Nervous System","Thyroid"],
     notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
-    nextCheckin:"Jul 16", pendingLabs:true,
+    checkInDay:"Wednesday", nextCheckin:"Jul 16", pendingLabs:true,
+    alertReasons:["Labs pending review — no results uploaded yet","Stress score elevated last 2 check-ins"],
     checkinHistory:[
       { date:"Jul 9 2026",  weight:"148.0", temp:"97.8", steps:"9,200", heartRate:"62", hrv:"68", bloodPressure:"118/74",
         energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:92, mood:"Motivated",
@@ -1074,7 +1075,7 @@ const CLIENT_ROSTER = [
     height:"5'11\"", age:34, gender:"Male",
     tags:["NuEthix Protocol"],
     notes:"Strong progress. Maintaining current macros. Add 5R Gut in week 6.",
-    nextCheckin:"Jul 15", pendingLabs:false,
+    checkInDay:"Wednesday", nextCheckin:"Jul 15", pendingLabs:false, alertReasons:[],
     checkinHistory:[
       { date:"Jul 8 2026",  weight:"182.0", temp:"98.2", steps:"11,200", heartRate:"58", hrv:"82", bloodPressure:"124/80",
         energy:8, sleep:7, bloating:8, brainFog:8, sexDrive:8, hunger:3, stress:4, compliance:94, mood:"Confident",
@@ -1116,7 +1117,7 @@ const CLIENT_ROSTER = [
     height:"5'7\"", age:27, gender:"Female",
     tags:["Adrenal Protocol","PCOS Protocol"],
     notes:"Feeling more energy week 4. Keep pushing hydration and step goal.",
-    nextCheckin:"Jul 14", pendingLabs:false,
+    checkInDay:"Friday", nextCheckin:"Jul 14", pendingLabs:false, alertReasons:[],
     checkinHistory:[
       { date:"Jul 7 2026",  weight:"165.0", temp:"97.8", steps:"9,800", heartRate:"66", hrv:"64", bloodPressure:"112/70",
         energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:5, stress:5, compliance:89, mood:"Motivated",
@@ -1158,7 +1159,8 @@ const CLIENT_ROSTER = [
     height:"6'0\"", age:41, gender:"Male",
     tags:["5R Gut Protocol","Methylation Protocol"],
     notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
-    nextCheckin:"Overdue", pendingLabs:true,
+    checkInDay:"Wednesday", nextCheckin:"Overdue", pendingLabs:true,
+    alertReasons:["Check-in overdue — last submitted Jun 30","Labs pending — GI Map results not uploaded","Elevated stress score 3 weeks in a row"],
     checkinHistory:[
       { date:"Jun 30 2026", weight:"191.0", temp:"97.4", steps:"6,800", heartRate:"72", hrv:"52", bloodPressure:"134/86",
         energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:4, hunger:6, stress:7, compliance:78, mood:"Frustrated",
@@ -1765,16 +1767,135 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   );
 };
 
+// ── Alert Detail Modal ────────────────────────────────────────────────────────
+const AlertDetailModal = ({ client, resolved, onResolve, onClose }: {
+  client: any; resolved: Set<string>; onResolve: (r: string) => void; onClose: () => void;
+}) => {
+  const reasons: string[] = client.alertReasons || [];
+  const allResolved = reasons.every(r => resolved.has(r));
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)", zIndex:200,
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:B.surface, borderTop:`2px solid ${B.gold}`, borderRadius:"18px 18px 0 0",
+        width:"100%", maxWidth:560, maxHeight:"80vh", display:"flex", flexDirection:"column" }}>
+        {/* Handle */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
+          <div style={{ width:40, height:4, borderRadius:2, background:B.border }}/>
+        </div>
+        {/* Header */}
+        <div style={{ padding:"14px 20px 12px", borderBottom:`1px solid ${B.border}`,
+          display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <p style={{ fontSize:16, fontWeight:800, color:B.text, margin:"0 0 2px" }}>⚠️ {client.name} — Alerts</p>
+            <p style={{ fontSize:11, color:B.muted, margin:0 }}>{reasons.length} issue{reasons.length!==1?"s":""} flagged</p>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:B.muted,
+            fontSize:22, cursor:"pointer", padding:0, lineHeight:1 }}>×</button>
+        </div>
+        {/* Reasons list */}
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+          {reasons.length === 0 ? (
+            <p style={{ color:B.muted, fontSize:13 }}>No specific alerts recorded.</p>
+          ) : reasons.map((r,i) => {
+            const done = resolved.has(r);
+            return (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px",
+                background: done ? "#0d1a0d" : B.card,
+                border:`1px solid ${done ? B.success+"44" : B.border}`,
+                borderRadius:10, marginBottom:10 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ fontSize:13, color: done ? B.muted : B.text, margin:0,
+                    textDecoration: done ? "line-through" : "none", lineHeight:1.4 }}>{r}</p>
+                  {done && <p style={{ fontSize:10, color:B.success, margin:"4px 0 0", fontWeight:600 }}>✓ Resolved</p>}
+                </div>
+                {!done && (
+                  <button onClick={()=>onResolve(r)}
+                    style={{ background:`${B.success}22`, border:`1px solid ${B.success}55`,
+                      borderRadius:8, padding:"6px 12px", color:B.success, fontSize:11,
+                      fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                    Mark Resolved
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {allResolved && reasons.length > 0 && (
+            <div style={{ textAlign:"center", padding:"16px 0" }}>
+              <p style={{ fontSize:28, margin:"0 0 8px" }}>✅</p>
+              <p style={{ fontSize:14, fontWeight:700, color:B.success, margin:"0 0 4px" }}>All alerts resolved!</p>
+              <p style={{ fontSize:12, color:B.muted, margin:0 }}>This client's badge will show green.</p>
+            </div>
+          )}
+        </div>
+        {/* Footer */}
+        {!allResolved && reasons.length > 0 && (
+          <div style={{ padding:"12px 20px", borderTop:`1px solid ${B.border}` }}>
+            <button onClick={()=>reasons.forEach(r=>onResolve(r))}
+              style={{ width:"100%", background:`${B.success}22`, border:`1px solid ${B.success}55`,
+                borderRadius:10, padding:"12px", color:B.success, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              ✅ Mark All Resolved
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Missing Check-In helpers ──────────────────────────────────────────────────
+function parseLastCheckin(str: string): Date | null {
+  if (!str || str === 'Overdue' || str === '—') return null;
+  const d = new Date(`${str} 2026`);
+  return isNaN(d.getTime()) ? null : d;
+}
+function isMissingCheckin(c: any): boolean {
+  if (c.nextCheckin === 'Overdue') return true;
+  const last = parseLastCheckin(c.lastCheckin);
+  if (!last) return true;
+  const today = new Date();
+  return (today.getTime() - last.getTime()) / 86400000 > 7;
+}
+
+// ── Coach Dashboard ───────────────────────────────────────────────────────────
 const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
   const isMobile = useIsMobile();
-  const [selectedClient, setSelectedClient] = useState(null);
-  const [rosterOpen, setRosterOpen]         = useState(true);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [rosterOpen,     setRosterOpen]     = useState(true);
+  const [missOpen,       setMissOpen]       = useState(true);
+  const [alertClient,    setAlertClient]    = useState<any>(null);
+  // Track resolved alert reasons per client email
+  const [resolved, setResolved]             = useState<Record<string,Set<string>>>({});
+  const [checkinDeadline, setCheckinDeadline] = useState("09:00");
   const clients = CLIENT_ROSTER;
 
-  // Anonymise labels when Loom Mode is on
+  function resolveItem(email: string, reason: string) {
+    setResolved(prev => {
+      const set = new Set(prev[email] || []);
+      set.add(reason);
+      return { ...prev, [email]: set };
+    });
+  }
+
+  function isAlertActive(c: any): boolean {
+    if (!c.alert) return false;
+    const done = resolved[c.email] || new Set();
+    return (c.alertReasons || []).some((r: string) => !done.has(r));
+  }
+
+  // Group clients by check-in day for the missing tracker
+  const byDay: Record<string, any[]> = {};
+  clients.forEach(c => {
+    const day = c.checkInDay || 'Unassigned';
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(c);
+  });
+
   const displayName     = (c: any, i: number) => loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name;
   const displayProtocol = (c: any)            => loomMode ? "Protocol hidden" : c.protocol;
   const displayCheckin  = (c: any)            => loomMode ? "—" : c.lastCheckin;
+
+  const missingClients = clients.filter(c => isMissingCheckin(c));
 
   return (
     <Screen>
@@ -1793,7 +1914,11 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
       <div style={{ padding:"16px 20px" }}>
         {/* Stat cards */}
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:20 }}>
-          {[{label:"Total Clients",val:loomMode?"—":clients.length,color:B.gold},{label:"Check-Ins Due",val:loomMode?"—":2,color:"#ffa600"},{label:"Pending Labs",val:loomMode?"—":1,color:"#D4A8F0"}].map(({label,val,color})=>(
+          {[
+            { label:"Total Clients",    val:loomMode?"—":clients.length,         color:B.gold },
+            { label:"Missing Check-Ins",val:loomMode?"—":missingClients.length,  color:"#ffa600" },
+            { label:"Pending Labs",     val:loomMode?"—":clients.filter((c:any)=>c.pendingLabs).length, color:"#D4A8F0" },
+          ].map(({label,val,color})=>(
             <Card key={label} style={{ textAlign:"center" }}>
               <p style={{ fontSize:24, fontWeight:700, color, margin:"0 0 4px" }}>{val}</p>
               <p style={{ fontSize:10, color:B.muted, margin:0, lineHeight:1.3 }}>{label}</p>
@@ -1801,7 +1926,75 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
           ))}
         </div>
 
-        {/* My Clients — collapsible header */}
+        {/* ── Missing Check-In Tracker ── */}
+        <button onClick={()=>setMissOpen(v=>!v)}
+          style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
+            background: missingClients.length > 0 ? `#ffa60018` : B.card,
+            border:`1px solid ${missingClients.length > 0 ? "#ffa60044" : B.border}`,
+            borderRadius:10, cursor:"pointer", padding:"12px 14px", marginBottom: missOpen ? 10 : 16 }}>
+          <span style={{ fontSize:11, fontWeight:700, color: missingClients.length > 0 ? "#ffa600" : B.text, letterSpacing:1, textTransform:"uppercase" }}>
+            {missingClients.length > 0 ? `⚠️ Missing Check-Ins (${loomMode?"—":missingClients.length})` : "✅ Check-In Tracker"}
+          </span>
+          <span style={{ fontSize:18, color:B.gold, fontWeight:700, display:"inline-block", transition:"transform .2s",
+            transform: missOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+        </button>
+
+        {missOpen && (
+          <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12, padding:16, marginBottom:16 }}>
+            {/* Deadline setting */}
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+              <span style={{ fontSize:11, color:B.muted, fontWeight:600 }}>Check-in deadline:</span>
+              <input type="time" value={checkinDeadline} onChange={e=>setCheckinDeadline(e.target.value)}
+                style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"4px 8px",
+                  color:B.text, fontSize:12, outline:"none", colorScheme:"dark" }}/>
+              <span style={{ fontSize:10, color:B.muted }}>— clients past this time are flagged</span>
+            </div>
+
+            {/* Group by check-in day */}
+            {Object.entries(byDay).sort().map(([day, dayClients]) => {
+              const missing  = loomMode ? [] : (dayClients as any[]).filter(c => isMissingCheckin(c));
+              const onTime   = loomMode ? [] : (dayClients as any[]).filter(c => !isMissingCheckin(c));
+              return (
+                <div key={day} style={{ marginBottom:16 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:.8, textTransform:"uppercase" }}>{day}</span>
+                    <span style={{ fontSize:10, color:B.muted }}>{loomMode?"—":`${onTime.length}/${dayClients.length} checked in`}</span>
+                  </div>
+                  {(dayClients as any[]).map((c,i) => {
+                    const missed = !loomMode && isMissingCheckin(c);
+                    return (
+                      <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                        background: missed ? "#1a0a00" : "#0a1a00",
+                        border:`1px solid ${missed ? "#ffa60033" : B.success+"33"}`,
+                        borderRadius:8, marginBottom:6 }}>
+                        <span style={{ fontSize:14, flexShrink:0 }}>{loomMode ? "👤" : missed ? "⏰" : "✅"}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ fontSize:12, fontWeight:700, color:B.text, margin:0 }}>
+                            {loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name}
+                          </p>
+                          <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>
+                            {loomMode ? "—" : missed
+                              ? `Last check-in: ${c.lastCheckin} — hasn't submitted this cycle`
+                              : `Checked in: ${c.lastCheckin} ✓`}
+                          </p>
+                        </div>
+                        {missed && !loomMode && (
+                          <button onClick={()=>{ onNavigate?.("msgs", { email:c.email, name:c.name, role:"client" }) }}
+                            style={{ background:`${B.gold}22`, border:`1px solid ${B.gold}55`, borderRadius:6,
+                              padding:"5px 10px", color:B.gold, fontSize:10, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                            💬 Follow Up
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── My Clients ── */}
         <button onClick={()=>setRosterOpen(v=>!v)}
           style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
             background:B.card, border:`1px solid ${B.border}`, borderRadius:10,
@@ -1809,44 +2002,72 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
           <span style={{ fontSize:11, fontWeight:700, color:B.text, letterSpacing:1, textTransform:"uppercase" }}>
             👥 My Clients {loomMode && <span style={{ color:"#ff5252" }}>· hidden</span>}
           </span>
-          <span style={{ fontSize:18, color:B.gold, fontWeight:700,
-            display:"inline-block", transition:"transform .2s",
+          <span style={{ fontSize:18, color:B.gold, fontWeight:700, display:"inline-block", transition:"transform .2s",
             transform: rosterOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
         </button>
 
         {rosterOpen && (
           <>
-            {clients.map((c,i)=>(
-              <div key={i} role="button" tabIndex={0}
-                onClick={()=>setSelectedClient(c)}
-                onKeyDown={e=>e.key==="Enter"&&setSelectedClient(c)}
-                style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`,
-                  borderLeft:`3px solid ${(!loomMode && c.alert) ? B.gold : B.border}`,
-                  borderRadius:14, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", boxSizing:"border-box" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                      <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
+            {clients.map((c,i)=>{
+              const alertOn = isAlertActive(c);
+              return (
+                <div key={i} style={{ width:"100%", background:B.card,
+                  border:`1px solid ${B.border}`,
+                  borderLeft:`3px solid ${(!loomMode && alertOn) ? B.gold : (!loomMode && c.alert===false) ? B.success : B.border}`,
+                  borderRadius:14, padding:"14px 16px", marginBottom:10, boxSizing:"border-box" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div style={{ flex:1, minWidth:0, cursor:"pointer" }}
+                      onClick={()=>setSelectedClient(c)}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                        <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
+                        {!loomMode && c.checkInDay && (
+                          <span style={{ fontSize:9, color:B.muted, background:B.surface, border:`1px solid ${B.border}`,
+                            borderRadius:4, padding:"1px 5px", fontWeight:600 }}>{c.checkInDay}</span>
+                        )}
+                      </div>
+                      <p style={{ fontSize:11, color:B.muted, margin:"0 0 4px" }}>Last check-in: {displayCheckin(c)}</p>
+                      <p style={{ fontSize:10, color:B.muted, margin:0, fontStyle:"italic" }}>{displayProtocol(c)}</p>
                     </div>
-                    <p style={{ fontSize:11, color:B.muted, margin:"0 0 4px" }}>
-                      Last check-in: {displayCheckin(c)}
-                    </p>
-                    <p style={{ fontSize:10, color:B.muted, margin:0, fontStyle:"italic" }}>{displayProtocol(c)}</p>
-                  </div>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0, marginLeft:12 }}>
-                    {!loomMode && <Badge color={c.alert?B.gold:B.success}>{c.status}</Badge>}
-                    <span style={{ fontSize:11, color:B.gold }}>View →</span>
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0, marginLeft:12 }}>
+                      {!loomMode && (
+                        <Badge color={alertOn ? B.gold : B.success}>
+                          {alertOn ? c.status : "Active"}
+                        </Badge>
+                      )}
+                      {!loomMode && alertOn && (c.alertReasons||[]).length > 0 && (
+                        <button
+                          onClick={e=>{ e.stopPropagation(); setAlertClient(c); }}
+                          style={{ background:`${B.gold}22`, border:`1px solid ${B.gold}66`,
+                            borderRadius:6, padding:"4px 10px", color:B.gold,
+                            fontSize:10, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                          ⚠️ View Alerts
+                        </button>
+                      )}
+                      <span style={{ fontSize:11, color:B.gold, cursor:"pointer" }}
+                        onClick={()=>setSelectedClient(c)}>View →</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div style={{ marginTop:6 }}>
               <Btn variant="secondary" fullWidth><Ic n="upload" size={16} c={B.muted}/>Import Client from GHL</Btn>
             </div>
           </>
         )}
       </div>
-      {selectedClient && <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}/>}
+
+      {selectedClient && (
+        <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}/>
+      )}
+      {alertClient && (
+        <AlertDetailModal
+          client={alertClient}
+          resolved={resolved[alertClient.email] || new Set()}
+          onResolve={r => resolveItem(alertClient.email, r)}
+          onClose={()=>setAlertClient(null)}
+        />
+      )}
     </Screen>
   );
 };
