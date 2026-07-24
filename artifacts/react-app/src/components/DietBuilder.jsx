@@ -727,6 +727,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         if (!Array.isArray(rows) || rows.length === 0) return
         const dbCheckins = rows.map(r => ({
           date:             new Date(r.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+          time:             new Date(r.submitted_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
           weight:           r.weight||'',       temp:             r.temp||'',
           steps:            r.steps||'',        heartRate:        r.heart_rate||'',
           hrv:              r.hrv||'',          bloodPressure:    r.blood_pressure||'',
@@ -1702,6 +1703,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                           <span style={{fontSize:13,fontWeight:700,color:isExpanded?C.gold:C.white}}>{ci.date}</span>
+                          {ci.time&&<span style={{fontSize:10,color:C.muted,fontWeight:500}}>· {ci.time}</span>}
                           {ci.compliance!=null&&(
                             <span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:20,
                               background:ci.compliance>=90?`${C.success}22`:ci.compliance>=75?`${C.gold}22`:'#ff444422',
@@ -2068,6 +2070,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         style={{width:'100%',background:'none',border:'none',padding:'12px 16px',cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:10}}>
                         <div style={{flex:1,minWidth:0}}>
                           <span style={{fontSize:13,fontWeight:700,color:isExpanded?C.gold:C.white}}>{ci.date}</span>
+                          {ci.time&&<span style={{fontSize:10,color:C.muted,fontWeight:500,marginLeft:6}}>· {ci.time}</span>}
                           <span style={{fontSize:11,color:C.muted,marginLeft:10}}>⚖ {ci.weight} lbs</span>
                           {ci.compliance!=null&&<span style={{fontSize:10,color:C.muted,marginLeft:8}}>{ci.compliance}% compliance</span>}
                         </div>
