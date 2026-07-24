@@ -234,13 +234,39 @@ function BroadcastComposer({ onClose, senderName }) {
   const [sent,            setSent]            = useState(false)
   const [history,         setHistory]         = useState([])
   const [view,            setView]            = useState('compose') // 'compose' | 'history'
+  // ── Scheduling ────────────────────────────────────────────
+  const [sendMode,      setSendMode]      = useState('now')   // 'now' | 'schedule'
+  const [scheduleDates, setScheduleDates] = useState([])      // [{id, date, time}]
+  const [newSchedDate,  setNewSchedDate]  = useState('')
+  const [newSchedTime,  setNewSchedTime]  = useState('09:00')
+  const [histTab,       setHistTab]       = useState('sent')  // 'sent' | 'scheduled'
 
   useEffect(() => { loadHistory() }, [])
 
   async function loadHistory() {
     try {
-      const rows = await dbGet('broadcast_messages', 'order=sent_at.desc&limit=30')
+      const rows = await dbGet('broadcast_messages',
+        'order=scheduled_for.asc.nullslast,sent_at.desc&limit=60')
       if (rows) setHistory(rows)
+    } catch {}
+  }
+
+  function addScheduleDate() {
+    if (!newSchedDate || !newSchedTime) return
+    const iso = new Date(`${newSchedDate}T${newSchedTime}:00`).toISOString()
+    if (scheduleDates.find(d => d.iso === iso)) return  // dedupe
+    setScheduleDates(prev => [...prev, { id: Date.now(), date: newSchedDate, time: newSchedTime, iso }])
+    setNewSchedDate(''); setNewSchedTime('09:00')
+  }
+
+  function removeScheduleDate(id) {
+    setScheduleDates(prev => prev.filter(d => d.id !== id))
+  }
+
+  async function cancelScheduled(id) {
+    try {
+      await dbUpdate('broadcast_messages', `id=eq.${id}`, { status: 'cancelled' })
+      await loadHistory()
     } catch {}
   }
 
@@ -278,8 +304,7 @@ function BroadcastComposer({ onClose, senderName }) {
     }
   }
 
-  function isReady() {
-    if (!message.trim()) return false
+  function audienceReady() {
     if (audienceType === 'company_wide' || audienceType === 'coaches_only') return true
     if (!selectedCoachId) return false
     if (audienceType === 'coach_roster') return true
@@ -288,20 +313,32 @@ function BroadcastComposer({ onClose, senderName }) {
     return false
   }
 
+  function isReady() {
+    if (!message.trim() || !audienceReady()) return false
+    if (sendMode === 'schedule') return scheduleDates.length > 0
+    return true
+  }
+
   async function send() {
     if (!isReady()) return
     setSending(true)
     try {
-      await dbInsert('broadcast_messages', {
-        sent_by_name:  senderName || 'Admin',
-        audience_type: audienceType,
+      const base = {
+        sent_by_name:   senderName || 'Admin',
+        audience_type:  audienceType,
         audience_label: audienceLabel(),
-        coach_id:      selectedCoachId || null,
-        check_in_day:  selectedDay     || null,
-        recipient_ids: JSON.stringify([...selectedClients]),
-        message:       message.trim(),
-        sent_at:       new Date().toISOString(),
-      })
+        coach_id:       selectedCoachId || null,
+        check_in_day:   selectedDay     || null,
+        recipient_ids:  JSON.stringify([...selectedClients]),
+        message:        message.trim(),
+      }
+      if (sendMode === 'now') {
+        await dbInsert('broadcast_messages', { ...base, status:'sent', sent_at: new Date().toISOString() })
+      } else {
+        for (const sd of scheduleDates) {
+          await dbInsert('broadcast_messages', { ...base, status:'scheduled', scheduled_for: sd.iso })
+        }
+      }
       setSent(true)
       await loadHistory()
     } catch {
@@ -314,6 +351,7 @@ function BroadcastComposer({ onClose, senderName }) {
   function reset() {
     setAudienceType('company_wide'); setSelectedCoachId(''); setSelectedDay('')
     setSelectedClients(new Set()); setMessage(''); setSent(false)
+    setSendMode('now'); setScheduleDates([]); setNewSchedDate(''); setNewSchedTime('09:00')
     setView('compose')
   }
 
@@ -344,23 +382,76 @@ function BroadcastComposer({ onClose, senderName }) {
         </button>
       </div>
 
-      {/* ── Sent History ── */}
+      {/* ── History ── */}
       {view === 'history' && (
-        <div style={{ flex:1, overflowY:'auto', padding:16 }}>
-          {history.length === 0 ? (
-            <div style={{ textAlign:'center', padding:40, color:C.muted }}>No broadcasts sent yet</div>
-          ) : history.map((b,i) => (
-            <div key={b.id||i} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
-                <span style={{ fontSize:11, fontWeight:700, color:C.gold, background:`${C.gold}18`, border:`1px solid ${C.gold}33`, borderRadius:6, padding:'2px 8px' }}>
-                  {b.audience_label || b.audience_type}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          {/* Sent / Scheduled tabs */}
+          <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+            {[{key:'sent',label:'📤 Sent'},{key:'scheduled',label:'🕐 Scheduled'}].map(t=>(
+              <button key={t.key} onClick={()=>setHistTab(t.key)}
+                style={{ flex:1, padding:'10px', background:histTab===t.key?`${C.gold}18`:'none', border:'none',
+                  borderBottom:`2px solid ${histTab===t.key?C.gold:'transparent'}`,
+                  color:histTab===t.key?C.gold:C.muted, fontSize:12, fontWeight:histTab===t.key?700:500, cursor:'pointer' }}>
+                {t.label}
+                <span style={{ marginLeft:6, fontSize:10, color:C.muted }}>
+                  ({history.filter(b=> t.key==='scheduled' ? b.status==='scheduled' : (b.status==='sent'||!b.status)).length})
                 </span>
-                <span style={{ fontSize:10, color:C.muted }}>{b.sent_at ? new Date(b.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}</span>
-              </div>
-              <div style={{ fontSize:13, color:C.white, lineHeight:1.5, marginBottom:4 }}>{b.message}</div>
-              <div style={{ fontSize:10, color:C.muted }}>Sent by {b.sent_by_name}</div>
-            </div>
-          ))}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ flex:1, overflowY:'auto', padding:16 }}>
+            {/* Sent tab */}
+            {histTab==='sent'&&(()=>{
+              const sent = history.filter(b=>b.status==='sent'||!b.status)
+              if (!sent.length) return <div style={{ textAlign:'center', padding:40, color:C.muted }}>No broadcasts sent yet</div>
+              return sent.map((b,i)=>(
+                <div key={b.id||i} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:C.gold, background:`${C.gold}18`, border:`1px solid ${C.gold}33`, borderRadius:6, padding:'2px 8px', maxWidth:'70%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {b.audience_label||b.audience_type}
+                    </span>
+                    <span style={{ fontSize:10, color:C.muted, flexShrink:0 }}>
+                      {b.sent_at ? new Date(b.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}
+                    </span>
+                  </div>
+                  <div style={{ fontSize:13, color:C.white, lineHeight:1.5, marginBottom:4 }}>{b.message}</div>
+                  <div style={{ fontSize:10, color:C.muted }}>Sent by {b.sent_by_name}</div>
+                </div>
+              ))
+            })()}
+
+            {/* Scheduled tab */}
+            {histTab==='scheduled'&&(()=>{
+              const pending = history.filter(b=>b.status==='scheduled')
+              if (!pending.length) return (
+                <div style={{ textAlign:'center', padding:40, color:C.muted }}>
+                  <div style={{ fontSize:32, marginBottom:10 }}>🕐</div>
+                  No scheduled broadcasts
+                </div>
+              )
+              return pending.sort((a,b)=>a.scheduled_for?.localeCompare(b.scheduled_for||'')||0).map((b,i)=>(
+                <div key={b.id||i} style={{ background:C.card, border:`1px solid ${C.gold}33`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ fontSize:10, fontWeight:700, color:'#6FB8E8', background:'#6FB8E822', border:'1px solid #6FB8E844', borderRadius:6, padding:'2px 8px' }}>🕐 SCHEDULED</span>
+                    </div>
+                    <button onClick={()=>cancelScheduled(b.id)}
+                      style={{ background:'#ff444422', border:'1px solid #ff444444', borderRadius:6, padding:'4px 10px',
+                        color:'#ff4444', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                  <div style={{ fontSize:12, color:C.gold, fontWeight:700, marginBottom:6 }}>
+                    📅 {b.scheduled_for ? new Date(b.scheduled_for).toLocaleString([],{weekday:'short',month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}
+                  </div>
+                  <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>{b.audience_label||b.audience_type}</div>
+                  <div style={{ fontSize:13, color:C.white, lineHeight:1.5 }}>{b.message}</div>
+                  <div style={{ fontSize:10, color:C.muted, marginTop:6 }}>By {b.sent_by_name}</div>
+                </div>
+              ))
+            })()}
+          </div>
         </div>
       )}
 
@@ -477,43 +568,125 @@ function BroadcastComposer({ onClose, senderName }) {
           )}
 
           {/* Message */}
-          <div style={{ marginBottom:20 }}>
+          <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>
               {['coach_roster','coach_day','individuals'].includes(audienceType) ? '4' : '2'} · Message
             </div>
-            <textarea value={message} onChange={e=>setMessage(e.target.value)} rows={5}
+            <textarea value={message} onChange={e=>setMessage(e.target.value)} rows={4}
               placeholder="Type your broadcast message here…"
               style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 14px',
                 color:C.white, fontSize:13, outline:'none', resize:'vertical', boxSizing:'border-box', fontFamily:'inherit', lineHeight:1.6 }}/>
             <div style={{ textAlign:'right', fontSize:10, color:C.muted, marginTop:4 }}>{message.length} chars</div>
           </div>
 
-          {/* Send button */}
-          <button onClick={send} disabled={!isReady() || sending}
-            style={{ width:'100%', background: isReady() ? C.gold : '#2a2a2a', border:'none', borderRadius:12,
-              padding:'14px', fontWeight:800, color: isReady() ? C.black : C.muted, fontSize:15,
-              cursor: isReady() ? 'pointer' : 'not-allowed', marginBottom:16, opacity: sending ? 0.7 : 1 }}>
-            {sending ? 'Sending…' : '📢 Send Broadcast'}
+          {/* ── When to Send ── */}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:10 }}>
+              {['coach_roster','coach_day','individuals'].includes(audienceType) ? '5' : '3'} · When to Send
+            </div>
+            {/* Toggle */}
+            <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+              {[{key:'now',label:'📢 Send Now'},{key:'schedule',label:'🕐 Schedule'}].map(m=>(
+                <button key={m.key} onClick={()=>setSendMode(m.key)}
+                  style={{ flex:1, padding:'10px', borderRadius:10, border:`2px solid ${sendMode===m.key?C.gold:C.border}`,
+                    background: sendMode===m.key?`${C.gold}18`:C.card, color:sendMode===m.key?C.gold:C.muted,
+                    fontWeight:sendMode===m.key?700:500, fontSize:13, cursor:'pointer' }}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Schedule date builder */}
+            {sendMode==='schedule'&&(
+              <div>
+                {/* Date + time row */}
+                <div style={{ display:'flex', gap:8, marginBottom:10, alignItems:'flex-end' }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>Date</div>
+                    <input type="date" value={newSchedDate} onChange={e=>setNewSchedDate(e.target.value)}
+                      style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px',
+                        color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', colorScheme:'dark' }}/>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>Time</div>
+                    <input type="time" value={newSchedTime} onChange={e=>setNewSchedTime(e.target.value)}
+                      style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px',
+                        color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', colorScheme:'dark' }}/>
+                  </div>
+                  <button onClick={addScheduleDate} disabled={!newSchedDate||!newSchedTime}
+                    style={{ background:newSchedDate&&newSchedTime?C.gold:'#2a2a2a', border:'none', borderRadius:8, padding:'8px 14px',
+                      color:newSchedDate&&newSchedTime?C.black:C.muted, fontWeight:700, fontSize:12, cursor:newSchedDate&&newSchedTime?'pointer':'not-allowed', whiteSpace:'nowrap', flexShrink:0 }}>
+                    + Add
+                  </button>
+                </div>
+
+                {/* Scheduled dates list */}
+                {scheduleDates.length>0&&(
+                  <div style={{ background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>
+                      📅 {scheduleDates.length} scheduled send{scheduleDates.length>1?'s':''}
+                    </div>
+                    {scheduleDates.sort((a,b)=>a.iso.localeCompare(b.iso)).map(sd=>(
+                      <div key={sd.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'6px 0', borderBottom:`1px solid ${C.gold}22` }}>
+                        <span style={{ fontSize:12, color:C.white }}>
+                          {new Date(sd.iso).toLocaleString([],{weekday:'short',month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+                        </span>
+                        <button onClick={()=>removeScheduleDate(sd.id)}
+                          style={{ background:'none', border:'none', color:C.muted, fontSize:16, cursor:'pointer', padding:'0 4px', lineHeight:1 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {scheduleDates.length===0&&(
+                  <div style={{ fontSize:11, color:C.muted, padding:'6px 0' }}>Add at least one date to schedule this broadcast.</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Send / Schedule button */}
+          <button onClick={send} disabled={!isReady()||sending}
+            style={{ width:'100%', background:isReady()?C.gold:'#2a2a2a', border:'none', borderRadius:12,
+              padding:'14px', fontWeight:800, color:isReady()?C.black:C.muted, fontSize:15,
+              cursor:isReady()?'pointer':'not-allowed', marginBottom:16, opacity:sending?0.7:1 }}>
+            {sending
+              ? (sendMode==='schedule'?'Scheduling…':'Sending…')
+              : sendMode==='schedule'
+                ? `🕐 Schedule (${scheduleDates.length} date${scheduleDates.length!==1?'s':''})`
+                : '📢 Send Now'}
           </button>
         </div>
       )}
 
       {/* ── Success state ── */}
-      {view === 'compose' && sent && (
+      {view==='compose'&&sent&&(
         <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:32, gap:16 }}>
-          <div style={{ fontSize:56 }}>✅</div>
-          <div style={{ fontSize:18, fontWeight:800, color:C.white }}>Broadcast Sent</div>
+          <div style={{ fontSize:56 }}>{sendMode==='schedule'?'🕐':'✅'}</div>
+          <div style={{ fontSize:18, fontWeight:800, color:C.white }}>
+            {sendMode==='schedule'?'Broadcasts Scheduled!':'Broadcast Sent!'}
+          </div>
+          {sendMode==='schedule'&&scheduleDates.length>0&&(
+            <div style={{ background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:12, padding:'14px 18px', width:'100%', maxWidth:320 }}>
+              <div style={{ fontSize:11, color:C.gold, fontWeight:700, marginBottom:8 }}>Scheduled send times:</div>
+              {scheduleDates.sort((a,b)=>a.iso.localeCompare(b.iso)).map(sd=>(
+                <div key={sd.id} style={{ fontSize:12, color:C.white, padding:'4px 0', borderBottom:`1px solid ${C.gold}22` }}>
+                  {new Date(sd.iso).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ fontSize:13, color:C.muted, textAlign:'center', maxWidth:280, lineHeight:1.6 }}>
-            Your message has been delivered to <span style={{ color:C.gold, fontWeight:700 }}>{audienceLabel()}</span>.
+            To: <span style={{ color:C.gold, fontWeight:700 }}>{audienceLabel()}</span>
           </div>
           <div style={{ display:'flex', gap:10, marginTop:8 }}>
             <button onClick={reset}
               style={{ background:C.gold, border:'none', borderRadius:10, padding:'12px 24px', fontWeight:800, color:C.black, fontSize:14, cursor:'pointer' }}>
-              Send Another
+              {sendMode==='schedule'?'Schedule Another':'Send Another'}
             </button>
-            <button onClick={() => setView('history')}
+            <button onClick={()=>{ setHistTab(sendMode==='schedule'?'scheduled':'sent'); setView('history') }}
               style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 24px', color:C.muted, fontSize:14, cursor:'pointer' }}>
-              View History
+              View {sendMode==='schedule'?'Scheduled':'History'}
             </button>
           </div>
         </div>
