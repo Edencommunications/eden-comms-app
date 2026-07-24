@@ -360,17 +360,6 @@ const SignupScreen = ({ onBack }) => {
 // ─── DASHBOARD SCREENS ────────────────────────────────────────────────────────
 
 const HomeScreen = ({ user }) => {
-  const isMobile = useIsMobile();
-  const quickLinks = [
-    { icon:"msg", label:"Messages", color:B.gold },
-    { icon:"diet", label:"Diet Plan", color:"#4FD89A" },
-    { icon:"checkin", label:"Check In", color:"#ffa600" },
-    { icon:"habits", label:"Habits", color:"#6FB8E8" },
-    { icon:"labs", label:"Labs", color:"#D4A8F0" },
-    { icon:"photos", label:"Photos", color:"#F0A8C8" },
-    { icon:"calendar", label:"Book Call", color:B.gold },
-    { icon:"links", label:"Resources", color:"#4FD89A" },
-  ];
   return (
     <Screen>
       {/* Header */}
@@ -393,19 +382,6 @@ const HomeScreen = ({ user }) => {
       <div style={{ margin:"16px 20px 0", background:B.card, border:`1px solid ${B.gold}33`, borderLeft:`3px solid ${B.gold}`, borderRadius:10, padding:"12px 14px" }}>
         <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 3px", letterSpacing:0.8 }}>COACH UPDATE</p>
         <p style={{ fontSize:13, color:B.text, margin:0 }}>Your weekly check-in is due Wednesday before 9 AM CST. Remember to take your morning weight fasted.</p>
-      </div>
-
-      {/* Quick access grid */}
-      <div style={{ padding:"20px 20px 0" }}>
-        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Quick Access</p>
-        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:10 }}>
-          {quickLinks.map(({ icon, label, color }) => (
-            <button key={label} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12, padding:"14px 8px", display:"flex", flexDirection:"column", alignItems:"center", gap:8, cursor:"pointer" }}>
-              <Ic n={icon} size={22} c={color}/>
-              <span style={{ fontSize:10, fontWeight:600, color:B.muted, textAlign:"center", lineHeight:1.3 }}>{label}</span>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* This week */}
