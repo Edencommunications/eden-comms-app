@@ -1214,7 +1214,7 @@ export default function Messaging({ currentUser, loomMode = false }) {
                 {activeConvo.name}
               </div>
               <div style={{ fontSize:10, color: activeConvo.online ? C.success : C.muted }}>
-                {activeConvo.online ? '● Online now' : '● Last seen recently'}
+                {activeConvo.online ? '● Online now' : ''}
               </div>
             </div>
           </div>

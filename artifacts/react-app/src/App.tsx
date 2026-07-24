@@ -1013,7 +1013,7 @@ const CLIENT_ROSTER = [
     tags:["Gut Protocol","Nervous System","Thyroid"],
     notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
     checkInDay:"Wednesday", nextCheckin:"Jul 16", pendingLabs:true,
-    alertReasons:["Labs pending review — no results uploaded yet","Stress score elevated last 2 check-ins"],
+    alertReasons:["Lab results not yet submitted by client — remind them to upload","Stress score elevated last 2 check-ins"],
     checkinHistory:[
       { date:"Jul 9 2026",  weight:"148.0", temp:"97.8", steps:"9,200", heartRate:"62", hrv:"68", bloodPressure:"118/74",
         energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:92, mood:"Motivated",
@@ -1160,7 +1160,7 @@ const CLIENT_ROSTER = [
     tags:["5R Gut Protocol","Methylation Protocol"],
     notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
     checkInDay:"Wednesday", nextCheckin:"Overdue", pendingLabs:true,
-    alertReasons:["Check-in overdue — last submitted Jun 30","Labs pending — GI Map results not uploaded","Elevated stress score 3 weeks in a row"],
+    alertReasons:["Check-in overdue — last submitted Jun 30","GI Map results not yet submitted by client","Elevated stress score 3 weeks in a row"],
     checkinHistory:[
       { date:"Jun 30 2026", weight:"191.0", temp:"97.4", steps:"6,800", heartRate:"72", hrv:"52", bloodPressure:"134/86",
         energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:4, hunger:6, stress:7, compliance:78, mood:"Frustrated",
@@ -1867,6 +1867,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
   // Track resolved alert reasons per client email
   const [resolved, setResolved]             = useState<Record<string,Set<string>>>({});
   const [checkinDeadline, setCheckinDeadline] = useState("09:00");
+  const [followedUp,     setFollowedUp]       = useState<Set<string>>(new Set());
   const clients = CLIENT_ROSTER;
 
   function resolveItem(email: string, reason: string) {
@@ -1950,47 +1951,58 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode }) => {
               <span style={{ fontSize:10, color:B.muted }}>— clients past this time are flagged</span>
             </div>
 
-            {/* Group by check-in day */}
-            {Object.entries(byDay).sort().map(([day, dayClients]) => {
-              const missing  = loomMode ? [] : (dayClients as any[]).filter(c => isMissingCheckin(c));
-              const onTime   = loomMode ? [] : (dayClients as any[]).filter(c => !isMissingCheckin(c));
-              return (
-                <div key={day} style={{ marginBottom:16 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                    <span style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:.8, textTransform:"uppercase" }}>{day}</span>
-                    <span style={{ fontSize:10, color:B.muted }}>{loomMode?"—":`${onTime.length}/${dayClients.length} checked in`}</span>
-                  </div>
-                  {(dayClients as any[]).map((c,i) => {
-                    const missed = !loomMode && isMissingCheckin(c);
-                    return (
+            {/* Group by check-in day — only show clients who are missing */}
+            {(() => {
+              const anyShown = Object.values(byDay).some((dc: any[]) =>
+                dc.some(c => isMissingCheckin(c) && !followedUp.has(c.email))
+              );
+              if (!anyShown && !loomMode) return (
+                <div style={{ textAlign:"center", padding:"20px 0", color:B.success }}>
+                  <div style={{ fontSize:28, marginBottom:6 }}>✅</div>
+                  <p style={{ fontSize:13, fontWeight:700, margin:0 }}>All clients have checked in</p>
+                </div>
+              );
+              return Object.entries(byDay).sort().map(([day, dayClients]) => {
+                const visibleMissing = loomMode
+                  ? (dayClients as any[])
+                  : (dayClients as any[]).filter(c => isMissingCheckin(c) && !followedUp.has(c.email));
+                if (!loomMode && visibleMissing.length === 0) return null;
+                return (
+                  <div key={day} style={{ marginBottom:14 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:"#ffa600", letterSpacing:.8, textTransform:"uppercase" }}>{day}</span>
+                      <span style={{ fontSize:10, color:B.muted }}>
+                        {loomMode ? "—" : `${visibleMissing.length} haven't checked in`}
+                      </span>
+                    </div>
+                    {visibleMissing.map((c: any, i: number) => (
                       <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
-                        background: missed ? "#1a0a00" : "#0a1a00",
-                        border:`1px solid ${missed ? "#ffa60033" : B.success+"33"}`,
-                        borderRadius:8, marginBottom:6 }}>
-                        <span style={{ fontSize:14, flexShrink:0 }}>{loomMode ? "👤" : missed ? "⏰" : "✅"}</span>
+                        background:"#1a0a00", border:`1px solid #ffa60033`, borderRadius:8, marginBottom:6 }}>
+                        <span style={{ fontSize:14, flexShrink:0 }}>⏰</span>
                         <div style={{ flex:1, minWidth:0 }}>
                           <p style={{ fontSize:12, fontWeight:700, color:B.text, margin:0 }}>
                             {loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name}
                           </p>
                           <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>
-                            {loomMode ? "—" : missed
-                              ? `Last check-in: ${c.lastCheckin} — hasn't submitted this cycle`
-                              : `Checked in: ${c.lastCheckin} ✓`}
+                            {loomMode ? "—" : `Last check-in: ${c.lastCheckin} — hasn't submitted this cycle`}
                           </p>
                         </div>
-                        {missed && !loomMode && (
-                          <button onClick={()=>{ onNavigate?.("msgs", { email:c.email, name:c.name, role:"client" }) }}
+                        {!loomMode && (
+                          <button onClick={()=>{
+                            setFollowedUp(prev => { const s = new Set(prev); s.add(c.email); return s; });
+                            onNavigate?.("msgs", { email:c.email, name:c.name, role:"client" });
+                          }}
                             style={{ background:`${B.gold}22`, border:`1px solid ${B.gold}55`, borderRadius:6,
                               padding:"5px 10px", color:B.gold, fontSize:10, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
                             💬 Follow Up
                           </button>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                    ))}
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
 
@@ -3709,7 +3721,7 @@ const AppShell = ({ user, onLogout }) => {
               <p style={{ fontSize:12, color:B.gold, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {tabs.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)}
+              <button key={t.key} onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); }}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${B.gold}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?B.gold:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
                 <Ic n={t.icon} size={17} c={tab===t.key?B.gold:B.muted}/>
                 <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?B.gold:B.muted }}>{t.label}</span>
@@ -3755,7 +3767,7 @@ const AppShell = ({ user, onLogout }) => {
           paddingBottom:"env(safe-area-inset-bottom, 0px)", overflowX:"auto",
           WebkitOverflowScrolling:"touch", scrollbarWidth:"none" }}>
           {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
+            <button key={t.key} onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); }}
               style={{ minWidth:60, flex: tabs.length <= 6 ? 1 : undefined,
                 display:"flex", flexDirection:"column", alignItems:"center", gap:3,
                 background:"none", border:"none", cursor:"pointer", padding:"6px 4px 8px", flexShrink:0 }}>
