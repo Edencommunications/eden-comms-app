@@ -85,6 +85,7 @@ const Ic = ({ n, size = 20, s, c = B.muted }) => {
     shop:     <><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" fill="none" stroke={c} strokeWidth="1.8"/><line x1="3" y1="6" x2="21" y2="6" stroke={c} strokeWidth="1.8"/><path d="M16 10a4 4 0 0 1-8 0" fill="none" stroke={c} strokeWidth="1.8"/></>,
     team:     <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" fill="none" stroke={c} strokeWidth="1.8"/><circle cx="9" cy="7" r="4" fill="none" stroke={c} strokeWidth="1.8"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke={c} strokeWidth="1.8"/></>,
     progress: <><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></>,
+    watch:    <><circle cx="12" cy="12" r="6" fill="none" stroke={c} strokeWidth="1.8"/><polyline points="12,9 12,12 14,13.5" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/><path d="M9 3.5h6M9 20.5h6" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></>,
   };
   return <svg width={sz} height={sz} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{d[n]}</svg>;
 };
@@ -3525,6 +3526,7 @@ const AppShell = ({ user, onLogout }) => {
     { key:"habits",    icon:"habits",    label:"Habits" },
     { key:"labs",      icon:"labs",      label:"Labs" },
     { key:"workout",   icon:"workout",   label:"Workout" },
+    { key:"wearables", icon:"watch",     label:"Wearables" },
     { key:"calendar",  icon:"calendar",  label:"Book a Call" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
