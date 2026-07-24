@@ -1188,23 +1188,25 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           </div>
         </div>
 
-        {/* ── scrollable tab row ────────────────────────────── */}
-        <div style={{display:'flex',overflowX:'auto',WebkitOverflowScrolling:'touch',scrollbarWidth:'none',msOverflowStyle:'none',touchAction:'pan-x',padding:'0 8px'}}>
-          {TABS.map(([k,l])=>(
-            <button key={k} onClick={()=>setTab(k)}
-              style={{
-                flexShrink:0, padding:'8px 14px', border:'none',
-                borderBottom:`3px solid ${tab===k?C.gold:'transparent'}`,
-                background:tab===k?`${C.gold}18`:'none',
-                color:tab===k?C.white:C.muted,
-                fontSize:12, fontWeight:tab===k?700:500,
-                cursor:'pointer', whiteSpace:'nowrap',
-                transition:'all 0.15s',
-              }}>
-              {l}
-            </button>
-          ))}
-        </div>
+        {/* ── scrollable tab row — hidden when opened as Check-In only ── */}
+        {initialTab !== 'checkin' && (
+          <div style={{display:'flex',overflowX:'auto',WebkitOverflowScrolling:'touch',scrollbarWidth:'none',msOverflowStyle:'none',touchAction:'pan-x',padding:'0 8px'}}>
+            {TABS.map(([k,l])=>(
+              <button key={k} onClick={()=>setTab(k)}
+                style={{
+                  flexShrink:0, padding:'8px 14px', border:'none',
+                  borderBottom:`3px solid ${tab===k?C.gold:'transparent'}`,
+                  background:tab===k?`${C.gold}18`:'none',
+                  color:tab===k?C.white:C.muted,
+                  fontSize:12, fontWeight:tab===k?700:500,
+                  cursor:'pointer', whiteSpace:'nowrap',
+                  transition:'all 0.15s',
+                }}>
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ══ MEAL PLAN ════════════════════════════════════════ */}
