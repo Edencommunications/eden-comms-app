@@ -3427,11 +3427,11 @@ const AppShell = ({ user, onLogout }) => {
       : user.email;
     const ciDemoCheckins = CLIENT_ROSTER.find(c => c.email === ciEmail)?.checkinHistory ?? [];
     const onBack = coachClient ? () => { setTab(clientNavSource); } : undefined;
-    if (tab === "diet")         return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins} onBack={onBack}/>;
-    if (tab === "supplements")  return <DietBuilder currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
+    if (tab === "diet")         return <DietBuilder key="diet" currentUser={toolUser} demoCheckins={ciDemoCheckins} onBack={onBack}/>;
+    if (tab === "supplements")  return <DietBuilder key="supplements" currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
-    if (tab === "labs")         return <Week4 currentUser={toolUser} initialTab="labs" onBack={onBack}/>;
-    if (tab === "checkin")      return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
+    if (tab === "labs")         return <Week4 key="labs" currentUser={toolUser} initialTab="labs" onBack={onBack}/>;
+    if (tab === "checkin")      return <DietBuilder key="checkin" currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
     if (tab === "workout")      return <Week4 currentUser={toolUser} initialTab="workout" onBack={onBack}/>;
     if (tab === "admin")     return <Week6 currentUser={{ email: user.email, name: user.name, role: user.role }}

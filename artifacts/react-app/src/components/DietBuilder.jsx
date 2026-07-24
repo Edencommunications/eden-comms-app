@@ -1189,7 +1189,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         </div>
 
         {/* ── scrollable tab row ────────────────────────────── */}
-        <div style={{display:'flex',overflowX:'auto',WebkitOverflowScrolling:'touch',scrollbarWidth:'none',msOverflowStyle:'none',padding:'0 8px'}}>
+        <div style={{display:'flex',overflowX:'auto',WebkitOverflowScrolling:'touch',scrollbarWidth:'none',msOverflowStyle:'none',touchAction:'pan-x',padding:'0 8px'}}>
           {TABS.map(([k,l])=>(
             <button key={k} onClick={()=>setTab(k)}
               style={{
