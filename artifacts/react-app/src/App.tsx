@@ -1862,7 +1862,7 @@ function isMissingCheckin(c: any): boolean {
 }
 
 // ── Coach Dashboard ───────────────────────────────────────────────────────────
-const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, followedUp, setFollowedUp }) => {
+const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured, followedUp, setFollowedUp }) => {
   const isMobile = useIsMobile();
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [rosterOpen,     setRosterOpen]     = useState(true);
@@ -3625,7 +3625,7 @@ const AppShell = ({ user, onLogout }) => {
     }
     // Coach
     if (user.role === "coach") {
-      if (tab === "home") return <CoachDashboard user={user} onNavigate={(dest:string, client?:any) => openClientTool(dest, client, 'home')} loomMode={loomMode} setLoomMode={setLoomMode} followedUp={followedUp} setFollowedUp={setFollowedUp}/>;
+      if (tab === "home") return <CoachDashboard user={user} onNavigate={(dest:string, client?:any) => openClientTool(dest, client, 'home')} loomMode={loomMode} setLoomMode={setLoomMode} loomFeatured={loomFeatured} followedUp={followedUp} setFollowedUp={setFollowedUp}/>;
     }
     // Staff (VA, head coach, etc.)
     if (isStaff) {
