@@ -1,0 +1,1 @@
+- [Client lifecycle state](client-lifecycle.md) — deactivation/transfer state lives in Supabase user_profiles (is_active, coach_id); localStorage is only a cache — DB is always the source of truth.
