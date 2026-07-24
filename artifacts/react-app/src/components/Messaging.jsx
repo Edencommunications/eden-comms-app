@@ -99,8 +99,8 @@ const DEMO_CLIENTS = [
   },
   {
     id: 'alex',
-    name: 'Alex Carter',
-    initials: 'AC',
+    name: 'Alex Martinez',
+    initials: 'AM',
     supabaseConvoId: null,
     lastMessage: "My weight was 184.2 this morning",
     lastTime: 'Yesterday',
@@ -119,8 +119,8 @@ const DEMO_CLIENTS = [
   },
   {
     id: 'taylor',
-    name: 'Taylor Brooks',
-    initials: 'TB',
+    name: 'Taylor Reyes',
+    initials: 'TR',
     supabaseConvoId: null,
     lastMessage: "Feeling way better this week! Energy is up 💪",
     lastTime: '2 days ago',
@@ -140,8 +140,8 @@ const DEMO_CLIENTS = [
   },
   {
     id: 'sam',
-    name: 'Sam Rivera',
-    initials: 'SR',
+    name: 'Sam Thompson',
+    initials: 'ST',
     supabaseConvoId: null,
     lastMessage: "Quick question about the Cort Eaze timing...",
     lastTime: '3 days ago',
@@ -756,9 +756,15 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // Only switch to Supabase-loaded convos when they are strictly richer than the demo set.
   // A partial load (e.g. only Jordan in DB, or only coach found for a client) must not wipe
   // demo conversations that have pre-seeded threads — otherwise the chat shows blank.
-  const conversations = (dynConversations && dynConversations.length > demoConversations.length)
+  const baseConversations = (dynConversations && dynConversations.length > demoConversations.length)
     ? dynConversations
     : demoConversations
+
+  // Extra stub conversations created on the fly when Follow Up targets a client not yet in the list
+  const [extraConvos, setExtraConvos] = useState([])
+  const conversations = extraConvos.length
+    ? [...baseConversations.filter(c => !extraConvos.find(e => e.id === c.id)), ...extraConvos]
+    : baseConversations
 
   // ── Conversation selection ────────────────────────────────
   // null = no conversation open (list-only view)
@@ -766,12 +772,31 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const activeConvo = activeId ? (conversations.find(c => c.id === activeId) ?? null) : null
 
   // ── Auto-open a specific conversation when navigated here from Follow Up ──
-  // Runs whenever conversations list is ready or the target name changes.
+  // If the client has a demo thread, open it directly.
+  // If not, create a blank stub conversation so the coach can start one.
   useEffect(() => {
     if (!initialConvoName) return
     const match = conversations.find(c => c.name === initialConvoName)
-    if (match) openConvo(match.id)
-  }, [initialConvoName, conversations.length])
+    if (match) {
+      openConvo(match.id)
+    } else {
+      // No existing conversation — create a stub so the coach can message them
+      const initials = initialConvoName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+      const stub = {
+        id:              'stub-' + initialConvoName.toLowerCase().replace(/\s+/g, '-'),
+        name:            initialConvoName,
+        initials,
+        supabaseConvoId: null,
+        lastMessage:     '',
+        lastTime:        '',
+        unread:          0,
+        online:          false,
+        thread:          [],
+      }
+      setExtraConvos(prev => prev.find(e => e.id === stub.id) ? prev : [...prev, stub])
+      setActiveId(stub.id)
+    }
+  }, [initialConvoName, baseConversations.length])
 
   // ── Mark-as-unread ────────────────────────────────────────
   const [openedConvos, setOpenedConvos] = useState(() => new Set())
