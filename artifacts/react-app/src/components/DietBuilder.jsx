@@ -1111,7 +1111,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const TABS=[
     ['plan','🥗 Meal Plan'],
     ['calculator','🔢 Calculator'],
-    ['checkin','📋 Check-In'],
     ['habits','✅ Habits'],
     ['supplements','💊 Supps'],
   ]
