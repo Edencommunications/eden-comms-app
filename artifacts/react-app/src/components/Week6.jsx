@@ -236,6 +236,30 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [removedCoaches, setRemovedCoaches] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eden_removed_coaches') || '[]') } catch { return [] }
   })
+  // Sync deactivations + coach transfers FROM the database so every
+  // device (coach, admin, anywhere) sees the same state.
+  useEffect(()=>{
+    dbGet('user_profiles','role=eq.client&select=email,is_active,coach_id')
+      .then(rows=>{
+        if (!Array.isArray(rows)) return
+        setDeactivatedMap(prev=>{
+          const next = { ...prev }
+          rows.forEach(r=>{
+            if (r.is_active===false && !next[r.email]) next[r.email] = { at:'', name:'', fromDb:true }
+            if (r.is_active!==false && next[r.email]?.fromDb) delete next[r.email]
+          })
+          localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
+          return next
+        })
+        setClientCoachMap(prev=>{
+          const next = { ...prev }
+          rows.forEach(r=>{ if (r.coach_id) next[r.email] = r.coach_id })
+          localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
+          return next
+        })
+      }).catch(()=>{})
+  },[])
+
   const [archiveOpen,       setArchiveOpen]       = useState(false)
   const [showTransferModal, setShowTransferModal]  = useState(false)  // coach removal modal
   const [pendingRemoval,    setPendingRemoval]     = useState(null)   // coach being removed
