@@ -450,10 +450,9 @@ const CS_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co';
 const CS_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU';
 const CS_H    = { 'apikey':CS_ANON, 'Authorization':`Bearer ${CS_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=representation' };
 async function csGet(table:string, q='') { try { const r=await fetch(`${CS_URL}/rest/v1/${table}?${q}`,{headers:CS_H}); return r.ok?r.json():[] } catch { return [] } }
-async function csUpsert(table:string, body:any, id?:string) {
+async function csSave(table:string, body:any, id?:string) {
   const url = id ? `${CS_URL}/rest/v1/${table}?id=eq.${id}` : `${CS_URL}/rest/v1/${table}`;
-  const method = id ? 'PATCH' : 'POST';
-  try { const r=await fetch(url,{method,headers:CS_H,body:JSON.stringify(body)}); return r.ok?(await r.text()?r.json():null):null } catch { return null }
+  try { const r=await fetch(url,{method:id?'PATCH':'POST',headers:CS_H,body:JSON.stringify(body)}); const t=await r.text(); return t?JSON.parse(t):null } catch { return null }
 }
 
 const DEFAULT_SOCIALS = [
@@ -466,7 +465,9 @@ const DEFAULT_SOCIALS = [
 ];
 
 const CommunityScreen = ({ user }:any) => {
-  const isAdmin = user?.role === 'super_admin';
+  const isAdmin  = user?.role === 'super_admin';
+  const isCoach  = user?.role === 'coach';
+
   const PILLARS = [
     { n:"1 · Nutrition",                   url:"https://open.spotify.com/episode/1AvDa6x3tU9jORoGSxMdBL?si=hzNiIFHcQIqoYaC5H-TrVg&nd=1&dlsi=e7f414423b2140dd" },
     { n:"2 · Community & Stress",          url:"https://open.spotify.com/episode/7D7p0ma4hRq0n8AGExlDaY?si=o6qTlhF6RPm7HgrleNmnHw&nd=1&dlsi=c794e85544654521" },
@@ -477,31 +478,62 @@ const CommunityScreen = ({ user }:any) => {
     { n:"7 · Sleep & Circadian Alignment", url:"https://open.spotify.com/episode/3HndjaiJHVctnn3uXuvb4J?si=dSpzHtIDRfWqduVASsWpiw&nd=1&dlsi=25e8f1d81d414c9c" },
   ];
 
-  const [socials,     setSocials]     = useState<any[]>(DEFAULT_SOCIALS);
-  const [rowId,       setRowId]       = useState<string|null>(null);
-  const [editing,     setEditing]     = useState(false);
-  const [draft,       setDraft]       = useState<any[]>(DEFAULT_SOCIALS);
+  // Admin picks which coach to edit; everyone else resolves their own coach
+  const [coachList,     setCoachList]     = useState<any[]>([]);
+  const [pickedCoachId, setPickedCoachId] = useState<string>('');  // admin's selected coach
+  const [myCoachId,     setMyCoachId]     = useState<string>('');  // coach/client resolved UUID
 
+  // Links state
+  const [socials, setSocials] = useState<any[]>(DEFAULT_SOCIALS);
+  const [rowId,   setRowId]   = useState<string>('');
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState<any[]>(DEFAULT_SOCIALS);
+
+  // Step 1: resolve coach identity
   useEffect(()=>{
-    csGet('company_social_links','limit=1').then((rows:any[])=>{
+    if (isAdmin) {
+      csGet('user_profiles','role=in.(coach,head_coach)&select=id,name&order=name.asc').then((rows:any[])=>{
+        setCoachList(rows||[]);
+        if (rows?.[0]?.id) setPickedCoachId(rows[0].id);
+      });
+    } else if (isCoach) {
+      csGet('user_profiles',`email=eq.${encodeURIComponent(user?.email||'')}&select=id`).then((rows:any[])=>{
+        if (rows?.[0]?.id) setMyCoachId(rows[0].id);
+      });
+    } else {
+      // client: look up their coach via client_access
+      csGet('user_profiles',`email=eq.${encodeURIComponent(user?.email||'')}&select=id`).then(async (rows:any[])=>{
+        const clientId = rows?.[0]?.id; if (!clientId) return;
+        const ca:any[] = await csGet('client_access',`client_id=eq.${clientId}&select=staff_id&limit=1`);
+        if (ca?.[0]?.staff_id) setMyCoachId(ca[0].staff_id);
+      });
+    }
+  },[user?.email]);
+
+  // Step 2: load links whenever the active coach changes
+  const activeCoachId = isAdmin ? pickedCoachId : myCoachId;
+  useEffect(()=>{
+    if (!activeCoachId) return;
+    setEditing(false);
+    csGet('coach_social_links',`coach_id=eq.${activeCoachId}&limit=1`).then((rows:any[])=>{
       if (rows?.[0]?.links?.length) {
-        setSocials(rows[0].links);
-        setDraft(rows[0].links);
-        setRowId(rows[0].id);
+        setSocials(rows[0].links); setDraft(rows[0].links); setRowId(rows[0].id);
+      } else {
+        setSocials(DEFAULT_SOCIALS); setDraft(DEFAULT_SOCIALS); setRowId('');
       }
     });
-  },[]);
+  },[activeCoachId]);
 
   const updateDraft = (i:number, field:string, val:string) =>
-    setDraft(prev => prev.map((s,idx)=> idx===i ? {...s,[field]:val} : s));
+    setDraft(prev=>prev.map((s:any,idx:number)=>idx===i?{...s,[field]:val}:s));
 
   const saveLinks = async () => {
-    setSocials(draft);
-    setEditing(false);
+    if (!activeCoachId) return;
+    setSocials(draft); setEditing(false);
     if (rowId) {
-      await csUpsert('company_social_links', {links:draft, updated_at:new Date().toISOString()}, rowId);
+      await csSave('coach_social_links',{links:draft,updated_at:new Date().toISOString()},rowId);
     } else {
-      const res:any = await csUpsert('company_social_links', {links:draft});
+      const res:any = await csSave('coach_social_links',{coach_id:activeCoachId,links:draft});
       if (res?.[0]?.id) setRowId(res[0].id);
     }
   };
@@ -515,6 +547,17 @@ const CommunityScreen = ({ user }:any) => {
         <p style={{ fontSize:12, color:B.muted, margin:0 }}>Podcast · social media · shop — all in one place</p>
       </div>
 
+      {/* Admin: coach picker */}
+      {isAdmin && coachList.length > 0 && (
+        <div style={{ padding:"12px 20px 0" }}>
+          <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>Editing links for coach</p>
+          <select value={pickedCoachId} onChange={e=>{ setPickedCoachId(e.target.value); setEditing(false); }}
+            style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px", color:B.text, fontSize:13, outline:"none", cursor:"pointer" }}>
+            {coachList.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
+
       {/* Social platform cards */}
       <div style={{ padding:"16px 20px 0" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
@@ -527,22 +570,25 @@ const CommunityScreen = ({ user }:any) => {
           )}
         </div>
 
-        {/* Admin edit panel */}
+        {/* Admin inline editor */}
         {editing && isAdmin && (
           <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:16, marginBottom:14 }}>
-            <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 12px" }}>Edit Follow &amp; Subscribe Links</p>
+            <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>
+              Edit links — {coachList.find((c:any)=>c.id===pickedCoachId)?.name||'Coach'}
+            </p>
+            <p style={{ fontSize:10, color:B.muted, margin:"0 0 12px" }}>Eden defaults pre-filled. Change any field and save.</p>
             {draft.map((s:any, i:number) => (
               <div key={i} style={{ borderBottom:`1px solid ${B.border}`, paddingBottom:12, marginBottom:12 }}>
                 <div style={{ display:"flex", gap:8, marginBottom:6 }}>
                   <input value={s.emoji} onChange={e=>updateDraft(i,'emoji',e.target.value)}
-                    style={{ width:48, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 8px", color:B.text, fontSize:16, textAlign:"center", outline:"none" }}/>
+                    style={{ width:44, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px", color:B.text, fontSize:16, textAlign:"center", outline:"none" }}/>
                   <input value={s.label} onChange={e=>updateDraft(i,'label',e.target.value)}
                     placeholder="Label" style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:13, outline:"none" }}/>
                 </div>
                 <input value={s.sub} onChange={e=>updateDraft(i,'sub',e.target.value)}
-                  placeholder="Subtitle / handle" style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box", marginBottom:6 }}/>
+                  placeholder="Handle / subtitle" style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box" as any, marginBottom:6 }}/>
                 <input value={s.url} onChange={e=>updateDraft(i,'url',e.target.value)}
-                  placeholder="https://…" style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box" }}/>
+                  placeholder="https://…" style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box" as any }}/>
               </div>
             ))}
             <div style={{ display:"flex", gap:8 }}>
@@ -552,7 +598,7 @@ const CommunityScreen = ({ user }:any) => {
               </button>
               <button onClick={saveLinks}
                 style={{ flex:2, background:B.gold, border:"none", borderRadius:8, padding:"9px", fontWeight:800, color:"#000", fontSize:12, cursor:"pointer" }}>
-                Save Changes
+                Save for {coachList.find((c:any)=>c.id===pickedCoachId)?.name?.split(' ')[0]||'Coach'}
               </button>
             </div>
           </div>
