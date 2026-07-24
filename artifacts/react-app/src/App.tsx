@@ -194,11 +194,12 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
     setError("");
     if (!email || !pass) { setError("Please enter your email and password."); return; }
     setLoading(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const user = DEMO_USERS[email.toLowerCase()];
       if (user && user.password === pass) {
         // Block deactivated client accounts
         if (user.role === 'client') {
+          // 1. Fast local check (same-device deactivations)
           try {
             const deactivated = JSON.parse(localStorage.getItem('eden_deactivated_clients') || '{}');
             if (deactivated[email.toLowerCase()]) {
@@ -207,6 +208,21 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
               return;
             }
           } catch {}
+          // 2. Database check — enforced from ANY device
+          try {
+            const resp = await fetch(
+              `https://jzdoojlwgpqlmworwcsr.supabase.co/rest/v1/user_profiles?email=eq.${encodeURIComponent(email.toLowerCase())}&select=is_active`,
+              { headers: {
+                  apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU",
+                  Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU",
+              }});
+            const rows = await resp.json();
+            if (Array.isArray(rows) && rows[0] && rows[0].is_active === false) {
+              setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
+              setLoading(false);
+              return;
+            }
+          } catch {} // network failure: don't lock users out of the demo
         }
         onLogin({ email, ...user });
       } else {

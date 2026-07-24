@@ -263,6 +263,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const next = { ...deactivatedMap, [client.email]: { at: new Date().toISOString(), name: client.name, coachName: effectiveCoachName(client) } }
     setDeactivatedMap(next)
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
+    // Enforce in the database — blocks login from ANY device
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:false}).catch(()=>{})
     addAudit('Eden Admin','Deactivated client',client.name,'Account deactivated — data preserved, coach still has full access')
     if (selectedClient?.uuid === client.uuid) setSelectedClient({ ...client, _deactivated: true })
   }
@@ -272,6 +274,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     delete next[client.email]
     setDeactivatedMap(next)
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
+    // Restore login access in the database
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:true}).catch(()=>{})
     addAudit('Eden Admin','Reactivated client',client.name,'Account restored — client can now log in again')
     setSelectedClient({ ...client, _deactivated: false })
   }
@@ -280,6 +284,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const next = { ...clientCoachMap, [clientEmail]: newCoachUuid }
     setClientCoachMap(next)
     localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
+    // Persist new coach assignment in the database
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(clientEmail)}`,{coach_id:newCoachUuid}).catch(()=>{})
   }
 
   function confirmRemoveCoach(coach) {
