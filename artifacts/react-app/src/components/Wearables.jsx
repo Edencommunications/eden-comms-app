@@ -5,7 +5,7 @@
 //   • Client's own Wearables tab (client viewing their own data)
 // currentUser.role determines coach vs. client view
 // ═══════════════════════════════════════════════════════════════
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
@@ -356,10 +356,32 @@ export default function Wearables({ currentUser }) {
   const [nutritionNote,setNutritionNote]= useState('')
   const [noteSaved,    setNoteSaved]    = useState(false)
 
-  // Food log state — seeded from demo, client can add/remove in session
-  const seedLog = DEMO_WEARABLE_DATA[clientUUID]?.foodLog ?? []
-  const [foodEntries, setFoodEntries] = useState(seedLog)
-  const [nextId,      setNextId]      = useState(seedLog.length + 1)
+  // ── Persistent food log ──────────────────────────────────────
+  // Key is based on the client's email so coach and client views share the same store.
+  // Falls back to demo seed entries only when the store is empty (first launch).
+  const seedLog    = DEMO_WEARABLE_DATA[clientUUID]?.foodLog ?? []
+  const storageKey = `eden_foodlog_${(clientUUID || email).replace(/[^a-z0-9]/gi, '_')}`
+
+  const [foodEntries, setFoodEntries] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return seedLog
+  })
+
+  // Persist every change to localStorage — unlimited entries, survives refresh
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    try { localStorage.setItem(storageKey, JSON.stringify(foodEntries)) } catch {}
+  }, [foodEntries])
+
+  // Derive next id from current max so it never collides after deletions
+  const nextIdRef = useRef(Math.max(0, ...foodEntries.map(e => e.id ?? 0)) + 1)
 
   const wearableData = DEMO_WEARABLE_DATA[clientUUID] || {}
   const oura  = wearableData.oura  || { connected: false }
@@ -374,9 +396,8 @@ export default function Wearables({ currentUser }) {
   }
 
   function handleAddFood(entry) {
-    const newEntry = { ...entry, id: nextId }
+    const newEntry = { ...entry, id: nextIdRef.current++ }
     setFoodEntries(prev => [newEntry, ...prev])
-    setNextId(n => n + 1)
   }
 
   function handleDeleteFood(id) {
