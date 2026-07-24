@@ -753,11 +753,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const isAdmin = myRole === 'super_admin' || myRole === 'company_admin'
 
   const demoConversations = myRole === 'coach' ? DEMO_CLIENTS : [CLIENT_COACH_CONVO, ADMIN_CONVO]
-  // For coach: only switch to Supabase-loaded convos if they're richer than the demo set.
-  // A partial load (e.g. only Jordan is in the DB) must not replace the other demo clients.
-  const conversations = myRole === 'coach'
-    ? (dynConversations && dynConversations.length > DEMO_CLIENTS.length ? dynConversations : DEMO_CLIENTS)
-    : (dynConversations ?? demoConversations)
+  // Only switch to Supabase-loaded convos when they are strictly richer than the demo set.
+  // A partial load (e.g. only Jordan in DB, or only coach found for a client) must not wipe
+  // demo conversations that have pre-seeded threads — otherwise the chat shows blank.
+  const conversations = (dynConversations && dynConversations.length > demoConversations.length)
+    ? dynConversations
+    : demoConversations
 
   // ── Conversation selection ────────────────────────────────
   // null = no conversation open (list-only view)
