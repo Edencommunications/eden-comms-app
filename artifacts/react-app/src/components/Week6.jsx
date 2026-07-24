@@ -246,7 +246,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           const next = { ...prev }
           rows.forEach(r=>{
             if (r.is_active===false && !next[r.email]) next[r.email] = { at:'', name:'', fromDb:true }
-            if (r.is_active!==false && next[r.email]?.fromDb) delete next[r.email]
+            // DB is the source of truth: if it says active, clear any stale local entry
+            if (r.is_active!==false && next[r.email]) delete next[r.email]
           })
           localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
           return next
@@ -322,17 +323,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   function executeRemoveCoach() {
     if (!pendingRemoval) return
     const activeCoachClients = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
+    // Guard: never remove a coach while active clients have nowhere to go
+    if (activeCoachClients.length>0 && !transferTargetId) {
+      alert('This coach still has active clients. Select a coach to transfer them to first.')
+      return
+    }
     const targetCoach = DEMO_COACHES.find(c=>c.uuid===transferTargetId)
+    let transferred = 0
     activeCoachClients.forEach(c=>{
-      if (transferTargetId) {
-        transferClient(c.email, transferTargetId)
-        addAudit('Eden Admin','Transferred client',c.name,`→ ${targetCoach?.name||'New Coach'}`)
-      }
+      transferClient(c.email, transferTargetId)
+      addAudit('Eden Admin','Transferred client',c.name,`→ ${targetCoach?.name||'New Coach'}`)
+      transferred++
     })
     const next = [...removedCoaches, pendingRemoval.uuid]
     setRemovedCoaches(next)
     localStorage.setItem('eden_removed_coaches', JSON.stringify(next))
-    addAudit('Eden Admin','Removed coach',pendingRemoval.name,`${activeCoachClients.length} client${activeCoachClients.length!==1?'s':''} transferred`)
+    addAudit('Eden Admin','Removed coach',pendingRemoval.name,
+      transferred>0?`${transferred} client${transferred!==1?'s':''} transferred to ${targetCoach?.name||'new coach'}`:'No active clients to transfer')
     setShowTransferModal(false)
     setPendingRemoval(null)
   }
