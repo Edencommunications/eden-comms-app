@@ -3584,10 +3584,10 @@ const AppShell = ({ user, onLogout }) => {
       ? coachClient.email : user.email;
     const ciDemoCheckins = CLIENT_ROSTER.find((c:any) => c.email === ciEmail)?.checkinHistory ?? [];
     if (panelTab === 'msgs')    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
-    if (panelTab === 'diet')    return <DietBuilder currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
-    if (panelTab === 'checkin') return <DietBuilder currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
-    if (panelTab === 'workout') return <Week4 currentUser={toolUser} initialTab="workout"/>;
-    if (panelTab === 'labs')    return <Week4 currentUser={toolUser} initialTab="labs"/>;
+    if (panelTab === 'diet')    return <DietBuilder key="diet"    currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
+    if (panelTab === 'checkin') return <DietBuilder key="checkin" currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
+    if (panelTab === 'workout') return <Week4 key="workout" currentUser={toolUser} initialTab="workout"/>;
+    if (panelTab === 'labs')    return <Week4 key="labs"    currentUser={toolUser} initialTab="labs"/>;
     return null;
   };
 
