@@ -600,8 +600,8 @@ function CheckInCharts({ checkins }) {
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[], onBack}) {
-  const [adminFormDocs, setAdminFormDocs] = React.useState([])
-  React.useEffect(()=>{
+  const [adminFormDocs, setAdminFormDocs] = useState([])
+  useEffect(()=>{
     const em = currentUser?.email||''
     if (!em) return
     dbGet('user_profiles',`email=eq.${encodeURIComponent(em)}&select=id`)

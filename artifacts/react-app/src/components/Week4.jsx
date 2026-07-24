@@ -358,8 +358,8 @@ const DEMO_WEEK_HISTORY = [
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function Week4({currentUser, initialTab='labs', onBack}) {
-  const [adminLabDocs, setAdminLabDocs] = React.useState([])
-  React.useEffect(()=>{
+  const [adminLabDocs, setAdminLabDocs] = useState([])
+  useEffect(()=>{
     const em = currentUser?.email||''
     if (!em) return
     dbGet('user_profiles',`email=eq.${encodeURIComponent(em)}&select=id`)
