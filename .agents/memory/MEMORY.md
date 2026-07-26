@@ -1,1 +1,2 @@
 - [Client lifecycle state](client-lifecycle.md) — deactivation/transfer state lives in Supabase user_profiles (is_active, coach_id); localStorage is only a cache — DB is always the source of truth.
+- [Staff access & messaging](staff-permissions.md) — client_access scopes (client/coach/company), separate coach_convo perm, participant-based conversations with nullable legacy coach_id/client_id.
