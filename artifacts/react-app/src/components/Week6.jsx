@@ -485,6 +485,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         initials,
         company_id: adminCompanyId||null,
         update_day: newUser.role==='client'?newUser.checkInDay:null,
+        temp_password: tempPass,
       }
       const result = await dbInsert('user_profiles', payload)
       profileId = Array.isArray(result)?result[0]?.id:result?.id
@@ -577,7 +578,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const TABS_ADMIN = [
     ['dashboard', '📊 Dashboard'],
     ['clients',   '👥 Clients'],
-    ['coaches',   '🏋 Coaches'],
+    ['coaches',   '🏋 Staff'],
     ['orgs',      '🏢 Orgs'],
     ['audit',     '🔐 Audit Log'],
   ]
@@ -1399,8 +1400,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <div style={{background:`${C.success}11`,border:`1px solid ${C.success}33`,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
               <div style={{fontSize:11,fontWeight:700,color:C.success,marginBottom:6}}>📋 What To Do</div>
               <div style={{fontSize:11,color:C.muted,lineHeight:1.7}}>
-                1. Their profile is saved in Supabase — ready for real auth when you enable it.<br/>
-                2. To give them access <em>now</em>: send them these credentials and have a developer add them to <code style={{color:C.gold}}>DEMO_USERS</code> in App.tsx.<br/>
+                1. Send them these credentials — they can log in right away with this temporary password.<br/>
+                2. Their profile is saved in Supabase, ready for real auth when you enable it.<br/>
                 3. Once Supabase Auth is live, they'll get a proper invite link instead.
               </div>
             </div>

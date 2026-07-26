@@ -835,6 +835,77 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
   const isLive = !!activeConvo?.supabaseConvoId
 
+  // ── Threads (Slack-style replies on any message) ─────────────
+  const [threadRootId, setThreadRootId] = useState(null)   // message id whose thread panel is open
+  const [threadMsg,    setThreadMsg]    = useState('')
+  const [showThreads,  setShowThreads]  = useState(false)  // Threads inbox panel
+  const [threadInbox,  setThreadInbox]  = useState([])     // [{root, replies, convo}]
+  const [threadReads,  setThreadReads]  = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`eden_thread_reads_${email}`) || '{}') } catch { return {} }
+  })
+  function markThreadRead(rootId) {
+    setThreadReads(prev => {
+      const next = { ...prev, [rootId]: new Date().toISOString() }
+      try { localStorage.setItem(`eden_thread_reads_${email}`, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+  function openThread(rootId) {
+    setThreadRootId(rootId)
+    markThreadRead(rootId)
+  }
+  function threadUnread(item) {
+    const last = item.replies[item.replies.length - 1]
+    if (!last || last.sender_id === myProfileId) return false
+    const readAt = threadReads[item.root.id]
+    return !readAt || last.created_at > readAt
+  }
+
+  // Load all thread replies across my conversations → Threads inbox
+  async function loadThreadInbox() {
+    try {
+      const ids = conversations.map(c => c.supabaseConvoId).filter(Boolean)
+      if (!ids.length) return
+      const replies = await dbGet('messages',
+        `conversation_id=in.(${ids.join(',')})&parent_id=not.is.null&order=created_at.desc&limit=200`)
+      if (!Array.isArray(replies) || !replies.length) { setThreadInbox([]); return }
+      const rootIds = [...new Set(replies.map(r => r.parent_id))]
+      const roots = await dbGet('messages', `id=in.(${rootIds.join(',')})`)
+      const items = rootIds.map(rid => {
+        const root = (roots || []).find(r => r.id === rid)
+        if (!root) return null
+        const reps = replies.filter(r => r.parent_id === rid)
+          .sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
+        const convo = conversations.find(c => c.supabaseConvoId === root.conversation_id)
+        return convo ? { root, replies: reps, convo } : null
+      }).filter(Boolean)
+      items.sort((a, b) => (b.replies[b.replies.length-1].created_at > a.replies[a.replies.length-1].created_at ? 1 : -1))
+      setThreadInbox(items)
+    } catch {}
+  }
+  useEffect(() => {
+    loadThreadInbox()
+    const iv = setInterval(loadThreadInbox, 15000)
+    return () => clearInterval(iv)
+  }, [conversations.length, myProfileId])
+  const unreadThreadCount = threadInbox.filter(threadUnread).length
+
+  async function sendThreadReply() {
+    const text = threadMsg.trim()
+    if (!text || !myProfileId || !threadRootId) return
+    const root = liveMessages.find(m => m.id === threadRootId) || threadInbox.find(t => t.root.id === threadRootId)?.root
+    const convoId = root?.conversation_id || activeConvo?.supabaseConvoId
+    if (!convoId) return
+    setThreadMsg('')
+    await dbInsert('messages', {
+      conversation_id: convoId, sender_id: myProfileId,
+      content: text, message_type: 'text', parent_id: threadRootId,
+    })
+    markThreadRead(threadRootId)
+    loadLiveMessages()
+    loadThreadInbox()
+  }
+
   // ── Load dynamic conversations from Supabase on mount ────────
   useEffect(() => { loadDynamicConversations() }, [email])
 
@@ -897,16 +968,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         }
       }
 
-      // Helper: load all fellow team members (coaches, VAs, head coaches, admins)
-      // so staff and coaches can message each other inside the app
-      async function loadTeammates(meId, companyId) {
-        const teammates = await dbGet('user_profiles',
-          `company_id=eq.${companyId}&role=neq.client&id=neq.${meId}&order=name.asc.nullslast`)
-        for (const t of teammates || []) {
-          const convoId = await findOrCreateConvo(meId, t.id, companyId)
-          pushConvo(t, convoId)
-        }
-      }
+      // NOTE: staff↔staff DMs live in the Team Hub, not here — Messages is for
+      // client conversations only (avoids the same chat living in two places).
 
       if (myRole === 'client') {
         // Primary coach
@@ -941,8 +1004,6 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         }
         // Additional clients from client_access (e.g. coach is also a VA for other clients)
         if (me.company_id) await loadAccessedClients(me.id, me.company_id)
-        // Fellow team members (VAs, head coaches, other coaches, admins)
-        if (me.company_id) await loadTeammates(me.id, me.company_id)
 
       } else if (myRole === 'super_admin' || myRole === 'company_admin') {
         // Admin: see all users in their company
@@ -954,10 +1015,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         }
 
       } else {
-        // Staff (VA, head_coach, etc.) — load all clients from client_access
+        // Staff (VA, head_coach, etc.) — load all clients from client_access.
+        // Teammate DMs happen in the Team Hub tab.
         if (me.company_id) await loadAccessedClients(me.id, me.company_id)
-        // Plus fellow team members (coaches, other VAs, admins)
-        if (me.company_id) await loadTeammates(me.id, me.company_id)
       }
 
       if (convos.length) {
@@ -1058,9 +1118,19 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // ── Which messages to show ─────────────────────────────────
   // Live for Jordan when messages exist in Supabase; otherwise fall back to demo thread so
   // the conversation is never blank (Supabase messages table may not be seeded yet).
+  // Group thread replies under their parent; the main chat only shows root messages
+  const repliesByParent = {}
+  for (const m of liveMessages) if (m.parent_id) (repliesByParent[m.parent_id] ||= []).push(m)
+  const rootLiveMessages = liveMessages.filter(m => !m.parent_id)
   const displayMessages = isLive && liveMessages.length > 0
-    ? liveMessages
+    ? rootLiveMessages
     : (activeConvo?.thread ?? [])
+  const threadRoot = threadRootId
+    ? (liveMessages.find(m => m.id === threadRootId) || threadInbox.find(t => t.root.id === threadRootId)?.root || null)
+    : null
+  const threadReplies = threadRootId
+    ? (repliesByParent[threadRootId] || threadInbox.find(t => t.root.id === threadRootId)?.replies || [])
+    : []
   const coachUUID = KNOWN_USERS['coach@eden.io'].uuid
   const clientUUID = KNOWN_USERS['client@eden.io'].uuid
 
@@ -1110,6 +1180,22 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               {myRole === 'coach' ? `${conversations.length} clients` : isAdmin ? 'All staff & clients' : 'Coach Marcus · Eden Admin'}
             </div>
           </div>
+          {/* Threads inbox button — everyone */}
+          <button onClick={() => { setShowThreads(s => !s); setShowBroadcast(false) }}
+            title="Threads — replies to messages you're part of"
+            style={{ position:'relative', background: showThreads ? C.gold : 'transparent',
+              border:`1px solid ${showThreads ? C.gold : C.border}`, borderRadius:8,
+              padding:'6px 10px', color: showThreads ? C.black : (unreadThreadCount ? C.gold : C.muted),
+              fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+            🧵 Threads
+            {unreadThreadCount > 0 && !showThreads && (
+              <span style={{ position:'absolute', top:-6, right:-6, minWidth:16, height:16,
+                borderRadius:8, background:C.gold, color:C.black, fontSize:9, fontWeight:800,
+                display:'flex', alignItems:'center', justifyContent:'center', padding:'0 4px' }}>
+                {unreadThreadCount}
+              </span>
+            )}
+          </button>
           {/* Broadcast button — admin only */}
           {isAdmin && (
             <button onClick={() => { setShowBroadcast(true); setActiveId(null) }}
@@ -1130,7 +1216,49 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           </div>
         )}
 
+        {/* Threads inbox — replaces the conversation list while open */}
+        {showThreads && (
+          <div style={{ flex:1, overflowY:'auto' }}>
+            <div style={{ padding:'10px 14px', fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', borderBottom:`1px solid ${C.border}` }}>
+              Threads you're in
+            </div>
+            {threadInbox.length === 0 && (
+              <div style={{ padding:'32px 20px', textAlign:'center', color:C.muted, fontSize:12, lineHeight:1.7 }}>
+                No threads yet.<br/>Tap ↪ on any message to start one — replies stay attached so nothing gets missed.
+              </div>
+            )}
+            {threadInbox.map(item => {
+              const last   = item.replies[item.replies.length - 1]
+              const unread = threadUnread(item)
+              return (
+                <button key={item.root.id}
+                  onClick={() => { openConvo(item.convo.id); openThread(item.root.id); setShowThreads(false); setTab('chat') }}
+                  style={{ width:'100%', textAlign:'left', background: unread ? `${C.gold}0d` : 'transparent',
+                    border:'none', borderBottom:`1px solid ${C.border}`,
+                    borderLeft:`3px solid ${unread ? C.gold : 'transparent'}`,
+                    padding:'10px 14px', cursor:'pointer' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color: unread ? C.gold : C.white }}>
+                      {unread && <span style={{ fontSize:8, marginRight:4 }}>●</span>}{item.convo.name}
+                    </span>
+                    <span style={{ fontSize:10, color:C.muted }}>{formatTime(last.created_at)}</span>
+                  </div>
+                  <div style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {item.root.content || '📎 Attachment'}
+                  </div>
+                  <div style={{ fontSize:11, color: unread ? C.white : C.muted, marginTop:2,
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: unread ? 600 : 400 }}>
+                    ↪ {last.sender_id === myProfileId ? 'You: ' : ''}{last.content}
+                  </div>
+                  <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>🧵 {item.replies.length} {item.replies.length===1?'reply':'replies'}</div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {/* Conversation list */}
+        {!showThreads && (
         <div style={{ flex:1, overflowY:'auto' }}>
           {conversations.map((convo, i) => {
             const isActive  = convo.id === activeId
@@ -1200,6 +1328,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             )
           })}
         </div>
+        )}
 
         {/* HIPAA footer */}
         <div style={{ padding:'10px 14px', borderTop:`1px solid ${C.border}` }}>
@@ -1208,6 +1337,77 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           </div>
         </div>
       </div>
+
+      {/* ── THREAD PANEL — side panel on desktop, full-screen on mobile ── */}
+      {threadRoot && (
+        <div style={{ position:'absolute', top:0, right:0, bottom:0, zIndex:30,
+          width: isMobile ? '100%' : 360, background:C.surface,
+          borderLeft: isMobile ? 'none' : `1px solid ${C.border}`,
+          display:'flex', flexDirection:'column', boxShadow:'-8px 0 24px rgba(0,0,0,0.5)' }}>
+          {/* Header */}
+          <div style={{ padding:'12px 14px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+            {isMobile && (
+              <button onClick={() => setThreadRootId(null)}
+                style={{ background:'none', border:'none', color:C.white, fontSize:16, cursor:'pointer', padding:'4px 8px 4px 0' }}>←</button>
+            )}
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:800, color:C.white }}>🧵 Thread</div>
+              <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
+                {(conversations.find(c => c.supabaseConvoId === threadRoot.conversation_id)?.name) || activeConvo?.name || ''}
+              </div>
+            </div>
+            {!isMobile && (
+              <button onClick={() => setThreadRootId(null)}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:8, color:C.muted, fontSize:14, cursor:'pointer', padding:'3px 9px', lineHeight:1 }}>×</button>
+            )}
+          </div>
+          {/* Root message */}
+          <div style={{ padding:'12px 14px', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:C.muted, marginBottom:6, textTransform:'uppercase', letterSpacing:1 }}>Original message</div>
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px' }}>
+              <div style={{ fontSize:11, fontWeight:700, color: threadRoot.sender_id === myProfileId ? C.gold : C.white, marginBottom:3 }}>
+                {threadRoot.sender_id === myProfileId ? 'You' :
+                  (conversations.find(c => c.supabaseConvoId === threadRoot.conversation_id)?.name || 'Them')}
+                <span style={{ fontSize:10, fontWeight:400, color:C.muted, marginLeft:6 }}>{formatTime(threadRoot.created_at)}</span>
+              </div>
+              <div style={{ fontSize:12, color:C.white, lineHeight:1.5, wordBreak:'break-word' }}>{threadRoot.content || '📎 Attachment'}</div>
+            </div>
+          </div>
+          {/* Replies */}
+          <div style={{ flex:1, overflowY:'auto', padding:'12px 14px' }}>
+            {threadReplies.length === 0 && (
+              <div style={{ textAlign:'center', color:C.muted, fontSize:12, padding:'24px 12px' }}>No replies yet — start the thread below.</div>
+            )}
+            {threadReplies.map(r => {
+              const mine = r.sender_id === myProfileId
+              return (
+                <div key={r.id} style={{ display:'flex', justifyContent: mine ? 'flex-end' : 'flex-start', marginBottom:8 }}>
+                  <div style={{ maxWidth:'85%' }}>
+                    <div style={{ background: mine ? C.gold : C.card, border: mine ? 'none' : `1px solid ${C.border}`,
+                      borderRadius: mine ? '12px 12px 4px 12px' : '12px 12px 12px 4px', padding:'8px 11px' }}>
+                      <div style={{ fontSize:12, color: mine ? C.black : C.white, lineHeight:1.5, wordBreak:'break-word' }}>{r.content}</div>
+                    </div>
+                    <div style={{ fontSize:9, color:C.muted, marginTop:2, textAlign: mine ? 'right' : 'left' }}>{formatTime(r.created_at)}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {/* Reply composer */}
+          <div style={{ padding:'10px 12px 12px', borderTop:`1px solid ${C.border}`, display:'flex', gap:6, flexShrink:0 }}>
+            <input value={threadMsg} onChange={e => setThreadMsg(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendThreadReply())}
+              placeholder="Reply in thread…"
+              style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:18,
+                padding: isMobile ? '11px 14px' : '9px 13px', color:C.white, fontSize:13, outline:'none', minWidth:0 }}/>
+            <button onClick={sendThreadReply} disabled={!threadMsg.trim()}
+              style={{ background:C.gold, border:'none', borderRadius:18, padding:'9px 16px',
+                fontWeight:800, color:C.black, fontSize:12, cursor:'pointer', opacity: threadMsg.trim() ? 1 : 0.4 }}>
+              ↑
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── RIGHT CONTENT ─────────────────────────────────────── */}
       <div style={{ flex:1, display: (showChat || (showBroadcast && !isMobile)) ? 'flex' : 'none', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
@@ -1369,10 +1569,36 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                       </div>
                       <div style={{ fontSize:10, color:C.muted, marginTop:3,
                         textAlign:mine?'right':'left',
-                        display:'flex', gap:4, justifyContent:mine?'flex-end':'flex-start' }}>
+                        display:'flex', gap:6, alignItems:'center', justifyContent:mine?'flex-end':'flex-start' }}>
                         <span>{msgTime(msg)}</span>
                         {mine && isLive && <span style={{ color:msg.is_read?C.success:C.muted }}>{msg.is_read?'✓✓':'✓'}</span>}
+                        {isLive && !(repliesByParent[msg.id]?.length) && (
+                          <button onClick={() => openThread(msg.id)} title="Reply in thread"
+                            style={{ background:'none', border:'none', color:C.muted, fontSize:11,
+                              cursor:'pointer', padding:'2px 4px', lineHeight:1 }}>
+                            ↪
+                          </button>
+                        )}
                       </div>
+                      {/* Thread reply-count chip */}
+                      {isLive && (repliesByParent[msg.id]?.length > 0) && (() => {
+                        const reps = repliesByParent[msg.id]
+                        const last = reps[reps.length - 1]
+                        const unread = last.sender_id !== myProfileId &&
+                          (!threadReads[msg.id] || last.created_at > threadReads[msg.id])
+                        return (
+                          <button onClick={() => openThread(msg.id)}
+                            style={{ marginTop:4, display:'flex', alignItems:'center', gap:5,
+                              background: unread ? `${C.gold}22` : C.card,
+                              border:`1px solid ${unread ? C.gold+'66' : C.border}`, borderRadius:12,
+                              padding:'4px 10px', cursor:'pointer',
+                              color: unread ? C.gold : C.muted, fontSize:11, fontWeight:unread?700:500,
+                              marginLeft: mine ? 'auto' : 0 }}>
+                            {unread && <span style={{ fontSize:7, lineHeight:1 }}>●</span>}
+                            🧵 {reps.length} {reps.length === 1 ? 'reply' : 'replies'} · {formatTime(last.created_at)}
+                          </button>
+                        )
+                      })()}
                     </div>
                     {mine && (
                       <div style={{ width:26, height:26, borderRadius:13, background:C.gold,

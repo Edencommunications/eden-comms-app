@@ -240,6 +240,22 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
         }
         onLogin({ email, ...user });
       } else {
+        // Not a demo account — check user_profiles for an admin-created account
+        // with a temporary password (until real Supabase Auth is wired up)
+        try {
+          const rows = await sbGet('user_profiles',
+            `email=eq.${encodeURIComponent(email.toLowerCase())}&select=id,name,full_name,email,role,temp_password,is_active`);
+          const p = Array.isArray(rows) ? rows[0] : null;
+          if (p && p.temp_password && p.temp_password === pass) {
+            if (p.is_active === false) {
+              setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
+            } else {
+              onLogin({ email: email.toLowerCase(), name: p.name || p.full_name || email, role: p.role || 'client' });
+            }
+            setLoading(false);
+            return;
+          }
+        } catch {}
         setError("Invalid email or password.");
       }
       setLoading(false);
