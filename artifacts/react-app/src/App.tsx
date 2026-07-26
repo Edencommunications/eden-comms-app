@@ -2434,6 +2434,7 @@ const AdminConversationMonitor = ({ user }:any) => {
   const [loading,     setLoading]     = useState(true);
   const [ready,       setReady]       = useState(false);
   const [msgLoading,  setMsgLoading]  = useState(false);
+  const [search,      setSearch]      = useState('');
 
   useEffect(() => { init() }, []);
 
@@ -2466,6 +2467,14 @@ const AdminConversationMonitor = ({ user }:any) => {
   const pInit = (id:string) => profiles[id]?.initials || '??';
   const pRole = (id:string) => (profiles[id]?.role||'').replace(/_/g,' ');
 
+  // Search: match either participant's name (so "jordan" or "marcus" both find their chat)
+  const q = search.trim().toLowerCase();
+  const shownConvos = q
+    ? convos.filter((c:any) =>
+        pName(c.participant_a_id).toLowerCase().includes(q) ||
+        pName(c.participant_b_id).toLowerCase().includes(q))
+    : convos;
+
   if (loading) return <div style={{ padding:40, textAlign:'center', color:B.muted, fontSize:13 }}>Loading conversations…</div>;
 
   if (!ready) return (
@@ -2489,12 +2498,28 @@ const AdminConversationMonitor = ({ user }:any) => {
       {(!selected || !isMobile) && (
         <div style={{ width: isMobile?'100%':280, flexShrink:0, borderRight:`1px solid ${B.border}`, overflowY:'auto', display:'flex', flexDirection:'column' }}>
           <div style={{ padding:'12px 16px', borderBottom:`1px solid ${B.border}` }}>
-            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:0 }}>
-              All Conversations ({convos.length})
+            <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>
+              All Conversations ({shownConvos.length})
             </p>
+            <div style={{ position:'relative' }}>
+              <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', fontSize:12, color:B.muted }}>🔍</span>
+              <input value={search} onChange={e=>setSearch(e.target.value)}
+                placeholder="Search by name…"
+                style={{ width:'100%', boxSizing:'border-box', background:B.card, border:`1px solid ${B.border}`,
+                  borderRadius:8, padding:'8px 28px 8px 30px', color:B.text, fontSize:12, outline:'none' }}/>
+              {search && (
+                <button onClick={()=>setSearch('')}
+                  style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)', background:'none',
+                    border:'none', color:B.muted, fontSize:13, cursor:'pointer', padding:2, lineHeight:1 }}>×</button>
+              )}
+            </div>
           </div>
-          {convos.length===0 && <div style={{ padding:28, textAlign:'center', color:B.muted, fontSize:12 }}>No conversations yet</div>}
-          {convos.map((c:any) => {
+          {shownConvos.length===0 && (
+            <div style={{ padding:28, textAlign:'center', color:B.muted, fontSize:12 }}>
+              {search ? `No conversations match "${search}"` : 'No conversations yet'}
+            </div>
+          )}
+          {shownConvos.map((c:any) => {
             const isActive = selected?.id===c.id;
             return (
               <button key={c.id} onClick={()=>openConvo(c)}

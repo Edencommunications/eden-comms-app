@@ -749,6 +749,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const [myProfileId,      setMyProfileId]      = useState(myUUID)
 
   const [showBroadcast, setShowBroadcast] = useState(false)
+  const [convoSearch,   setConvoSearch]   = useState('')
 
   const isAdmin = myRole === 'super_admin' || myRole === 'company_admin'
 
@@ -1268,10 +1269,33 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           </div>
         )}
 
+        {/* Search bar — find a chat by name */}
+        {!showThreads && (
+          <div style={{ padding:'8px 12px', borderBottom:`1px solid ${C.border}`, position:'relative' }}>
+            <span style={{ position:'absolute', left:22, top:'50%', transform:'translateY(-50%)', fontSize:12, color:C.muted }}>🔍</span>
+            <input value={convoSearch} onChange={e => setConvoSearch(e.target.value)}
+              placeholder="Search by name…"
+              style={{ width:'100%', boxSizing:'border-box', background:C.card, border:`1px solid ${C.border}`,
+                borderRadius:8, padding:'8px 28px 8px 32px', color:C.white, fontSize:12, outline:'none' }}/>
+            {convoSearch && (
+              <button onClick={() => setConvoSearch('')}
+                style={{ position:'absolute', right:18, top:'50%', transform:'translateY(-50%)', background:'none',
+                  border:'none', color:C.muted, fontSize:13, cursor:'pointer', padding:2, lineHeight:1 }}>×</button>
+            )}
+          </div>
+        )}
+
         {/* Conversation list */}
         {!showThreads && (
         <div style={{ flex:1, overflowY:'auto' }}>
-          {conversations.map((convo, i) => {
+          {conversations.filter(c => !convoSearch.trim() ||
+              c.name.toLowerCase().includes(convoSearch.trim().toLowerCase())).length === 0 && (
+            <div style={{ padding:'28px 16px', textAlign:'center', color:C.muted, fontSize:12 }}>
+              No chats match "{convoSearch}"
+            </div>
+          )}
+          {conversations.filter(c => !convoSearch.trim() ||
+              c.name.toLowerCase().includes(convoSearch.trim().toLowerCase())).map((convo, i) => {
             const isActive  = convo.id === activeId
             // In Loom Mode: active conversation always shows real name;
             // all others are anonymised so they can't be read on camera
