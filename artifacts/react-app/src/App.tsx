@@ -2817,14 +2817,67 @@ const StaffClientPanel = ({ user }:any) => {
 };
 
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
+// Monthly price per white-label package — MRR is the sum of these across
+// active white-label organizations underneath Lifestyle of Eden
+const PLAN_PRICES:Record<string,number> = { standard:299, professional:499, enterprise:999 };
+const EDEN_COMPANY_ID = 'b0000000-0000-0000-0000-000000000001';
+
 const AdminDashboard = ({ user }:any) => {
   const isMobile = useIsMobile();
   const [adminTab, setAdminTab] = useState('overview');
-  const orgs = [
+  const [dbOrgs,   setDbOrgs]   = useState<any[]|null>(null);
+  const [counts,   setCounts]   = useState<{coaches:number,clients:number}|null>(null);
+  // Platform owner (Eden HQ) sees Organizations + MRR; white-label admins see only their own coach/client counts
+  const [isOwnerHQ, setIsOwnerHQ] = useState(true);
+  const [myCompanyId, setMyCompanyId] = useState<string|null>(null);
+
+  useEffect(() => { (async () => {
+    try {
+      const meRows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=company_id`);
+      const cid = meRows?.[0]?.company_id || null;
+      setMyCompanyId(cid);
+      const ownerHQ = !cid || cid === EDEN_COMPANY_ID;
+      setIsOwnerHQ(ownerHQ);
+      // Coach & client counts — company-scoped for white-label admins, platform-wide for Eden HQ
+      const scope = ownerHQ ? '' : `&company_id=eq.${cid}`;
+      const [coachRows, clientRows] = await Promise.all([
+        sbGet('user_profiles', `role=in.(coach,head_coach)${scope}&select=id`),
+        sbGet('user_profiles', `role=eq.client${scope}&select=id`),
+      ]);
+      if (Array.isArray(coachRows) && Array.isArray(clientRows))
+        setCounts({ coaches: coachRows.length, clients: clientRows.length });
+      if (ownerHQ) {
+        const orgRows = await sbGet('organizations', `select=id,name,slug,plan,is_white_label,brand_color&order=created_at.asc`);
+        if (Array.isArray(orgRows)) setDbOrgs(orgRows);
+      }
+    } catch {}
+  })() }, []);
+
+  // MRR = sum of package prices across white-label orgs (Eden HQ itself doesn't count)
+  const whiteLabelOrgs = (dbOrgs || []).filter((o:any) => o.is_white_label);
+  const mrr = whiteLabelOrgs.reduce((sum:number, o:any) => sum + (PLAN_PRICES[(o.plan||'').toLowerCase()] || 0), 0);
+  const fmtMrr = mrr >= 1000 ? `$${(mrr/1000).toFixed(1)}k` : `$${mrr}`;
+
+  const demoOrgs = [
     { name:"Lifestyle of Eden", coaches:3, clients:24, color:B.gold },
     { name:"Partner Brand Co.", coaches:2, clients:11, color:"#6FB8E8" },
     { name:"Elite Performance", coaches:1, clients:6,  color:"#4FD89A" },
   ];
+  const orgs = (dbOrgs && dbOrgs.length)
+    ? dbOrgs.map((o:any) => ({ name:o.name, coaches:'—', clients:'—', color:o.brand_color||B.gold, plan:o.plan, isWhiteLabel:o.is_white_label }))
+    : demoOrgs;
+
+  const statCards = isOwnerHQ
+    ? [
+        {label:"Organizations", val: dbOrgs ? dbOrgs.length : orgs.length},
+        {label:"Total Coaches", val: counts ? counts.coaches : 6},
+        {label:"Total Clients", val: counts ? counts.clients : 41},
+        {label:"MRR (White Label)", val: fmtMrr},
+      ]
+    : [
+        {label:"Total Coaches", val: counts ? counts.coaches : '—'},
+        {label:"Total Clients", val: counts ? counts.clients : '—'},
+      ];
   return (
     <Screen>
       <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"28px 20px 16px" }}>
@@ -2848,26 +2901,37 @@ const AdminDashboard = ({ user }:any) => {
       {adminTab==='overview' && (
         <div style={{ overflowY:'auto', flex:1 }}>
           <div style={{ padding:"16px 20px" }}>
-            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:10, marginBottom:20 }}>
-              {[{label:"Organizations",val:orgs.length},{label:"Total Coaches",val:6},{label:"Total Clients",val:41},{label:"MRR",val:"$4.2k"}].map(({label,val})=>(
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `repeat(${statCards.length},1fr)`, gap:10, marginBottom:20 }}>
+              {statCards.map(({label,val})=>(
                 <Card key={label} style={{ textAlign:"center" }}>
                   <p style={{ fontSize:20, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>{val}</p>
                   <p style={{ fontSize:9, color:B.muted, margin:0, lineHeight:1.3 }}>{label}</p>
                 </Card>
               ))}
             </div>
+            {isOwnerHQ && (<>
             <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Organizations</p>
-            {orgs.map((o,i)=>(
+            {orgs.map((o:any,i:number)=>(
               <Card key={i} style={{ marginBottom:10, borderLeft:`3px solid ${o.color}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div>
                     <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{o.name}</p>
-                    <p style={{ fontSize:11, color:B.muted, margin:0 }}>{o.coaches} coaches · {o.clients} clients</p>
+                    <p style={{ fontSize:11, color:B.muted, margin:0 }}>
+                      {o.plan
+                        ? <>
+                            <span style={{ textTransform:'capitalize' }}>{o.plan}</span>
+                            {o.isWhiteLabel && PLAN_PRICES[(o.plan||'').toLowerCase()] != null &&
+                              <span style={{ color:B.gold }}> · ${PLAN_PRICES[(o.plan||'').toLowerCase()]}/mo</span>}
+                            {!o.isWhiteLabel && ' · Platform owner'}
+                          </>
+                        : `${o.coaches} coaches · ${o.clients} clients`}
+                    </p>
                   </div>
                   <Btn variant="ghost" style={{ fontSize:11, padding:"4px 0" }}>Manage →</Btn>
                 </div>
               </Card>
             ))}
+            </>)}
             <Divider/>
             <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Platform Actions</p>
             {["Add New Organization","Add Coach Account","View All Client Data","Audit Log","Zapier / GHL Webhooks","Stripe Subscription Overview"].map(action=>(
