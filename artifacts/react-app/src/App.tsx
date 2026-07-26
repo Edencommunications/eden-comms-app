@@ -310,6 +310,8 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
               ["Super Admin","admin@edencomms.io","Admin1234!"],
               ["Coach","coach@eden.io","Coach1234!"],
               ["Client","client@eden.io","Client123!"],
+              ["Head Coach","headcoach@eden.io","HC1234!"],
+              ["VA","va@eden.io","VA1234!"],
             ].map(([role,em,pw])=>(
               <button key={role} onClick={()=>{setEmail(em);setPass(pw);}}
                 style={{ display:"block", width:"100%", textAlign:"left", background:"none", border:"none", cursor:"pointer", padding:"4px 0" }}>

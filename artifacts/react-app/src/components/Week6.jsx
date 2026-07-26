@@ -247,9 +247,39 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [removedCoaches, setRemovedCoaches] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eden_removed_coaches') || '[]') } catch { return [] }
   })
+  // Head coach designations — array of coach UUIDs promoted to head coach
+  const [headCoaches, setHeadCoaches] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('eden_head_coaches') || '[]') } catch { return [] }
+  })
+  function promoteToHeadCoach(coach) {
+    const next = [...new Set([...headCoaches, coach.uuid])]
+    setHeadCoaches(next)
+    localStorage.setItem('eden_head_coaches', JSON.stringify(next))
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'head_coach'}).catch(()=>{})
+    addAudit('Eden Admin','Promoted to Head Coach',coach.name,'')
+  }
+  function demoteFromHeadCoach(coach) {
+    const next = headCoaches.filter(id=>id!==coach.uuid)
+    setHeadCoaches(next)
+    localStorage.setItem('eden_head_coaches', JSON.stringify(next))
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'coach'}).catch(()=>{})
+    addAudit('Eden Admin','Removed Head Coach designation',coach.name,'')
+  }
   // Sync deactivations + coach transfers FROM the database so every
   // device (coach, admin, anywhere) sees the same state.
   useEffect(()=>{
+    // Head coach designations from DB (source of truth)
+    dbGet('user_profiles','role=eq.head_coach&select=email')
+      .then(rows=>{
+        if (!Array.isArray(rows)) return
+        const hcEmails = new Set(rows.map(r=>r.email))
+        const next = DEMO_COACHES.filter(c=>hcEmails.has(c.email)).map(c=>c.uuid)
+        setHeadCoaches(prev=>{
+          const merged = [...new Set([...next])]
+          localStorage.setItem('eden_head_coaches', JSON.stringify(merged))
+          return merged
+        })
+      }).catch(()=>{})
     dbGet('user_profiles','role=eq.client&select=email,is_active,coach_id')
       .then(rows=>{
         if (!Array.isArray(rows)) return
@@ -1010,6 +1040,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           </div>
           {DEMO_COACHES.map(coach=>{
             const isRemoved    = removedCoaches.includes(coach.uuid)
+            const isHC         = headCoaches.includes(coach.uuid)
             const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
             const activeClients   = coachClients.filter(c=>!isDeactivated(c))
             const archivedByCoach = coachClients.filter(c=>isDeactivated(c))
@@ -1022,7 +1053,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       {coach.name[0]}
                     </div>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:14,fontWeight:700,color:isRemoved?C.muted:C.white}}>{coach.name}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:isRemoved?C.muted:C.white,display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
+                        {coach.name}
+                        {isHC&&!isRemoved&&(
+                          <span style={{fontSize:9,fontWeight:800,letterSpacing:0.8,background:`${C.gold}22`,border:`1px solid ${C.gold}66`,color:C.gold,padding:'2px 7px',borderRadius:8}}>★ HEAD COACH</span>
+                        )}
+                      </div>
                       <div style={{fontSize:11,color:C.muted,marginTop:2}}>{coach.email}</div>
                       <div style={{display:'flex',gap:12,marginTop:5,flexWrap:'wrap'}}>
                         <span style={{fontSize:10,color:C.gold,fontWeight:600}}>{activeClients.length} active client{activeClients.length!==1?'s':''}</span>
@@ -1036,10 +1072,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       {isRemoved?'REMOVED':'ACTIVE'}
                     </span>
                     {!isRemoved&&(
-                      <button onClick={()=>confirmRemoveCoach(coach)}
-                        style={{fontSize:10,background:'none',border:`1px solid ${C.danger}44`,borderRadius:6,padding:'3px 8px',color:C.danger,cursor:'pointer',fontWeight:600,whiteSpace:'nowrap'}}>
-                        Remove Coach
-                      </button>
+                      <div style={{display:'flex',gap:5,flexWrap:'wrap',justifyContent:isMobile?'flex-end':'flex-end'}}>
+                        {isHC?(
+                          <button onClick={()=>demoteFromHeadCoach(coach)}
+                            style={{fontSize:10,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',color:C.muted,cursor:'pointer',fontWeight:600,whiteSpace:'nowrap'}}>
+                            Remove HC Role
+                          </button>
+                        ):(
+                          <button onClick={()=>promoteToHeadCoach(coach)}
+                            style={{fontSize:10,background:`${C.gold}15`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'3px 8px',color:C.gold,cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>
+                            ★ Promote to Head Coach
+                          </button>
+                        )}
+                        <button onClick={()=>confirmRemoveCoach(coach)}
+                          style={{fontSize:10,background:'none',border:`1px solid ${C.danger}44`,borderRadius:6,padding:'3px 8px',color:C.danger,cursor:'pointer',fontWeight:600,whiteSpace:'nowrap'}}>
+                          Remove Coach
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
