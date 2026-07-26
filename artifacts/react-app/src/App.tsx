@@ -2164,8 +2164,9 @@ const PERM_DEFS = [
   { key:'workout',  label:'Workout',   icon:'🏋️', color:'#f06060' },
   { key:'checkins', label:'Check-ins', icon:'✅', color:B.gold    },
   { key:'habits',   label:'Habits',    icon:'🌱', color:'#88ddaa' },
+  { key:'coach_convo', label:'Coach Convo', icon:'👁', color:'#e8b76f' },
 ];
-const DEFAULT_PERMS:any = { messages:true, diet:false, labs:false, workout:false, checkins:false, habits:false };
+const DEFAULT_PERMS:any = { messages:true, diet:false, labs:false, workout:false, checkins:false, habits:false, coach_convo:false };
 
 const FALLBACK_STAFF:any[]   = [
   { id:'s1', name:'Coach Marcus',   role:'coach',      initials:'CM' },
@@ -2589,6 +2590,15 @@ const StaffClientPanel = ({ user }:any) => {
       perms.workout  && sbGet('workout_plans',   `client_id=eq.${client.id}&order=created_at.desc&limit=1`).then(r=>{data.workout=r?.[0]||null}),
       perms.labs     && sbGet('lab_results',     `client_id=eq.${client.id}&order=created_at.desc&limit=6`).then(r=>{data.labs=r||[]}),
       perms.checkins && sbGet('weekly_checkins', `client_id=eq.${client.id}&order=submitted_at.desc&limit=3`).then(r=>{data.checkins=r||[]}),
+      perms.coach_convo && (async()=>{
+        const coach = client.coach_id ? (await sbGet('user_profiles', `id=eq.${client.coach_id}&select=id,name,full_name`))?.[0] : null;
+        if (!coach) { data.coachConvo = { coachName:null, msgs:[] }; return; }
+        const [pA,pB] = [coach.id, client.id].sort();
+        let conv = (await sbGet('conversations', `participant_a_id=eq.${pA}&participant_b_id=eq.${pB}&limit=1`))?.[0];
+        if (!conv) conv = (await sbGet('conversations', `coach_id=eq.${coach.id}&client_id=eq.${client.id}&limit=1`))?.[0];
+        const msgs = conv ? await sbGet('messages', `conversation_id=eq.${conv.id}&order=created_at.asc`) : [];
+        data.coachConvo = { coachName: coach.name||coach.full_name||'Coach', coachId:coach.id, msgs: msgs||[] };
+      })(),
     ].filter(Boolean));
     setSelected({client,perms,data}); setDataLoading(false);
   }
@@ -2661,6 +2671,33 @@ const StaffClientPanel = ({ user }:any) => {
                   return <span key={p.key} style={{ fontSize:10, fontWeight:700, color:on?p.color:B.border, background:on?`${p.color}15`:B.surface, border:`1px solid ${on?p.color+'44':B.border}`, borderRadius:12, padding:'3px 10px' }}>{p.icon} {p.label}</span>;
                 })}
               </div>
+
+              {/* Coach ↔ Client conversation (read-only, separate allowance) */}
+              {selected.perms.coach_convo && (
+                <Card style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>👁 Coach ↔ Client Conversation <span style={{ color:'#e8b76f' }}>· read-only</span></p>
+                  {!selected.data.coachConvo?.coachName
+                    ? <p style={{ fontSize:12, color:B.muted, margin:0 }}>No coach assigned to this client yet</p>
+                    : !selected.data.coachConvo.msgs.length
+                      ? <p style={{ fontSize:12, color:B.muted, margin:0 }}>No messages between {selected.data.coachConvo.coachName} and {selected.client.name} yet</p>
+                      : (
+                        <div style={{ maxHeight:320, overflowY:'auto' }}>
+                          {selected.data.coachConvo.msgs.map((m:any)=>{
+                            const fromCoach = m.sender_id===selected.data.coachConvo.coachId;
+                            return (
+                              <div key={m.id} style={{ display:'flex', justifyContent:fromCoach?'flex-start':'flex-end', marginBottom:6 }}>
+                                <div style={{ maxWidth:'80%', background:fromCoach?B.surface:`${B.gold}18`, border:`1px solid ${fromCoach?B.border:B.gold+'33'}`, borderRadius:10, padding:'6px 10px' }}>
+                                  <p style={{ fontSize:9, fontWeight:700, color:fromCoach?'#6FB8E8':B.gold, margin:'0 0 2px' }}>{fromCoach?selected.data.coachConvo.coachName:selected.client.name}</p>
+                                  <p style={{ fontSize:12, color:B.text, margin:0, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{m.content}</p>
+                                  <p style={{ fontSize:8, color:B.muted, margin:'2px 0 0' }}>{m.created_at?new Date(m.created_at).toLocaleString():''}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                </Card>
+              )}
 
               {/* Diet */}
               {selected.perms.diet && (
@@ -3637,6 +3674,7 @@ const AppShell = ({ user, onLogout }) => {
   const staffTabs = [
     { key:"home", icon:"home", label:"My Clients" },
     { key:"msgs", icon:"msg",  label:"Messages"   },
+    { key:"team", icon:"team", label:"Team Hub"   },
   ];
 
   const tabs = user.role === "super_admin" ? adminTabs
@@ -3709,6 +3747,7 @@ const AppShell = ({ user, onLogout }) => {
     if (isStaff) {
       if (tab === "home") return <StaffClientPanel user={user}/>;
       if (tab === "msgs") return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
+      if (tab === "team") return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
       return <StaffClientPanel user={user}/>;
     }
     // Shared screens

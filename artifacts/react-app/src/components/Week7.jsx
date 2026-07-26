@@ -114,11 +114,32 @@ function NavItem({ icon, label, active, onClick, badge }) {
 export default function Week7({ currentUser }) {
   const isMobile = useIsMobile()
   const email  = currentUser?.email || ''
-  const info   = KNOWN_USERS[email] || { role:'coach', name:'User', uuid:null, orgId:EDEN_ORG_ID }
-  const myUUID = info.uuid
-  const myName = info.name
-  const myRole = info.role
-  const orgId  = info.orgId || EDEN_ORG_ID
+  const info   = KNOWN_USERS[email] || { role:currentUser?.role||'coach', name:currentUser?.name||'User', uuid:null, orgId:EDEN_ORG_ID }
+  const [self, setSelf] = useState(info)
+  const myUUID = self.uuid
+  const myName = self.name
+  const myRole = self.role
+  const orgId  = self.orgId || EDEN_ORG_ID
+
+  // Team roster from DB (coaches, head coaches, VAs, admins) — falls back to demo list
+  const [team, setTeam] = useState(DEMO_COACHES)
+  useEffect(()=>{
+    // Resolve own profile from DB when not in the hardcoded map (VAs, new staff…)
+    if (!info.uuid && email) {
+      dbGet('user_profiles', `email=eq.${encodeURIComponent(email)}&select=id,name,full_name,role,company_id`)
+        .then(rows=>{
+          const me = rows?.[0]
+          if (me) setSelf({ uuid:me.id, name:me.name||me.full_name||currentUser?.name||'User', role:me.role, orgId:me.company_id||EDEN_ORG_ID })
+        }).catch(()=>{})
+    }
+    dbGet('user_profiles', `role=neq.client&select=id,name,full_name,role&order=name.asc.nullslast`)
+      .then(rows=>{
+        if (!Array.isArray(rows)||!rows.length) return
+        const seen = new Set()
+        setTeam(rows.filter(r=>{ if(seen.has(r.id)) return false; seen.add(r.id); return true })
+          .map(r=>({ uuid:r.id, name:r.name||r.full_name||'Team member', role:r.role, isHeadCoach:r.role==='head_coach' })))
+      }).catch(()=>{})
+  }, []) // eslint-disable-line
 
   // Safety block — clients must never reach this
   if (myRole === 'client') {
@@ -248,7 +269,7 @@ export default function Week7({ currentUser }) {
 
   const dmKey    = dmTarget ? [myUUID, dmTarget.uuid].sort().join('_') : null
   const dmConvo  = dmKey ? (dmMessages[dmKey] || []) : []
-  const otherCoaches = DEMO_COACHES.filter(c => c.uuid !== myUUID)
+  const otherCoaches = team.filter(c => c.uuid !== myUUID)
 
   // ─── Sidebar nav items ─────────────────────────────────────
   const NAV = [
@@ -350,7 +371,7 @@ export default function Week7({ currentUser }) {
                 <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
                   <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
                     <div style={{fontSize:14,fontWeight:700,color:C.white}}># general</div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:1}}>Main channel · {DEMO_COACHES.length} members</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:1}}>Main channel · {team.length} members</div>
                   </div>
 
                   <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>

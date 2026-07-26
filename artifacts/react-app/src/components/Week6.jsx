@@ -247,6 +247,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [removedCoaches, setRemovedCoaches] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eden_removed_coaches') || '[]') } catch { return [] }
   })
+  // Support staff (VAs, head coaches, etc.) loaded from the database
+  const [supportStaff, setSupportStaff] = useState([])
+  useEffect(()=>{
+    dbGet('user_profiles','role=in.(va,head_coach)&select=id,name,full_name,email,role&order=created_at.asc')
+      .then(rows=>{ if(Array.isArray(rows)) setSupportStaff(rows) }).catch(()=>{})
+  },[])
   // Head coach designations — array of coach UUIDs promoted to head coach
   const [headCoaches, setHeadCoaches] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eden_head_coaches') || '[]') } catch { return [] }
@@ -511,6 +517,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       active:     true,
     }
     if (newUser.role==='client') setClients(prev=>[...prev,localUser])
+    if (newUser.role==='va'||newUser.role==='head_coach')
+      setSupportStaff(prev=>[...prev,{ id:localUser.uuid, name:localUser.name, email:localUser.email, role:newUser.role }])
 
     // Show setup instructions card
     setLastAdded({ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role, tempPass })
@@ -1033,10 +1041,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         <div style={{flex:1,overflowY:'auto',padding:16}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:700,color:C.white}}>All Coaches</div>
-            <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'coach'}))}}
-              style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>
-              + Add Coach
-            </button>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'va'}))}}
+                style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer'}}>
+                + Add VA
+              </button>
+              <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'coach'}))}}
+                style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>
+                + Add Coach
+              </button>
+            </div>
           </div>
           {DEMO_COACHES.map(coach=>{
             const isRemoved    = removedCoaches.includes(coach.uuid)
@@ -1125,6 +1139,28 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               </Card>
             )
           })}
+
+          {/* ── Support staff (VAs, head coaches) from the database ── */}
+          <div style={{fontSize:14,fontWeight:700,color:C.white,margin:'20px 0 10px'}}>Support Staff</div>
+          {supportStaff.length===0&&(
+            <Card><div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'8px 0'}}>No VAs or additional staff yet — use "+ Add VA" above.</div></Card>
+          )}
+          {supportStaff.map(s=>(
+            <Card key={s.id} sx={{marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:40,height:40,borderRadius:20,background:`${C.gold}15`,border:`1px solid ${C.gold}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:C.gold,flexShrink:0}}>
+                  {(s.name||s.full_name||'?')[0]}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.white}}>{s.name||s.full_name}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>{s.email}</div>
+                </div>
+                <span style={{fontSize:10,background:`${C.gold}18`,color:C.gold,padding:'3px 9px',borderRadius:10,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5}}>
+                  {(s.role||'').replace(/_/g,' ')}
+                </span>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 

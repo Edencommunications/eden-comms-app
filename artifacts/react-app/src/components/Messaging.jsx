@@ -897,6 +897,17 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         }
       }
 
+      // Helper: load all fellow team members (coaches, VAs, head coaches, admins)
+      // so staff and coaches can message each other inside the app
+      async function loadTeammates(meId, companyId) {
+        const teammates = await dbGet('user_profiles',
+          `company_id=eq.${companyId}&role=neq.client&id=neq.${meId}&order=name.asc.nullslast`)
+        for (const t of teammates || []) {
+          const convoId = await findOrCreateConvo(meId, t.id, companyId)
+          pushConvo(t, convoId)
+        }
+      }
+
       if (myRole === 'client') {
         // Primary coach
         if (me.coach_id) {
@@ -930,6 +941,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         }
         // Additional clients from client_access (e.g. coach is also a VA for other clients)
         if (me.company_id) await loadAccessedClients(me.id, me.company_id)
+        // Fellow team members (VAs, head coaches, other coaches, admins)
+        if (me.company_id) await loadTeammates(me.id, me.company_id)
 
       } else if (myRole === 'super_admin' || myRole === 'company_admin') {
         // Admin: see all users in their company
@@ -943,6 +956,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       } else {
         // Staff (VA, head_coach, etc.) — load all clients from client_access
         if (me.company_id) await loadAccessedClients(me.id, me.company_id)
+        // Plus fellow team members (coaches, other VAs, admins)
+        if (me.company_id) await loadTeammates(me.id, me.company_id)
       }
 
       if (convos.length) {
