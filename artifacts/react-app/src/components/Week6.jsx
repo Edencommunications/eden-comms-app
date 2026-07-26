@@ -676,24 +676,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             ))}
           </Card>
 
-          {/* Quick actions */}
-          <Card>
-            <Lbl t="Quick Actions"/>
-            <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-              {[
-                ['+ Add Coach',   ()=>{ setShowNewUser(true); setNewUser(p=>({...p,role:'coach'})) }],
-                ['+ Add Client',  ()=>{ setShowNewUser(true); setNewUser(p=>({...p,role:'client'})) }],
-                ['+ Add Org',     ()=>setShowNewOrg(true)],
-                ['View Clients',  ()=>setTab('clients')],
-                ['View Audit Log',()=>setTab('audit')],
-              ].map(([l,fn])=>(
-                <button key={l} onClick={fn}
-                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'9px 16px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </Card>
         </div>
       )}
 
