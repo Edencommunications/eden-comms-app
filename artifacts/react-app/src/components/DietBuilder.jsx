@@ -10,6 +10,16 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 
+function useIsMobile(bp = 768) {
+  const [m, setM] = useState(() => window.innerWidth < bp)
+  useEffect(() => {
+    const h = () => setM(window.innerWidth < bp)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [bp])
+  return m
+}
+
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
@@ -600,6 +610,7 @@ function CheckInCharts({ checkins }) {
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[], onBack}) {
+  const isMobile = useIsMobile()
   const [adminFormDocs, setAdminFormDocs] = useState([])
   useEffect(()=>{
     const em = currentUser?.email||''
@@ -1530,7 +1541,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             <>
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Client Data"/>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
                   <Sel label="Gender" value={calc.gender} onChange={v=>setCalc(c=>({...c,gender:v}))} options={['Male','Female']}/>
                   <Inp label="Bodyweight (lbs)" value={calc.weight} onChange={v=>setCalc(c=>({...c,weight:v}))} placeholder="e.g. 185" type="number"/>
                   <Inp label="Height (inches)" value={calc.height} onChange={v=>setCalc(c=>({...c,height:v}))} placeholder="e.g. 70" type="number"/>
@@ -1545,7 +1556,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               </Card>
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Macro Split"/>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+                <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:10}}>
                   {[['protPct','Protein %','#4FD89A'],['fatPct','Fat %','#f06060'],['carbPct','Carb %','#6FB8E8']].map(([k,l,col])=>(
                     <div key={k}>
                       <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{l}</div>
@@ -1565,7 +1576,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {results&&(
                 <Card sx={{marginBottom:20}}>
                   <Lbl t="Results"/>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:12}}>
+                  <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:10,marginBottom:12}}>
                     {[['BMR',results.bmr+' cal'],['Maintenance',results.maintenance+' cal'],['Calorie Target',results.cal+' cal'],['Protein',results.pro+'g'],['Fats',results.fat+'g'],['Carbs',results.carb+'g']].map(([l,v])=>(
                       <div key={l} style={{background:C.surface,borderRadius:8,padding:'10px 12px'}}>
                         <div style={{fontSize:10,color:C.muted,marginBottom:3}}>{l}</div>
@@ -1608,7 +1619,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             {showAddForm&&(
               <div style={{background:'#111a00',borderBottom:`1px solid ${C.gold}33`,padding:16,flexShrink:0}}>
                 <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:.8,textTransform:'uppercase',marginBottom:12}}>New Coach Update — visible to client in their Check-In tab</div>
-                <div style={{display:'grid',gridTemplateColumns:'140px 1fr',gap:10,marginBottom:10}}>
+                <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'140px 1fr',gap:10,marginBottom:10}}>
                   <div>
                     <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Date</div>
                     <input type="date" value={newDate} onChange={e=>setNewDate(e.target.value)}
@@ -1817,7 +1828,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                 <span style={{fontSize:11,fontWeight:700,color:ci.habitPct>=85?C.success:ci.habitPct>=60?C.gold:C.danger}}>{ci.habitPct}%</span>
                               )}
                             </div>
-                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 12px'}}>
+                            <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'6px 12px'}}>
                               {Object.entries(ci.habits).map(([id,count])=>{
                                 const h=MASTER_HABITS.find(x=>x.id===id)
                                 if(!h) return null
@@ -1962,7 +1973,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           {wPhotos.length} photo{wPhotos.length!==1?'s':''}
                         </span>
                       </div>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:8}}>
                         {wPhotos.map((p,i)=>(
                           p.photo_url?(
                             <a key={i} href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
@@ -2122,7 +2133,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                   <span style={{fontSize:11,fontWeight:700,color:ci.habitPct>=85?C.success:ci.habitPct>=60?C.gold:C.danger}}>{ci.habitPct}%</span>
                                 )}
                               </div>
-                              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 12px'}}>
+                              <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'6px 12px'}}>
                                 {Object.entries(ci.habits).map(([id,count])=>{
                                   const h=MASTER_HABITS.find(x=>x.id===id)
                                   if(!h) return null
@@ -2203,7 +2214,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     </div>
                   )}
                   {(clientIntake.startDate||clientIntake.startWeight)&&(
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:12}}>
+                    <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:12,marginTop:12}}>
                       {clientIntake.startDate&&(
                         <div style={{background:C.surface,borderRadius:8,padding:'10px 12px'}}>
                           <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:3}}>Start Date</div>
@@ -2346,7 +2357,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           {wPhotos.length} photo{wPhotos.length!==1?'s':''}
                         </span>
                       </div>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:8}}>
                         {wPhotos.map((p,i)=>(
                           p.photo_url?(
                             <a key={i} href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
@@ -2376,7 +2387,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </div>
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="Vitals"/>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
                     <Inp label="Body Weight (lbs)" value={ci.weight} onChange={setC('weight')} placeholder="e.g. 172.4" type="number"/>
                     <Inp label="Body Temperature (°F)" value={ci.temp} onChange={setC('temp')} placeholder="e.g. 97.8" type="number"/>
                     <Inp label="Avg Daily Steps" value={ci.steps} onChange={setC('steps')} placeholder="e.g. 9500" type="number"/>
@@ -2415,7 +2426,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <textarea value={ci.sleepNotes} onChange={e=>setC('sleepNotes')(e.target.value)} placeholder="Describe disruptions, times, duration…"
                       style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
                     <Inp label="Avg Daily Bowel Movements" value={ci.bowelCount} onChange={setC('bowelCount')} placeholder="e.g. 2" type="number"/>
                     <Sel label="Stool Consistency" value={ci.bowelType||''} onChange={setC('bowelType')} options={['','Well formed','Loose','Diarrhea','Constipated','Mixed']}/>
                   </div>
@@ -2749,7 +2760,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         <button onClick={()=>removeSupp(s.id)}
                           style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:15,padding:'0 4px',flexShrink:0}}>×</button>
                       </div>
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:8}}>
                         <div>
                           <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.8}}>Dosage</div>
                           <input value={s.customDose||''} onChange={e=>updateSuppField(s.id,'customDose',e.target.value)}
@@ -2815,7 +2826,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     </div>
 
                     {/* Dose + start date */}
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+                    <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:8,marginBottom:10}}>
                       <div>
                         <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:4}}>Starting Dose *</div>
                         <input
@@ -2880,7 +2891,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       {/* Mini form for a new taper step */}
                       {showTaperRow&&(
                         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:10,marginTop:6}}>
-                          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                          <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:8,marginBottom:8}}>
                             <div>
                               <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Effective Date *</div>
                               <input type="date" value={tapDate} onChange={e=>setTapDate(e.target.value)}
@@ -2974,7 +2985,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     {editTaperFor===rx.id?(
                       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,marginTop:6}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:8,textTransform:'uppercase',letterSpacing:.8}}>Add Taper / Adjustment Step</div>
-                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:8,marginBottom:8}}>
                           <div>
                             <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Effective Date *</div>
                             <input type="date" value={editTapDate} onChange={e=>setEditTapDate(e.target.value)}

@@ -3568,6 +3568,8 @@ const AppShell = ({ user, onLogout }) => {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const clientTabs = [
     { key:"home",      icon:"home",      label:"Home" },
     { key:"msgs",      icon:"msg",       label:"Messages" },
@@ -3715,6 +3717,14 @@ const AppShell = ({ user, onLogout }) => {
       {/* Top bar */}
       <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding:"8px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          {/* Hamburger menu — mobile only */}
+          {isMobile && (
+            <button onClick={() => setMenuOpen(v => !v)} aria-label="Menu"
+              style={{ background: menuOpen ? `${B.gold}22` : "none", border:`1.5px solid ${menuOpen ? B.gold : B.border}`,
+                borderRadius:8, padding:"6px 9px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <span style={{ fontSize:17, lineHeight:1, color: menuOpen ? B.gold : B.text }}>☰</span>
+            </button>
+          )}
           <HoneycombLogo size={30}/>
           <div>
             <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>Eden Communications</p>
@@ -3722,8 +3732,8 @@ const AppShell = ({ user, onLogout }) => {
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
-          {/* Split View toggle — coach/admin, desktop only */}
-          {(user.role === "coach" || user.role === "super_admin") && !isMobile && (
+          {/* Split View toggle — coach/admin */}
+          {(user.role === "coach" || user.role === "super_admin") && (
             <button onClick={() => setSplitView(v => !v)}
               title={splitView ? "Exit Split View" : "Split View — see two panels side by side"}
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
@@ -3765,6 +3775,35 @@ const AppShell = ({ user, onLogout }) => {
         </div>
       </div>
 
+      {/* Mobile dropdown menu */}
+      {isMobile && menuOpen && (
+        <>
+          <div onClick={() => setMenuOpen(false)}
+            style={{ position:"fixed", inset:0, zIndex:998, background:"rgba(0,0,0,0.6)" }}/>
+          <div style={{ position:"absolute", top:54, left:8, zIndex:999, width:230,
+            background:B.surface, border:`1px solid ${B.border}`, borderRadius:14,
+            boxShadow:"0 12px 40px rgba(0,0,0,0.7)", overflow:"hidden", paddingBottom:6 }}>
+            <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.border}`, marginBottom:4 }}>
+              <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
+                {user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
+              </p>
+              <p style={{ fontSize:13, color:B.gold, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
+            </div>
+            {tabs.map(t => (
+              <button key={t.key}
+                onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); setMenuOpen(false); }}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 16px",
+                  background:tab===t.key?`${B.gold}15`:"none", border:"none",
+                  borderLeft:`3px solid ${tab===t.key?B.gold:"transparent"}`,
+                  cursor:"pointer", textAlign:"left", width:"100%" }}>
+                <Ic n={t.icon} size={19} c={tab===t.key?B.gold:B.muted}/>
+                <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?B.gold:B.text }}>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
       {/* Body */}
       <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"row" }}>
 
@@ -3796,7 +3835,20 @@ const AppShell = ({ user, onLogout }) => {
 
         {/* Main content area */}
         <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", background:B.black }}>
-          {splitView && !isMobile ? (
+          {splitView ? (
+            isMobile ? (
+              /* Mobile split view — two panels stacked vertically */
+              <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden', height:'100%' }}>
+                <div style={{ height:'50%', display:'flex', flexDirection:'column', overflow:'hidden', borderBottom:`2px solid ${B.gold}55` }}>
+                  <PanelPicker value={leftPanel} onChange={setLeftPanel}/>
+                  <div style={{ flex:1, overflow:'hidden' }}>{renderPanel(leftPanel)}</div>
+                </div>
+                <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                  <PanelPicker value={rightPanel} onChange={setRightPanel}/>
+                  <div style={{ flex:1, overflow:'hidden' }}>{renderPanel(rightPanel)}</div>
+                </div>
+              </div>
+            ) : (
             <div ref={splitContainerRef} style={{ display:'flex', flex:1, overflow:'hidden', height:'100%' }}>
               {/* Left panel */}
               <div style={{ width:`${splitRatio}%`, display:'flex', flexDirection:'column', overflow:'hidden', borderRight:`1px solid ${B.border}` }}>
@@ -3814,27 +3866,11 @@ const AppShell = ({ user, onLogout }) => {
                 <div style={{ flex:1, overflow:'hidden' }}>{renderPanel(rightPanel)}</div>
               </div>
             </div>
+            )
           ) : renderScreen()}
         </div>
       </div>
 
-      {/* Bottom nav — mobile only */}
-      {isMobile && (
-        <div style={{ background:B.surface, borderTop:`1px solid ${B.border}`, display:"flex", flexShrink:0,
-          paddingBottom:"env(safe-area-inset-bottom, 0px)", overflowX:"auto",
-          WebkitOverflowScrolling:"touch", scrollbarWidth:"none" }}>
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); }}
-              style={{ minWidth:60, flex: tabs.length <= 6 ? 1 : undefined,
-                display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-                background:"none", border:"none", cursor:"pointer", padding:"6px 4px 8px", flexShrink:0 }}>
-              <Ic n={t.icon} size={20} c={tab===t.key?B.gold:B.muted}/>
-              <span style={{ fontSize:9, fontWeight:600, color:tab===t.key?B.gold:B.muted,
-                letterSpacing:0.4, textTransform:"uppercase", whiteSpace:"nowrap" }}>{t.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* ── HIPAA inactivity warning overlay ────────────────────────── */}
       {idleWarning && (

@@ -9,6 +9,16 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 
+function useIsMobile(bp = 768) {
+  const [m, setM] = useState(() => window.innerWidth < bp)
+  useEffect(() => {
+    const h = () => setM(window.innerWidth < bp)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [bp])
+  return m
+}
+
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
@@ -109,6 +119,7 @@ function Stat({label,value,color=C.gold,sub}) {
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}}) {
+  const isMobile = useIsMobile()
   const email    = currentUser?.email||''
   const info     = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   const myUUID   = info.uuid
@@ -654,7 +665,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
           {/* Client list */}
-          <div style={{width:selectedClient?280:undefined,flex:selectedClient?undefined:1,display:'flex',flexDirection:'column',overflow:'hidden',borderRight:selectedClient?`1px solid ${C.border}`:undefined}}>
+          <div style={{
+            width: isMobile ? '100%' : (selectedClient ? 280 : undefined),
+            flex: isMobile ? (selectedClient ? 0 : 1) : (selectedClient ? undefined : 1),
+            display: isMobile && selectedClient ? 'none' : 'flex',
+            flexDirection:'column',
+            overflow:'hidden',
+            borderRight: selectedClient && !isMobile ? `1px solid ${C.border}` : undefined
+          }}>
             <div style={{padding:'12px 14px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
               <div style={{display:'flex',gap:8,marginBottom:10}}>
                 <input value={clientSearch} onChange={e=>setClientSearch(e.target.value)}
@@ -777,10 +795,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
           {/* Client detail panel */}
           {selectedClient&&(
-            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            <div style={{
+              flex: 1,
+              display: isMobile && !selectedClient ? 'none' : 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              width: isMobile ? '100%' : undefined
+            }}>
               <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
                 <button onClick={()=>setSelectedClient(null)}
-                  style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,padding:0}}>←</button>
+                  style={{
+                    background:'none',border:'none',color:C.muted,cursor:'pointer',
+                    fontSize:18,padding:0, display: isMobile ? 'block' : 'block'
+                  }}>←</button>
                 <div style={{flex:1}}>
                   <div style={{fontSize:15,fontWeight:700,color:C.white}}>{selectedClient.name}</div>
                   <div style={{fontSize:11,color:C.muted,marginTop:1}}>
@@ -826,7 +853,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 {/* Account Status — admin can deactivate / reactivate */}
                 {isAdmin&&(
                   <Card sx={{marginBottom:14,border:`1px solid ${isDeactivated(selectedClient)?C.danger+'55':C.border}`}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div style={{display:'flex',flexDirection: isMobile ? 'column' : 'row', justifyContent:'space-between',alignItems: isMobile ? 'flex-start' : 'center', gap: 12}}>
                       <div>
                         <Lbl t="Account Status"/>
                         {isDeactivated(selectedClient)?(
@@ -846,20 +873,20 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         )}
                       </div>
                       {isDeactivated(selectedClient)?(
-                        <div style={{display:'flex',flexDirection:'column',gap:6,alignItems:'flex-end'}}>
+                        <div style={{display:'flex',flexDirection:'column',gap:6,alignItems: isMobile ? 'flex-start' : 'flex-end'}}>
                           <button onClick={()=>reactivateClient(selectedClient)}
                             style={{background:C.success,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
                             ✓ Reactivate
                           </button>
                           {isAdmin&&(
-                            <div style={{fontSize:9,color:C.muted,textAlign:'right',maxWidth:140}}>
+                            <div style={{fontSize:9,color:C.muted,textAlign: isMobile ? 'left' : 'right',maxWidth:140}}>
                               Restores login access. All past data remains intact.
                             </div>
                           )}
                         </div>
                       ):(
                         <button onClick={()=>{if(window.confirm(`Deactivate ${selectedClient.name}? They won't be able to log in, but all their data stays here.`)) deactivateClient(selectedClient)}}
-                          style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.danger,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+                          style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.danger,fontSize:11,cursor:'pointer',whiteSpace:'nowrap', marginTop: isMobile ? 8 : 0}}>
                           Deactivate
                         </button>
                       )}
@@ -886,7 +913,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 {/* Quick navigation to client tools */}
                 <Card sx={{marginBottom:14}}>
                   <Lbl t="Client Tools"/>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <div style={{display:'grid',gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',gap:8}}>
                     {[
                       ['🥗 Diet Plan',    'diet'],
                       ['📋 Check-In',     'checkin'],
@@ -989,20 +1016,22 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             const pending      = activeClients.filter(c=>c.hasUpdate).length
             return (
               <Card key={coach.uuid} sx={{marginBottom:10,opacity:isRemoved?0.55:1,border:`1px solid ${isRemoved?C.danger+'33':C.border}`}}>
-                <div style={{display:'flex',alignItems:'center',gap:12}}>
-                  <div style={{width:44,height:44,borderRadius:22,background:isRemoved?`${C.danger}15`:`${C.gold}22`,border:`2px solid ${isRemoved?C.danger+'33':C.gold+'44'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:isRemoved?C.danger:C.gold,flexShrink:0}}>
-                    {coach.name[0]}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:14,fontWeight:700,color:isRemoved?C.muted:C.white}}>{coach.name}</div>
-                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{coach.email}</div>
-                    <div style={{display:'flex',gap:12,marginTop:5}}>
-                      <span style={{fontSize:10,color:C.gold,fontWeight:600}}>{activeClients.length} active client{activeClients.length!==1?'s':''}</span>
-                      {archivedByCoach.length>0&&<span style={{fontSize:10,color:C.muted,fontWeight:600}}>{archivedByCoach.length} archived</span>}
-                      {pending>0&&<span style={{fontSize:10,color:C.danger,fontWeight:600}}>{pending} pending</span>}
+                <div style={{display:'flex',flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center',gap:12}}>
+                  <div style={{display:'flex', alignItems:'center', gap:12, width:'100%'}}>
+                    <div style={{width:44,height:44,borderRadius:22,background:isRemoved?`${C.danger}15`:`${C.gold}22`,border:`2px solid ${isRemoved?C.danger+'33':C.gold+'44'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:isRemoved?C.danger:C.gold,flexShrink:0}}>
+                      {coach.name[0]}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:14,fontWeight:700,color:isRemoved?C.muted:C.white}}>{coach.name}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{coach.email}</div>
+                      <div style={{display:'flex',gap:12,marginTop:5,flexWrap:'wrap'}}>
+                        <span style={{fontSize:10,color:C.gold,fontWeight:600}}>{activeClients.length} active client{activeClients.length!==1?'s':''}</span>
+                        {archivedByCoach.length>0&&<span style={{fontSize:10,color:C.muted,fontWeight:600}}>{archivedByCoach.length} archived</span>}
+                        {pending>0&&<span style={{fontSize:10,color:C.danger,fontWeight:600}}>{pending} pending</span>}
+                      </div>
                     </div>
                   </div>
-                  <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}>
+                  <div style={{display:'flex',flexDirection: isMobile ? 'row' : 'column',gap:5,alignItems: isMobile ? 'center' : 'flex-end', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end'}}>
                     <span style={{fontSize:10,background:isRemoved?`${C.danger}22`:`${C.success}22`,color:isRemoved?C.danger:C.success,padding:'3px 8px',borderRadius:10,fontWeight:700}}>
                       {isRemoved?'REMOVED':'ACTIVE'}
                     </span>
@@ -1175,7 +1204,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             />
 
             {/* Start date + weight row */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:14}}>
+            <div style={{display:'grid',gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',gap:12,marginTop:14}}>
               <Inp label="Start Date" value={intake.startDate} onChange={isCoach||isAdmin?setI('startDate'):undefined} type="date" disabled={isClient}/>
               <Inp label="Starting Weight (lbs)" value={intake.startWeight} onChange={isCoach||isAdmin?setI('startWeight'):undefined} placeholder="e.g. 185" disabled={isClient}/>
             </div>
@@ -1369,7 +1398,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <div style={{fontSize:11,color:C.muted,marginTop:2}}>Log notes from a consultation call with this client</div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:20}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:10}}>
+              <div style={{display:'grid',gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',gap:12,marginBottom:10}}>
                 <Inp label="Call Date" value={newCall.callDate} onChange={setNC('callDate')} type="date"/>
                 <Sel label="Call Type" value={newCall.callType} onChange={setNC('callType')} options={CALL_TYPES}/>
               </div>

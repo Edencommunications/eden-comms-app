@@ -8,6 +8,16 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 
+function useIsMobile(bp = 768) {
+  const [m, setM] = useState(() => window.innerWidth < bp)
+  useEffect(() => {
+    const h = () => setM(window.innerWidth < bp)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [bp])
+  return m
+}
+
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
@@ -72,11 +82,18 @@ function Card({children, sx={}}) {
 // LEFT NAV SIDEBAR ITEM
 // ════════════════════════════════════════════════════════════════
 function NavItem({ icon, label, active, onClick, badge }) {
+  const isMobile = window.innerWidth < 768;
   return (
     <button onClick={onClick} style={{
-      width:'100%', display:'flex', flexDirection:'column', alignItems:'center',
-      gap:4, padding:'12px 6px', background:'none', border:'none',
-      borderLeft:`3px solid ${active ? C.gold : 'transparent'}`,
+      width: isMobile ? 'auto' : '100%', 
+      flex: isMobile ? 1 : 'none',
+      display:'flex', 
+      flexDirection: isMobile ? 'row' : 'column', 
+      justifyContent: 'center',
+      alignItems:'center',
+      gap:4, padding: isMobile ? '8px 12px' : '12px 6px', background:'none', border:'none',
+      borderLeft: isMobile ? 'none' : `3px solid ${active ? C.gold : 'transparent'}`,
+      borderBottom: isMobile ? `3px solid ${active ? C.gold : 'transparent'}` : 'none',
       cursor:'pointer', position:'relative', transition:'background .15s',
       backgroundColor: active ? `${C.gold}12` : 'transparent',
     }}>
@@ -95,6 +112,7 @@ function NavItem({ icon, label, active, onClick, badge }) {
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function Week7({ currentUser }) {
+  const isMobile = useIsMobile()
   const email  = currentUser?.email || ''
   const info   = KNOWN_USERS[email] || { role:'coach', name:'User', uuid:null, orgId:EDEN_ORG_ID }
   const myUUID = info.uuid
@@ -243,17 +261,26 @@ export default function Week7({ currentUser }) {
   // RENDER
   // ════════════════════════════════════════════════════════════
   return (
-    <div style={{display:'flex',height:'100%',background:C.black,overflow:'hidden'}}>
+    <div style={{display:'flex', flexDirection: isMobile ? 'column' : 'row', height:'100%',background:C.black,overflow: isMobile ? 'auto' : 'hidden'}}>
 
       {/* ── LEFT NAV SIDEBAR ───────────────────────────────── */}
-      <div style={{width:72,background:C.surface,borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
+      <div style={{
+        width: isMobile ? '100%' : 72,
+        height: isMobile ? 'auto' : '100%',
+        background:C.surface,
+        borderRight: isMobile ? 'none' : `1px solid ${C.border}`,
+        borderBottom: isMobile ? `1px solid ${C.border}` : 'none',
+        display:'flex',
+        flexDirection: isMobile ? 'row' : 'column',
+        flexShrink:0
+      }}>
         {/* Brand mark */}
-        <div style={{padding:'12px 0 8px',textAlign:'center',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        <div style={{padding: isMobile ? '8px 16px' : '12px 0 8px',textAlign:'center',borderBottom: isMobile ? 'none' : `1px solid ${C.border}`, borderRight: isMobile ? `1px solid ${C.border}` : 'none', flexShrink:0, display:'flex', alignItems:'center'}}>
           <div style={{fontSize:9,fontWeight:800,color:C.gold,letterSpacing:.5,lineHeight:1.3}}>TEAM<br/>HUB</div>
         </div>
 
         {/* Nav items */}
-        <div style={{flex:1,overflowY:'auto',paddingTop:4}}>
+        <div style={{flex:1,overflowY: isMobile ? 'hidden' : 'auto', overflowX: isMobile ? 'auto' : 'hidden', paddingTop: isMobile ? 0 : 4, display:'flex', flexDirection: isMobile ? 'row' : 'column'}}>
           {NAV.map(n => (
             <NavItem key={n.key} icon={n.icon} label={n.label} active={section===n.key} badge={n.badge} onClick={() => setSection(n.key)}/>
           ))}
@@ -269,16 +296,16 @@ export default function Week7({ currentUser }) {
       </div>
 
       {/* ── MAIN CONTENT ───────────────────────────────────── */}
-      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+      <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
 
         {/* ══════════════════════════════════════════════════
             TEAM CHAT
         ══════════════════════════════════════════════════ */}
         {section==='chat' && (
-          <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+          <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
 
             {/* Chat sidebar — channels + DMs */}
-            <div style={{width:196,background:C.surface,borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
+            <div style={{width: isMobile ? '100%' : 196, background:C.surface, borderRight: isMobile ? 'none' : `1px solid ${C.border}`, borderBottom: isMobile ? `1px solid ${C.border}` : 'none', display:'flex', flexDirection: isMobile ? 'row' : 'column', flexShrink:0, overflowX: isMobile ? 'auto' : 'hidden'}}>
               <div style={{padding:'12px 14px 6px'}}>
                 <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Channels</div>
                 <button onClick={() => setChatView('main')}
@@ -319,8 +346,8 @@ export default function Week7({ currentUser }) {
 
             {/* Main channel */}
             {(chatView==='main' || chatView==='thread') && (
-              <div style={{flex:1,display:'flex',overflow:'hidden'}}>
-                <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
+                <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
                   <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
                     <div style={{fontSize:14,fontWeight:700,color:C.white}}># general</div>
                     <div style={{fontSize:10,color:C.muted,marginTop:1}}>Main channel · {DEMO_COACHES.length} members</div>
@@ -385,7 +412,7 @@ export default function Week7({ currentUser }) {
 
                 {/* Thread panel */}
                 {activeThread && chatView==='thread' && (
-                  <div style={{width:320,borderLeft:`1px solid ${C.border}`,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                  <div style={{width: isMobile ? '100%' : 320, borderTop: isMobile ? `1px solid ${C.border}` : 'none', borderLeft: isMobile ? 'none' : `1px solid ${C.border}`, display:'flex', flexDirection:'column', overflow: isMobile ? 'visible' : 'hidden'}}>
                     <div style={{padding:'12px 14px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:8}}>
                       <button onClick={() => setChatView('main')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,padding:0}}>←</button>
                       <div style={{flex:1}}>
@@ -448,7 +475,7 @@ export default function Week7({ currentUser }) {
 
             {/* DM view */}
             {chatView==='dm' && dmTarget && (
-              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
                 <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:10}}>
                   <button onClick={() => setChatView('main')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,padding:0}}>←</button>
                   <div style={{width:30,height:30,borderRadius:15,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.gold,flexShrink:0}}>
@@ -507,7 +534,7 @@ export default function Week7({ currentUser }) {
             MY CALENDAR — coach's personal Google Calendar
         ══════════════════════════════════════════════════ */}
         {section==='calendar' && (
-          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
             <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
               <div style={{flex:1}}>
                 <div style={{fontSize:14,fontWeight:700,color:C.white}}>🗓 My Calendar</div>
@@ -528,7 +555,7 @@ export default function Week7({ currentUser }) {
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
                   <input value={tempCalUrl} onChange={e => setTempCalUrl(e.target.value)}
                     placeholder="Paste Google Calendar embed URL…"
-                    style={{width:280,background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 10px',color:C.white,fontSize:11,outline:'none'}}/>
+                    style={{width: isMobile ? '100%' : 280,background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 10px',color:C.white,fontSize:11,outline:'none'}}/>
                   <button onClick={saveCalendarUrl}
                     style={{background:C.gold,border:'none',borderRadius:7,padding:'6px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
                     Save

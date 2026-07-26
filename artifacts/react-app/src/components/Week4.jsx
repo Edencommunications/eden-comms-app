@@ -8,6 +8,16 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 
+function useIsMobile(bp = 768) {
+  const [m, setM] = useState(() => window.innerWidth < bp)
+  useEffect(() => {
+    const h = () => setM(window.innerWidth < bp)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [bp])
+  return m
+}
+
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
@@ -358,6 +368,7 @@ const DEMO_WEEK_HISTORY = [
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function Week4({currentUser, initialTab='labs', onBack}) {
+  const isMobile = useIsMobile()
   const [adminLabDocs, setAdminLabDocs] = useState([])
   useEffect(()=>{
     const em = currentUser?.email||''
@@ -766,7 +777,14 @@ Training Principles:
         <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
           {/* Lab list */}
-          <div style={{width:activeLab?280:undefined,flex:activeLab?undefined:1,borderRight:activeLab?`1px solid ${C.border}`:undefined,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{
+            width: isMobile ? '100%' : (activeLab ? 280 : undefined),
+            flex: isMobile ? (activeLab ? 0 : 1) : (activeLab ? undefined : 1),
+            display: isMobile && activeLab ? 'none' : 'flex',
+            borderRight: activeLab && !isMobile ? `1px solid ${C.border}` : undefined,
+            flexDirection:'column',
+            overflow:'hidden'
+          }}>
 
             {/* Upload area */}
             <div style={{padding:14,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
@@ -831,12 +849,19 @@ Training Principles:
           </div>
 
           {/* Lab detail + comments */}
+          {/* Lab details */}
           {activeLab&&(
-            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            <div style={{
+              flex: 1,
+              display: isMobile && !activeLab ? 'none' : 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              width: isMobile ? '100%' : undefined
+            }}>
               {/* Header */}
               <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:10}}>
                 <button onClick={()=>setActiveLab(null)}
-                  style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,padding:0,lineHeight:1}}>←</button>
+                  style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,padding:0,lineHeight:1, display: isMobile ? 'block' : 'block'}}>←</button>
                 <div style={{flex:1}}>
                   <div style={{fontSize:14,fontWeight:700,color:C.white}}>{activeLab.lab_type}</div>
                   <div style={{fontSize:11,color:C.muted}}>{formatTime(activeLab.created_at)} · {activeLab.uploader_name}</div>
@@ -934,10 +959,10 @@ Training Principles:
           WORKOUT BUILDER TAB
       ══════════════════════════════════════════════════════ */}
       {tab==='workout'&&(
-        <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+        <div style={{flex:1,display:'flex',flexDirection: isMobile ? 'column' : 'row',overflow: isMobile ? 'auto' : 'hidden'}}>
 
           {/* Workout selector sidebar */}
-          <div style={{width:160,background:C.surface,borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
+          <div style={{width: isMobile ? '100%' : 160, maxHeight: isMobile ? 200 : 'none', background:C.surface, borderRight: isMobile ? 'none' : `1px solid ${C.border}`, borderBottom: isMobile ? `1px solid ${C.border}` : 'none', display:'flex', flexDirection: 'column', flexShrink:0}}>
             <div style={{padding:'12px 12px 8px',borderBottom:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>Workouts</div>
             </div>
@@ -990,7 +1015,7 @@ Training Principles:
           </div>
 
           {/* Workout content */}
-          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{flex:1,display:'flex',flexDirection:'column',overflow: isMobile ? 'visible' : 'hidden', minHeight: isMobile ? '80vh' : 'auto'}}>
             {/* Workout header */}
             <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
               <input value={workouts[activeWorkout].name}
@@ -1051,7 +1076,7 @@ Training Principles:
 
                   {/* Coach: exercise settings */}
                   {isCoach&&(
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+                    <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:8,marginBottom:10}}>
                       {[['sets','Sets','e.g. 4'],['reps','Reps','e.g. 10-12'],['rest','Rest','e.g. 90 sec']].map(([f,l,p])=>(
                         <div key={f}>
                           <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.8,textTransform:'uppercase',marginBottom:3}}>{l}</div>
@@ -1064,7 +1089,7 @@ Training Principles:
 
                   {/* Coach: cues and video */}
                   {isCoach&&(
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                    <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:8,marginBottom:8}}>
                       <div>
                         <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.8,textTransform:'uppercase',marginBottom:3}}>Exercise Cues</div>
                         <input value={ex.cues} onChange={e=>updateExercise(ex.id,'cues',e.target.value)} placeholder="e.g. Full ROM, squeeze at top"
@@ -1204,7 +1229,7 @@ Training Principles:
           CARDIO TAB
       ══════════════════════════════════════════════════════ */}
       {tab==='cardio'&&(
-        <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+        <div style={{flex:1,display:'flex',flexDirection: isMobile ? 'column' : 'row',overflow: isMobile ? 'auto' : 'hidden'}}>
 
           {/* Cardio week selector sidebar */}
           {(()=>{
@@ -1214,7 +1239,7 @@ Training Principles:
             if (list.length===0) list.push({week:1,saved_at:null})
             list.sort((a,b)=>b.week-a.week)
             return (
-              <div style={{width:160,background:C.surface,borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
+              <div style={{width: isMobile ? '100%' : 160, maxHeight: isMobile ? 120 : 'none', background:C.surface, borderRight: isMobile ? 'none' : `1px solid ${C.border}`, borderBottom: isMobile ? `1px solid ${C.border}` : 'none', display:'flex', flexDirection: 'column', flexShrink:0}}>
                 <div style={{padding:'12px 12px 8px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>
                     {isCoach ? 'View Week' : 'My Log'}
@@ -1243,7 +1268,7 @@ Training Principles:
           })()}
 
           {/* Cardio main content */}
-          <div style={{flex:1,overflowY:'auto',padding:16}}>
+          <div style={{flex:1,overflowY:'auto',padding:16, minHeight: isMobile ? '80vh' : 'auto'}}>
 
           {/* Admin-only: manage company-wide cardio types */}
           {isAdmin&&(
@@ -1305,7 +1330,7 @@ Training Principles:
             {cardio.map((c,i)=>(
               <div key={i} style={{padding:'12px 0',borderTop:`1px solid ${C.border}`}}>
                 {isCoach?(
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
                     <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={[...CARDIO_TYPES,...companyCardioTypes]}/>
                     <Inp label="Duration" value={c.duration} onChange={v=>updateCardio(i,'duration',v)} placeholder="e.g. 45-60 min"/>
                     <Inp label="Frequency" value={c.frequency} onChange={v=>updateCardio(i,'frequency',v)} placeholder="e.g. Daily"/>

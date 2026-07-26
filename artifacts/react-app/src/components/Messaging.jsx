@@ -1226,14 +1226,14 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
         {/* Top bar */}
         <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`,
-          padding:'0 12px', display:'flex', alignItems:'center', flexShrink:0, gap:8, height:52 }}>
+          padding:'0 12px', display:'flex', alignItems:'center', flexShrink:0, gap:8, height: isMobile ? 64 : 52 }}>
           {/* Back button — mobile only */}
           {/* Back / close button — on mobile shows ← Back, on desktop shows × */}
           {isMobile ? (
             <button onClick={closeConvo}
               style={{ background:'none', border:'none', color:C.white, fontSize:18, cursor:'pointer',
-                padding:'4px 8px 4px 0', flexShrink:0, display:'flex', alignItems:'center', gap:4 }}>
-              ← <span style={{ fontSize:13, fontWeight:600 }}>Back</span>
+                padding:'12px 16px 12px 0', flexShrink:0, display:'flex', alignItems:'center', gap:6 }}>
+              ← <span style={{ fontSize:15, fontWeight:600 }}>Back</span>
             </button>
           ) : (
             <button onClick={closeConvo} title="Close conversation"
@@ -1381,7 +1381,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"/>
                 <button onClick={() => fileRef.current?.click()} disabled={uploading}
                   style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8,
-                    width:38, height:38, cursor:'pointer', fontSize:17, flexShrink:0,
+                    width: isMobile ? 44 : 38, height: isMobile ? 44 : 38, cursor:'pointer', fontSize:17, flexShrink:0,
                     display:'flex', alignItems:'center', justifyContent:'center' }}>
                   {uploading ? '⏳' : '📎'}
                 </button>
@@ -1389,12 +1389,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   onKeyDown={e => e.key==='Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
                   placeholder={isMobile ? 'Message…' : 'Type a message… Enter to send'}
                   style={{ flex:1, background:C.card, border:`1px solid ${C.border}`,
-                    borderRadius:20, padding:'10px 14px', color:C.white, fontSize:13, outline:'none', minWidth:0 }}/>
+                    borderRadius:20, padding: isMobile ? '12px 16px' : '10px 14px', color:C.white, fontSize:14, outline:'none', minWidth:0 }}/>
                 <button onClick={sendMessage} disabled={!newMsg.trim()}
                   style={{ background:C.gold, border:'none', borderRadius:20,
-                    padding: isMobile ? '10px 14px' : '10px 20px',
-                    fontWeight:800, color:C.black, fontSize:13, cursor:'pointer',
-                    opacity:newMsg.trim()?1:0.4, flexShrink:0 }}>
+                    padding: isMobile ? '12px 20px' : '10px 20px',
+                    fontWeight:800, color:C.black, fontSize: isMobile ? 16 : 13, cursor:'pointer',
+                    opacity:newMsg.trim()?1:0.4, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
                   {isMobile ? '↑' : 'Send'}
                 </button>
               </div>
