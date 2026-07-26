@@ -756,7 +756,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // Only switch to Supabase-loaded convos when they are strictly richer than the demo set.
   // A partial load (e.g. only Jordan in DB, or only coach found for a client) must not wipe
   // demo conversations that have pre-seeded threads — otherwise the chat shows blank.
-  const baseConversations = (dynConversations && dynConversations.length > demoConversations.length)
+  // Real DB-auth users (not in the demo KNOWN_USERS list) always use live data;
+  // demo accounts only switch when the live set is at least as rich as the demo set,
+  // so a partial load never wipes pre-seeded demo threads.
+  const isRealDbUser = !KNOWN_USERS[email]
+  const baseConversations = (dynConversations && dynConversations.length &&
+      (isRealDbUser || dynConversations.length >= demoConversations.length))
     ? dynConversations
     : demoConversations
 
@@ -1135,7 +1140,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const clientUUID = KNOWN_USERS['client@eden.io'].uuid
 
   function isMine(msg) {
-    if (isLive) return msg.sender_id === myUUID
+    if (isLive) return msg.sender_id === myProfileId
     if (myRole === 'coach') return msg.from === 'coach'
     return msg.from === 'client'
   }
@@ -1219,6 +1224,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         {/* Threads inbox — replaces the conversation list while open */}
         {showThreads && (
           <div style={{ flex:1, overflowY:'auto' }}>
+            <button onClick={() => { setShowThreads(false); setThreadRootId(null) }}
+              style={{ width:'100%', display:'flex', alignItems:'center', gap:8, background:C.card,
+                border:'none', borderBottom:`1px solid ${C.border}`, padding:'12px 14px',
+                color:C.gold, fontSize:12, fontWeight:700, cursor:'pointer', textAlign:'left' }}>
+              ← Back to Messages
+            </button>
             <div style={{ padding:'10px 14px', fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', borderBottom:`1px solid ${C.border}` }}>
               Threads you're in
             </div>

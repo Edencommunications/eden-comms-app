@@ -479,6 +479,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     let profileId = null
     try {
       const payload = {
+        id:         crypto.randomUUID(),
         name:       newUser.name.trim(),
         email:      newUser.email.trim().toLowerCase(),
         role:       newUser.role,
