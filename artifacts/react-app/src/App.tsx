@@ -2817,9 +2817,9 @@ const StaffClientPanel = ({ user }:any) => {
 };
 
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
-// Monthly price per white-label package — MRR is the sum of these across
-// active white-label organizations underneath Lifestyle of Eden
-const PLAN_PRICES:Record<string,number> = { standard:299, professional:499, enterprise:999 };
+// Fallback prices if the packages table hasn't been set up yet — the live
+// tiers/prices are managed in Admin → Orgs → Packages & Pricing
+const FALLBACK_PLAN_PRICES:Record<string,number> = { standard:299, professional:499, enterprise:999 };
 const EDEN_COMPANY_ID = 'b0000000-0000-0000-0000-000000000001';
 
 const AdminDashboard = ({ user }:any) => {
@@ -2830,6 +2830,7 @@ const AdminDashboard = ({ user }:any) => {
   // Platform owner (Eden HQ) sees Organizations + MRR; white-label admins see only their own coach/client counts
   const [isOwnerHQ, setIsOwnerHQ] = useState(true);
   const [myCompanyId, setMyCompanyId] = useState<string|null>(null);
+  const [planPrices, setPlanPrices] = useState<Record<string,number>>(FALLBACK_PLAN_PRICES);
 
   useEffect(() => { (async () => {
     try {
@@ -2847,15 +2848,23 @@ const AdminDashboard = ({ user }:any) => {
       if (Array.isArray(coachRows) && Array.isArray(clientRows))
         setCounts({ coaches: coachRows.length, clients: clientRows.length });
       if (ownerHQ) {
-        const orgRows = await sbGet('organizations', `select=id,name,slug,plan,is_white_label,brand_color&order=created_at.asc`);
+        const [orgRows, pkgRows] = await Promise.all([
+          sbGet('organizations', `select=id,name,slug,plan,is_white_label,brand_color&order=created_at.asc`),
+          sbGet('packages', `active=eq.true&select=name,price`).catch(()=>null),
+        ]);
         if (Array.isArray(orgRows)) setDbOrgs(orgRows);
+        if (Array.isArray(pkgRows) && pkgRows.length) {
+          const map:Record<string,number> = {};
+          pkgRows.forEach((p:any)=>{ map[(p.name||'').toLowerCase()] = Number(p.price)||0 });
+          setPlanPrices(map);
+        }
       }
     } catch {}
   })() }, []);
 
   // MRR = sum of package prices across white-label orgs (Eden HQ itself doesn't count)
   const whiteLabelOrgs = (dbOrgs || []).filter((o:any) => o.is_white_label);
-  const mrr = whiteLabelOrgs.reduce((sum:number, o:any) => sum + (PLAN_PRICES[(o.plan||'').toLowerCase()] || 0), 0);
+  const mrr = whiteLabelOrgs.reduce((sum:number, o:any) => sum + (planPrices[(o.plan||'').toLowerCase()] || 0), 0);
   const fmtMrr = mrr >= 1000 ? `$${(mrr/1000).toFixed(1)}k` : `$${mrr}`;
 
   const demoOrgs = [
@@ -2920,8 +2929,8 @@ const AdminDashboard = ({ user }:any) => {
                       {o.plan
                         ? <>
                             <span style={{ textTransform:'capitalize' }}>{o.plan}</span>
-                            {o.isWhiteLabel && PLAN_PRICES[(o.plan||'').toLowerCase()] != null &&
-                              <span style={{ color:B.gold }}> · ${PLAN_PRICES[(o.plan||'').toLowerCase()]}/mo</span>}
+                            {o.isWhiteLabel && planPrices[(o.plan||'').toLowerCase()] != null &&
+                              <span style={{ color:B.gold }}> · ${planPrices[(o.plan||'').toLowerCase()]}/mo</span>}
                             {!o.isWhiteLabel && ' · Platform owner'}
                           </>
                         : `${o.coaches} coaches · ${o.clients} clients`}

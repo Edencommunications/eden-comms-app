@@ -173,6 +173,49 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   })
   const setNO = k=>v=>setNewOrg(p=>({...p,[k]:v}))
 
+  // ── Packages / pricing tiers (drive org plans + MRR) ─────
+  const [packages,    setPackages]    = useState([])   // [{id,name,price,active}]
+  const [pkgsLoaded,  setPkgsLoaded]  = useState(false)
+  const [newPkg,      setNewPkg]      = useState({name:'',price:''})
+  const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price} being edited
+
+  useEffect(()=>{
+    if (!isAdmin) return
+    dbGet('packages','active=eq.true&order=price.asc')
+      .then(rows=>{ if(Array.isArray(rows)) setPackages(rows); setPkgsLoaded(true) })
+      .catch(()=>setPkgsLoaded(true))
+    dbGet('organizations','select=id,name,slug,plan,is_white_label,brand_color&order=created_at.asc')
+      .then(rows=>{
+        if (Array.isArray(rows)&&rows.length)
+          setOrgs(rows.map(o=>({ id:o.id, name:o.name, slug:o.slug, isWhiteLabel:o.is_white_label,
+            plan:o.plan, coachCount:0, clientCount:0, active:true, brandColor:o.brand_color||'#ffa600' })))
+      }).catch(()=>{})
+  },[isAdmin])
+
+  const planOptions = packages.length ? packages.map(p=>p.name) : ['standard','professional','enterprise']
+
+  async function addPackage() {
+    const name = newPkg.name.trim(); const price = parseFloat(newPkg.price)
+    if (!name || isNaN(price)) return
+    const res = await dbInsert('packages',{ name, price })
+    const row = Array.isArray(res)?res[0]:res
+    if (row?.id) { setPackages(p=>[...p,row].sort((a,b)=>a.price-b.price)); setNewPkg({name:'',price:''}) }
+    else alert('Could not save the tier. Make sure the packages table exists (run the SQL I gave you), then try again.')
+  }
+  async function savePackage() {
+    if (!editPkg) return
+    const name = editPkg.name.trim(); const price = parseFloat(editPkg.price)
+    if (!name || isNaN(price)) return
+    await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price })
+    setPackages(p=>p.map(x=>x.id===editPkg.id?{...x,name,price}:x).sort((a,b)=>a.price-b.price))
+    setEditPkg(null)
+  }
+  async function deletePackage(pkg) {
+    if (!confirm(`Remove the "${pkg.name}" tier? Existing orgs on this tier will stop counting toward MRR until you move them to another tier.`)) return
+    await dbUpdate('packages',`id=eq.${pkg.id}`,{ active:false })
+    setPackages(p=>p.filter(x=>x.id!==pkg.id))
+  }
+
   // ── Admin org context (loaded from Supabase) ─────────────
   const [adminCompanyId,  setAdminCompanyId]  = useState(null)
   const [adminProfileId,  setAdminProfileId]  = useState(null)
@@ -1158,11 +1201,63 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <div style={{fontSize:14,fontWeight:700,color:C.white}}>Organizations</div>
               <div style={{fontSize:11,color:C.muted,marginTop:2}}>Manage white-label companies and their access</div>
             </div>
-            <button onClick={()=>setShowNewOrg(true)}
+            <button onClick={()=>{ if(!planOptions.includes(newOrg.plan)) setNO('plan')(planOptions[0]); setShowNewOrg(true) }}
               style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>
               + New Org
             </button>
           </div>
+
+          {/* ── Packages & Pricing ── */}
+          <Card sx={{marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:2}}>💰 Packages & Pricing</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
+              These tiers drive the plan choices for white-label orgs and the MRR total on your Overview. Edit prices anytime — MRR recalculates automatically.
+            </div>
+            {!pkgsLoaded && <div style={{fontSize:11,color:C.muted}}>Loading tiers…</div>}
+            {pkgsLoaded && packages.length===0 && (
+              <div style={{fontSize:11,color:C.warning||'#e8b74f',marginBottom:10}}>
+                No tiers yet — add your first one below. (If adding fails, the packages table hasn't been created in the database yet.)
+              </div>
+            )}
+            {packages.map(pkg=>(
+              <div key={pkg.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:C.surface,borderRadius:8,marginBottom:6}}>
+                {editPkg?.id===pkg.id ? (
+                  <>
+                    <input value={editPkg.name} onChange={e=>setEditPkg(p=>({...p,name:e.target.value}))}
+                      style={{flex:2,background:C.card,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none'}}/>
+                    <div style={{display:'flex',alignItems:'center',gap:4,flex:1}}>
+                      <span style={{fontSize:12,color:C.muted}}>$</span>
+                      <input value={editPkg.price} onChange={e=>setEditPkg(p=>({...p,price:e.target.value}))} inputMode="decimal"
+                        style={{width:'100%',background:C.card,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none'}}/>
+                      <span style={{fontSize:11,color:C.muted}}>/mo</span>
+                    </div>
+                    <button onClick={savePackage}
+                      style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>Save</button>
+                    <button onClick={()=>setEditPkg(null)}
+                      style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 10px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{flex:2,fontSize:13,fontWeight:700,color:C.white,textTransform:'capitalize'}}>{pkg.name}</div>
+                    <div style={{flex:1,fontSize:13,fontWeight:700,color:C.gold}}>${Number(pkg.price)}/mo</div>
+                    <button onClick={()=>setEditPkg({id:pkg.id,name:pkg.name,price:String(pkg.price)})}
+                      style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>Edit</button>
+                    <button onClick={()=>deletePackage(pkg)}
+                      style={{background:`${C.danger}18`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 10px',color:C.danger,fontSize:11,cursor:'pointer'}}>✕</button>
+                  </>
+                )}
+              </div>
+            ))}
+            <div style={{display:'flex',gap:8,marginTop:10}}>
+              <input value={newPkg.name} onChange={e=>setNewPkg(p=>({...p,name:e.target.value}))} placeholder="Tier name (e.g. Standard)"
+                style={{flex:2,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+              <input value={newPkg.price} onChange={e=>setNewPkg(p=>({...p,price:e.target.value}))} placeholder="Price / mo" inputMode="decimal"
+                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+              <button onClick={addPackage} disabled={!newPkg.name.trim()||isNaN(parseFloat(newPkg.price))}
+                style={{background:C.gold,border:'none',borderRadius:6,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',
+                  opacity:(!newPkg.name.trim()||isNaN(parseFloat(newPkg.price)))?.5:1}}>+ Add Tier</button>
+            </div>
+          </Card>
 
           {orgs.map(org=>(
             <Card key={org.id} sx={{marginBottom:10}}>
@@ -1525,7 +1620,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <Inp label="Company Name" value={newOrg.name} onChange={setNO('name')} placeholder="e.g. Peak Performance Coaching"/>
             <Inp label="URL Slug" value={newOrg.slug} onChange={setNO('slug')} placeholder="e.g. peak-performance (auto-generated if blank)"/>
             <Inp label="Billing Email" value={newOrg.billingEmail} onChange={setNO('billingEmail')} placeholder="billing@company.com" type="email"/>
-            <Sel label="Plan" value={newOrg.plan} onChange={setNO('plan')} options={['standard','professional','enterprise']}/>
+            <Sel label="Plan" value={newOrg.plan} onChange={setNO('plan')} options={planOptions}/>
             <div style={{marginBottom:12}}>
               <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Brand Color</div>
               <div style={{display:'flex',gap:10,alignItems:'center'}}>
