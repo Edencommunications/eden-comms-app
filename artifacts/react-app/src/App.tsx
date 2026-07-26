@@ -2224,7 +2224,11 @@ const StaffAccessManager = ({ user }:any) => {
       if (!usingDemo) await sbPatch('client_access', `id=eq.${editing.id}`, { permissions:fPerms });
       setAssignments(p => p.map(a => a.id===editing.id ? {...a,permissions:fPerms} : a));
     } else {
-      const payload = { company_id:companyId, staff_id:fStaff, client_id:fClient==='all'?null:fClient, permissions:fPerms, assigned_by:adminId };
+      const isCoachPick = fClient.startsWith('coach:');
+      const payload:any = { company_id:companyId, staff_id:fStaff,
+        client_id: (fClient==='all'||isCoachPick) ? null : fClient,
+        coach_id:  isCoachPick ? fClient.slice(6) : null,
+        permissions:fPerms, assigned_by:adminId };
       if (!usingDemo) {
         const res:any = await sbInsert('client_access', payload);
         if (res?.[0]) setAssignments(p => [...p, res[0]]);
@@ -2245,6 +2249,10 @@ const StaffAccessManager = ({ user }:any) => {
   const staffInit  = (id:string) => staffList.find(s=>s.id===id)?.initials || '?';
   const staffRole  = (id:string) => (staffList.find(s=>s.id===id)?.role||'').replace(/_/g,' ');
   const clientLabel = (id:string|null) => id ? (clientList.find(c=>c.id===id)?.name||id) : '👥 All Clients';
+  const assignLabel = (a:any) => a?.coach_id
+    ? `🏋 All clients of ${staffList.find(s=>s.id===a.coach_id)?.name || 'coach'}`
+    : clientLabel(a?.client_id ?? null);
+  const coachOptions = staffList.filter((s:any)=>s.role==='coach'||s.role==='head_coach');
 
   const grouped = staffList
     .map(s => ({ staff:s, rows:assignments.filter(a=>a.staff_id===s.id) }))
@@ -2294,7 +2302,7 @@ const StaffAccessManager = ({ user }:any) => {
               <Card key={a.id} style={{ marginBottom:8, marginLeft:46 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:12, fontWeight:700, color:B.text, margin:'0 0 8px' }}>{clientLabel(a.client_id)}</p>
+                    <p style={{ fontSize:12, fontWeight:700, color:B.text, margin:'0 0 8px' }}>{assignLabel(a)}</p>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                       {active.length===0 && <span style={{ fontSize:10, color:B.muted }}>No permissions enabled</span>}
                       {active.map((p:any) => (
@@ -2341,7 +2349,14 @@ const StaffAccessManager = ({ user }:any) => {
                 <select value={fClient} onChange={e=>setFClient(e.target.value)}
                   style={{ width:'100%', background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:'10px 12px', color:B.text, fontSize:13, outline:'none' }}>
                   <option value='all'>👥 All Clients (company-wide)</option>
-                  {clientList.map((c:any) => <option key={c.id} value={c.id}>👤 {c.name}</option>)}
+                  {coachOptions.length>0 && (
+                    <optgroup label="A coach's clients (auto-includes future clients)">
+                      {coachOptions.map((s:any) => <option key={`coach:${s.id}`} value={`coach:${s.id}`}>🏋 All clients of {s.name}</option>)}
+                    </optgroup>
+                  )}
+                  <optgroup label="Specific client">
+                    {clientList.map((c:any) => <option key={c.id} value={c.id}>👤 {c.name}</option>)}
+                  </optgroup>
                 </select>
               </div>
             </>)}
@@ -2349,7 +2364,7 @@ const StaffAccessManager = ({ user }:any) => {
             {editing && (
               <div style={{ padding:'10px 12px', background:B.surface, borderRadius:8, marginBottom:18 }}>
                 <p style={{ fontSize:12, color:B.muted, margin:'0 0 2px' }}>Editing access for</p>
-                <p style={{ fontSize:13, fontWeight:700, color:B.gold, margin:0 }}>{staffName(editing.staff_id)} → {clientLabel(editing.client_id)}</p>
+                <p style={{ fontSize:13, fontWeight:700, color:B.gold, margin:0 }}>{staffName(editing.staff_id)} → {assignLabel(editing)}</p>
               </div>
             )}
 
@@ -2535,16 +2550,24 @@ const StaffClientPanel = ({ user }:any) => {
     setMyProfile(me);
     const access:any[] = await sbGet('client_access', `staff_id=eq.${me.id}&company_id=eq.${me.company_id}&select=*`) || [];
     if (!access.length) { setLoading(false); return; }
-    const specific = access.filter((a:any)=>a.client_id).map((a:any)=>a.client_id);
-    const compWide  = access.find((a:any)=>!a.client_id);
-    let clientRows:any[] = compWide
-      ? await sbGet('user_profiles', `company_id=eq.${me.company_id}&role=eq.client&order=name.asc`) || []
-      : specific.length ? await sbGet('user_profiles', `id=in.(${specific.join(',')})&order=name.asc`) || [] : [];
+    const specific  = access.filter((a:any)=>a.client_id).map((a:any)=>a.client_id);
+    const coachIds  = access.filter((a:any)=>a.coach_id).map((a:any)=>a.coach_id);
+    const compWide  = access.find((a:any)=>!a.client_id && !a.coach_id);
+    let clientRows:any[];
+    if (compWide) {
+      clientRows = await sbGet('user_profiles', `company_id=eq.${me.company_id}&role=eq.client&order=name.asc`) || [];
+    } else {
+      const byId    = specific.length ? await sbGet('user_profiles', `id=in.(${specific.join(',')})&order=name.asc`) || [] : [];
+      const byCoach = coachIds.length ? await sbGet('user_profiles', `coach_id=in.(${coachIds.join(',')})&role=eq.client&order=name.asc`) || [] : [];
+      const seen = new Set<string>();
+      clientRows = [...byId, ...byCoach].filter((c:any)=>{ if(seen.has(c.id)) return false; seen.add(c.id); return true; });
+    }
     const pm:Record<string,any> = {};
     for (const c of clientRows) {
       const sp = access.find((a:any)=>a.client_id===c.id);
-      const cw = access.find((a:any)=>!a.client_id);
-      pm[c.id] = {...(cw?.permissions||{}), ...(sp?.permissions||{})};
+      const co = access.find((a:any)=>a.coach_id && a.coach_id===c.coach_id);
+      const cw = access.find((a:any)=>!a.client_id && !a.coach_id);
+      pm[c.id] = {...(cw?.permissions||{}), ...(co?.permissions||{}), ...(sp?.permissions||{})};
     }
     setClients(clientRows); setPermsMap(pm); setLoading(false);
   }
