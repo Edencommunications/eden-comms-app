@@ -705,8 +705,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const unreadCount = notifications.filter(n=>!n.read).length
 
   useEffect(() => {
-    // Load company-wide habits (available to all coaches)
+    // Load company-wide habits and foods (available to all coaches)
     loadCompanyHabits()
+    loadCompanyFoods()
 
     // Seed with demo data immediately so the UI isn't blank
     const demo = (demoCheckins||[]).map(ci => ({
@@ -822,6 +823,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [companyHabits,    setCompanyHabits]    = useState([])
   const [newHabitName,     setNewHabitName]     = useState('')
   const [newHabitTarget,   setNewHabitTarget]   = useState(7)
+  // Company-wide foods managed by admin only
+  const [companyFoods,     setCompanyFoods]     = useState([])
+  const [newFood,          setNewFood]          = useState({name:'',serving:'',cal:'',pro:'',carb:'',fat:'',fib:'',cat:'Proteins'})
+  const [showAddFood,      setShowAddFood]      = useState(false)
   const setHabitCount = (id,v) => setHabitCounts(p=>({...p,[id]:Math.min(7,Math.max(0,parseInt(v)||0))}))
 
   // Coach-only updates — visible to client in their Check-In history
@@ -1039,6 +1044,34 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setAssignedHabits(p=>p.filter(h=>h.id!==id))
   }
 
+  // ── Company foods (admin manages, all coaches see in picker) ─
+  async function loadCompanyFoods() {
+    const data = await dbGet('company_foods','order=created_at.asc')
+    setCompanyFoods((data||[]).map(f=>({dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true})))
+  }
+  async function addCompanyFood() {
+    if (!newFood.name.trim()||!newFood.serving.trim()) return
+    const body = {
+      name: newFood.name.trim(), serving: newFood.serving.trim(), cat: newFood.cat,
+      cal: parseFloat(newFood.cal)||0, pro: parseFloat(newFood.pro)||0,
+      carb: parseFloat(newFood.carb)||0, fat: parseFloat(newFood.fat)||0,
+      fib: parseFloat(newFood.fib)||0, created_by: myUUID,
+    }
+    const inserted = await dbInsert('company_foods', body)
+    if (inserted) {
+      const f = Array.isArray(inserted)?inserted[0]:inserted
+      setCompanyFoods(p=>[...p,{dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true}])
+      setNewFood({name:'',serving:'',cal:'',pro:'',carb:'',fat:'',fib:'',cat:newFood.cat})
+      setShowAddFood(false)
+    } else {
+      alert('Could not save — the company_foods table may not exist yet in the database.')
+    }
+  }
+  async function removeCompanyFood(dbId) {
+    await fetch(`${SUPABASE_URL}/rest/v1/company_foods?id=eq.${dbId}`,{method:'DELETE',headers:H})
+    setCompanyFoods(p=>p.filter(f=>f.dbId!==dbId))
+  }
+
   // ── Notification helpers ───────────────────────────────────
   async function insertNotification(recipientId, senderId, type, message) {
     if (!recipientId) return
@@ -1112,7 +1145,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     ? Math.round(assignedHabits.reduce((a,h)=>a+(habitCounts[h.id]||0),0)/assignedHabits.reduce((a,h)=>a+h.target,0)*100)
     : 0
 
-  const filteredFoods = FOODS.filter(f=>
+  const filteredFoods = [...FOODS,...companyFoods].filter(f=>
     !foodSearch||f.name.toLowerCase().includes(foodSearch.toLowerCase())||f.cat.toLowerCase().includes(foodSearch.toLowerCase())
   )
 
@@ -3199,24 +3232,70 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div key={cat}>
                     <div style={{padding:'5px 16px 2px',fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>{cat}</div>
                     {foods.map(food=>(
-                      <button key={food.name} onClick={()=>addFood(food)}
-                        style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'8px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}}
-                        onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}10`}
-                        onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                        <div>
-                          <div style={{fontSize:13,color:C.white,fontWeight:500}}>{food.name}</div>
-                          <div style={{fontSize:10,color:C.muted,marginTop:1}}>{food.serving}</div>
-                        </div>
-                        <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-                          <div style={{fontSize:12,color:C.gold,fontWeight:600}}>{food.cal} cal</div>
-                          <div style={{fontSize:10,color:C.muted}}>P:{food.pro}g C:{food.carb}g F:{food.fat}g</div>
-                        </div>
-                      </button>
+                      <div key={food.dbId?`db_${food.dbId}`:food.name} style={{display:'flex',alignItems:'center'}}>
+                        <button onClick={()=>addFood(food)}
+                          style={{flex:1,textAlign:'left',background:'none',border:'none',padding:'8px 16px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}}
+                          onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}10`}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          <div>
+                            <div style={{fontSize:13,color:C.white,fontWeight:500}}>
+                              {food.name}
+                              {food.fromDB&&<span style={{fontSize:8,fontWeight:700,color:C.gold,marginLeft:6,letterSpacing:0.5,verticalAlign:'middle'}}>COMPANY</span>}
+                            </div>
+                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>{food.serving}</div>
+                          </div>
+                          <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
+                            <div style={{fontSize:12,color:C.gold,fontWeight:600}}>{food.cal} cal</div>
+                            <div style={{fontSize:10,color:C.muted}}>P:{food.pro}g C:{food.carb}g F:{food.fat}g</div>
+                          </div>
+                        </button>
+                        {isAdmin&&food.fromDB&&(
+                          <button onClick={()=>removeCompanyFood(food.dbId)} title="Remove company food"
+                            style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 8px',margin:'0 12px 0 4px',color:C.danger,fontSize:11,cursor:'pointer',flexShrink:0}}>✕</button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )
               })}
             </div>
+            {isAdmin&&(
+              <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
+                {!showAddFood?(
+                  <button onClick={()=>setShowAddFood(true)}
+                    style={{width:'100%',background:`${C.gold}15`,border:`1px dashed ${C.gold}66`,borderRadius:8,padding:9,color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                    ⚙️ Add Company-Wide Food
+                  </button>
+                ):(
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>⚙️ Add Company-Wide Food</div>
+                    <div style={{display:'flex',gap:6,marginBottom:6}}>
+                      <input value={newFood.name} onChange={e=>setNewFood(p=>({...p,name:e.target.value}))} placeholder="Food name"
+                        style={{flex:2,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',minWidth:0}}/>
+                      <input value={newFood.serving} onChange={e=>setNewFood(p=>({...p,serving:e.target.value}))} placeholder="Serving (e.g. 4oz)"
+                        style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',minWidth:0}}/>
+                    </div>
+                    <div style={{display:'flex',gap:6,marginBottom:6}}>
+                      {[['cal','Cal'],['pro','Protein g'],['carb','Carbs g'],['fat','Fat g'],['fib','Fiber g']].map(([k,ph])=>(
+                        <input key={k} value={newFood[k]} onChange={e=>setNewFood(p=>({...p,[k]:e.target.value}))} placeholder={ph} inputMode="decimal"
+                          style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 6px',color:C.white,fontSize:11,outline:'none',minWidth:0}}/>
+                      ))}
+                    </div>
+                    <div style={{display:'flex',gap:6,marginBottom:6}}>
+                      <select value={newFood.cat} onChange={e=>setNewFood(p=>({...p,cat:e.target.value}))}
+                        style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px',color:C.white,fontSize:12,outline:'none',cursor:'pointer'}}>
+                        {['Proteins','Carbohydrates','Fats','Fruits/Vegetables','Supplements','Drinks/Condiments'].map(c=><option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <button onClick={addCompanyFood}
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+                      <button onClick={()=>setShowAddFood(false)}
+                        style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancel</button>
+                    </div>
+                    <div style={{fontSize:9,color:C.muted}}>This food will appear in the picker for all coaches across the company.</div>
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
               <button onClick={()=>setShowPicker(false)}
                 style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
@@ -3256,6 +3335,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   </div>
                 )
               })}
+              {/* Coach: one-off custom habit for THIS client only */}
+              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:4}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>➕ Add Custom Habit (this client only)</div>
+                <div style={{display:'flex',gap:8,marginBottom:6}}>
+                  <input value={customHabit} onChange={e=>setCustomHabit(e.target.value)}
+                    onKeyDown={e=>{if(e.key==='Enter')addCustomHabit()}}
+                    placeholder="e.g. 10-min evening walk"
+                    style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                  <button onClick={addCustomHabit}
+                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+                </div>
+                <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Assigned only to this client — not added to the company library.</div>
+              </div>
               {isAdmin&&(
                 <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:4}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>⚙️ Add Company-Wide Habit</div>
