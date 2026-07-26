@@ -2229,6 +2229,14 @@ const StaffAccessManager = ({ user }:any) => {
         client_id: (fClient==='all'||isCoachPick) ? null : fClient,
         coach_id:  isCoachPick ? fClient.slice(6) : null,
         permissions:fPerms, assigned_by:adminId };
+      // Same staff + same target already assigned? Update it instead of duplicating.
+      const dup = assignments.find((a:any) => a.staff_id===fStaff &&
+        (a.client_id||null)===(payload.client_id||null) && (a.coach_id||null)===(payload.coach_id||null));
+      if (dup) {
+        if (!usingDemo) await sbPatch('client_access', `id=eq.${dup.id}`, { permissions:fPerms });
+        setAssignments(p => p.map(a => a.id===dup.id ? {...a,permissions:fPerms} : a));
+        setSaving(false); setShowModal(false); return;
+      }
       if (!usingDemo) {
         const res:any = await sbInsert('client_access', payload);
         if (res?.[0]) setAssignments(p => [...p, res[0]]);
