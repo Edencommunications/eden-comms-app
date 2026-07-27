@@ -2968,6 +2968,34 @@ const AdminDashboard = ({ user }:any) => {
   const [logoSaved, setLogoSaved] = useState(false);
   const [logoError, setLogoError] = useState('');
   const logoFileRef = useRef<HTMLInputElement>(null);
+  // Brand color management (white-label admins)
+  const [colorDraft, setColorDraft] = useState('#ffa600');       // primary brand color
+  const [paletteDraft, setPaletteDraft] = useState<string[]>([]); // optional extra palette colors
+  const [colorSaving, setColorSaving] = useState(false);
+  const [colorSaved, setColorSaved] = useState(false);
+  const [colorError, setColorError] = useState('');
+
+  const isHex6 = (v:string) => /^#[0-9a-fA-F]{6}$/.test((v||'').trim());
+
+  const saveColors = async () => {
+    if (!myOrg) return;
+    const primary = (colorDraft || '').trim();
+    if (!isHex6(primary)) { setColorError('Primary color must be a 6-digit hex value like #ffa600.'); return; }
+    const extras = paletteDraft.map(c => (c||'').trim()).filter(Boolean);
+    if (extras.some(c => !isHex6(c))) { setColorError('Palette colors must be 6-digit hex values like #6FB8E8.'); return; }
+    setColorError(''); setColorSaving(true);
+    await sbPatch('organizations', `id=eq.${myOrg.id}`, { brand_color: primary, brand_colors: extras.length ? extras : null });
+    // Verify the write landed (sbPatch swallows errors)
+    const check = await sbGet('organizations', `id=eq.${myOrg.id}&select=brand_color,brand_colors&limit=1`);
+    const savedPrimary = check?.[0]?.brand_color ?? null;
+    if ((savedPrimary || '').toLowerCase() === primary.toLowerCase()) {
+      setMyOrg((o:any) => ({ ...o, brand_color: primary, brand_colors: extras.length ? extras : null }));
+      setColorSaved(true); setTimeout(()=>setColorSaved(false), 2000);
+    } else {
+      setColorError('Could not save your colors. Please try again.');
+    }
+    setColorSaving(false);
+  };
 
   const saveLogo = async (url: string) => {
     if (!myOrg) return;
@@ -3018,10 +3046,12 @@ const AdminDashboard = ({ user }:any) => {
       const ownerHQ = !cid || cid === EDEN_COMPANY_ID;
       setIsOwnerHQ(ownerHQ);
       if (!ownerHQ) {
-        const orgRows = await sbGet('organizations', `id=eq.${cid}&select=id,name,slug,brand_color,logo_url,is_white_label&limit=1`);
+        const orgRows = await sbGet('organizations', `id=eq.${cid}&select=id,name,slug,brand_color,brand_colors,logo_url,is_white_label&limit=1`);
         if (orgRows?.[0]?.is_white_label && orgRows[0].slug) {
           setMyOrg(orgRows[0]);
           setLogoDraft(orgRows[0].logo_url || '');
+          if (orgRows[0].brand_color) setColorDraft(orgRows[0].brand_color);
+          if (Array.isArray(orgRows[0].brand_colors)) setPaletteDraft(orgRows[0].brand_colors.filter((c:any)=>typeof c==='string'));
         }
       }
       // Coach & client counts — company-scoped for white-label admins, platform-wide for Eden HQ
@@ -3161,6 +3191,60 @@ const AdminDashboard = ({ user }:any) => {
                       {logoError && <p style={{ fontSize:11, color:B.danger, margin:"8px 0 0" }}>{logoError}</p>}
                     </div>
                   </div>
+                </Card>
+              );
+            })()}
+            {/* White-label admin: brand colors */}
+            {!isOwnerHQ && myOrg && (() => {
+              const accent = myOrg.brand_color || B.gold;
+              const previewPrimary = isHex6(colorDraft) ? colorDraft.trim() : accent;
+              return (
+                <Card style={{ marginBottom:20, borderLeft:`3px solid ${accent}` }}>
+                  <p style={{ fontSize:11, fontWeight:700, color:accent, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>🎨 Your Brand Colors</p>
+                  <p style={{ fontSize:12, color:B.muted, margin:"0 0 12px", lineHeight:1.5 }}>Your primary color themes your branded login page and in-app accents. Optionally add palette colors used for charts and highlights.</p>
+                  {/* Primary color */}
+                  <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginBottom:12 }}>
+                    <label style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", width:70, flexShrink:0 }}>Primary</label>
+                    <input type="color" value={isHex6(colorDraft) ? colorDraft.trim() : '#ffa600'}
+                      onChange={e=>{ setColorDraft(e.target.value); setColorError(''); }}
+                      style={{ width:40, height:34, padding:2, background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer" }}/>
+                    <input type="text" value={colorDraft}
+                      onChange={e=>{ setColorDraft(e.target.value); setColorError(''); }}
+                      placeholder="#ffa600" maxLength={7}
+                      style={{ width:100, background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box", fontFamily:"monospace" }}/>
+                    <span style={{ fontSize:11, fontWeight:800, color:"#000", background:previewPrimary, borderRadius:8, padding:"8px 12px" }}>Preview</span>
+                  </div>
+                  {/* Palette colors */}
+                  {paletteDraft.map((c, i) => (
+                    <div key={i} style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
+                      <label style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", width:70, flexShrink:0 }}>Color {i+2}</label>
+                      <input type="color" value={isHex6(c) ? c.trim() : '#888888'}
+                        onChange={e=>{ setPaletteDraft(p => p.map((v,j)=> j===i ? e.target.value : v)); setColorError(''); }}
+                        style={{ width:40, height:34, padding:2, background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer" }}/>
+                      <input type="text" value={c}
+                        onChange={e=>{ setPaletteDraft(p => p.map((v,j)=> j===i ? e.target.value : v)); setColorError(''); }}
+                        placeholder="#6FB8E8" maxLength={7}
+                        style={{ width:100, background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box", fontFamily:"monospace" }}/>
+                      <button onClick={()=>{ setPaletteDraft(p => p.filter((_,j)=>j!==i)); setColorError(''); }}
+                        style={{ background:"none", color:B.danger, border:`1px solid ${B.danger}44`, borderRadius:8, padding:"7px 12px", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:4 }}>
+                    <button onClick={saveColors} disabled={colorSaving}
+                      style={{ background:colorSaved?B.success:accent, color:"#000", border:"none", borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:800, cursor:colorSaving?"wait":"pointer", opacity:colorSaving?0.6:1 }}>
+                      {colorSaved ? "✓ Saved" : colorSaving ? "Saving…" : "Save Colors"}
+                    </button>
+                    {paletteDraft.length < 4 && (
+                      <button onClick={()=>setPaletteDraft(p => [...p, '#6FB8E8'])} disabled={colorSaving}
+                        style={{ background:B.card, color:B.text, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        + Add Palette Color
+                      </button>
+                    )}
+                  </div>
+                  {colorError && <p style={{ fontSize:11, color:B.danger, margin:"8px 0 0" }}>{colorError}</p>}
+                  <p style={{ fontSize:10, color:B.muted, margin:"10px 0 0" }}>Changes apply to your branded login page and app theme after a refresh.</p>
                 </Card>
               );
             })()}
