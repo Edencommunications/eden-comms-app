@@ -634,12 +634,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // null until resolved; Eden org id for Eden staff and any user without a profile row.
   const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
   const [myCompanyId, setMyCompanyId] = useState(null)
+  const [myUUID, setMyUUID] = useState(null)
   const isWLOrg = !!myCompanyId && myCompanyId!==EDEN_ORG_ID
   useEffect(()=>{ (async()=>{
     if (!email) return
     try {
-      const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=company_id`)
+      const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,company_id`)
       setMyCompanyId(rows?.[0]?.company_id || EDEN_ORG_ID)
+      setMyUUID(rows?.[0]?.id || null)
     } catch { setMyCompanyId(EDEN_ORG_ID) }
   })() },[email])
 
