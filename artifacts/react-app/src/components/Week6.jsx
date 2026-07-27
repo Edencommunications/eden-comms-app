@@ -248,6 +248,22 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           setOrgs(rows.map(o=>({ id:o.id, name:o.name, slug:o.slug, isWhiteLabel:o.is_white_label,
             plan:o.plan, coachCount:0, clientCount:0, active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
             calendarUrl:o.calendar_url||'', billingEmail:o.billing_email||'' })))
+      })
+      // Real coach/client counts per org — chained after the org list lands so it
+      // can't be overwritten by the zero-count initial mapping above.
+      .then(()=>dbGet('user_profiles','role=in.(coach,head_coach,client)&select=company_id,role,is_active'))
+      .then(rows=>{
+        if (!Array.isArray(rows)) return
+        const counts = {}
+        rows.forEach(r=>{
+          if (!r.company_id || r.is_active===false) return
+          const c = counts[r.company_id] ||= { coaches:0, clients:0 }
+          if (r.role==='client') c.clients++; else c.coaches++
+        })
+        setOrgs(prev=>prev.map(o=>{
+          const c = counts[o.id]
+          return c ? { ...o, coachCount:c.coaches, clientCount:c.clients } : { ...o, coachCount:0, clientCount:0 }
+        }))
       }).catch(()=>{})
     // Probe for the brand_colors palette column (added later — needs its SQL run once)
     dbGet('organizations','select=id,brand_colors')
