@@ -1063,6 +1063,23 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       setNewHabitName(''); setNewHabitTarget(7)
     }
   }
+  // Eden admin: push a company habit to every white-label org's library (skipping name duplicates)
+  async function pushHabitToAllOrgs(habit) {
+    if (!window.confirm(`Push "${habit.name}" to every white-label org's habit library?\nOrgs that already have a habit with this name are skipped.`)) return
+    const orgs = await dbGet('organizations','is_white_label=eq.true&select=id,name')
+    if (!Array.isArray(orgs)||!orgs.length) { alert('No white-label orgs found.'); return }
+    const existing = await dbGet('company_habits',`name=eq.${encodeURIComponent(habit.name)}&select=company_id`)
+    const have = new Set((existing||[]).map(r=>r.company_id))
+    const targets = orgs.filter(o=>!have.has(o.id))
+    if (!targets.length) { alert(`All ${orgs.length} white-label orgs already have "${habit.name}".`); return }
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/company_habits`,{
+      method:'POST',
+      headers:{...H,'Prefer':'return=minimal'},
+      body:JSON.stringify(targets.map(o=>({name:habit.name, default_target:habit.defaultTarget??7, created_by:myUUID, company_id:o.id}))),
+    })
+    if (res.ok) alert(`"${habit.name}" pushed to ${targets.length} of ${orgs.length} white-label orgs${orgs.length-targets.length?` (${orgs.length-targets.length} already had it)`:''}.`)
+    else { console.error('PUSH HABIT', await res.text()); alert('Push failed — please try again.') }
+  }
   async function removeCompanyHabit(id) {
     await fetch(`${SUPABASE_URL}/rest/v1/company_habits?id=eq.${id}`,{method:'DELETE',headers:H})
     setCompanyHabits(p=>p.filter(h=>h.id!==id))
@@ -3408,6 +3425,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         <div style={{fontSize:10,color:C.muted,marginTop:1}}>Default: {h.defaultTarget}x/week</div>
                       </div>
                     </button>
+                    {isAdmin&&!isWLOrg&&h.fromDB&&(
+                      <button onClick={()=>pushHabitToAllOrgs(h)} title="Push to all orgs"
+                        style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>→ All orgs</button>
+                    )}
                     {isAdmin&&h.fromDB&&(
                       <button onClick={()=>removeCompanyHabit(h.id)}
                         style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 8px',color:C.danger,fontSize:11,cursor:'pointer',flexShrink:0}}>✕</button>

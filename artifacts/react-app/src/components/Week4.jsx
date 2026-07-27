@@ -468,6 +468,23 @@ Training Principles:
     setCompanyCardioTypes(p=>[...p, newCardioType.trim()])
     setNewCardioType('')
   }
+  // Eden admin: push a cardio type to every white-label org's library (skipping name duplicates)
+  async function pushCardioTypeToAllOrgs(name) {
+    if (!window.confirm(`Push "${name}" to every white-label org's cardio type library?\nOrgs that already have a type with this name are skipped.`)) return
+    const orgs = await dbGet('organizations','is_white_label=eq.true&select=id,name')
+    if (!Array.isArray(orgs)||!orgs.length) { alert('No white-label orgs found.'); return }
+    const existing = await dbGet('company_cardio_types',`name=eq.${encodeURIComponent(name)}&select=company_id`)
+    const have = new Set((existing||[]).map(r=>r.company_id))
+    const targets = orgs.filter(o=>!have.has(o.id))
+    if (!targets.length) { alert(`All ${orgs.length} white-label orgs already have "${name}".`); return }
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types`,{
+      method:'POST',
+      headers:{...H,'Prefer':'resolution=ignore-duplicates,return=minimal'},
+      body:JSON.stringify(targets.map(o=>({name, created_by:myUUID, company_id:o.id}))),
+    })
+    if (res.ok) alert(`"${name}" pushed to ${targets.length} of ${orgs.length} white-label orgs${orgs.length-targets.length?` (${orgs.length-targets.length} already had it)`:''}.`)
+    else { console.error('PUSH CARDIO TYPE', await res.text()); alert('Push failed — please try again.') }
+  }
   async function removeCompanyCardioType(name) {
     if (!myCompanyId) return
     // Scope by org so one org's removal never touches another org's identically-named type
@@ -1303,6 +1320,10 @@ Training Principles:
                   {companyCardioTypes.map(t=>(
                     <div key={t} style={{display:'flex',alignItems:'center',gap:4,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px'}}>
                       <span style={{fontSize:11,color:C.white}}>{t}</span>
+                      {myCompanyId===EDEN_ORG_ID&&(
+                        <button onClick={()=>pushCardioTypeToAllOrgs(t)} title="Push to all orgs"
+                          style={{background:'none',border:'none',color:C.gold,cursor:'pointer',fontSize:10,fontWeight:700,padding:0,lineHeight:1}}>→ orgs</button>
+                      )}
                       <button onClick={()=>removeCompanyCardioType(t)}
                         style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>✕</button>
                     </div>
