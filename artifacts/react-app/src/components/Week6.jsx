@@ -1417,6 +1417,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     {org.isWhiteLabel&&<span style={{fontSize:9,background:`#D4A8F022`,color:'#D4A8F0',padding:'2px 7px',borderRadius:10,fontWeight:700}}>WHITE LABEL</span>}
                   </div>
                   <div style={{fontSize:10,color:C.muted,marginTop:2}}>/{org.slug} · {org.plan}</div>
+                  <div style={{display:'flex',gap:4,alignItems:'center',marginTop:5,flexWrap:'wrap'}}>
+                    {[org.brandColor,...(org.brandColors||[])].filter(Boolean).map((c,i)=>(
+                      <span key={i} title={i===0?`${c} (primary)`:c}
+                        style={{width:14,height:14,borderRadius:7,background:c,display:'inline-block',
+                          border:i===0?`2px solid ${C.white}55`:'1px solid #333',boxSizing:'border-box',flexShrink:0}}/>
+                    ))}
+                    <span style={{fontSize:9,color:C.muted,marginLeft:2}}>
+                      {(org.brandColors||[]).length?`Palette (${1+(org.brandColors||[]).length})`:'Primary only'}
+                    </span>
+                  </div>
                 </div>
                 <span style={{fontSize:10,background:org.active?`${C.success}22`:`${C.danger}22`,color:org.active?C.success:C.danger,padding:'3px 8px',borderRadius:10,fontWeight:700,flexShrink:0}}>
                   {org.active?'ACTIVE':'INACTIVE'}
