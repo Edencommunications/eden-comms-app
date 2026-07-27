@@ -42,6 +42,19 @@ const B = {
   goldMid: "#ffa60044", // gold at medium opacity for borders
 };
 
+// ─── WHITE-LABEL PALETTE ─────────────────────────────────────────────────────
+// Turns an organizations row (brand_color + brand_colors jsonb) into a full
+// theme. Falls back gracefully to the Eden gold theme when nothing is set.
+const wlPalette = (org) => {
+  const isHex = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim());
+  const primary = isHex(org?.brand_color) ? org.brand_color.trim() : B.gold;
+  const extra = Array.isArray(org?.brand_colors) ? org.brand_colors.filter(isHex).map(c => c.trim()) : [];
+  const secondary = extra[0] || primary;
+  const accent = extra[1] || extra[0] || primary;
+  const all = [primary, ...extra];
+  return { primary, secondary, accent, extra, all, nth: (i) => all[i % all.length] };
+};
+
 // ─── AUTH CONTEXT ─────────────────────────────────────────────────────────────
 const AuthContext = createContext(null);
 const useAuth = () => useContext(AuthContext);
@@ -546,7 +559,13 @@ const CommunityScreen = ({ user }:any) => {
     const cid  = rows?.[0]?.company_id;
     if (cid && cid !== EDEN_ORG_ID) {
       const org:any[] = await csGet('organizations',`id=eq.${cid}&select=id,name,brand_color,calendar_url`);
-      if (org?.[0]) { setMyCompany(org[0]); return; } // white-label: company links, no coach logic
+      if (org?.[0]) {
+        let row = org[0];
+        // Palette column added later — fetch separately so a missing column can't break primary branding
+        const pal:any[] = await csGet('organizations',`id=eq.${cid}&select=brand_colors&limit=1`);
+        if (Array.isArray(pal?.[0]?.brand_colors)) row = { ...row, brand_colors: pal[0].brand_colors };
+        setMyCompany(row); return; // white-label: company links, no coach logic
+      }
     }
     if (isAdmin) {
       csGet('user_profiles','role=in.(coach,head_coach)&select=id,name&order=name.asc').then((rows2:any[])=>{
@@ -683,18 +702,23 @@ const CommunityScreen = ({ user }:any) => {
           <p style={{ fontSize:12, color:B.muted, margin:"0 0 12px" }}>Your community links are coming soon — your team is setting them up.</p>
         )}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          {socials.filter((s:any)=> s.url || isAdmin).map(({ emoji, label, sub, url, accent, bg }:any) => (
+          {socials.filter((s:any)=> s.url || isAdmin).map(({ emoji, label, sub, url, accent, bg }:any, i:number) => {
+            // White-label: the org's palette always wins over stored per-link colors,
+            // cycling through primary/secondary/accent so cards feel branded.
+            const cardAccent = myCompany ? wlPalette(myCompany).nth(i) : (accent || B.gold);
+            const cardBg     = myCompany ? `${cardAccent}18` : (bg || `${cardAccent}18`);
+            return (
             <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
-              <div style={{ background:bg||`${B.gold}18`, border:`1px solid ${(accent||B.gold)}44`, borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column", gap:6, height:"100%", boxSizing:"border-box" }}>
+              <div style={{ background:cardBg, border:`1px solid ${cardAccent}44`, borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column", gap:6, height:"100%", boxSizing:"border-box" }}>
                 <span style={{ fontSize:24 }}>{emoji}</span>
                 <div>
                   <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:"0 0 2px" }}>{label}</p>
                   <p style={{ fontSize:10, color:B.muted, margin:0, lineHeight:1.4 }}>{sub}</p>
                 </div>
-                <span style={{ fontSize:11, color:accent||B.gold, fontWeight:700, marginTop:"auto" }}>Open →</span>
+                <span style={{ fontSize:11, color:cardAccent, fontWeight:700, marginTop:"auto" }}>Open →</span>
               </div>
             </a>
-          ))}
+          );})}
         </div>
       </div>
 
@@ -727,20 +751,20 @@ const CommunityScreen = ({ user }:any) => {
       )}
 
       {/* White-label: booking calendar */}
-      {myCompany?.calendar_url && (
+      {myCompany?.calendar_url && (() => { const wpc = wlPalette(myCompany); return (
         <div style={{ padding:"20px 20px 32px" }}>
           <a href={myCompany.calendar_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
-            <div style={{ background:`${myCompany.brand_color||B.gold}15`, border:`1px solid ${myCompany.brand_color||B.gold}44`, borderRadius:14, padding:"16px", display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ background:`linear-gradient(135deg, ${wpc.primary}15, ${wpc.secondary}15)`, border:`1px solid ${wpc.accent}44`, borderRadius:14, padding:"16px", display:"flex", alignItems:"center", gap:12 }}>
               <span style={{ fontSize:24 }}>📅</span>
               <div style={{ flex:1 }}>
                 <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:"0 0 2px" }}>Book a Call</p>
                 <p style={{ fontSize:11, color:B.muted, margin:0 }}>Schedule time with your coach</p>
               </div>
-              <span style={{ fontSize:12, color:myCompany.brand_color||B.gold, fontWeight:700 }}>Open →</span>
+              <span style={{ fontSize:12, color:wpc.secondary, fontWeight:700 }}>Open →</span>
             </div>
           </a>
         </div>
-      )}
+      ); })()}
     </Screen>
   );
 };
@@ -3727,9 +3751,21 @@ const AppShell = ({ user, onLogout }) => {
       const cid = prof?.[0]?.company_id;
       if (!cid || cid === EDEN_ORG_ID) { setWlOrg(null); return; }
       const org = await sbGet('organizations', `id=eq.${cid}&select=id,name,brand_color,is_white_label&limit=1`);
-      setWlOrg(org?.[0]?.is_white_label ? org[0] : null);
+      if (!org?.[0]?.is_white_label) { setWlOrg(null); return; }
+      let row = org[0];
+      // Palette column added later — fetch separately so a missing column can't break primary branding
+      try {
+        const pal = await sbGet('organizations', `id=eq.${cid}&select=brand_colors&limit=1`);
+        if (Array.isArray(pal?.[0]?.brand_colors)) row = { ...row, brand_colors: pal[0].brand_colors };
+      } catch {}
+      setWlOrg(row);
     } catch { setWlOrg(null); }
   })(); }, [user.email]);
+  // Full org palette (primary + secondary/accent) — falls back to Eden gold
+  const wp = wlPalette(wlOrg);
+  const shellPrimary   = wlOrg ? wp.primary   : B.gold;
+  const shellSecondary = wlOrg ? wp.secondary : B.gold;
+  const shellAccent    = wlOrg ? wp.accent    : B.gold;
   const [loomMode,     setLoomMode]     = useState(false);
   const [loomFeatured, setLoomFeatured] = useState<Set<string>>(new Set());
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
@@ -4022,7 +4058,7 @@ const AppShell = ({ user, onLogout }) => {
             </button>
           )}
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={setTab}/>
-          <div style={{ width:30, height:30, borderRadius:15, background:B.gold, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ width:30, height:30, borderRadius:15, background:`linear-gradient(135deg, ${shellPrimary}, ${shellSecondary})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <span style={{ fontSize:13, fontWeight:800, color:B.black }}>{user.name[0]}</span>
           </div>
           <button onClick={onLogout} style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
@@ -4044,17 +4080,17 @@ const AppShell = ({ user, onLogout }) => {
               <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
                 {user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
               </p>
-              <p style={{ fontSize:13, color:B.gold, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
+              <p style={{ fontSize:13, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {tabs.map(t => (
               <button key={t.key}
                 onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); setMenuOpen(false); }}
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 16px",
-                  background:tab===t.key?`${B.gold}15`:"none", border:"none",
-                  borderLeft:`3px solid ${tab===t.key?B.gold:"transparent"}`,
+                  background:tab===t.key?`${shellPrimary}15`:"none", border:"none",
+                  borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`,
                   cursor:"pointer", textAlign:"left", width:"100%" }}>
-                <Ic n={t.icon} size={19} c={tab===t.key?B.gold:B.muted}/>
-                <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?B.gold:B.text }}>{t.label}</span>
+                <Ic n={t.icon} size={19} c={tab===t.key?shellPrimary:B.muted}/>
+                <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?shellPrimary:B.text }}>{t.label}</span>
               </button>
             ))}
           </div>
@@ -4071,19 +4107,26 @@ const AppShell = ({ user, onLogout }) => {
               <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
                 {user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
               </p>
-              <p style={{ fontSize:12, color:B.gold, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
+              <p style={{ fontSize:12, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {tabs.map(t => (
               <button key={t.key} onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); }}
-                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${B.gold}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?B.gold:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
-                <Ic n={t.icon} size={17} c={tab===t.key?B.gold:B.muted}/>
-                <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?B.gold:B.muted }}>{t.label}</span>
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${shellPrimary}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
+                <Ic n={t.icon} size={17} c={tab===t.key?shellPrimary:B.muted}/>
+                <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?shellPrimary:B.muted }}>{t.label}</span>
               </button>
             ))}
             <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.border}` }}>
-              <div style={{ padding:"8px 10px", background: wlOrg ? `${wlOrg.brand_color||B.gold}15` : B.goldDim, border:`1px solid ${wlOrg ? `${wlOrg.brand_color||B.gold}44` : B.goldMid}`, borderRadius:8 }}>
-                <p style={{ fontSize:9, color: wlOrg ? (wlOrg.brand_color||B.gold) : B.gold, margin:0, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase" }}>{wlOrg ? wlOrg.name : "LIFESTYLE OF EDEN"}</p>
+              <div style={{ padding:"8px 10px", background: wlOrg ? `linear-gradient(135deg, ${shellPrimary}18, ${shellSecondary}18)` : B.goldDim, border:`1px solid ${wlOrg ? `${shellAccent}44` : B.goldMid}`, borderRadius:8 }}>
+                <p style={{ fontSize:9, color: shellPrimary, margin:0, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase" }}>{wlOrg ? wlOrg.name : "LIFESTYLE OF EDEN"}</p>
                 {!wlOrg && <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>Powered by Eden Comms</p>}
+                {wlOrg && wp.extra.length > 0 && (
+                  <div style={{ display:"flex", gap:4, marginTop:5 }}>
+                    {wp.all.slice(0,6).map((c,i)=>(
+                      <span key={i} style={{ width:10, height:10, borderRadius:5, background:c, display:"inline-block", border:"1px solid #00000055" }}/>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
