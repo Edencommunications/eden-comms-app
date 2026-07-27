@@ -211,12 +211,9 @@ const OrgLogo = ({ org, size = 44 }) => {
       </div>
     );
   }
-  return (
-    <div style={{ width:size, height:size, borderRadius:"50%", border:`2px solid ${p.primary}`, background:`${p.primary}22`,
-      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-      <span style={{ fontSize:size*0.42, fontWeight:800, color:p.primary }}>{(org?.name||"?").trim().charAt(0).toUpperCase()}</span>
-    </div>
-  );
+  // No logo uploaded (or it failed to load) — keep the Eden logo so the app never looks unbranded;
+  // the org's NAME still replaces Eden's everywhere.
+  return <EdenLogo size={size}/>;
 };
 
 // LOGIN
