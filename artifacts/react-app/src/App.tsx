@@ -2945,6 +2945,166 @@ const StaffClientPanel = ({ user }:any) => {
   );
 };
 
+// ─── ORG BRANDING EDITOR (Eden HQ → Manage an org) ──────────────────────────
+// Lets the super admin edit any organization's name, brand colors, and logo.
+// Uses the same validation + PATCH-and-verify approach as the white-label
+// admin's own branding panel.
+const OrgBrandingEditor = ({ org, onSaved, onClose }:any) => {
+  const [nameDraft, setNameDraft] = useState(org.name || '');
+  const [colorDraft, setColorDraft] = useState(org.brand_color || '#ffa600');
+  const [paletteDraft, setPaletteDraft] = useState<string[]>(
+    Array.isArray(org.brand_colors) ? org.brand_colors.filter((c:any)=>typeof c==='string') : []);
+  const [logoDraft, setLogoDraft] = useState(org.logo_url || '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [logoError, setLogoError] = useState('');
+  const logoFileRef = useRef<HTMLInputElement>(null);
+
+  const isHex6 = (v:string) => /^#[0-9a-fA-F]{6}$/.test((v||'').trim());
+  const isDataUrl = (logoDraft || '').startsWith('data:');
+  const accent = isHex6(colorDraft) ? colorDraft.trim() : (org.brand_color || B.gold);
+
+  // Preview object for OrgLogo
+  const previewOrg = { ...org, name:nameDraft, brand_color:accent, logo_url:logoDraft || null };
+
+  const save = async () => {
+    const name = (nameDraft || '').trim();
+    if (!name) { setError('Organization name cannot be empty.'); return; }
+    const primary = (colorDraft || '').trim();
+    if (!isHex6(primary)) { setError('Primary color must be a 6-digit hex value like #ffa600.'); return; }
+    const extras = paletteDraft.map(c => (c||'').trim()).filter(Boolean);
+    if (extras.some(c => !isHex6(c))) { setError('Palette colors must be 6-digit hex values like #6FB8E8.'); return; }
+    const logo = (logoDraft || '').trim();
+    if (logo && !/^(https?:\/\/|data:image\/)/i.test(logo)) {
+      setError('Logo must be a valid image URL (https://…) or an uploaded file.'); return;
+    }
+    setError(''); setSaving(true);
+    const body = { name, brand_color: primary, brand_colors: extras.length ? extras : null, logo_url: logo || null };
+    await sbPatch('organizations', `id=eq.${org.id}`, body);
+    // Verify the write landed (sbPatch swallows errors)
+    const check = await sbGet('organizations', `id=eq.${org.id}&select=name,brand_color,brand_colors,logo_url&limit=1`);
+    const row = check?.[0];
+    if (row && row.name === name && (row.brand_color||'').toLowerCase() === primary.toLowerCase() && (row.logo_url||'') === (logo||'')) {
+      onSaved({ ...org, ...body });
+      setSaved(true); setTimeout(()=>setSaved(false), 2000);
+    } else {
+      setError('Could not save changes. Please try again.');
+    }
+    setSaving(false);
+  };
+
+  const onLogoFile = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setLogoError('Please choose an image file.'); return; }
+    if (file.size > 2 * 1024 * 1024) { setLogoError('Image too large — please use a file under 2 MB.'); return; }
+    setLogoError('');
+    // Preferred: real file storage
+    const url = await sbUploadLogo(org.id, file);
+    if (url) { setLogoDraft(url); return; }
+    // Fallback if the storage bucket isn't set up yet: store small images inline
+    if (file.size > 400 * 1024) {
+      setLogoError('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setLogoDraft(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  };
+
+  const inputStyle:any = { background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:16, width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", padding:20 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <p style={{ fontSize:13, fontWeight:800, color:accent, letterSpacing:1, textTransform:"uppercase", margin:0 }}>⚙️ Manage {org.name}</p>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:B.muted, fontSize:18, cursor:"pointer", padding:0, lineHeight:1 }}>✕</button>
+        </div>
+
+        {/* Name */}
+        <label style={{ display:"block", fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Organization Name</label>
+        <input type="text" value={nameDraft} onChange={e=>{ setNameDraft(e.target.value); setError(''); }}
+          style={{ ...inputStyle, width:"100%", marginBottom:16 }}/>
+
+        {/* Logo */}
+        <label style={{ display:"block", fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Logo</label>
+        <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap", marginBottom:16 }}>
+          <OrgLogo org={previewOrg} size={52}/>
+          <div style={{ flex:1, minWidth:200 }}>
+            <input type="text" value={isDataUrl ? '(uploaded image)' : logoDraft} readOnly={isDataUrl}
+              onChange={e=>{ setLogoDraft(e.target.value); setLogoError(''); setError(''); }}
+              placeholder="https://yourdomain.com/logo.png"
+              style={{ ...inputStyle, width:"100%", marginBottom:8 }}/>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <button onClick={()=>logoFileRef.current?.click()}
+                style={{ background:B.card, color:B.text, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                Upload Image…
+              </button>
+              {logoDraft && (
+                <button onClick={()=>{ setLogoDraft(''); setLogoError(''); }}
+                  style={{ background:"none", color:B.danger, border:`1px solid ${B.danger}44`, borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                  Remove
+                </button>
+              )}
+            </div>
+            <input ref={logoFileRef} type="file" accept="image/*" style={{ display:"none" }}
+              onChange={e=>{ onLogoFile(e.target.files?.[0] || null); e.target.value=''; }}/>
+            {logoError && <p style={{ fontSize:11, color:B.danger, margin:"8px 0 0" }}>{logoError}</p>}
+          </div>
+        </div>
+
+        {/* Primary color */}
+        <label style={{ display:"block", fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Brand Colors</label>
+        <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", width:70, flexShrink:0 }}>Primary</span>
+          <input type="color" value={isHex6(colorDraft) ? colorDraft.trim() : '#ffa600'}
+            onChange={e=>{ setColorDraft(e.target.value); setError(''); }}
+            style={{ width:40, height:34, padding:2, background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer" }}/>
+          <input type="text" value={colorDraft} onChange={e=>{ setColorDraft(e.target.value); setError(''); }}
+            placeholder="#ffa600" maxLength={7}
+            style={{ ...inputStyle, width:100, fontFamily:"monospace" }}/>
+          <span style={{ fontSize:11, fontWeight:800, color:"#000", background:accent, borderRadius:8, padding:"8px 12px" }}>Preview</span>
+        </div>
+        {paletteDraft.map((c, i) => (
+          <div key={i} style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
+            <span style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", width:70, flexShrink:0 }}>Color {i+2}</span>
+            <input type="color" value={isHex6(c) ? c.trim() : '#888888'}
+              onChange={e=>{ setPaletteDraft(p => p.map((v,j)=> j===i ? e.target.value : v)); setError(''); }}
+              style={{ width:40, height:34, padding:2, background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer" }}/>
+            <input type="text" value={c}
+              onChange={e=>{ setPaletteDraft(p => p.map((v,j)=> j===i ? e.target.value : v)); setError(''); }}
+              placeholder="#6FB8E8" maxLength={7}
+              style={{ ...inputStyle, width:100, fontFamily:"monospace" }}/>
+            <button onClick={()=>{ setPaletteDraft(p => p.filter((_,j)=>j!==i)); setError(''); }}
+              style={{ background:"none", color:B.danger, border:`1px solid ${B.danger}44`, borderRadius:8, padding:"7px 12px", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+              Remove
+            </button>
+          </div>
+        ))}
+        {paletteDraft.length < 4 && (
+          <button onClick={()=>setPaletteDraft(p => [...p, '#6FB8E8'])}
+            style={{ background:B.card, color:B.text, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:12 }}>
+            + Add Palette Color
+          </button>
+        )}
+
+        {error && <p style={{ fontSize:11, color:B.danger, margin:"4px 0 8px" }}>{error}</p>}
+        <div style={{ display:"flex", gap:8, marginTop:8 }}>
+          <button onClick={save} disabled={saving}
+            style={{ background:saved?B.success:accent, color:"#000", border:"none", borderRadius:8, padding:"9px 16px", fontSize:12, fontWeight:800, cursor:saving?"wait":"pointer", opacity:saving?0.6:1 }}>
+            {saved ? "✓ Saved" : saving ? "Saving…" : "Save Changes"}
+          </button>
+          <button onClick={onClose}
+            style={{ background:B.card, color:B.text, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 16px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
 // Fallback prices if the packages table hasn't been set up yet — the live
 // tiers/prices are managed in Admin → Orgs → Packages & Pricing
@@ -2961,6 +3121,7 @@ const AdminDashboard = ({ user }:any) => {
   const [myCompanyId, setMyCompanyId] = useState<string|null>(null);
   const [planPrices, setPlanPrices] = useState<Record<string,number>>(FALLBACK_PLAN_PRICES);
   const [myOrg, setMyOrg] = useState<any>(null);        // white-label admin's own org (for branded login link)
+  const [manageOrg, setManageOrg] = useState<any>(null); // Eden HQ: org being edited via "Manage →"
   const [linkCopied, setLinkCopied] = useState(false);
   // Logo management (white-label admins)
   const [logoDraft, setLogoDraft] = useState('');
@@ -3064,7 +3225,7 @@ const AdminDashboard = ({ user }:any) => {
         setCounts({ coaches: coachRows.length, clients: clientRows.length });
       if (ownerHQ) {
         const [orgRows, pkgRows] = await Promise.all([
-          sbGet('organizations', `select=id,name,slug,plan,is_white_label,brand_color,is_active&order=created_at.asc`),
+          sbGet('organizations', `select=id,name,slug,plan,is_white_label,brand_color,brand_colors,logo_url,is_active&order=created_at.asc`),
           sbGet('packages', `active=eq.true&select=name,price`).catch(()=>null),
         ]);
         if (Array.isArray(orgRows)) setDbOrgs(orgRows);
@@ -3088,7 +3249,7 @@ const AdminDashboard = ({ user }:any) => {
     { name:"Elite Performance", coaches:1, clients:6,  color:"#4FD89A" },
   ];
   const orgs = (dbOrgs && dbOrgs.length)
-    ? dbOrgs.map((o:any) => ({ name:o.name, coaches:'—', clients:'—', color:o.brand_color||B.gold, plan:o.plan, isWhiteLabel:o.is_white_label }))
+    ? dbOrgs.map((o:any) => ({ name:o.name, coaches:'—', clients:'—', color:o.brand_color||B.gold, plan:o.plan, isWhiteLabel:o.is_white_label, row:o }))
     : demoOrgs;
 
   const statCards = isOwnerHQ
@@ -3266,7 +3427,7 @@ const AdminDashboard = ({ user }:any) => {
                         : `${o.coaches} coaches · ${o.clients} clients`}
                     </p>
                   </div>
-                  <Btn variant="ghost" style={{ fontSize:11, padding:"4px 0" }}>Manage →</Btn>
+                  {o.row && <Btn variant="ghost" onClick={()=>setManageOrg(o.row)} style={{ fontSize:11, padding:"4px 0" }}>Manage →</Btn>}
                 </div>
               </Card>
             ))}
@@ -3292,6 +3453,16 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Conversations — admin reads all coach↔client threads */}
       {adminTab==='convos' && <AdminConversationMonitor user={user}/>}
+
+      {/* Eden HQ: edit an org's name, colors & logo */}
+      {manageOrg && (
+        <OrgBrandingEditor org={manageOrg}
+          onClose={()=>setManageOrg(null)}
+          onSaved={(updated:any)=>{
+            setManageOrg(updated);
+            setDbOrgs(list => Array.isArray(list) ? list.map((o:any)=> o.id===updated.id ? { ...o, ...updated } : o) : list);
+          }}/>
+      )}
     </Screen>
   );
 };
