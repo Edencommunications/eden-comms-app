@@ -198,6 +198,19 @@ const Divider = () => <div style={{ height:1, background:B.border, margin:"12px 
 // Circle logo for a branded (white-label) login — org initial on brand color
 const OrgLogo = ({ org, size = 44 }) => {
   const p = wlPalette(org);
+  const logoUrl = typeof org?.logo_url === "string" && org.logo_url.trim() ? org.logo_url.trim() : null;
+  const [imgFailed, setImgFailed] = useState(false);
+  // Reset failure state if the logo URL changes (e.g. admin just updated it)
+  useEffect(() => { setImgFailed(false); }, [logoUrl]);
+  if (logoUrl && !imgFailed) {
+    return (
+      <div style={{ width:size, height:size, borderRadius:"50%", border:`2px solid ${p.primary}`, overflow:"hidden",
+        background:"#ffffff", flexShrink:0 }}>
+        <img src={logoUrl} alt={org?.name || "Organization logo"} onError={()=>setImgFailed(true)}
+          style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
+      </div>
+    );
+  }
   return (
     <div style={{ width:size, height:size, borderRadius:"50%", border:`2px solid ${p.primary}`, background:`${p.primary}22`,
       display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -2938,6 +2951,43 @@ const AdminDashboard = ({ user }:any) => {
   const [planPrices, setPlanPrices] = useState<Record<string,number>>(FALLBACK_PLAN_PRICES);
   const [myOrg, setMyOrg] = useState<any>(null);        // white-label admin's own org (for branded login link)
   const [linkCopied, setLinkCopied] = useState(false);
+  // Logo management (white-label admins)
+  const [logoDraft, setLogoDraft] = useState('');
+  const [logoSaving, setLogoSaving] = useState(false);
+  const [logoSaved, setLogoSaved] = useState(false);
+  const [logoError, setLogoError] = useState('');
+  const logoFileRef = useRef<HTMLInputElement>(null);
+
+  const saveLogo = async (url: string) => {
+    if (!myOrg) return;
+    const trimmed = (url || '').trim();
+    if (trimmed && !/^(https?:\/\/|data:image\/)/i.test(trimmed)) {
+      setLogoError('Enter a valid image URL (https://…) or upload a file.');
+      return;
+    }
+    setLogoError(''); setLogoSaving(true);
+    await sbPatch('organizations', `id=eq.${myOrg.id}`, { logo_url: trimmed || null });
+    // Verify the write landed (sbPatch swallows errors)
+    const check = await sbGet('organizations', `id=eq.${myOrg.id}&select=logo_url&limit=1`);
+    const saved = check?.[0]?.logo_url ?? null;
+    if ((saved || '') === (trimmed || '')) {
+      setMyOrg((o:any) => ({ ...o, logo_url: trimmed || null }));
+      setLogoDraft(trimmed);
+      setLogoSaved(true); setTimeout(()=>setLogoSaved(false), 2000);
+    } else {
+      setLogoError('Could not save the logo. Please try again.');
+    }
+    setLogoSaving(false);
+  };
+
+  const onLogoFile = (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setLogoError('Please choose an image file.'); return; }
+    if (file.size > 400 * 1024) { setLogoError('Image too large — please use a file under 400 KB, or paste a hosted image URL instead.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => saveLogo(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => { (async () => {
     try {
@@ -2947,8 +2997,11 @@ const AdminDashboard = ({ user }:any) => {
       const ownerHQ = !cid || cid === EDEN_COMPANY_ID;
       setIsOwnerHQ(ownerHQ);
       if (!ownerHQ) {
-        const orgRows = await sbGet('organizations', `id=eq.${cid}&select=id,name,slug,brand_color,is_white_label&limit=1`);
-        if (orgRows?.[0]?.is_white_label && orgRows[0].slug) setMyOrg(orgRows[0]);
+        const orgRows = await sbGet('organizations', `id=eq.${cid}&select=id,name,slug,brand_color,logo_url,is_white_label&limit=1`);
+        if (orgRows?.[0]?.is_white_label && orgRows[0].slug) {
+          setMyOrg(orgRows[0]);
+          setLogoDraft(orgRows[0].logo_url || '');
+        }
       }
       // Coach & client counts — company-scoped for white-label admins, platform-wide for Eden HQ
       const scope = ownerHQ ? '' : `&company_id=eq.${cid}`;
@@ -3047,6 +3100,45 @@ const AdminDashboard = ({ user }:any) => {
                       style={{ background:linkCopied?B.success:accent, color:"#000", border:"none", borderRadius:8, padding:"9px 14px", fontSize:12, fontWeight:800, cursor:"pointer", flexShrink:0 }}>
                       {linkCopied ? "✓ Copied" : "Copy Link"}
                     </button>
+                  </div>
+                </Card>
+              );
+            })()}
+            {/* White-label admin: org logo */}
+            {!isOwnerHQ && myOrg && (() => {
+              const accent = myOrg.brand_color || B.gold;
+              const isDataUrl = (logoDraft || '').startsWith('data:');
+              return (
+                <Card style={{ marginBottom:20, borderLeft:`3px solid ${accent}` }}>
+                  <p style={{ fontSize:11, fontWeight:700, color:accent, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>🖼 Your Logo</p>
+                  <p style={{ fontSize:12, color:B.muted, margin:"0 0 12px", lineHeight:1.5 }}>Shown on your branded login page and in the app header. Without a logo, your brand initial is shown instead.</p>
+                  <div style={{ display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
+                    <OrgLogo org={myOrg} size={56}/>
+                    <div style={{ flex:1, minWidth:220 }}>
+                      <input type="text" value={isDataUrl ? '(uploaded image)' : logoDraft} readOnly={isDataUrl}
+                        onChange={e=>{ setLogoDraft(e.target.value); setLogoError(''); }}
+                        placeholder="https://yourdomain.com/logo.png"
+                        style={{ width:"100%", background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box", fontFamily:"inherit", marginBottom:8 }}/>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <button onClick={()=>saveLogo(logoDraft)} disabled={logoSaving || isDataUrl}
+                          style={{ background:logoSaved?B.success:accent, color:"#000", border:"none", borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:800, cursor:logoSaving?"wait":"pointer", opacity:(logoSaving||isDataUrl)?0.6:1 }}>
+                          {logoSaved ? "✓ Saved" : logoSaving ? "Saving…" : "Save Logo URL"}
+                        </button>
+                        <button onClick={()=>logoFileRef.current?.click()} disabled={logoSaving}
+                          style={{ background:B.card, color:B.text, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                          Upload Image…
+                        </button>
+                        {myOrg.logo_url && (
+                          <button onClick={()=>{ setLogoDraft(''); saveLogo(''); }} disabled={logoSaving}
+                            style={{ background:"none", color:B.danger, border:`1px solid ${B.danger}44`, borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <input ref={logoFileRef} type="file" accept="image/*" style={{ display:"none" }}
+                        onChange={e=>{ onLogoFile(e.target.files?.[0] || null); e.target.value=''; }}/>
+                      {logoError && <p style={{ fontSize:11, color:B.danger, margin:"8px 0 0" }}>{logoError}</p>}
+                    </div>
                   </div>
                 </Card>
               );
@@ -3799,7 +3891,7 @@ const AppShell = ({ user, onLogout }) => {
       const prof = await sbGet('user_profiles', `email=eq.${encodeURIComponent((user.email||'').toLowerCase())}&select=company_id&limit=1`);
       const cid = prof?.[0]?.company_id;
       if (!cid || cid === EDEN_ORG_ID) { setWlOrg(null); return; }
-      const org = await sbGet('organizations', `id=eq.${cid}&select=id,name,brand_color,is_white_label&limit=1`);
+      const org = await sbGet('organizations', `id=eq.${cid}&select=id,name,brand_color,logo_url,is_white_label&limit=1`);
       if (!org?.[0]?.is_white_label) { setWlOrg(null); return; }
       let row = org[0];
       // Palette column added later — fetch separately so a missing column can't break primary branding
@@ -4067,7 +4159,7 @@ const AppShell = ({ user, onLogout }) => {
               <span style={{ fontSize:17, lineHeight:1, color: menuOpen ? B.gold : B.text }}>☰</span>
             </button>
           )}
-          <HoneycombLogo size={30}/>
+          {wlOrg ? <OrgLogo org={wlOrg} size={30}/> : <HoneycombLogo size={30}/>}
           <div>
             <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{wlOrg ? wlOrg.name : "Eden Communications"}</p>
             {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>{wlOrg ? "🔒 HIPAA Secure" : "🔒 HIPAA Secure · edencommunications.io"}</p>}
@@ -4272,7 +4364,7 @@ export default function App() {
       const slug = new URLSearchParams(window.location.search).get('org');
       if (!slug) return;
       const rows = await sbGet('organizations',
-        `slug=eq.${encodeURIComponent(slug.toLowerCase())}&select=id,name,slug,brand_color,is_white_label,is_active&limit=1`);
+        `slug=eq.${encodeURIComponent(slug.toLowerCase())}&select=id,name,slug,brand_color,logo_url,is_white_label,is_active&limit=1`);
       const org = Array.isArray(rows) ? rows[0] : null;
       if (!org || org.is_active === false) return; // unknown/inactive org → Eden default
       // Palette column added later — fetch separately so a missing column can't break primary branding
