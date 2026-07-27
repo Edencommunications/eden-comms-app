@@ -840,9 +840,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         dbGet('company_habits',`company_id=eq.${EDEN_ORG_ID}&select=name,default_target`),
         dbGet('company_cardio_types',`company_id=eq.${EDEN_ORG_ID}&select=name`),
       ])
-      if (edenHabits?.length) await dbInsert('company_habits', edenHabits.map(h=>({name:h.name, default_target:h.default_target, company_id:dbId})))
-      if (edenCardio?.length) await dbInsert('company_cardio_types', edenCardio.map(t=>({name:t.name, company_id:dbId})))
-    } catch {}
+      let seedOk = true
+      if (edenHabits?.length) {
+        const r = await dbInsert('company_habits', edenHabits.map(h=>({name:h.name, default_target:h.default_target, company_id:dbId})))
+        if (!r) seedOk = false
+      }
+      if (edenCardio?.length) {
+        const r = await dbInsert('company_cardio_types', edenCardio.map(t=>({name:t.name, company_id:dbId})))
+        if (!r) seedOk = false
+      }
+      if (!seedOk) alert('The organization was created, but copying your starter habit/cardio lists into it failed. You can re-add them manually, or delete and recreate the organization.')
+    } catch {
+      alert('The organization was created, but copying your starter habit/cardio lists into it failed. You can re-add them manually, or delete and recreate the organization.')
+    }
     const org = {
       id:           dbId,
       name:         newOrg.name,
