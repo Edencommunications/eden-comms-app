@@ -442,28 +442,42 @@ Training Principles:
   // ── Calendar state ────────────────────────────────────────
   const [calendarUrl, setCalendarUrl] = useState(DEFAULT_CALENDAR_URL)
 
-  // ── Company cardio types (admin manages, all coaches see) ──
-  async function loadCompanyCardioTypes() {
-    const data = await dbGet('company_cardio_types','order=created_at.asc')
+  // Which organization this user belongs to — scopes the cardio-type library per org
+  const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
+  const [myCompanyId, setMyCompanyId] = useState(null)
+  useEffect(()=>{ (async()=>{
+    if (!email) { setMyCompanyId(EDEN_ORG_ID); return }
+    try {
+      const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=company_id`)
+      setMyCompanyId(rows?.[0]?.company_id || EDEN_ORG_ID)
+    } catch { setMyCompanyId(EDEN_ORG_ID) }
+  })() },[email])
+
+  // ── Company cardio types (each org's admin manages their own library) ──
+  async function loadCompanyCardioTypes(cid) {
+    const data = await dbGet('company_cardio_types',`company_id=eq.${cid}&order=created_at.asc`)
     setCompanyCardioTypes((data||[]).map(r=>r.name))
   }
   async function addCompanyCardioType() {
-    if (!newCardioType.trim()) return
+    if (!newCardioType.trim()||!myCompanyId) return
     await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types`,{
       method:'POST',
       headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({name:newCardioType.trim(), created_by:myUUID}),
+      body:JSON.stringify({name:newCardioType.trim(), created_by:myUUID, company_id:myCompanyId}),
     })
     setCompanyCardioTypes(p=>[...p, newCardioType.trim()])
     setNewCardioType('')
   }
   async function removeCompanyCardioType(name) {
-    await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types?name=eq.${encodeURIComponent(name)}`,{method:'DELETE',headers:H})
+    if (!myCompanyId) return
+    // Scope by org so one org's removal never touches another org's identically-named type
+    await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types?name=eq.${encodeURIComponent(name)}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
     setCompanyCardioTypes(p=>p.filter(t=>t!==name))
   }
 
   // ── Load on mount ─────────────────────────────────────────
-  useEffect(()=>{ loadLabs(); loadWorkoutPlan(); loadWeekHistory(); loadCompanyCardioTypes() },[])
+  useEffect(()=>{ loadLabs(); loadWorkoutPlan(); loadWeekHistory() },[])
+  useEffect(()=>{ if (myCompanyId) loadCompanyCardioTypes(myCompanyId) },[myCompanyId])
 
   // Reload logs whenever week changes
   useEffect(()=>{ loadWorkoutLog(activeWeek) },[activeWeek])

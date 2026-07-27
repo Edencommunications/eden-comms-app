@@ -802,6 +802,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       alert('Could not finish creating the organization — please try again.')
       return
     }
+    // Seed the new org with a copy of Eden's current habit & cardio libraries as their starting point.
+    // Copies are independent — the org edits theirs freely without affecting Eden's.
+    try {
+      const [edenHabits, edenCardio] = await Promise.all([
+        dbGet('company_habits',`company_id=eq.${EDEN_ORG_ID}&select=name,default_target`),
+        dbGet('company_cardio_types',`company_id=eq.${EDEN_ORG_ID}&select=name`),
+      ])
+      if (edenHabits?.length) await dbInsert('company_habits', edenHabits.map(h=>({name:h.name, default_target:h.default_target, company_id:dbId})))
+      if (edenCardio?.length) await dbInsert('company_cardio_types', edenCardio.map(t=>({name:t.name, company_id:dbId})))
+    } catch {}
     const org = {
       id:           dbId,
       name:         newOrg.name,

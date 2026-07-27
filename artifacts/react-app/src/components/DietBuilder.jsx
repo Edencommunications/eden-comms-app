@@ -630,6 +630,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const isClient= role==='client'
   const isAdmin = role==='super_admin'
 
+  // Which organization this user belongs to — scopes company habits/foods/cardio libraries.
+  // null until resolved; Eden org id for Eden staff and any user without a profile row.
+  const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
+  const [myCompanyId, setMyCompanyId] = useState(null)
+  const isWLOrg = !!myCompanyId && myCompanyId!==EDEN_ORG_ID
+  useEffect(()=>{ (async()=>{
+    if (!email) return
+    try {
+      const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=company_id`)
+      setMyCompanyId(rows?.[0]?.company_id || EDEN_ORG_ID)
+    } catch { setMyCompanyId(EDEN_ORG_ID) }
+  })() },[email])
+
   const [tab,        setTab]        = useState(initialTab)
   const [dayType,    setDayType]    = useState('high')
   const [protocol,   setProtocol]   = useState('Base Diet Protocol Male')
@@ -709,10 +722,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const unreadCount = notifications.filter(n=>!n.read).length
 
   useEffect(() => {
-    // Load company-wide habits and foods (available to all coaches)
-    loadCompanyHabits()
-    loadCompanyFoods()
+    // Load company-wide habits and foods once we know which org this user belongs to
+    if (myCompanyId) { loadCompanyHabits(); loadCompanyFoods() }
+  }, [myCompanyId])
 
+  useEffect(() => {
     // Seed with demo data immediately so the UI isn't blank
     const demo = (demoCheckins||[]).map(ci => ({
       ...ci,
@@ -1030,15 +1044,16 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     return ()=>clearInterval(iv)
   },[email])
 
-  // ── Company habits (admin manages, all coaches see) ────────
+  // ── Company habits (each org's admin manages their own library) ──
   async function loadCompanyHabits() {
-    const data = await dbGet('company_habits','order=created_at.asc')
+    if (!myCompanyId) return
+    const data = await dbGet('company_habits',`company_id=eq.${myCompanyId}&order=created_at.asc`)
     setCompanyHabits((data||[]).map(h=>({id:h.id,name:h.name,defaultTarget:h.default_target,fromDB:true})))
   }
   async function addCompanyHabit() {
-    if (!newHabitName.trim()) return
+    if (!newHabitName.trim()||!myCompanyId) return
     const inserted = await dbInsert('company_habits',{
-      name: newHabitName.trim(), default_target: newHabitTarget, created_by: myUUID
+      name: newHabitName.trim(), default_target: newHabitTarget, created_by: myUUID, company_id: myCompanyId
     })
     if (inserted) {
       const h = Array.isArray(inserted)?inserted[0]:inserted
@@ -1052,18 +1067,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setAssignedHabits(p=>p.filter(h=>h.id!==id))
   }
 
-  // ── Company foods (admin manages, all coaches see in picker) ─
+  // ── Company foods (Eden-only: the shared food library is controlled by the parent company) ─
   async function loadCompanyFoods() {
-    const data = await dbGet('company_foods','order=created_at.asc')
+    // Everyone (including white-label users) sees Eden's added foods — the food library is shared
+    const data = await dbGet('company_foods',`company_id=eq.${EDEN_ORG_ID}&order=created_at.asc`)
     setCompanyFoods((data||[]).map(f=>({dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true})))
   }
   async function addCompanyFood() {
-    if (!newFood.name.trim()||!newFood.serving.trim()) return
+    if (!newFood.name.trim()||!newFood.serving.trim()||isWLOrg) return
     const body = {
       name: newFood.name.trim(), serving: newFood.serving.trim(), cat: newFood.cat,
       cal: parseFloat(newFood.cal)||0, pro: parseFloat(newFood.pro)||0,
       carb: parseFloat(newFood.carb)||0, fat: parseFloat(newFood.fat)||0,
-      fib: parseFloat(newFood.fib)||0, created_by: myUUID,
+      fib: parseFloat(newFood.fib)||0, created_by: myUUID, company_id: EDEN_ORG_ID,
     }
     const inserted = await dbInsert('company_foods', body)
     if (inserted) {
@@ -3311,7 +3327,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             <div style={{fontSize:10,color:C.muted}}>P:{food.pro}g C:{food.carb}g F:{food.fat}g</div>
                           </div>
                         </button>
-                        {isAdmin&&food.fromDB&&(
+                        {isAdmin&&!isWLOrg&&food.fromDB&&(
                           <button onClick={()=>removeCompanyFood(food.dbId)} title="Remove company food"
                             style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 8px',margin:'0 12px 0 4px',color:C.danger,fontSize:11,cursor:'pointer',flexShrink:0}}>✕</button>
                         )}
@@ -3321,7 +3337,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )
               })}
             </div>
-            {isAdmin&&(
+            {isAdmin&&!isWLOrg&&(
               <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
                 {!showAddFood?(
                   <button onClick={()=>setShowAddFood(true)}
