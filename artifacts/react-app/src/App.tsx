@@ -432,19 +432,23 @@ const SignupScreen = ({ onBack }) => {
 
 // ─── DASHBOARD SCREENS ────────────────────────────────────────────────────────
 
-const HomeScreen = ({ user }) => {
+const HomeScreen = ({ user, wlOrg = null }) => {
+  // White-label palette — falls back to Eden gold when no wl org
+  const hp = wlPalette(wlOrg);
+  const primary   = wlOrg ? hp.primary   : B.gold;
+  const secondary = wlOrg ? hp.secondary : "#ffa600";
   return (
     <Screen>
       {/* Header */}
-      <div style={{ background:`linear-gradient(180deg, #1a1200 0%, #000000 100%)`, padding:"28px 20px 20px" }}>
+      <div style={{ background: wlOrg ? `linear-gradient(180deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(180deg, #1a1200 0%, #000000 100%)`, padding:"28px 20px 20px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4, gap:8 }}>
           <div style={{ minWidth:0 }}>
             <p style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>Welcome back</p>
             <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name}</h1>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-            <Badge color={B.gold}>{user.role.replace("_"," ")}</Badge>
-            <div style={{ width:42, height:42, borderRadius:21, background:`linear-gradient(135deg,${B.gold},${"#ffa600"})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Badge color={primary}>{user.role.replace("_"," ")}</Badge>
+            <div style={{ width:42, height:42, borderRadius:21, background:`linear-gradient(135deg,${primary},${secondary})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
               <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{user.name[0]}</span>
             </div>
           </div>
@@ -452,8 +456,8 @@ const HomeScreen = ({ user }) => {
       </div>
 
       {/* Announcement banner */}
-      <div style={{ margin:"16px 20px 0", background:B.card, border:`1px solid ${B.gold}33`, borderLeft:`3px solid ${B.gold}`, borderRadius:10, padding:"12px 14px" }}>
-        <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 3px", letterSpacing:0.8 }}>COACH UPDATE</p>
+      <div style={{ margin:"16px 20px 0", background:B.card, border:`1px solid ${primary}33`, borderLeft:`3px solid ${primary}`, borderRadius:10, padding:"12px 14px" }}>
+        <p style={{ fontSize:11, fontWeight:700, color:primary, margin:"0 0 3px", letterSpacing:0.8 }}>COACH UPDATE</p>
         <p style={{ fontSize:13, color:B.text, margin:0 }}>Your weekly check-in is due Wednesday before 9 AM CST. Remember to take your morning weight fasted.</p>
       </div>
 
@@ -3972,7 +3976,7 @@ const AppShell = ({ user, onLogout }) => {
       return <StaffClientPanel user={user}/>;
     }
     // Shared screens
-    if (tab === "home")      return <HomeScreen user={user}/>;
+    if (tab === "home")      return <HomeScreen user={user} wlOrg={wlOrg}/>;
     if (tab === "msgs")      return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured} initialConvoName={coachClient?.name}/>;
     // When a coach navigates into a client tool, pass the client's email/name for
     // data context but keep the coach's role so components show the editable coach view
@@ -4002,7 +4006,7 @@ const AppShell = ({ user, onLogout }) => {
     if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "community") return <CommunityScreen user={user}/>;
-    return <HomeScreen user={user}/>;
+    return <HomeScreen user={user} wlOrg={wlOrg}/>;
   };
 
   return (
