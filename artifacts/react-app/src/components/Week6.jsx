@@ -8,6 +8,7 @@
 //   {tab === 'admin' && <Week6 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -502,11 +503,35 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
   useEffect(()=>{
     syncLifecycleFromDb()
-    // Poll so other open sessions converge without a reload; pause when hidden
-    const id = setInterval(()=>{ if (!document.hidden) syncLifecycleFromDb() }, 10000)
-    const onVis = ()=>{ if (!document.hidden) syncLifecycleFromDb() }
+    // Realtime: push changes to user_profiles instantly over websocket.
+    // Polling below is only a FALLBACK while the channel is not connected.
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
+    let realtimeUp = false
+    let debounce = null
+    const scheduleSync = ()=>{
+      // Coalesce bursts of row events into a single refresh
+      clearTimeout(debounce)
+      debounce = setTimeout(()=>syncLifecycleFromDb(), 250)
+    }
+    const channel = sb
+      .channel('admin-lifecycle')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, scheduleSync)
+      .subscribe(status=>{
+        const wasUp = realtimeUp
+        realtimeUp = status === 'SUBSCRIBED'
+        // Catch up on anything missed while the channel was down
+        if (realtimeUp && !wasUp) syncLifecycleFromDb()
+      })
+    // Fallback poll: only fires when the realtime channel is disconnected
+    const id = setInterval(()=>{ if (!document.hidden && !realtimeUp) syncLifecycleFromDb() }, 10000)
+    const onVis = ()=>{ if (!document.hidden && !realtimeUp) syncLifecycleFromDb() }
     document.addEventListener('visibilitychange', onVis)
-    return ()=>{ clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
+    return ()=>{
+      clearTimeout(debounce)
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+      sb.removeChannel(channel)
+    }
   },[])
 
   const [archiveOpen,       setArchiveOpen]       = useState(false)
