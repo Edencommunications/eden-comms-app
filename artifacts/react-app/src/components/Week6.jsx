@@ -326,13 +326,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   useEffect(()=>{
     // Wait for the admin's company to resolve, then always scope — never expose other companies' coaches
     if (!adminCompanyId) return
-    dbGet('user_profiles',`role=in.(coach,head_coach)&select=id,name,email,role&company_id=eq.${adminCompanyId}`)
+    dbGet('user_profiles',`role=in.(coach,head_coach)&select=id,name,email,role&company_id=eq.${adminCompanyId}&is_active=not.is.false`)
       .then(rows=>{ if (Array.isArray(rows))
         setDbCoaches(rows.filter(r=>!DEMO_COACHES.some(d=>d.uuid===r.id))
           .map(r=>({uuid:r.id,name:r.name,email:r.email,role:'coach',checkInDay:'',clientCount:0,active:true}))) })
       .catch(()=>{})
   },[adminCompanyId])
-  const allCoaches = [...DEMO_COACHES, ...dbCoaches]
+  // Removed coach UUIDs — seeded from localStorage, kept in sync with the DB
+  // (is_active=false) by syncLifecycleFromDb. Declared here so allCoaches can
+  // honor the DB flag: removed coaches (demo or real) never appear anywhere.
+  const [removedCoaches, setRemovedCoaches] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('eden_removed_coaches') || '[]') } catch { return [] }
+  })
+  const allCoaches = [...DEMO_COACHES, ...dbCoaches].filter(c=>!removedCoaches.includes(c.uuid))
   const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
 
   // ── Admin Documents ───────────────────────────────────────
@@ -413,10 +419,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // Maps clientEmail → newCoachUuid after a transfer
   const [clientCoachMap, setClientCoachMap] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eden_client_coach_map') || '{}') } catch { return {} }
-  })
-  // Array of removed coach UUIDs
-  const [removedCoaches, setRemovedCoaches] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('eden_removed_coaches') || '[]') } catch { return [] }
   })
   // Support staff (VAs, head coaches, etc.) loaded from the database
   const [supportStaff, setSupportStaff] = useState([])
