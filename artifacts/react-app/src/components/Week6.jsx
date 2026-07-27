@@ -232,35 +232,48 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [orgCoursesOpen, setOrgCoursesOpen] = useState(null) // org id whose Eden course list is expanded
   const [manageOrg,   setManageOrg]   = useState(null)  // org being edited in the Manage modal
 
-  useEffect(()=>{
-    if (!isAdmin) return
-    dbGet('packages','active=eq.true&order=price.asc')
+  // Reload the active package tiers from the DB — used on mount and by realtime pushes
+  function refreshPackages() {
+    return dbGet('packages','active=eq.true&order=price.asc')
       .then(rows=>{ if(Array.isArray(rows)) setPackages(rows); setPkgsLoaded(true) })
       .catch(()=>setPkgsLoaded(true))
-    // Eden courses + their per-course tier distribution (courses.tiers = array of package ids)
-    dbGet('courses','select=id,title,tiers,company_id&is_active=eq.true&order=sort_order.asc')
-      .then(rows=>{
-        if (Array.isArray(rows))
-          setEdenCourses(rows.filter(c=>!c.company_id||c.company_id===EDEN_ORG_ID))
-      }).catch(()=>{})
-    dbGet('organizations','select=id,name,slug,plan,is_white_label,brand_color,calendar_url,billing_email,is_active&order=created_at.asc')
+  }
+  // Reload org list (+ counts + brand palettes) from the DB — used on mount and by realtime pushes
+  function refreshOrgs() {
+    return dbGet('organizations','select=id,name,slug,plan,is_white_label,brand_color,calendar_url,billing_email,is_active&order=created_at.asc')
       .then(rows=>{
         if (Array.isArray(rows)&&rows.length)
-          setOrgs(rows.map(o=>({ id:o.id, name:o.name, slug:o.slug, isWhiteLabel:o.is_white_label,
-            plan:o.plan, coachCount:0, clientCount:0, active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
-            calendarUrl:o.calendar_url||'', billingEmail:o.billing_email||'' })))
+          setOrgs(prev=>rows.map(o=>{
+            const old = prev.find(p=>p.id===o.id)
+            return { id:o.id, name:o.name, slug:o.slug, isWhiteLabel:o.is_white_label,
+              plan:o.plan, coachCount:old?.coachCount||0, clientCount:old?.clientCount||0,
+              active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
+              calendarUrl:o.calendar_url||'', billingEmail:o.billing_email||'',
+              brandColors:old?.brandColors }
+          }))
       })
       // Real coach/client counts per org — chained after the org list lands so it
-      // can't be overwritten by the zero-count initial mapping above.
+      // can't be overwritten by the stale-count initial mapping above.
       .then(refreshOrgCounts)
-    // Probe for the brand_colors palette column (added later — needs its SQL run once)
-    dbGet('organizations','select=id,brand_colors')
+      // Probe for the brand_colors palette column (added later — needs its SQL run once)
+      .then(()=>dbGet('organizations','select=id,brand_colors'))
       .then(rows=>{
         if (Array.isArray(rows)&&rows.length) {
           setColorsColSupported(true)
           setOrgs(prev=>prev.map(o=>{ const m=rows.find(r=>r.id===o.id); return m?{...o,brandColors:m.brand_colors||[]}:o }))
         }
       }).catch(()=>{})
+  }
+  useEffect(()=>{
+    if (!isAdmin) return
+    refreshPackages()
+    // Eden courses + their per-course tier distribution (courses.tiers = array of package ids)
+    dbGet('courses','select=id,title,tiers,company_id&is_active=eq.true&order=sort_order.asc')
+      .then(rows=>{
+        if (Array.isArray(rows))
+          setEdenCourses(rows.filter(c=>!c.company_id||c.company_id===EDEN_ORG_ID))
+      }).catch(()=>{})
+    refreshOrgs()
   },[isAdmin])
 
   // Recompute each org card's coach/client counts from the database — the same
@@ -358,13 +371,18 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       }).catch(()=>{})
   },[email])
 
-  // Load admin docs when selected client changes
-  useEffect(()=>{
-    if (!selectedClient?.uuid){ setAdminDocs([]); return }
-    dbGet('client_documents',`client_id=eq.${selectedClient.uuid}&order=created_at.desc`)
+  // Load admin docs for the currently selected client — a ref keeps the id
+  // reachable from the long-lived realtime subscription without re-subscribing.
+  const selectedClientUuidRef = useRef(null)
+  selectedClientUuidRef.current = selectedClient?.uuid||null
+  function refreshAdminDocs() {
+    const uuid = selectedClientUuidRef.current
+    if (!uuid){ setAdminDocs([]); return Promise.resolve() }
+    return dbGet('client_documents',`client_id=eq.${uuid}&order=created_at.desc`)
       .then(rows=>setAdminDocs(Array.isArray(rows)?rows:[]))
       .catch(()=>{})
-  },[selectedClient?.uuid])
+  }
+  useEffect(()=>{ refreshAdminDocs() },[selectedClient?.uuid])
 
   const docTypeIcon = t=>DOC_TYPES.find(d=>d.v===t)?.icon||'📄'
 
@@ -513,21 +531,34 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       clearTimeout(debounce)
       debounce = setTimeout(()=>syncLifecycleFromDb(), 250)
     }
-    const channel = sb
+    // Same debounce pattern for the other admin-visible tables — each table gets
+    // its own timer so a burst on one doesn't delay a refresh of another.
+    const timers = {}
+    const debounced = fn => ()=>{ clearTimeout(timers[fn.name]); timers[fn.name] = setTimeout(fn, 250) }
+    let channel = sb
       .channel('admin-lifecycle')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, scheduleSync)
-      .subscribe(status=>{
+    if (isAdmin) channel = channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'organizations' },    debounced(refreshOrgs))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' },         debounced(refreshPackages))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_documents' }, debounced(refreshAdminDocs))
+    const catchUp = ()=>{
+      syncLifecycleFromDb()
+      if (isAdmin) { refreshOrgs(); refreshPackages(); refreshAdminDocs() }
+    }
+    channel = channel.subscribe(status=>{
         const wasUp = realtimeUp
         realtimeUp = status === 'SUBSCRIBED'
         // Catch up on anything missed while the channel was down
-        if (realtimeUp && !wasUp) syncLifecycleFromDb()
+        if (realtimeUp && !wasUp) catchUp()
       })
     // Fallback poll: only fires when the realtime channel is disconnected
-    const id = setInterval(()=>{ if (!document.hidden && !realtimeUp) syncLifecycleFromDb() }, 10000)
-    const onVis = ()=>{ if (!document.hidden && !realtimeUp) syncLifecycleFromDb() }
+    const id = setInterval(()=>{ if (!document.hidden && !realtimeUp) catchUp() }, 10000)
+    const onVis = ()=>{ if (!document.hidden && !realtimeUp) catchUp() }
     document.addEventListener('visibilitychange', onVis)
     return ()=>{
       clearTimeout(debounce)
+      Object.values(timers).forEach(clearTimeout)
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVis)
       sb.removeChannel(channel)
