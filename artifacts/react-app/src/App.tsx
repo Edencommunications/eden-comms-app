@@ -195,8 +195,24 @@ const Divider = () => <div style={{ height:1, background:B.border, margin:"12px 
 
 // ─── SCREENS ─────────────────────────────────────────────────────────────────
 
+// Circle logo for a branded (white-label) login — org initial on brand color
+const OrgLogo = ({ org, size = 44 }) => {
+  const p = wlPalette(org);
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%", border:`2px solid ${p.primary}`, background:`${p.primary}22`,
+      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+      <span style={{ fontSize:size*0.42, fontWeight:800, color:p.primary }}>{(org?.name||"?").trim().charAt(0).toUpperCase()}</span>
+    </div>
+  );
+};
+
 // LOGIN
-const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
+// brandOrg: organizations row loaded from a branded link (?org=<slug>) — themes
+// the whole login page with that org's name and palette. Null = Eden default.
+const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
+  const wl = brandOrg ? wlPalette(brandOrg) : null;
+  const primary = wl ? wl.primary : B.gold;
+  const secondary = wl ? wl.secondary : "#ffb733";
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -281,23 +297,23 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
     <div style={{ minHeight:"100vh", width:"100%", background:"#000000", display:"flex", flexDirection: isMobile ? "column" : "row" }}>
       {/* Branding panel — full left on desktop, compact top on mobile */}
       {isMobile ? (
-        <div style={{ background:`linear-gradient(160deg, #1a1200 0%, #000000 100%)`, padding:"32px 20px 24px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid #1a1a1a` }}>
-          <EdenLogo size={72}/>
-          <h1 style={{ fontSize:22, fontWeight:800, color:"#ffffff", margin:"16px 0 4px", textAlign:"center" }}>Eden Communications</h1>
-          <p style={{ fontSize:12, color:"#888888", margin:0, textAlign:"center" }}>The private platform for Lifestyle of Eden coaches and clients</p>
+        <div style={{ background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, padding:"32px 20px 24px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid #1a1a1a` }}>
+          {brandOrg ? <OrgLogo org={brandOrg} size={72}/> : <EdenLogo size={72}/>}
+          <h1 style={{ fontSize:22, fontWeight:800, color:"#ffffff", margin:"16px 0 4px", textAlign:"center" }}>{brandOrg ? brandOrg.name : "Eden Communications"}</h1>
+          <p style={{ fontSize:12, color:"#888888", margin:0, textAlign:"center" }}>{brandOrg ? "The private platform for coaches and clients" : "The private platform for Lifestyle of Eden coaches and clients"}</p>
         </div>
       ) : (
-        <div style={{ flex:1, background:`linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, borderRight:`1px solid #1a1a1a`, minWidth:0 }}>
-          <EdenLogo size={110}/>
+        <div style={{ flex:1, background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, borderRight:`1px solid #1a1a1a`, minWidth:0 }}>
+          {brandOrg ? <OrgLogo org={brandOrg} size={110}/> : <EdenLogo size={110}/>}
           <h1 style={{ fontSize:32, fontWeight:800, color:"#ffffff", margin:"24px 0 8px", textAlign:"center", lineHeight:1.2 }}>
-            Eden<br/>Communications
+            {brandOrg ? brandOrg.name : <>Eden<br/>Communications</>}
           </h1>
           <p style={{ fontSize:14, color:"#888888", margin:"0 0 32px", textAlign:"center", lineHeight:1.6 }}>
-            The private platform for<br/>Lifestyle of Eden coaches and clients
+            {brandOrg ? <>The private platform for<br/>coaches and clients</> : <>The private platform for<br/>Lifestyle of Eden coaches and clients</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
             {["🔒 HIPAA-grade encryption","🛡 End-to-end secure messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
-              <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:"#ffa60011", borderRadius:8, border:"1px solid #ffa60022" }}>
+              <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:`${primary}11`, borderRadius:8, border:`1px solid ${primary}22` }}>
                 <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
               </div>
             ))}
@@ -319,22 +335,23 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
               rightIcon={<Ic n={showPass?"eyeoff":"eye"} size={16} c={B.muted}/>}
               onRightClick={()=>setShowPass(!showPass)}
               error={error}/>
-            <button onClick={onForgot} style={{ background:"none", border:"none", cursor:"pointer", color:B.gold, fontSize:12, padding:0, marginBottom:20, display:"block", textAlign:"right", width:"100%" }}>
+            <button onClick={onForgot} style={{ background:"none", border:"none", cursor:"pointer", color:primary, fontSize:12, padding:0, marginBottom:20, display:"block", textAlign:"right", width:"100%" }}>
               Forgot password?
             </button>
-            <Btn onClick={submit} fullWidth disabled={loading}>
+            <Btn onClick={submit} fullWidth disabled={loading}
+              style={brandOrg ? { background:`linear-gradient(135deg, ${secondary}, ${primary})`, color:"#000000" } : undefined}>
               {loading ? "Signing in…" : "Sign In →"}
             </Btn>
           </Card>
 
           <p style={{ textAlign:"center", fontSize:13, color:B.muted, marginTop:20 }}>
             New client?{" "}
-            <button onClick={onSignup} style={{ background:"none", border:"none", cursor:"pointer", color:B.gold, fontSize:13, fontWeight:600, padding:0 }}>Request Access</button>
+            <button onClick={onSignup} style={{ background:"none", border:"none", cursor:"pointer", color:primary, fontSize:13, fontWeight:600, padding:0 }}>Request Access</button>
           </p>
 
           {/* Demo credentials helper */}
           <div style={{ marginTop:28, padding:"12px 14px", background:"#1a1a1a", border:"1px solid #2a2a2a", borderRadius:10 }}>
-            <p style={{ fontSize:10, fontWeight:700, color:B.gold, margin:"0 0 8px", letterSpacing:1 }}>DEMO LOGINS</p>
+            <p style={{ fontSize:10, fontWeight:700, color:primary, margin:"0 0 8px", letterSpacing:1 }}>DEMO LOGINS</p>
             {[
               ["Super Admin","admin@edencomms.io","Admin1234!"],
               ["Coach","coach@eden.io","Coach1234!"],
@@ -344,13 +361,13 @@ const LoginScreen = ({ onLogin, onForgot, onSignup }) => {
             ].map(([role,em,pw])=>(
               <button key={role} onClick={()=>{setEmail(em);setPass(pw);}}
                 style={{ display:"block", width:"100%", textAlign:"left", background:"none", border:"none", cursor:"pointer", padding:"4px 0" }}>
-                <span style={{ fontSize:11, color:B.muted }}><span style={{ color:B.gold, fontWeight:600 }}>{role}:</span> {em}</span>
+                <span style={{ fontSize:11, color:B.muted }}><span style={{ color:primary, fontWeight:600 }}>{role}:</span> {em}</span>
               </button>
             ))}
           </div>
 
           <p style={{ textAlign:"center", fontSize:10, color:"#444444", marginTop:20, lineHeight:1.6 }}>
-            🔒 All data encrypted · HIPAA compliant · edencommunications.io
+            {brandOrg ? "🔒 All data encrypted · HIPAA compliant" : "🔒 All data encrypted · HIPAA compliant · edencommunications.io"}
           </p>
         </div>
       </div>
@@ -2919,6 +2936,8 @@ const AdminDashboard = ({ user }:any) => {
   const [isOwnerHQ, setIsOwnerHQ] = useState(true);
   const [myCompanyId, setMyCompanyId] = useState<string|null>(null);
   const [planPrices, setPlanPrices] = useState<Record<string,number>>(FALLBACK_PLAN_PRICES);
+  const [myOrg, setMyOrg] = useState<any>(null);        // white-label admin's own org (for branded login link)
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => { (async () => {
     try {
@@ -2927,6 +2946,10 @@ const AdminDashboard = ({ user }:any) => {
       setMyCompanyId(cid);
       const ownerHQ = !cid || cid === EDEN_COMPANY_ID;
       setIsOwnerHQ(ownerHQ);
+      if (!ownerHQ) {
+        const orgRows = await sbGet('organizations', `id=eq.${cid}&select=id,name,slug,brand_color,is_white_label&limit=1`);
+        if (orgRows?.[0]?.is_white_label && orgRows[0].slug) setMyOrg(orgRows[0]);
+      }
       // Coach & client counts — company-scoped for white-label admins, platform-wide for Eden HQ
       const scope = ownerHQ ? '' : `&company_id=eq.${cid}`;
       const [coachRows, clientRows] = await Promise.all([
@@ -3006,6 +3029,28 @@ const AdminDashboard = ({ user }:any) => {
                 </Card>
               ))}
             </div>
+            {/* White-label admin: branded login link */}
+            {!isOwnerHQ && myOrg && (() => {
+              const brandedUrl = `${window.location.origin}${window.location.pathname}?org=${myOrg.slug}`;
+              const accent = myOrg.brand_color || B.gold;
+              return (
+                <Card style={{ marginBottom:20, borderLeft:`3px solid ${accent}` }}>
+                  <p style={{ fontSize:11, fontWeight:700, color:accent, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>🔗 Your Branded Login Link</p>
+                  <p style={{ fontSize:12, color:B.muted, margin:"0 0 10px", lineHeight:1.5 }}>Share this link with your coaches and clients — the sign-in page will show {myOrg.name}'s branding.</p>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <code style={{ flex:1, minWidth:180, fontSize:11, color:B.text, background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 10px", overflowX:"auto", whiteSpace:"nowrap" }}>{brandedUrl}</code>
+                    <button onClick={async ()=>{
+                        try { await navigator.clipboard.writeText(brandedUrl); }
+                        catch { const ta=document.createElement('textarea'); ta.value=brandedUrl; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+                        setLinkCopied(true); setTimeout(()=>setLinkCopied(false), 2000);
+                      }}
+                      style={{ background:linkCopied?B.success:accent, color:"#000", border:"none", borderRadius:8, padding:"9px 14px", fontSize:12, fontWeight:800, cursor:"pointer", flexShrink:0 }}>
+                      {linkCopied ? "✓ Copied" : "Copy Link"}
+                    </button>
+                  </div>
+                </Card>
+              );
+            })()}
             {isOwnerHQ && (<>
             <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Organizations</p>
             {orgs.map((o:any,i:number)=>(
@@ -4219,10 +4264,29 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authScreen, setAuthScreen] = useState("login");
 
+  // Branded login link: ?org=<slug> loads that org's name + palette before auth.
+  // Plain visits keep brandOrg = null → Eden gold login.
+  const [brandOrg, setBrandOrg] = useState<any>(null);
+  useEffect(() => { (async () => {
+    try {
+      const slug = new URLSearchParams(window.location.search).get('org');
+      if (!slug) return;
+      const rows = await sbGet('organizations',
+        `slug=eq.${encodeURIComponent(slug.toLowerCase())}&select=id,name,slug,brand_color,is_white_label,is_active&limit=1`);
+      const org = Array.isArray(rows) ? rows[0] : null;
+      if (!org || org.is_active === false) return; // unknown/inactive org → Eden default
+      // Palette column added later — fetch separately so a missing column can't break primary branding
+      let full = org;
+      const pal = await sbGet('organizations', `id=eq.${org.id}&select=brand_colors&limit=1`);
+      if (Array.isArray(pal?.[0]?.brand_colors)) full = { ...org, brand_colors: pal[0].brand_colors };
+      setBrandOrg(full);
+    } catch {}
+  })() }, []);
+
   if (!user) {
     if (authScreen === "forgot") return <ForgotScreen onBack={()=>setAuthScreen("login")}/>;
     if (authScreen === "signup") return <SignupScreen onBack={()=>setAuthScreen("login")}/>;
-    return <LoginScreen onLogin={setUser} onForgot={()=>setAuthScreen("forgot")} onSignup={()=>setAuthScreen("signup")}/>;
+    return <LoginScreen onLogin={setUser} onForgot={()=>setAuthScreen("forgot")} onSignup={()=>setAuthScreen("signup")} brandOrg={brandOrg}/>;
   }
 
   return (
