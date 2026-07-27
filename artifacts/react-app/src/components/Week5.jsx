@@ -153,12 +153,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
         setDbProfile(p)
         if (p.company_id && p.company_id!==EDEN_ORG_ID) {
           const org = await dbGet('organizations',`id=eq.${p.company_id}&select=id,plan,is_white_label`)
-          let tierCourses=false, tierRecipes=false
+          let tierCourses=false, tierRecipes=false, packageId=null
           if (org?.[0]?.plan) {
             const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(org[0].plan)}&active=eq.true&limit=1`)
             tierCourses=!!pkg?.[0]?.includes_courses; tierRecipes=!!pkg?.[0]?.includes_recipes
+            packageId=pkg?.[0]?.id||null
           }
-          setCompanyCtx({companyId:p.company_id, isWhiteLabel:!!org?.[0]?.is_white_label, tierCourses, tierRecipes})
+          setCompanyCtx({companyId:p.company_id, isWhiteLabel:!!org?.[0]?.is_white_label, tierCourses, tierRecipes, packageId})
         } else {
           setCompanyCtx(null)
         }
@@ -192,6 +193,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [accessList,   setAccessList]   = useState([])
   const [accessCourse, setAccessCourse] = useState(null)
 
+  // Admin (Eden only): per-course tier distribution
+  const [showTiers,    setShowTiers]    = useState(false)
+  const [tiersCourse,  setTiersCourse]  = useState(null)
+  const [allPackages,  setAllPackages]  = useState([])
+  const [tierSel,      setTierSel]      = useState(new Set())
+  const [savingTiers,  setSavingTiers]  = useState(false)
+
   // Admin: new course
   const [showNewCourse,setShowNewCourse]= useState(false)
   const [newTitle,     setNewTitle]     = useState('')
@@ -216,7 +224,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     loadCourses()
     loadLiveRecipes()
     if (myUUID) { checkRecipeAccess(); loadAssignedRecipes() }
-  },[profileReady, myUUID, companyCtx?.companyId, companyCtx?.tierCourses])
+  },[profileReady, myUUID, companyCtx?.companyId, companyCtx?.tierCourses, companyCtx?.packageId])
 
   // ── Load courses based on role ────────────────────────────
   // A course belongs to Eden when it has no company_id (or Eden's)
@@ -236,9 +244,12 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       if (!access?.length) { setCourses([]); return }
       const ids = access.map(a=>a.course_id).join(',')
       data = await dbGet('courses',`id=in.(${ids})&is_active=eq.true&order=sort_order.asc`)
-      // White-label users: own company's courses always; Eden courses only if their tier includes them
+      // White-label users: own company's courses always; Eden courses only if that
+      // course's per-course distribution (courses.tiers) includes their org's package.
+      // A course with no tiers set is "Eden only" and never shown to white-label users.
       if (isWL) data = (data||[]).filter(c=>
-        c.company_id===companyCtx.companyId || (isEdenCourse(c)&&companyCtx.tierCourses))
+        c.company_id===companyCtx.companyId ||
+        (isEdenCourse(c)&&Array.isArray(c.tiers)&&companyCtx.packageId&&c.tiers.includes(companyCtx.packageId)))
     }
     setCourses(data||[])
     if (data?.length>0) {
@@ -313,6 +324,25 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     await dbUpdate('courses',`id=eq.${course.id}`,{ is_active:!course.is_active })
     setCourses(prev=>prev.map(c=>c.id===course.id?{...c,is_active:!c.is_active}:c))
     if (activeCourse?.id===course.id) setActiveCourse(prev=>({...prev,is_active:!prev.is_active}))
+  }
+
+  // ── ADMIN (Eden): Per-course tier distribution ────────────
+  // Which white-label tiers include this Eden course. Empty = Eden only.
+  async function openTierManager(course) {
+    setTiersCourse(course)
+    setTierSel(new Set(Array.isArray(course.tiers)?course.tiers:[]))
+    const pkgs = await dbGet('packages','active=eq.true&order=price.asc')
+    setAllPackages(pkgs||[])
+    setShowTiers(true)
+  }
+  async function saveTiers() {
+    if (!tiersCourse) return
+    setSavingTiers(true)
+    const tiers = [...tierSel]
+    await dbUpdate('courses',`id=eq.${tiersCourse.id}`,{ tiers })
+    setCourses(prev=>prev.map(c=>c.id===tiersCourse.id?{...c,tiers}:c))
+    if (activeCourse?.id===tiersCourse.id) setActiveCourse(prev=>({...prev,tiers}))
+    setSavingTiers(false); setShowTiers(false)
   }
 
   // ── ADMIN: Open access management ─────────────────────────
@@ -522,6 +552,12 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:5,padding:'2px 7px',color:C.gold,fontSize:9,fontWeight:700,cursor:'pointer'}}>
                         Manage Access
                       </button>
+                      {!isWL&&isEdenCourse(c)&&(
+                        <button onClick={e=>{e.stopPropagation();openTierManager(c)}}
+                          style={{background:`${C.success}18`,border:`1px solid ${C.success}44`,borderRadius:5,padding:'2px 7px',color:C.success,fontSize:9,fontWeight:700,cursor:'pointer'}}>
+                          {Array.isArray(c.tiers)&&c.tiers.length>0?`Tiers (${c.tiers.length})`:'Eden Only'}
+                        </button>
+                      )}
                     </div>
                   )}
                   {/* Coach: view client progress */}
@@ -954,6 +990,64 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
               <button onClick={()=>setShowAccess(false)}
                 style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TIER DISTRIBUTION MODAL (Eden admin only) ─────── */}
+      {showTiers&&tiersCourse&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setShowTiers(false)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:440,maxHeight:'82vh',display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:3}}>Distribution — {tiersCourse.title}</div>
+              <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
+                Choose which white-label tiers include this course. Leave all unchecked to keep it internal to Lifestyle of Eden.
+              </div>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+              <div style={{background:tierSel.size===0?`${C.gold}12`:C.surface,border:`1px solid ${tierSel.size===0?C.gold+'44':C.border}`,borderRadius:10,padding:'11px 13px',marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontSize:16}}>🔒</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:tierSel.size===0?C.gold:C.white}}>Eden Only</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>Not shared with any white-label tier</div>
+                </div>
+                {tierSel.size>0&&(
+                  <button onClick={()=>setTierSel(new Set())}
+                    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',color:C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}}>
+                    Clear All
+                  </button>
+                )}
+              </div>
+              <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Included In Tiers</div>
+              {allPackages.length===0&&(
+                <div style={{fontSize:11,color:C.muted,textAlign:'center',padding:16}}>No active tiers found. Create tiers in the Tiers &amp; Packages manager first.</div>
+              )}
+              {allPackages.map(pkg=>{
+                const on = tierSel.has(pkg.id)
+                return (
+                  <label key={pkg.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',borderRadius:10,border:`1px solid ${on?C.success+'44':C.border}`,background:on?`${C.success}10`:C.surface,marginBottom:6,cursor:'pointer'}}>
+                    <input type="checkbox" checked={on} style={{accentColor:C.gold}}
+                      onChange={()=>setTierSel(prev=>{const n=new Set(prev); on?n.delete(pkg.id):n.add(pkg.id); return n})}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:700,color:C.white,textTransform:'capitalize'}}>{pkg.name}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                        ${pkg.price}/mo{pkg.includes_courses?' · has full-library access':''}
+                      </div>
+                    </div>
+                    {on&&<span style={{fontSize:12,color:C.success,fontWeight:700}}>✓</span>}
+                  </label>
+                )
+              })}
+            </div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0,display:'flex',gap:10}}>
+              <button onClick={()=>setShowTiers(false)}
+                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
+              <button onClick={saveTiers} disabled={savingTiers}
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:savingTiers?.6:1}}>
+                {savingTiers?'Saving…':tierSel.size===0?'Save — Eden Only':`Save — ${tierSel.size} Tier${tierSel.size>1?'s':''}`}
               </button>
             </div>
           </div>
