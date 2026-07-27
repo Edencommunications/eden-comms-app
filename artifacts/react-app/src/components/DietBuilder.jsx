@@ -1133,12 +1133,27 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     if(dbId) await dbDelete('client_recipes',`id=eq.${dbId}`)
   }
 
+  const servingsSaveTimers = useRef({}) // debounce per recipe row so rapid +/- clicks save once
   function updateRecipeServings(dbId, recipeName, newServings) {
     const s = Math.max(0.25, Math.round((parseFloat(newServings)||1)*4)/4)  // snap to 0.25
     setAssignedRecipes(p=>p.map(r=>
       (r.db_id===dbId||(r.db_id==null&&(r.name||r.recipe_name)===recipeName))
         ? {...r, servings:s} : r
     ))
+    // Persist to client_recipes so servings survive refresh / reassignment views
+    if (dbId) {
+      clearTimeout(servingsSaveTimers.current[dbId])
+      servingsSaveTimers.current[dbId] = setTimeout(()=>{
+        setAssignedRecipes(p=>{
+          const row = p.find(r=>r.db_id===dbId)
+          if (row) {
+            const {db_id, recipe_name, meal_name, ...data} = row
+            dbUpdate('client_recipes',`id=eq.${dbId}`,{recipe_data:{...data, servings:row.servings}}).catch(()=>{})
+          }
+          return p
+        })
+      }, 600)
+    }
   }
 
   function toggleHabitAssign(habit) {

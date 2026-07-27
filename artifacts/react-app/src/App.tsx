@@ -2289,6 +2289,20 @@ async function sbPatch(table:string, params:string, body:any) {
 async function sbDelete(table:string, params:string) {
   try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:SB_H}); } catch {}
 }
+// Upload an org logo to Supabase Storage (bucket: org-logos) and return its public URL, or null if unavailable
+async function sbUploadLogo(orgId:string, file:File):Promise<string|null> {
+  try {
+    const ext  = ((file.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,''))||'png';
+    const path = `${orgId}-${Date.now()}.${ext}`;
+    const r = await fetch(`${SB_URL}/storage/v1/object/org-logos/${path}`,{
+      method:'POST',
+      headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':file.type||'image/png' },
+      body:file,
+    });
+    if (!r.ok) return null;
+    return `${SB_URL}/storage/v1/object/public/org-logos/${path}`;
+  } catch { return null; }
+}
 
 // ─── STAFF ACCESS MANAGER ─────────────────────────────────────────────────────
 const PERM_DEFS = [
@@ -2980,10 +2994,20 @@ const AdminDashboard = ({ user }:any) => {
     setLogoSaving(false);
   };
 
-  const onLogoFile = (file: File | null) => {
+  const onLogoFile = async (file: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { setLogoError('Please choose an image file.'); return; }
-    if (file.size > 400 * 1024) { setLogoError('Image too large — please use a file under 400 KB, or paste a hosted image URL instead.'); return; }
+    if (file.size > 2 * 1024 * 1024) { setLogoError('Image too large — please use a file under 2 MB.'); return; }
+    setLogoError(''); setLogoSaving(true);
+    // Preferred: real file storage (keeps the database lean and logos fast to load)
+    const url = myOrg ? await sbUploadLogo(myOrg.id, file) : null;
+    if (url) { await saveLogo(url); return; }
+    // Fallback if the storage bucket isn't set up yet: store small images inline as before
+    if (file.size > 400 * 1024) {
+      setLogoSaving(false);
+      setLogoError('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => saveLogo(String(reader.result || ''));
     reader.readAsDataURL(file);
