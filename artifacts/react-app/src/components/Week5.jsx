@@ -57,10 +57,21 @@ async function dbInsert(table, body) {
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
 async function dbUpdate(table, params, body) {
-  await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
-    method:'PATCH', headers:H, body:JSON.stringify(body)
-  })
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+      method:'PATCH', headers:H, body:JSON.stringify(body)
+    })
+  } catch {}
 }
+async function dbDelete(table, params) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers:H })
+    return r.ok
+  } catch { return false }
+}
+
+// Palette cycled through for new course sections
+const SECTION_COLORS = ['#D4AF37','#4CAF7D','#5B9BD5','#C0504D','#9B59B6','#E67E22']
 
 // ── Static recipe fallback ────────────────────────────────────
 const STATIC_RECIPES = [
@@ -206,6 +217,17 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [newDesc,      setNewDesc]      = useState('')
   const [savingCourse, setSavingCourse] = useState(false)
 
+  // Admin: course content builder (sections & lessons)
+  const [showBuilder,  setShowBuilder]  = useState(false)
+  const [draftSecs,    setDraftSecs]    = useState([])   // [{id,title,color}] incl. not-yet-saved empty sections
+  const [secEdit,      setSecEdit]      = useState(null) // {id,title}
+  const [modEdit,      setModEdit]      = useState(null) // {id,title,duration}
+  const [newModFor,    setNewModFor]    = useState(null) // section id gaining a lesson
+  const [newModTitle,  setNewModTitle]  = useState('')
+  const [newModDur,    setNewModDur]    = useState('')
+  const [newSecTitle,  setNewSecTitle]  = useState('')
+  const [builderBusy,  setBuilderBusy]  = useState(false)
+
   // Coach: client progress view
   const [showProgress, setShowProgress]  = useState(false)
   const [clientProgress,setClientProgress]= useState([])
@@ -260,11 +282,14 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     }
   }
 
+  // Order by section first so per-section sort_order works for admin-built courses
+  const sortMods = mods => [...(mods||[])].sort((a,b)=>(a.section_id-b.section_id)||(a.sort_order-b.sort_order))
+
   async function openCourse(course) {
     setActiveCourse(course)
     setCourseView('home')
     const mods = await dbGet('course_modules',`course_id=eq.${course.id}&order=sort_order.asc`)
-    setModules(mods||[])
+    setModules(sortMods(mods))
     if (myUUID) {
       const prog = await dbGet('course_progress',`user_id=eq.${myUUID}&course_id=eq.${course.id}`)
       setCompleted(new Set((prog||[]).filter(p=>p.completed).map(p=>p.module_id)))
@@ -324,6 +349,99 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     await dbUpdate('courses',`id=eq.${course.id}`,{ is_active:!course.is_active })
     setCourses(prev=>prev.map(c=>c.id===course.id?{...c,is_active:!c.is_active}:c))
     if (activeCourse?.id===course.id) setActiveCourse(prev=>({...prev,is_active:!prev.is_active}))
+  }
+
+  // ── ADMIN: Course content builder ─────────────────────────
+  // Eden admin edits Eden courses; a white-label admin edits their own org's courses
+  const canEditCourse = c => isAdmin && (isWL ? c.company_id===companyCtx.companyId : isEdenCourse(c))
+
+  async function refreshModules(courseId) {
+    const mods = await dbGet('course_modules',`course_id=eq.${courseId}&order=sort_order.asc`)
+    const sorted = sortMods(mods)
+    setModules(sorted)
+    return sorted
+  }
+  function openBuilder() {
+    setDraftSecs(sections.map(s=>({id:s.id,title:s.title,color:s.color})))
+    setSecEdit(null); setModEdit(null); setNewModFor(null); setNewModTitle(''); setNewModDur(''); setNewSecTitle('')
+    setShowBuilder(true)
+  }
+  function addSectionDraft() {
+    const title = newSecTitle.trim(); if (!title) return
+    const nextId = Math.max(0,...draftSecs.map(s=>Number(s.id)||0))+1
+    setDraftSecs(prev=>[...prev,{id:nextId,title,color:SECTION_COLORS[(nextId-1)%SECTION_COLORS.length]}])
+    setNewSecTitle('')
+  }
+  async function saveSectionTitle(sec, title) {
+    title = title.trim(); if (!title) return
+    setDraftSecs(prev=>prev.map(s=>s.id===sec.id?{...s,title}:s))
+    setSecEdit(null)
+    if (modules.some(m=>m.section_id===sec.id)) {
+      await dbUpdate('course_modules',`course_id=eq.${activeCourse.id}&section_id=eq.${sec.id}`,{section_title:title})
+      await refreshModules(activeCourse.id)
+    }
+  }
+  async function deleteSection(sec) {
+    const count = modules.filter(m=>m.section_id===sec.id).length
+    if (count>0 && !window.confirm(`Delete section "${sec.title}" and its ${count} lesson${count>1?'s':''}? This cannot be undone.`)) return
+    if (count>0) {
+      setBuilderBusy(true)
+      await dbDelete('course_modules',`course_id=eq.${activeCourse.id}&section_id=eq.${sec.id}`)
+      await refreshModules(activeCourse.id)
+      setBuilderBusy(false)
+    }
+    setDraftSecs(prev=>prev.filter(s=>s.id!==sec.id))
+  }
+  async function addModule(sec) {
+    const title = newModTitle.trim(); if (!title||builderBusy) return
+    setBuilderBusy(true)
+    try {
+      const inSection    = modules.filter(m=>m.section_id===sec.id)
+      const nextSort     = Math.max(0,...inSection.map(m=>Number(m.sort_order)||0))+1
+      const nextModuleId = `${sec.id}.${nextSort}`   // matches CEO-course convention, e.g. "2.3"
+      const inserted = await dbInsert('course_modules',{
+        course_id:activeCourse.id, section_id:sec.id, section_title:sec.title, section_color:sec.color,
+        module_id:nextModuleId, title, duration:newModDur.trim()||null, sort_order:nextSort,
+      })
+      if (!inserted) { alert('Could not save the lesson — please try again.'); return }
+      await refreshModules(activeCourse.id)
+      setNewModTitle(''); setNewModDur(''); setNewModFor(null)
+    } catch {
+      alert('Could not save the lesson — please check your connection and try again.')
+    } finally {
+      setBuilderBusy(false)
+    }
+  }
+  async function saveModuleEdit() {
+    if (!modEdit?.title?.trim()) return
+    await dbUpdate('course_modules',`id=eq.${modEdit.id}`,{title:modEdit.title.trim(),duration:modEdit.duration?.trim()||null,updated_at:new Date().toISOString()})
+    await refreshModules(activeCourse.id)
+    setModEdit(null)
+  }
+  async function deleteModule(m) {
+    if (!window.confirm(`Delete lesson "${m.title}"?`)) return
+    await dbDelete('course_modules',`id=eq.${m.id}`)
+    await refreshModules(activeCourse.id)
+  }
+
+  // ── ADMIN: Delete course ──────────────────────────────────
+  async function deleteCourse(course) {
+    if (!window.confirm(`Delete the course "${course.title}" for everyone?\n\nThis removes all its sections, lessons, access grants, and progress. This cannot be undone.`)) return
+    // Children first so a mid-way failure never leaves an orphaned course invisible in the UI
+    const okChildren = (await Promise.all([
+      dbDelete('course_modules', `course_id=eq.${course.id}`),
+      dbDelete('course_access',  `course_id=eq.${course.id}`),
+      dbDelete('course_progress',`course_id=eq.${course.id}`),
+    ])).every(Boolean)
+    const okCourse = okChildren && await dbDelete('courses',`id=eq.${course.id}`)
+    if (!okCourse) { alert('Could not fully delete the course — please check your connection and try again.'); return }
+    setShowBuilder(false)
+    const remaining = courses.filter(c=>c.id!==course.id)
+    setCourses(remaining)
+    if (activeCourse?.id===course.id) {
+      if (remaining.length>0) openCourse(remaining[0])
+      else { setActiveCourse(null); setModules([]); setCourseView('catalog') }
+    }
   }
 
   // ── ADMIN (Eden): Per-course tier distribution ────────────
@@ -552,6 +670,18 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:5,padding:'2px 7px',color:C.gold,fontSize:9,fontWeight:700,cursor:'pointer'}}>
                         Manage Access
                       </button>
+                      {canEditCourse(c)&&(
+                        <button onClick={e=>{e.stopPropagation();openBuilder()}}
+                          style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:5,padding:'2px 7px',color:C.gold,fontSize:9,fontWeight:700,cursor:'pointer'}}>
+                          Edit Content
+                        </button>
+                      )}
+                      {canEditCourse(c)&&(
+                        <button onClick={e=>{e.stopPropagation();deleteCourse(c)}}
+                          style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:5,padding:'2px 7px',color:C.danger,fontSize:9,fontWeight:700,cursor:'pointer'}}>
+                          Delete
+                        </button>
+                      )}
                       {!isWL&&isEdenCourse(c)&&(
                         <button onClick={e=>{e.stopPropagation();openTierManager(c)}}
                           style={{background:`${C.success}18`,border:`1px solid ${C.success}44`,borderRadius:5,padding:'2px 7px',color:C.success,fontSize:9,fontWeight:700,cursor:'pointer'}}>
@@ -1048,6 +1178,130 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
               <button onClick={saveTiers} disabled={savingTiers}
                 style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:savingTiers?.6:1}}>
                 {savingTiers?'Saving…':tierSel.size===0?'Save — Eden Only':`Save — ${tierSel.size} Tier${tierSel.size>1?'s':''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── COURSE CONTENT BUILDER MODAL (Admin only) ─────── */}
+      {showBuilder&&activeCourse&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setShowBuilder(false)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'86vh',display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:3}}>Course Content — {activeCourse.title}</div>
+              <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
+                Build the course like the CEO course: sections, each with its own lessons. Changes save instantly. Add videos by opening a lesson from the course view.
+              </div>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+              {draftSecs.length===0&&(
+                <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'20px 10px',lineHeight:1.6}}>
+                  No sections yet. Add your first section below to start building.
+                </div>
+              )}
+              {draftSecs.map(sec=>{
+                const secMods = modules.filter(m=>m.section_id===sec.id)
+                return (
+                  <div key={sec.id} style={{border:`1px solid ${C.border}`,borderRadius:12,marginBottom:12,overflow:'hidden'}}>
+                    {/* Section header */}
+                    <div style={{background:C.surface,padding:'10px 12px',display:'flex',alignItems:'center',gap:9}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:`${sec.color}22`,color:sec.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{sec.id}</div>
+                      {secEdit?.id===sec.id?(
+                        <>
+                          <input autoFocus value={secEdit.title} onChange={e=>setSecEdit({...secEdit,title:e.target.value})}
+                            onKeyDown={e=>{if(e.key==='Enter')saveSectionTitle(sec,secEdit.title)}}
+                            style={{flex:1,background:C.card,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'5px 9px',color:C.white,fontSize:12,outline:'none'}}/>
+                          <button onClick={()=>saveSectionTitle(sec,secEdit.title)}
+                            style={{background:C.gold,border:'none',borderRadius:6,padding:'5px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
+                          <button onClick={()=>setSecEdit(null)}
+                            style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
+                        </>
+                      ):(
+                        <>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:700,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sec.title}</div>
+                            <div style={{fontSize:9,color:C.muted}}>{secMods.length} lesson{secMods.length===1?'':'s'}{secMods.length===0?' — add one to keep this section':''}</div>
+                          </div>
+                          <button onClick={()=>setSecEdit({id:sec.id,title:sec.title})}
+                            style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 9px',color:C.muted,fontSize:10,cursor:'pointer'}}>Rename</button>
+                          <button onClick={()=>deleteSection(sec)}
+                            style={{background:`${C.danger}18`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'4px 9px',color:C.danger,fontSize:10,fontWeight:700,cursor:'pointer'}}>Delete</button>
+                        </>
+                      )}
+                    </div>
+                    {/* Lessons */}
+                    <div style={{padding:'6px 10px'}}>
+                      {secMods.map(m=>(
+                        modEdit?.id===m.id?(
+                          <div key={m.id} style={{display:'flex',gap:6,alignItems:'center',padding:'6px 0'}}>
+                            <input autoFocus value={modEdit.title} onChange={e=>setModEdit({...modEdit,title:e.target.value})}
+                              style={{flex:1,background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none'}}/>
+                            <input value={modEdit.duration||''} onChange={e=>setModEdit({...modEdit,duration:e.target.value})} placeholder="e.g. 12 min"
+                              style={{width:70,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+                            <button onClick={saveModuleEdit}
+                              style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
+                            <button onClick={()=>setModEdit(null)}
+                              style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
+                          </div>
+                        ):(
+                          <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 2px',borderBottom:`1px solid ${C.border}`}}>
+                            <span style={{fontSize:10,color:C.muted,width:18,textAlign:'right',flexShrink:0}}>{m.module_id}</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.title}</div>
+                              <div style={{fontSize:9,color:C.muted,display:'flex',gap:8}}>
+                                {m.duration&&<span>{m.duration}</span>}
+                                <span style={{color:m.video_url?C.success:C.danger}}>{m.video_url?'▶ video added':'no video yet'}</span>
+                              </div>
+                            </div>
+                            <button onClick={()=>setModEdit({id:m.id,title:m.title,duration:m.duration||''})}
+                              style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',color:C.muted,fontSize:9,cursor:'pointer',flexShrink:0}}>Edit</button>
+                            <button onClick={()=>deleteModule(m)}
+                              style={{background:'none',border:`1px solid ${C.danger}44`,borderRadius:6,padding:'3px 8px',color:C.danger,fontSize:9,fontWeight:700,cursor:'pointer',flexShrink:0}}>✕</button>
+                          </div>
+                        )
+                      ))}
+                      {/* Add lesson */}
+                      {newModFor===sec.id?(
+                        <div style={{display:'flex',gap:6,alignItems:'center',padding:'8px 0'}}>
+                          <input autoFocus value={newModTitle} onChange={e=>setNewModTitle(e.target.value)} placeholder="Lesson title…"
+                            onKeyDown={e=>{if(e.key==='Enter')addModule(sec)}}
+                            style={{flex:1,background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none'}}/>
+                          <input value={newModDur} onChange={e=>setNewModDur(e.target.value)} placeholder="e.g. 12 min"
+                            style={{width:70,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+                          <button onClick={()=>addModule(sec)} disabled={builderBusy||!newModTitle.trim()}
+                            style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer',opacity:builderBusy||!newModTitle.trim()?.5:1}}>
+                            {builderBusy?'Adding…':'Add'}
+                          </button>
+                          <button onClick={()=>{setNewModFor(null);setNewModTitle('');setNewModDur('')}}
+                            style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
+                        </div>
+                      ):(
+                        <button onClick={()=>{setNewModFor(sec.id);setNewModTitle('');setNewModDur('')}}
+                          style={{width:'100%',background:'none',border:`1px dashed ${C.border}`,borderRadius:8,padding:'7px',color:C.muted,fontSize:11,cursor:'pointer',margin:'7px 0 4px'}}>
+                          + Add Lesson
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {/* Add section */}
+              <div style={{display:'flex',gap:8,marginTop:4}}>
+                <input value={newSecTitle} onChange={e=>setNewSecTitle(e.target.value)} placeholder="New section title…"
+                  onKeyDown={e=>{if(e.key==='Enter')addSectionDraft()}}
+                  style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none'}}/>
+                <button onClick={addSectionDraft} disabled={!newSecTitle.trim()}
+                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'9px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer',opacity:newSecTitle.trim()?1:.5}}>
+                  + Add Section
+                </button>
+              </div>
+            </div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              <button onClick={()=>setShowBuilder(false)}
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,color:C.black,fontSize:13,fontWeight:800,cursor:'pointer'}}>
+                Done
               </button>
             </div>
           </div>
