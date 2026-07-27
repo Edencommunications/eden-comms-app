@@ -500,9 +500,23 @@ const DEFAULT_SOCIALS = [
   { emoji:"🛍", label:"Eden Clothing",   sub:"Shop the brand",             url:"https://lifestyle-of-eden.myshopify.com/",               accent:B.gold,    bg:`${B.gold}18` },
 ];
 
+const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001';
+// Starter links a white-label admin sees before customizing their Connect space
+const WL_PLACEHOLDER_SOCIALS = [
+  { emoji:"🌐", label:"Website",   sub:"Add your website link",   url:"", accent:"#ffa600", bg:"#ffa60018" },
+  { emoji:"📸", label:"Instagram", sub:"Add your Instagram",      url:"", accent:"#E1306C", bg:"#E1306C18" },
+  { emoji:"👥", label:"Facebook",  sub:"Add your Facebook page",  url:"", accent:"#1877F2", bg:"#1877F218" },
+  { emoji:"📺", label:"YouTube",   sub:"Add your YouTube",        url:"", accent:"#FF0000", bg:"#FF000018" },
+  { emoji:"📅", label:"Book a Call", sub:"Add your booking link", url:"", accent:"#4FD89A", bg:"#4FD89A18" },
+  { emoji:"🎙", label:"Podcast",   sub:"Add your podcast link",   url:"", accent:"#1DB954", bg:"#1DB95418" },
+];
+
 const CommunityScreen = ({ user }:any) => {
   const isAdmin  = user?.role === 'super_admin';
   const isCoach  = user?.role === 'coach';
+
+  // White-label company context: null = Lifestyle of Eden (default experience)
+  const [myCompany, setMyCompany] = useState<any>(null);
 
   const PILLARS = [
     { n:"1 · Nutrition",                   url:"https://open.spotify.com/episode/1AvDa6x3tU9jORoGSxMdBL?si=hzNiIFHcQIqoYaC5H-TrVg&nd=1&dlsi=e7f414423b2140dd" },
@@ -525,30 +539,42 @@ const CommunityScreen = ({ user }:any) => {
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState<any[]>(DEFAULT_SOCIALS);
 
-  // Step 1: resolve coach identity
-  useEffect(()=>{
+  // Step 1: resolve identity + company (white-label users get their own Connect space)
+  useEffect(()=>{ (async () => {
+    const rows:any[] = await csGet('user_profiles',`email=eq.${encodeURIComponent(user?.email||'')}&select=id,company_id`);
+    const myId = rows?.[0]?.id;
+    const cid  = rows?.[0]?.company_id;
+    if (cid && cid !== EDEN_ORG_ID) {
+      const org:any[] = await csGet('organizations',`id=eq.${cid}&select=id,name,brand_color,calendar_url`);
+      if (org?.[0]) { setMyCompany(org[0]); return; } // white-label: company links, no coach logic
+    }
     if (isAdmin) {
-      csGet('user_profiles','role=in.(coach,head_coach)&select=id,name&order=name.asc').then((rows:any[])=>{
-        setCoachList(rows||[]);
-        if (rows?.[0]?.id) setPickedCoachId(rows[0].id);
+      csGet('user_profiles','role=in.(coach,head_coach)&select=id,name&order=name.asc').then((rows2:any[])=>{
+        setCoachList(rows2||[]);
+        if (rows2?.[0]?.id) setPickedCoachId(rows2[0].id);
       });
     } else if (isCoach) {
-      csGet('user_profiles',`email=eq.${encodeURIComponent(user?.email||'')}&select=id`).then((rows:any[])=>{
-        if (rows?.[0]?.id) setMyCoachId(rows[0].id);
-      });
-    } else {
-      // client: look up their coach via client_access
-      csGet('user_profiles',`email=eq.${encodeURIComponent(user?.email||'')}&select=id`).then(async (rows:any[])=>{
-        const clientId = rows?.[0]?.id; if (!clientId) return;
-        const ca:any[] = await csGet('client_access',`client_id=eq.${clientId}&select=staff_id&limit=1`);
-        if (ca?.[0]?.staff_id) setMyCoachId(ca[0].staff_id);
-      });
+      if (myId) setMyCoachId(myId);
+    } else if (myId) {
+      const ca:any[] = await csGet('client_access',`client_id=eq.${myId}&select=staff_id&limit=1`);
+      if (ca?.[0]?.staff_id) setMyCoachId(ca[0].staff_id);
     }
-  },[user?.email]);
+  })() },[user?.email]);
 
-  // Step 2: load links whenever the active coach changes
+  // Step 2: load links — company links for white-label users, coach links otherwise
   const activeCoachId = isAdmin ? pickedCoachId : myCoachId;
   useEffect(()=>{
+    if (myCompany) {
+      setEditing(false);
+      csGet('company_links',`company_id=eq.${myCompany.id}&limit=1`).then((rows:any[])=>{
+        if (rows?.[0]?.links?.length) {
+          setSocials(rows[0].links); setDraft(rows[0].links); setRowId(rows[0].id);
+        } else {
+          setSocials(WL_PLACEHOLDER_SOCIALS); setDraft(WL_PLACEHOLDER_SOCIALS); setRowId('');
+        }
+      });
+      return;
+    }
     if (!activeCoachId) return;
     setEditing(false);
     csGet('coach_social_links',`coach_id=eq.${activeCoachId}&limit=1`).then((rows:any[])=>{
@@ -558,14 +584,23 @@ const CommunityScreen = ({ user }:any) => {
         setSocials(DEFAULT_SOCIALS); setDraft(DEFAULT_SOCIALS); setRowId('');
       }
     });
-  },[activeCoachId]);
+  },[activeCoachId, myCompany?.id]);
 
   const updateDraft = (i:number, field:string, val:string) =>
     setDraft(prev=>prev.map((s:any,idx:number)=>idx===i?{...s,[field]:val}:s));
 
   const saveLinks = async () => {
-    if (!activeCoachId) return;
     setSocials(draft); setEditing(false);
+    if (myCompany) {
+      if (rowId) {
+        await csSave('company_links',{links:draft,updated_at:new Date().toISOString()},rowId);
+      } else {
+        const res:any = await csSave('company_links',{company_id:myCompany.id,links:draft});
+        if (res?.[0]?.id) setRowId(res[0].id);
+      }
+      return;
+    }
+    if (!activeCoachId) return;
     if (rowId) {
       await csSave('coach_social_links',{links:draft,updated_at:new Date().toISOString()},rowId);
     } else {
@@ -578,13 +613,15 @@ const CommunityScreen = ({ user }:any) => {
     <Screen>
       {/* Hero */}
       <div style={{ background:"linear-gradient(180deg,#1a1200 0%,#000 100%)", padding:"24px 20px 20px" }}>
-        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>Lifestyle of Eden</p>
+        <p style={{ fontSize:11, fontWeight:700, color:myCompany?.brand_color||B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>{myCompany?.name||'Lifestyle of Eden'}</p>
         <h1 style={{ fontSize:22, fontWeight:800, color:B.text, margin:"0 0 4px" }}>Connect</h1>
-        <p style={{ fontSize:12, color:B.muted, margin:0 }}>Podcast · social media · shop — all in one place</p>
+        <p style={{ fontSize:12, color:B.muted, margin:0 }}>
+          {myCompany ? 'Your community links — all in one place' : 'Podcast · social media · shop — all in one place'}
+        </p>
       </div>
 
       {/* Admin: coach picker */}
-      {isAdmin && coachList.length > 0 && (
+      {!myCompany && isAdmin && coachList.length > 0 && (
         <div style={{ padding:"12px 20px 0" }}>
           <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>Editing links for coach</p>
           <select value={pickedCoachId} onChange={e=>{ setPickedCoachId(e.target.value); setEditing(false); }}
@@ -610,9 +647,11 @@ const CommunityScreen = ({ user }:any) => {
         {editing && isAdmin && (
           <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:16, marginBottom:14 }}>
             <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>
-              Edit links — {coachList.find((c:any)=>c.id===pickedCoachId)?.name||'Coach'}
+              Edit links — {myCompany ? myCompany.name : (coachList.find((c:any)=>c.id===pickedCoachId)?.name||'Coach')}
             </p>
-            <p style={{ fontSize:10, color:B.muted, margin:"0 0 12px" }}>Eden defaults pre-filled. Change any field and save.</p>
+            <p style={{ fontSize:10, color:B.muted, margin:"0 0 12px" }}>
+              {myCompany ? 'These links appear for everyone in your company. Set the label, handle, and URL for each.' : 'Eden defaults pre-filled. Change any field and save.'}
+            </p>
             {draft.map((s:any, i:number) => (
               <div key={i} style={{ borderBottom:`1px solid ${B.border}`, paddingBottom:12, marginBottom:12 }}>
                 <div style={{ display:"flex", gap:8, marginBottom:6 }}>
@@ -634,14 +673,17 @@ const CommunityScreen = ({ user }:any) => {
               </button>
               <button onClick={saveLinks}
                 style={{ flex:2, background:B.gold, border:"none", borderRadius:8, padding:"9px", fontWeight:800, color:"#000", fontSize:12, cursor:"pointer" }}>
-                Save for {coachList.find((c:any)=>c.id===pickedCoachId)?.name?.split(' ')[0]||'Coach'}
+                Save {myCompany ? `for ${myCompany.name}` : `for ${coachList.find((c:any)=>c.id===pickedCoachId)?.name?.split(' ')[0]||'Coach'}`}
               </button>
             </div>
           </div>
         )}
 
+        {myCompany && !isAdmin && socials.every((s:any)=>!s.url) && (
+          <p style={{ fontSize:12, color:B.muted, margin:"0 0 12px" }}>Your community links are coming soon — your team is setting them up.</p>
+        )}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          {socials.map(({ emoji, label, sub, url, accent, bg }:any) => (
+          {socials.filter((s:any)=> s.url || isAdmin).map(({ emoji, label, sub, url, accent, bg }:any) => (
             <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
               <div style={{ background:bg||`${B.gold}18`, border:`1px solid ${(accent||B.gold)}44`, borderRadius:14, padding:"14px 12px", display:"flex", flexDirection:"column", gap:6, height:"100%", boxSizing:"border-box" }}>
                 <span style={{ fontSize:24 }}>{emoji}</span>
@@ -656,7 +698,8 @@ const CommunityScreen = ({ user }:any) => {
         </div>
       </div>
 
-      {/* 7 Pillars episodes */}
+      {/* 7 Pillars episodes — Eden experience only */}
+      {!myCompany && (
       <div style={{ padding:"20px 20px 32px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
           <span style={{ fontSize:16 }}>🎧</span>
@@ -681,6 +724,23 @@ const CommunityScreen = ({ user }:any) => {
           ))}
         </div>
       </div>
+      )}
+
+      {/* White-label: booking calendar */}
+      {myCompany?.calendar_url && (
+        <div style={{ padding:"20px 20px 32px" }}>
+          <a href={myCompany.calendar_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
+            <div style={{ background:`${myCompany.brand_color||B.gold}15`, border:`1px solid ${myCompany.brand_color||B.gold}44`, borderRadius:14, padding:"16px", display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:24 }}>📅</span>
+              <div style={{ flex:1 }}>
+                <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:"0 0 2px" }}>Book a Call</p>
+                <p style={{ fontSize:11, color:B.muted, margin:0 }}>Schedule time with your coach</p>
+              </div>
+              <span style={{ fontSize:12, color:myCompany.brand_color||B.gold, fontWeight:700 }}>Open →</span>
+            </div>
+          </a>
+        </div>
+      )}
     </Screen>
   );
 };
@@ -2849,7 +2909,7 @@ const AdminDashboard = ({ user }:any) => {
         setCounts({ coaches: coachRows.length, clients: clientRows.length });
       if (ownerHQ) {
         const [orgRows, pkgRows] = await Promise.all([
-          sbGet('organizations', `select=id,name,slug,plan,is_white_label,brand_color&order=created_at.asc`),
+          sbGet('organizations', `select=id,name,slug,plan,is_white_label,brand_color,is_active&order=created_at.asc`),
           sbGet('packages', `active=eq.true&select=name,price`).catch(()=>null),
         ]);
         if (Array.isArray(orgRows)) setDbOrgs(orgRows);
@@ -2863,7 +2923,7 @@ const AdminDashboard = ({ user }:any) => {
   })() }, []);
 
   // MRR = sum of package prices across white-label orgs (Eden HQ itself doesn't count)
-  const whiteLabelOrgs = (dbOrgs || []).filter((o:any) => o.is_white_label);
+  const whiteLabelOrgs = (dbOrgs || []).filter((o:any) => o.is_white_label && o.is_active !== false);
   const mrr = whiteLabelOrgs.reduce((sum:number, o:any) => sum + (planPrices[(o.plan||'').toLowerCase()] || 0), 0);
   const fmtMrr = mrr >= 1000 ? `$${(mrr/1000).toFixed(1)}k` : `$${mrr}`;
 

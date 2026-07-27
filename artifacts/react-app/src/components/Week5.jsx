@@ -128,13 +128,40 @@ function Lbl({t}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
+const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
+
 export default function Week5({currentUser, onAddRecipeToDiet}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
-  const myUUID  = info.uuid
-  const isAdmin = info.role==='super_admin'
-  const isCoach = info.role==='coach'
-  const isClient= info.role==='client'
+  const [dbProfile,  setDbProfile]  = useState(null)   // DB-auth users (white-label) resolved from user_profiles
+  const [companyCtx, setCompanyCtx] = useState(null)   // {companyId,isWhiteLabel,tierCourses,tierRecipes} — null = Eden
+  const myUUID  = info.uuid || dbProfile?.id || null
+  const roleEff = KNOWN_USERS[email] ? info.role : (dbProfile?.role || 'client')
+  const isAdmin = roleEff==='super_admin'
+  const isCoach = roleEff==='coach'
+  const isClient= roleEff==='client'
+
+  useEffect(()=>{ (async()=>{
+    if (!email) return
+    const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,role,company_id`)
+    const p = rows?.[0]; if (!p) return
+    setDbProfile(p)
+    if (p.company_id && p.company_id!==EDEN_ORG_ID) {
+      const org = await dbGet('organizations',`id=eq.${p.company_id}&select=id,plan,is_white_label`)
+      let tierCourses=false, tierRecipes=false
+      if (org?.[0]?.plan) {
+        const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(org[0].plan)}&active=eq.true&limit=1`)
+        tierCourses=!!pkg?.[0]?.includes_courses; tierRecipes=!!pkg?.[0]?.includes_recipes
+      }
+      setCompanyCtx({companyId:p.company_id, isWhiteLabel:!!org?.[0]?.is_white_label, tierCourses, tierRecipes})
+    } else {
+      setCompanyCtx(null)
+    }
+  })() },[email])
+
+  // White-label tier gates (Eden users always get everything)
+  const isWL = !!companyCtx?.isWhiteLabel
+  const recipesAllowed = !isWL || companyCtx.tierRecipes
 
   const [tab, setTab] = useState('course')
 
@@ -179,20 +206,28 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     loadCourses()
     loadLiveRecipes()
     if (myUUID) checkRecipeAccess()
-  },[myUUID])
+  },[myUUID, companyCtx?.companyId, companyCtx?.tierCourses])
 
   // ── Load courses based on role ────────────────────────────
+  // A course belongs to Eden when it has no company_id (or Eden's)
+  const isEdenCourse = c => !c.company_id || c.company_id===EDEN_ORG_ID
+
   async function loadCourses() {
     let data
     if (isAdmin) {
-      // Admin sees ALL courses
       data = await dbGet('courses','order=sort_order.asc')
+      // White-label admin manages only their own company's courses
+      if (isWL) data = (data||[]).filter(c=>c.company_id===companyCtx.companyId)
     } else {
+      if (!myUUID) { setCourses([]); return }
       // Coach/client: only courses they have access to
       const access = await dbGet('course_access',`user_id=eq.${myUUID}&revoked=eq.false`)
       if (!access?.length) { setCourses([]); return }
       const ids = access.map(a=>a.course_id).join(',')
       data = await dbGet('courses',`id=in.(${ids})&is_active=eq.true&order=sort_order.asc`)
+      // White-label users: own company's courses always; Eden courses only if their tier includes them
+      if (isWL) data = (data||[]).filter(c=>
+        c.company_id===companyCtx.companyId || (isEdenCourse(c)&&companyCtx.tierCourses))
     }
     setCourses(data||[])
     if (data?.length>0) openCourse(data[0])
@@ -245,6 +280,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       title:newTitle.trim(), description:newDesc.trim(),
       is_active:false, sort_order:courses.length+1,
       created_by:myUUID,
+      company_id: companyCtx?.companyId || null,   // null = Eden platform course
     })
     if (inserted) {
       const arr = Array.isArray(inserted)?inserted:[inserted]
@@ -394,7 +430,9 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     return ms&&mc
   })
 
-  const TABS=[['course','🎓 Course'],['recipes','🍽 Recipes']]
+  // White-label users only get the Eden Recipe Book if their company's tier includes it
+  const TABS = recipesAllowed ? [['course','🎓 Course'],['recipes','🍽 Recipes']] : [['course','🎓 Course']]
+  useEffect(()=>{ if (!recipesAllowed && tab==='recipes') setTab('course') },[recipesAllowed])
 
   // ════════════════════════════════════════════════════════════
   // RENDER

@@ -176,19 +176,21 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // ── Packages / pricing tiers (drive org plans + MRR) ─────
   const [packages,    setPackages]    = useState([])   // [{id,name,price,active}]
   const [pkgsLoaded,  setPkgsLoaded]  = useState(false)
-  const [newPkg,      setNewPkg]      = useState({name:'',price:''})
-  const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price} being edited
+  const [newPkg,      setNewPkg]      = useState({name:'',price:'',includes_courses:false,includes_recipes:false})
+  const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price,includes_courses,includes_recipes} being edited
+  const [manageOrg,   setManageOrg]   = useState(null)  // org being edited in the Manage modal
 
   useEffect(()=>{
     if (!isAdmin) return
     dbGet('packages','active=eq.true&order=price.asc')
       .then(rows=>{ if(Array.isArray(rows)) setPackages(rows); setPkgsLoaded(true) })
       .catch(()=>setPkgsLoaded(true))
-    dbGet('organizations','select=id,name,slug,plan,is_white_label,brand_color&order=created_at.asc')
+    dbGet('organizations','select=id,name,slug,plan,is_white_label,brand_color,calendar_url,billing_email,is_active&order=created_at.asc')
       .then(rows=>{
         if (Array.isArray(rows)&&rows.length)
           setOrgs(rows.map(o=>({ id:o.id, name:o.name, slug:o.slug, isWhiteLabel:o.is_white_label,
-            plan:o.plan, coachCount:0, clientCount:0, active:true, brandColor:o.brand_color||'#ffa600' })))
+            plan:o.plan, coachCount:0, clientCount:0, active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
+            calendarUrl:o.calendar_url||'', billingEmail:o.billing_email||'' })))
       }).catch(()=>{})
   },[isAdmin])
 
@@ -197,19 +199,30 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   async function addPackage() {
     const name = newPkg.name.trim(); const price = parseFloat(newPkg.price)
     if (!name || isNaN(price)) return
-    const res = await dbInsert('packages',{ name, price })
+    const res = await dbInsert('packages',{ name, price, includes_courses:newPkg.includes_courses, includes_recipes:newPkg.includes_recipes })
     const row = Array.isArray(res)?res[0]:res
-    if (row?.id) { setPackages(p=>[...p,row].sort((a,b)=>a.price-b.price)); setNewPkg({name:'',price:''}) }
+    if (row?.id) { setPackages(p=>[...p,row].sort((a,b)=>a.price-b.price)); setNewPkg({name:'',price:'',includes_courses:false,includes_recipes:false}) }
     else alert('Could not save the tier. Make sure the packages table exists (run the SQL I gave you), then try again.')
   }
   async function savePackage() {
     if (!editPkg) return
     const name = editPkg.name.trim(); const price = parseFloat(editPkg.price)
     if (!name || isNaN(price)) return
-    await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price })
-    setPackages(p=>p.map(x=>x.id===editPkg.id?{...x,name,price}:x).sort((a,b)=>a.price-b.price))
+    await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price, includes_courses:!!editPkg.includes_courses, includes_recipes:!!editPkg.includes_recipes })
+    setPackages(p=>p.map(x=>x.id===editPkg.id?{...x,name,price,includes_courses:!!editPkg.includes_courses,includes_recipes:!!editPkg.includes_recipes}:x).sort((a,b)=>a.price-b.price))
     setEditPkg(null)
   }
+  async function saveManagedOrg() {
+    if (!manageOrg?.id) return
+    await dbUpdate('organizations',`id=eq.${manageOrg.id}`,{
+      name: manageOrg.name.trim(), plan: manageOrg.plan,
+      brand_color: manageOrg.brandColor, calendar_url: manageOrg.calendarUrl||null,
+      billing_email: manageOrg.billingEmail||null, is_active: !!manageOrg.active,
+    })
+    setOrgs(prev=>prev.map(o=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
+    setManageOrg(null)
+  }
+  const tierOf = planName => packages.find(p=>(p.name||'').toLowerCase()===(planName||'').toLowerCase())
   async function deletePackage(pkg) {
     if (!confirm(`Remove the "${pkg.name}" tier? Existing orgs on this tier will stop counting toward MRR until you move them to another tier.`)) return
     await dbUpdate('packages',`id=eq.${pkg.id}`,{ active:false })
@@ -521,13 +534,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Write to Supabase user_profiles so the record is ready for real auth
     let profileId = null
     try {
+      // org_admin = a white-label company's admin: stored as super_admin scoped to their org
+      const targetOrg = newUser.role==='org_admin' ? orgs.find(o=>o.name===newUser.orgName&&o.isWhiteLabel) : null
+      if (newUser.role==='org_admin' && !targetOrg) { alert('Pick which organization this admin belongs to.'); return }
       const payload = {
         id:         crypto.randomUUID(),
         name:       newUser.name.trim(),
         email:      newUser.email.trim().toLowerCase(),
-        role:       newUser.role,
+        role:       newUser.role==='org_admin' ? 'super_admin' : newUser.role,
         initials,
-        company_id: adminCompanyId||null,
+        company_id: targetOrg ? targetOrg.id : (adminCompanyId||null),
         update_day: newUser.role==='client'?newUser.checkInDay:null,
         temp_password: tempPass,
       }
@@ -1231,6 +1247,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         style={{width:'100%',background:C.card,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none'}}/>
                       <span style={{fontSize:11,color:C.muted}}>/mo</span>
                     </div>
+                    <label style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>
+                      <input type="checkbox" checked={!!editPkg.includes_courses} onChange={e=>setEditPkg(p=>({...p,includes_courses:e.target.checked}))}/>🎓 Eden Courses
+                    </label>
+                    <label style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>
+                      <input type="checkbox" checked={!!editPkg.includes_recipes} onChange={e=>setEditPkg(p=>({...p,includes_recipes:e.target.checked}))}/>🍽 Recipe Book
+                    </label>
                     <button onClick={savePackage}
                       style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>Save</button>
                     <button onClick={()=>setEditPkg(null)}
@@ -1238,9 +1260,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   </>
                 ) : (
                   <>
-                    <div style={{flex:2,fontSize:13,fontWeight:700,color:C.white,textTransform:'capitalize'}}>{pkg.name}</div>
+                    <div style={{flex:2}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.white,textTransform:'capitalize'}}>{pkg.name}</div>
+                      <div style={{fontSize:9,color:C.muted,marginTop:2}}>
+                        Includes: {[pkg.includes_courses&&'🎓 Eden Courses',pkg.includes_recipes&&'🍽 Recipe Book'].filter(Boolean).join(' · ')||'their own content only'}
+                      </div>
+                    </div>
                     <div style={{flex:1,fontSize:13,fontWeight:700,color:C.gold}}>${Number(pkg.price)}/mo</div>
-                    <button onClick={()=>setEditPkg({id:pkg.id,name:pkg.name,price:String(pkg.price)})}
+                    <button onClick={()=>setEditPkg({id:pkg.id,name:pkg.name,price:String(pkg.price),includes_courses:!!pkg.includes_courses,includes_recipes:!!pkg.includes_recipes})}
                       style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>Edit</button>
                     <button onClick={()=>deletePackage(pkg)}
                       style={{background:`${C.danger}18`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 10px',color:C.danger,fontSize:11,cursor:'pointer'}}>✕</button>
@@ -1256,6 +1283,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <button onClick={addPackage} disabled={!newPkg.name.trim()||isNaN(parseFloat(newPkg.price))}
                 style={{background:C.gold,border:'none',borderRadius:6,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',
                   opacity:(!newPkg.name.trim()||isNaN(parseFloat(newPkg.price)))?.5:1}}>+ Add Tier</button>
+            </div>
+            <div style={{display:'flex',gap:14,marginTop:8}}>
+              <label style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:C.muted,cursor:'pointer'}}>
+                <input type="checkbox" checked={newPkg.includes_courses} onChange={e=>setNewPkg(p=>({...p,includes_courses:e.target.checked}))}/>Includes 🎓 Eden Courses
+              </label>
+              <label style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:C.muted,cursor:'pointer'}}>
+                <input type="checkbox" checked={newPkg.includes_recipes} onChange={e=>setNewPkg(p=>({...p,includes_recipes:e.target.checked}))}/>Includes 🍽 Recipe Book
+              </label>
             </div>
           </Card>
 
@@ -1287,29 +1322,35 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <div style={{fontSize:16,fontWeight:700,color:C.gold}}>{org.clientCount}</div>
                 </div>
                 <div style={{flex:2,display:'flex',gap:6,alignItems:'center'}}>
-                  <button style={{flex:1,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:7,padding:'8px',color:C.gold,fontSize:10,fontWeight:700,cursor:'pointer'}}>
-                    Manage
-                  </button>
-                  <button style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:'8px',color:C.muted,fontSize:10,cursor:'pointer'}}>
-                    Settings
+                  <button onClick={()=>setManageOrg({...org})}
+                    style={{flex:1,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:7,padding:'8px',color:C.gold,fontSize:10,fontWeight:700,cursor:'pointer'}}>
+                    ⚙ Manage
                   </button>
                 </div>
               </div>
 
-              {/* White-label content toggles */}
-              {org.isWhiteLabel&&(
+              {/* What this org's clients get */}
+              {org.isWhiteLabel&&(()=>{ const t=tierOf(org.plan); return (
                 <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Content Sections</div>
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Included by their tier{t?` (${t.name})`:''}</div>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    {['Courses','Recipe Book','Podcast','Social Links','Calendar'].map(section=>(
-                      <span key={section} style={{fontSize:10,background:`${C.success}22`,border:`1px solid ${C.success}33`,borderRadius:6,padding:'3px 8px',color:C.success,cursor:'pointer',userSelect:'none'}}>
-                        ✓ {section}
+                    {[['🎓 Eden Courses',!!t?.includes_courses],['🍽 Recipe Book',!!t?.includes_recipes]].map(([label,on])=>(
+                      <span key={label} style={{fontSize:10,background:on?`${C.success}22`:`${C.danger}15`,border:`1px solid ${on?C.success:C.danger}33`,borderRadius:6,padding:'3px 8px',color:on?C.success:C.danger}}>
+                        {on?'✓':'✕'} {label}
+                      </span>
+                    ))}
+                    {['🔗 Connect Links','📅 Calendar','📚 Own Courses'].map(label=>(
+                      <span key={label} style={{fontSize:10,background:`${C.gold}15`,border:`1px solid ${C.gold}33`,borderRadius:6,padding:'3px 8px',color:C.gold}}>
+                        {label} — their admin
                       </span>
                     ))}
                   </div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:6}}>Click any section to toggle on/off for this org</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:6}}>
+                    {!t&&'⚠ Their plan doesn\u2019t match any current tier — open Manage to assign one. '}
+                    Eden Courses & Recipe Book follow the tier. Connect links, calendar, and their own courses are managed by their admin.
+                  </div>
                 </div>
-              )}
+              )})()}
             </Card>
           ))}
         </div>
@@ -1530,7 +1571,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>They will receive login credentials manually until auto-auth is configured in production.</div>
             <Inp label="Full Name" value={newUser.name} onChange={setNU('name')} placeholder="e.g. Sarah Johnson"/>
             <Inp label="Email Address" value={newUser.email} onChange={setNU('email')} placeholder="e.g. sarah@email.com" type="email"/>
-            <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','head_coach','va']}/>
+            <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','head_coach','va','org_admin']}/>
+            {newUser.role==='org_admin'&&(
+              orgs.filter(o=>o.isWhiteLabel).length
+                ? <Sel label="Their Organization" value={newUser.orgName||''} onChange={setNU('orgName')}
+                    options={['— select org —',...orgs.filter(o=>o.isWhiteLabel).map(o=>o.name)]}/>
+                : <div style={{fontSize:11,color:C.danger,marginBottom:10}}>No white-label orgs yet — create the org first in the Orgs tab.</div>
+            )}
             {newUser.role==='client'&&(
               <>
                 <Sel label="Assign to Coach" value={newUser.coachId||''} onChange={setNU('coachId')}
@@ -1611,6 +1658,47 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       )}
 
       {/* ── New Org Modal ─────────────────────────────────── */}
+      {manageOrg&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget)setManageOrg(null)}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:440,padding:24,maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>Manage — {manageOrg.name}</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:16}}>Change their tier, branding, or status. MRR updates automatically when the tier changes.</div>
+            <Inp label="Company Name" value={manageOrg.name} onChange={v=>setManageOrg(p=>({...p,name:v}))}/>
+            {manageOrg.isWhiteLabel
+              ? <Sel label="Tier / Package" value={manageOrg.plan} onChange={v=>setManageOrg(p=>({...p,plan:v}))}
+                  options={planOptions.includes(manageOrg.plan)?planOptions:[manageOrg.plan,...planOptions]}/>
+              : <div style={{fontSize:11,color:C.muted,margin:'6px 0 10px'}}>Platform owner — no tier applies.</div>}
+            <Inp label="Billing Email" value={manageOrg.billingEmail||''} onChange={v=>setManageOrg(p=>({...p,billingEmail:v}))} type="email"/>
+            <Inp label="Calendar / Booking URL" value={manageOrg.calendarUrl||''} onChange={v=>setManageOrg(p=>({...p,calendarUrl:v}))} placeholder="Their booking link (they can also manage this)"/>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Brand Color</div>
+              <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                <input type="color" value={manageOrg.brandColor} onChange={e=>setManageOrg(p=>({...p,brandColor:e.target.value}))}
+                  style={{width:44,height:36,borderRadius:8,border:`1px solid ${C.border}`,background:'none',cursor:'pointer',padding:2}}/>
+                <span style={{fontSize:12,color:C.muted}}>{manageOrg.brandColor}</span>
+              </div>
+            </div>
+            {manageOrg.isWhiteLabel&&(
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.white,cursor:'pointer',marginBottom:14}}>
+                <input type="checkbox" checked={!!manageOrg.active} onChange={e=>setManageOrg(p=>({...p,active:e.target.checked}))}/>
+                Organization active {!manageOrg.active&&<span style={{fontSize:10,color:C.danger}}>(inactive orgs don't count toward MRR)</span>}
+              </label>
+            )}
+            <div style={{display:'flex',gap:10,marginTop:6}}>
+              <button onClick={()=>setManageOrg(null)}
+                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                Cancel
+              </button>
+              <button onClick={saveManagedOrg} disabled={!manageOrg.name.trim()}
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:manageOrg.name.trim()?1:.5}}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showNewOrg&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget)setShowNewOrg(false)}}>
