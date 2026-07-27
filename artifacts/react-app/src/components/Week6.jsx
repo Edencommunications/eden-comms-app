@@ -590,10 +590,24 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   async function createOrg() {
     if (!newOrg.name.trim()) return
+    const slug = newOrg.slug||newOrg.name.toLowerCase().replace(/\s+/g,'-')
+    const inserted = await dbInsert('organizations',{
+      name:           newOrg.name,
+      slug,
+      brand_color:    newOrg.brandColor,
+      calendar_url:   newOrg.calendarUrl,
+      billing_email:  newOrg.billingEmail,
+      is_white_label: true,
+      plan:           newOrg.plan,
+    })
+    const dbId = Array.isArray(inserted)?inserted[0]?.id:inserted?.id
+    if (!dbId) { alert('Could not create the organization — please try again.'); return }
+    // user_profiles.company_id references the companies table — mirror the org there with the same id
+    await dbInsert('companies',{ id:dbId, name:newOrg.name })
     const org = {
-      id:           'org_'+Date.now(),
+      id:           dbId,
       name:         newOrg.name,
-      slug:         newOrg.slug||newOrg.name.toLowerCase().replace(/\s+/g,'-'),
+      slug,
       isWhiteLabel: true,
       plan:         newOrg.plan,
       coachCount:   0,
@@ -601,15 +615,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       active:       true,
       brandColor:   newOrg.brandColor,
     }
-    await dbInsert('organizations',{
-      name:           newOrg.name,
-      slug:           org.slug,
-      brand_color:    newOrg.brandColor,
-      calendar_url:   newOrg.calendarUrl,
-      billing_email:  newOrg.billingEmail,
-      is_white_label: true,
-      plan:           newOrg.plan,
-    })
     setOrgs(prev=>[...prev,org])
     setNewOrg({name:'',slug:'',brandColor:'#ffa600',calendarUrl:'',billingEmail:'',plan:'standard'})
     setShowNewOrg(false)
