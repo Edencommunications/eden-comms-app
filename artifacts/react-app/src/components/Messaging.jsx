@@ -227,7 +227,7 @@ const BROADCAST_COACHES = [
 function BroadcastComposer({ onClose, senderName }) {
   const [audienceType,    setAudienceType]    = useState('company_wide')
   const [selectedCoachId, setSelectedCoachId] = useState('')
-  const [selectedDay,     setSelectedDay]     = useState('')
+  const [selectedDays,    setSelectedDays]    = useState([])
   const [selectedClients, setSelectedClients] = useState(new Set())
   const [message,         setMessage]         = useState('')
   const [sending,         setSending]         = useState(false)
@@ -278,8 +278,8 @@ function BroadcastComposer({ onClose, senderName }) {
 
   const filteredClients = (() => {
     if (!coach) return []
-    if (audienceType === 'coach_day' && selectedDay)
-      return coach.clients.filter(c => c.checkInDay === selectedDay)
+    if (audienceType === 'coach_day' && selectedDays.length)
+      return coach.clients.filter(c => selectedDays.includes(c.checkInDay))
     return coach.clients
   })()
 
@@ -296,7 +296,7 @@ function BroadcastComposer({ onClose, senderName }) {
       case 'company_wide': return '🌐 Everyone — all coaches & their clients'
       case 'coaches_only': return '👨‍💼 Coaches only'
       case 'coach_roster': return coach ? `All clients of ${coach.name} (${coach.clients.length} clients)` : '— pick a coach —'
-      case 'coach_day':    return (coach && selectedDay) ? `${coach.name} · ${selectedDay} clients (${filteredClients.length})` : '— pick coach & day —'
+      case 'coach_day':    return (coach && selectedDays.length) ? `${coach.name} · ${selectedDays.join(' + ')} clients (${filteredClients.length})` : '— pick coach & day(s) —'
       case 'individuals':  return selectedClients.size > 0
         ? `${selectedClients.size} selected: ${[...selectedClients].map(id => coach?.clients.find(c=>c.id===id)?.name).filter(Boolean).join(', ')}`
         : '— pick coach, then select clients —'
@@ -308,7 +308,7 @@ function BroadcastComposer({ onClose, senderName }) {
     if (audienceType === 'company_wide' || audienceType === 'coaches_only') return true
     if (!selectedCoachId) return false
     if (audienceType === 'coach_roster') return true
-    if (audienceType === 'coach_day') return !!selectedDay
+    if (audienceType === 'coach_day') return selectedDays.length > 0
     if (audienceType === 'individuals') return selectedClients.size > 0
     return false
   }
@@ -328,7 +328,7 @@ function BroadcastComposer({ onClose, senderName }) {
         audience_type:  audienceType,
         audience_label: audienceLabel(),
         coach_id:       selectedCoachId || null,
-        check_in_day:   selectedDay     || null,
+        check_in_day:   selectedDays.join(', ') || null,
         recipient_ids:  JSON.stringify([...selectedClients]),
         message:        message.trim(),
       }
@@ -349,7 +349,7 @@ function BroadcastComposer({ onClose, senderName }) {
   }
 
   function reset() {
-    setAudienceType('company_wide'); setSelectedCoachId(''); setSelectedDay('')
+    setAudienceType('company_wide'); setSelectedCoachId(''); setSelectedDays([])
     setSelectedClients(new Set()); setMessage(''); setSent(false)
     setSendMode('now'); setScheduleDates([]); setNewSchedDate(''); setNewSchedTime('09:00')
     setView('compose')
@@ -464,7 +464,7 @@ function BroadcastComposer({ onClose, senderName }) {
             <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:10 }}>1 · Choose Audience</div>
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {aud.map(a => (
-                <button key={a.key} onClick={() => { setAudienceType(a.key); setSelectedCoachId(''); setSelectedDay(''); setSelectedClients(new Set()) }}
+                <button key={a.key} onClick={() => { setAudienceType(a.key); setSelectedCoachId(''); setSelectedDays([]); setSelectedClients(new Set()) }}
                   style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:`2px solid ${audienceType===a.key ? C.gold : C.border}`,
                     background: audienceType===a.key ? `${C.gold}12` : C.card, cursor:'pointer', textAlign:'left' }}>
                   <span style={{ fontSize:20, flexShrink:0 }}>{a.icon}</span>
@@ -484,7 +484,7 @@ function BroadcastComposer({ onClose, senderName }) {
               <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>2 · Select Coach</div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 {BROADCAST_COACHES.map(c => (
-                  <button key={c.id} onClick={() => { setSelectedCoachId(c.id); setSelectedDay(''); setSelectedClients(new Set()) }}
+                  <button key={c.id} onClick={() => { setSelectedCoachId(c.id); setSelectedDays([]); setSelectedClients(new Set()) }}
                     style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:10,
                       border:`2px solid ${selectedCoachId===c.id ? C.gold : C.border}`,
                       background: selectedCoachId===c.id ? `${C.gold}12` : C.card, cursor:'pointer', textAlign:'left' }}>
@@ -502,21 +502,21 @@ function BroadcastComposer({ onClose, senderName }) {
           {/* Day picker */}
           {audienceType === 'coach_day' && selectedCoachId && (
             <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>3 · Check-In Day</div>
+              <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>3 · Check-In Day(s) — pick one or more</div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {availableDays.map(d => (
-                  <button key={d} onClick={() => setSelectedDay(d)}
-                    style={{ padding:'8px 16px', borderRadius:20, border:`2px solid ${selectedDay===d ? C.gold : C.border}`,
-                      background: selectedDay===d ? `${C.gold}18` : C.card, color: selectedDay===d ? C.gold : C.muted,
-                      fontWeight: selectedDay===d ? 700 : 400, fontSize:12, cursor:'pointer' }}>
-                    {d}
+                {availableDays.map(d => { const on = selectedDays.includes(d); return (
+                  <button key={d} onClick={() => setSelectedDays(prev => on ? prev.filter(x=>x!==d) : [...prev, d])}
+                    style={{ padding:'8px 16px', borderRadius:20, border:`2px solid ${on ? C.gold : C.border}`,
+                      background: on ? `${C.gold}18` : C.card, color: on ? C.gold : C.muted,
+                      fontWeight: on ? 700 : 400, fontSize:12, cursor:'pointer' }}>
+                    {on ? '✓ ' : ''}{d}
                     <span style={{ fontSize:10, marginLeft:6, color:C.muted }}>
                       ({coach?.clients.filter(c=>c.checkInDay===d).length})
                     </span>
                   </button>
-                ))}
+                )})}
               </div>
-              {selectedDay && (
+              {selectedDays.length > 0 && (
                 <div style={{ marginTop:10, padding:'8px 12px', background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:8 }}>
                   <div style={{ fontSize:11, color:C.gold, fontWeight:600, marginBottom:4 }}>Recipients:</div>
                   <div style={{ fontSize:12, color:C.white }}>
@@ -753,7 +753,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
   const isAdmin = myRole === 'super_admin' || myRole === 'company_admin'
 
-  const demoConversations = myRole === 'coach' ? DEMO_CLIENTS : [CLIENT_COACH_CONVO, ADMIN_CONVO]
+  // Clients see their coach + admin; ALL staff (coach, admin, VA, head coach) see client threads only —
+  // teammate conversations live in the Team Hub, never here.
+  const demoConversations = myRole === 'client' ? [CLIENT_COACH_CONVO, ADMIN_CONVO] : DEMO_CLIENTS
   // Only switch to Supabase-loaded convos when they are strictly richer than the demo set.
   // A partial load (e.g. only Jordan in DB, or only coach found for a client) must not wipe
   // demo conversations that have pre-seeded threads — otherwise the chat shows blank.
@@ -1012,9 +1014,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         if (me.company_id) await loadAccessedClients(me.id, me.company_id)
 
       } else if (myRole === 'super_admin' || myRole === 'company_admin') {
-        // Admin: see all users in their company
+        // Admin: CLIENT conversations only — teammate chats live in the Team Hub
         const users = await dbGet('user_profiles',
-          `company_id=eq.${me.company_id}&id=neq.${me.id}&order=created_at.asc`)
+          `company_id=eq.${me.company_id}&role=eq.client&id=neq.${me.id}&order=created_at.asc`)
         for (const user of users || []) {
           const convoId = await findOrCreateConvo(me.id, user.id, me.company_id)
           pushConvo(user, convoId)

@@ -7,7 +7,7 @@
 //   import Week6 from './components/Week6'
 //   {tab === 'admin' && <Week6 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -94,6 +94,41 @@ function Inp({label,value,onChange,type='text',placeholder,disabled=false}) {
     </div>
   )
 }
+function ColorRow({primary, colors=[], onPrimary, onColors}) {
+  const [hexP,   setHexP]   = useState(primary||'#ffa600')
+  const [hexNew, setHexNew] = useState('#')
+  useEffect(()=>{ setHexP(primary||'#ffa600') },[primary])
+  const norm = v=>{ v=(v||'').trim(); if(v&&!v.startsWith('#')) v='#'+v; return /^#[0-9a-fA-F]{6}$/.test(v)?v.toLowerCase():null }
+  return (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Brand Colors</div>
+      <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:8}}>
+        <input type="color" value={primary||'#ffa600'} onChange={e=>onPrimary(e.target.value)}
+          style={{width:44,height:36,borderRadius:8,border:`1px solid ${C.border}`,background:'none',cursor:'pointer',padding:2}}/>
+        <input value={hexP} maxLength={7} placeholder="#ffa600"
+          onChange={e=>{ setHexP(e.target.value); const n=norm(e.target.value); if(n) onPrimary(n) }}
+          style={{width:90,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+        <span style={{fontSize:10,color:C.muted}}>Primary — type a hex code or use the picker</span>
+      </div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        {(colors||[]).map((c,i)=>(
+          <span key={i} style={{display:'flex',alignItems:'center',gap:5,background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:'3px 8px 3px 4px'}}>
+            <span style={{width:16,height:16,borderRadius:8,background:c,display:'inline-block',border:'1px solid #333'}}/>
+            <span style={{fontSize:11,color:C.muted}}>{c}</span>
+            <span onClick={()=>onColors((colors||[]).filter((_,j)=>j!==i))} style={{cursor:'pointer',color:C.muted,fontSize:12,fontWeight:700}}>×</span>
+          </span>
+        ))}
+        <input value={hexNew} maxLength={7} placeholder="#hex"
+          onChange={e=>setHexNew(e.target.value)}
+          onKeyDown={e=>{ if(e.key==='Enter'){ const n=norm(hexNew); if(n&&!(colors||[]).includes(n)){ onColors([...(colors||[]),n]); setHexNew('#') } } }}
+          style={{width:74,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+        <button onClick={()=>{ const n=norm(hexNew); if(!n) return; if(!(colors||[]).includes(n)) onColors([...(colors||[]),n]); setHexNew('#') }}
+          style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',color:C.gold,fontSize:11,cursor:'pointer',fontWeight:700}}>+ Add</button>
+      </div>
+      <div style={{fontSize:9,color:C.muted,marginTop:4}}>Add as many extra palette colors as they use (secondary, accent, etc.).</div>
+    </div>
+  )
+}
 function Sel({label,value,onChange,options}) {
   return (
     <div style={{marginBottom:10}}>
@@ -168,9 +203,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [orgs,       setOrgs]       = useState(DEMO_ORGS)
   const [showNewOrg, setShowNewOrg] = useState(false)
   const [newOrg, setNewOrg] = useState({
-    name:'', slug:'', brandColor:'#ffa600', calendarUrl:'',
+    name:'', slug:'', brandColor:'#ffa600', brandColors:[], calendarUrl:'',
     billingEmail:'', plan:'standard',
   })
+  const [colorsColSupported, setColorsColSupported] = useState(false) // organizations.brand_colors exists?
   const setNO = k=>v=>setNewOrg(p=>({...p,[k]:v}))
 
   // ── Packages / pricing tiers (drive org plans + MRR) ─────
@@ -191,6 +227,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           setOrgs(rows.map(o=>({ id:o.id, name:o.name, slug:o.slug, isWhiteLabel:o.is_white_label,
             plan:o.plan, coachCount:0, clientCount:0, active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
             calendarUrl:o.calendar_url||'', billingEmail:o.billing_email||'' })))
+      }).catch(()=>{})
+    // Probe for the brand_colors palette column (added later — needs its SQL run once)
+    dbGet('organizations','select=id,brand_colors')
+      .then(rows=>{
+        if (Array.isArray(rows)&&rows.length) {
+          setColorsColSupported(true)
+          setOrgs(prev=>prev.map(o=>{ const m=rows.find(r=>r.id===o.id); return m?{...o,brandColors:m.brand_colors||[]}:o }))
+        }
       }).catch(()=>{})
   },[isAdmin])
 
@@ -218,6 +262,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       name: manageOrg.name.trim(), plan: manageOrg.plan,
       brand_color: manageOrg.brandColor, calendar_url: manageOrg.calendarUrl||null,
       billing_email: manageOrg.billingEmail||null, is_active: !!manageOrg.active,
+      ...(colorsColSupported ? { brand_colors: manageOrg.brandColors||[] } : {}),
     })
     setOrgs(prev=>prev.map(o=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
     setManageOrg(null)
@@ -232,6 +277,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // ── Admin org context (loaded from Supabase) ─────────────
   const [adminCompanyId,  setAdminCompanyId]  = useState(null)
   const [adminProfileId,  setAdminProfileId]  = useState(null)
+
+  // Real coaches from the database (merged with the demo coach so transfers/pickers show everyone)
+  const [dbCoaches, setDbCoaches] = useState([])
+  useEffect(()=>{
+    // Wait for the admin's company to resolve, then always scope — never expose other companies' coaches
+    if (!adminCompanyId) return
+    dbGet('user_profiles',`role=in.(coach,head_coach)&select=id,name,email,role&company_id=eq.${adminCompanyId}`)
+      .then(rows=>{ if (Array.isArray(rows))
+        setDbCoaches(rows.filter(r=>!DEMO_COACHES.some(d=>d.uuid===r.id))
+          .map(r=>({uuid:r.id,name:r.name,email:r.email,role:'coach',checkInDay:'',clientCount:0,active:true}))) })
+      .catch(()=>{})
+  },[adminCompanyId])
+  const allCoaches = [...DEMO_COACHES, ...dbCoaches]
   const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
 
   // ── Admin Documents ───────────────────────────────────────
@@ -335,7 +393,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .then(rows=>{
         if (!Array.isArray(rows)) return
         const hcEmails = new Set(rows.map(r=>r.email))
-        const next = DEMO_COACHES.filter(c=>hcEmails.has(c.email)).map(c=>c.uuid)
+        const next = allCoaches.filter(c=>hcEmails.has(c.email)).map(c=>c.uuid)
         setHeadCoaches(prev=>{
           const merged = [...new Set([...next])]
           localStorage.setItem('eden_head_coaches', JSON.stringify(merged))
@@ -377,7 +435,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
   function effectiveCoachName(client) {
     const cid = effectiveCoachId(client)
-    return DEMO_COACHES.find(c=>c.uuid===cid)?.name || client.coachName || 'Unassigned'
+    return allCoaches.find(c=>c.uuid===cid)?.name || client.coachName || 'Unassigned'
   }
 
   function addAudit(actor, action, target, detail) {
@@ -417,7 +475,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
 
   function confirmRemoveCoach(coach) {
-    const available = DEMO_COACHES.filter(c=>c.uuid!==coach.uuid&&!removedCoaches.includes(c.uuid))
+    const available = allCoaches.filter(c=>c.uuid!==coach.uuid&&!removedCoaches.includes(c.uuid))
     setPendingRemoval(coach)
     setTransferTargetId(available[0]?.uuid||'')
     setShowTransferModal(true)
@@ -431,7 +489,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       alert('This coach still has active clients. Select a coach to transfer them to first.')
       return
     }
-    const targetCoach = DEMO_COACHES.find(c=>c.uuid===transferTargetId)
+    const targetCoach = allCoaches.find(c=>c.uuid===transferTargetId)
     let transferred = 0
     activeCoachClients.forEach(c=>{
       transferClient(c.email, transferTargetId)
@@ -452,9 +510,21 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setSelectedClient(prev=>prev?.uuid===clientId?{...prev,hasUpdate:false}:prev)
   }
 
+  const openClientRef = useRef(null) // which client's consultation data is currently loading
   function openClient(client) {
     setSelectedClient(client)
     if (client.hasUpdate) markViewed(client.uuid)
+    // Load this client's saved consultation data so admin/coach always see what's in the DB.
+    // Track which client is open so late responses from a previous client never overwrite the current one.
+    openClientRef.current = client.uuid
+    setIntake({notes:'',startDate:'',startWeight:''})
+    dbGet('client_intakes',`client_id=eq.${client.uuid}&order=updated_at.desc&limit=1`)
+      .then(rows=>{ if (openClientRef.current!==client.uuid) return; const r=rows?.[0]; if (r) setIntake({notes:r.call_notes||'', startDate:r.start_date||'', startWeight:r.start_weight||''}) })
+      .catch(()=>{})
+    setCallNotes([])
+    dbGet('consultation_notes',`client_id=eq.${client.uuid}&order=call_date.desc`)
+      .then(rows=>{ if (openClientRef.current!==client.uuid) return; if (Array.isArray(rows)) setCallNotes(rows.map(n=>({ id:n.id, callDate:n.call_date, callType:n.call_type, summary:n.summary, focusPoints:n.focus_points, actionItems:n.action_items, nextCallDate:n.next_call_date, loomUrl:n.loom_url }))) })
+      .catch(()=>{})
     // Load saved update_day from DB and sync into local state
     dbGet('user_profiles', `id=eq.${client.uuid}&select=update_day`)
       .then(rows => {
@@ -575,7 +645,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       email:      newUser.email.trim().toLowerCase(),
       role:       newUser.role,
       coachId:    newUser.coachId,
-      coachName:  DEMO_COACHES.find(c=>c.uuid===newUser.coachId)?.name||'',
+      coachName:  allCoaches.find(c=>c.uuid===newUser.coachId)?.name||'',
       checkInDay: newUser.checkInDay,
       hasUpdate:  false,
       lastSeen:   'Never',
@@ -603,6 +673,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       billing_email:  newOrg.billingEmail,
       is_white_label: true,
       plan:           newOrg.plan,
+      ...(colorsColSupported ? { brand_colors: newOrg.brandColors||[] } : {}),
     })
     const dbId = Array.isArray(inserted)?inserted[0]?.id:inserted?.id
     if (!dbId) { alert('Could not create the organization — please try again.'); return }
@@ -626,7 +697,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       brandColor:   newOrg.brandColor,
     }
     setOrgs(prev=>[...prev,org])
-    setNewOrg({name:'',slug:'',brandColor:'#ffa600',calendarUrl:'',billingEmail:'',plan:'standard'})
+    setNewOrg({name:'',slug:'',brandColor:'#ffa600',brandColors:[],calendarUrl:'',billingEmail:'',plan:'standard'})
     setShowNewOrg(false)
     alert(`${newOrg.name} organization created. Now add their admin user using the + Add User button.`)
   }
@@ -705,7 +776,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           {/* Stats row */}
           <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
             <Stat label="Total Clients"  value={DEMO_CLIENTS.length}  color={C.gold}    sub="Across all coaches"/>
-            <Stat label="Total Coaches"  value={DEMO_COACHES.length}  color={C.success} sub="Active coaches"/>
+            <Stat label="Total Coaches"  value={allCoaches.length}  color={C.success} sub="Active coaches"/>
             <Stat label="Pending Updates" value={pendingUpdates}       color={pendingUpdates>0?C.danger:C.success} sub={`Due ${todayDay}`}/>
             <Stat label="Orgs"           value={DEMO_ORGS.length}      color='#D4A8F0'   sub="White-label companies"/>
           </div>
@@ -716,7 +787,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <Lbl t="Check-In Status — All Coaches"/>
               <span style={{fontSize:11,color:C.muted}}>{todayDay}</span>
             </div>
-            {DEMO_COACHES.map(coach=>{
+            {allCoaches.map(coach=>{
               const coachClients = DEMO_CLIENTS.filter(c=>c.coachId===coach.uuid)
               const submitted    = coachClients.filter(c=>!c.hasUpdate).length
               return (
@@ -785,7 +856,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <select value={filterCoach} onChange={e=>setFilterCoach(e.target.value)}
                   style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}>
                   <option>All Coaches</option>
-                  {DEMO_COACHES.map(c=><option key={c.uuid}>{c.name}</option>)}
+                  {allCoaches.map(c=><option key={c.uuid}>{c.name}</option>)}
                 </select>
               )}
             </div>
@@ -987,16 +1058,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         </button>
                       )}
                     </div>
-                    {isDeactivated(selectedClient)&&(
+                    {isAdmin&&(
                       <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
                         <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:'uppercase',fontWeight:700,marginBottom:6}}>Transfer to Coach</div>
                         <div style={{display:'flex',gap:8}}>
                           <select
                             defaultValue=""
-                            onChange={e=>{ if(e.target.value){ transferClient(selectedClient.email,e.target.value); setSelectedClient(prev=>({...prev,coachName:DEMO_COACHES.find(c=>c.uuid===e.target.value)?.name||prev.coachName})) }}}
+                            onChange={e=>{ if(e.target.value){ transferClient(selectedClient.email,e.target.value); setSelectedClient(prev=>({...prev,coachName:allCoaches.find(c=>c.uuid===e.target.value)?.name||prev.coachName})) }}}
                             style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}>
                             <option value="">Current: {effectiveCoachName(selectedClient)}</option>
-                            {DEMO_COACHES.filter(c=>!removedCoaches.includes(c.uuid)).map(c=>(
+                            {allCoaches.filter(c=>!removedCoaches.includes(c.uuid)).map(c=>(
                               <option key={c.uuid} value={c.uuid}>{c.name}</option>
                             ))}
                           </select>
@@ -1110,7 +1181,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               </button>
             </div>
           </div>
-          {DEMO_COACHES.map(coach=>{
+          {allCoaches.map(coach=>{
             const isRemoved    = removedCoaches.includes(coach.uuid)
             const isHC         = headCoaches.includes(coach.uuid)
             const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
@@ -1596,7 +1667,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             {newUser.role==='client'&&(
               <>
                 <Sel label="Assign to Coach" value={newUser.coachId||''} onChange={setNU('coachId')}
-                  options={['', ...DEMO_COACHES.map(c=>c.uuid)]}/>
+                  options={['', ...allCoaches.map(c=>c.uuid)]}/>
                 <Sel label="Check-In Day" value={newUser.checkInDay} onChange={setNU('checkInDay')} options={CHECK_IN_DAYS}/>
               </>
             )}
@@ -1686,14 +1757,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               : <div style={{fontSize:11,color:C.muted,margin:'6px 0 10px'}}>Platform owner — no tier applies.</div>}
             <Inp label="Billing Email" value={manageOrg.billingEmail||''} onChange={v=>setManageOrg(p=>({...p,billingEmail:v}))} type="email"/>
             <Inp label="Calendar / Booking URL" value={manageOrg.calendarUrl||''} onChange={v=>setManageOrg(p=>({...p,calendarUrl:v}))} placeholder="Their booking link (they can also manage this)"/>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Brand Color</div>
-              <div style={{display:'flex',gap:10,alignItems:'center'}}>
-                <input type="color" value={manageOrg.brandColor} onChange={e=>setManageOrg(p=>({...p,brandColor:e.target.value}))}
-                  style={{width:44,height:36,borderRadius:8,border:`1px solid ${C.border}`,background:'none',cursor:'pointer',padding:2}}/>
-                <span style={{fontSize:12,color:C.muted}}>{manageOrg.brandColor}</span>
-              </div>
-            </div>
+            <ColorRow primary={manageOrg.brandColor} colors={manageOrg.brandColors||[]}
+              onPrimary={v=>setManageOrg(p=>({...p,brandColor:v}))}
+              onColors={v=>setManageOrg(p=>({...p,brandColors:v}))}/>
             {manageOrg.isWhiteLabel&&(
               <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.white,cursor:'pointer',marginBottom:14}}>
                 <input type="checkbox" checked={!!manageOrg.active} onChange={e=>setManageOrg(p=>({...p,active:e.target.checked}))}/>
@@ -1724,14 +1790,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <Inp label="URL Slug" value={newOrg.slug} onChange={setNO('slug')} placeholder="e.g. peak-performance (auto-generated if blank)"/>
             <Inp label="Billing Email" value={newOrg.billingEmail} onChange={setNO('billingEmail')} placeholder="billing@company.com" type="email"/>
             <Sel label="Plan" value={newOrg.plan} onChange={setNO('plan')} options={planOptions}/>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Brand Color</div>
-              <div style={{display:'flex',gap:10,alignItems:'center'}}>
-                <input type="color" value={newOrg.brandColor} onChange={e=>setNO('brandColor')(e.target.value)}
-                  style={{width:44,height:36,borderRadius:8,border:`1px solid ${C.border}`,background:'none',cursor:'pointer',padding:2}}/>
-                <span style={{fontSize:12,color:C.muted}}>{newOrg.brandColor}</span>
-              </div>
-            </div>
+            <ColorRow primary={newOrg.brandColor} colors={newOrg.brandColors||[]}
+              onPrimary={setNO('brandColor')}
+              onColors={setNO('brandColors')}/>
             <Inp label="Calendar / Booking URL" value={newOrg.calendarUrl} onChange={setNO('calendarUrl')} placeholder="GHL or Calendly booking link"/>
             <div style={{display:'flex',gap:10,marginTop:6}}>
               <button onClick={()=>setShowNewOrg(false)}
@@ -1761,7 +1822,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             {(()=>{
               const activeC    = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
               const archivedC  = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&isDeactivated(c))
-              const available  = DEMO_COACHES.filter(c=>c.uuid!==pendingRemoval.uuid&&!removedCoaches.includes(c.uuid))
+              const available  = allCoaches.filter(c=>c.uuid!==pendingRemoval.uuid&&!removedCoaches.includes(c.uuid))
               return (
                 <>
                   {activeC.length>0?(
