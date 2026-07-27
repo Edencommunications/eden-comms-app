@@ -28,6 +28,8 @@ const KNOWN_USERS = {
   'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',      role:'super_admin', coachId:null },
 }
 
+const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
+
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
   surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
@@ -224,6 +226,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [pkgsLoaded,  setPkgsLoaded]  = useState(false)
   const [newPkg,      setNewPkg]      = useState({name:'',price:'',includes_courses:false,includes_recipes:false})
   const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price,includes_courses,includes_recipes} being edited
+  const [edenCourses, setEdenCourses] = useState([])    // Eden courses w/ per-course tier distribution (courses.tiers)
+  const [pkgCoursesOpen, setPkgCoursesOpen] = useState(null) // package id whose Eden course list is expanded
   const [manageOrg,   setManageOrg]   = useState(null)  // org being edited in the Manage modal
 
   useEffect(()=>{
@@ -231,6 +235,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbGet('packages','active=eq.true&order=price.asc')
       .then(rows=>{ if(Array.isArray(rows)) setPackages(rows); setPkgsLoaded(true) })
       .catch(()=>setPkgsLoaded(true))
+    // Eden courses + their per-course tier distribution (courses.tiers = array of package ids)
+    dbGet('courses','select=id,title,tiers,company_id&is_active=eq.true&order=sort_order.asc')
+      .then(rows=>{
+        if (Array.isArray(rows))
+          setEdenCourses(rows.filter(c=>!c.company_id||c.company_id===EDEN_ORG_ID))
+      }).catch(()=>{})
     dbGet('organizations','select=id,name,slug,plan,is_white_label,brand_color,calendar_url,billing_email,is_active&order=created_at.asc')
       .then(rows=>{
         if (Array.isArray(rows)&&rows.length)
@@ -1375,6 +1385,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       <div style={{fontSize:9,color:C.muted,marginTop:2}}>
                         Includes: {[pkg.includes_courses&&'🎓 Eden Courses',pkg.includes_recipes&&'🍽 Recipe Book'].filter(Boolean).join(' · ')||'their own content only'}
                       </div>
+                      {(()=>{ const list = edenCourses.filter(c=>Array.isArray(c.tiers)&&c.tiers.includes(pkg.id)); return (
+                        <div style={{marginTop:4}}>
+                          <button onClick={()=>setPkgCoursesOpen(o=>o===pkg.id?null:pkg.id)} disabled={!list.length}
+                            style={{background:'none',border:'none',padding:0,fontSize:9,color:list.length?C.gold:C.muted,cursor:list.length?'pointer':'default',fontWeight:700}}>
+                            🎓 {list.length} Eden course{list.length===1?'':'s'} distributed to this tier{list.length?(pkgCoursesOpen===pkg.id?' ▾':' ▸'):''}
+                          </button>
+                          {pkgCoursesOpen===pkg.id&&list.length>0&&(
+                            <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:2}}>
+                              {list.map(c=>(
+                                <div key={c.id} style={{fontSize:9,color:C.white,background:C.card,border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 7px'}}>
+                                  {c.title}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )})()}
                     </div>
                     <div style={{flex:1,fontSize:13,fontWeight:700,color:C.gold}}>${Number(pkg.price)}/mo</div>
                     <button onClick={()=>setEditPkg({id:pkg.id,name:pkg.name,price:String(pkg.price),includes_courses:!!pkg.includes_courses,includes_recipes:!!pkg.includes_recipes})}
