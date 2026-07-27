@@ -228,6 +228,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price,includes_recipes} being edited
   const [edenCourses, setEdenCourses] = useState([])    // Eden courses w/ per-course tier distribution (courses.tiers)
   const [pkgCoursesOpen, setPkgCoursesOpen] = useState(null) // package id whose Eden course list is expanded
+  const [orgCoursesOpen, setOrgCoursesOpen] = useState(null) // org id whose Eden course list is expanded
   const [manageOrg,   setManageOrg]   = useState(null)  // org being edited in the Manage modal
 
   useEffect(()=>{
@@ -1486,8 +1487,25 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       </span>
                     ))}
                   </div>
+                  {t&&(()=>{ const list = edenCourses.filter(c=>Array.isArray(c.tiers)&&c.tiers.includes(t.id)); return (
+                    <div style={{marginTop:8}}>
+                      <button onClick={()=>setOrgCoursesOpen(o=>o===org.id?null:org.id)} disabled={!list.length}
+                        style={{background:'none',border:'none',padding:0,fontSize:9,color:list.length?C.gold:C.muted,cursor:list.length?'pointer':'default',fontWeight:700}}>
+                        🎓 {list.length} Eden course{list.length===1?'':'s'} their clients can access{list.length?(orgCoursesOpen===org.id?' ▾':' ▸'):''}
+                      </button>
+                      {orgCoursesOpen===org.id&&list.length>0&&(
+                        <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:2}}>
+                          {list.map(c=>(
+                            <div key={c.id} style={{fontSize:9,color:C.white,background:C.card,border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 7px'}}>
+                              {c.title}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )})()}
                   <div style={{fontSize:9,color:C.muted,marginTop:6}}>
-                    {!t&&'⚠ Their plan doesn\u2019t match any current tier — open Manage to assign one. '}
+                    {!t&&'⚠ Their plan doesn\u2019t match any current tier — open Manage to assign one, then their Eden course list will appear here. '}
                     Recipe Book follows the tier; Eden Courses are distributed per course from the course library. Connect links, calendar, and their own courses are managed by their admin.
                   </div>
                 </div>
