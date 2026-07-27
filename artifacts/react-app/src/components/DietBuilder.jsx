@@ -9,6 +9,7 @@ import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import { getRecipeDetails } from './recipeDetails'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -635,6 +636,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [showPicker, setShowPicker] = useState(false)
   const [activeMeal, setActiveMeal] = useState(null)
   const [foodSearch, setFoodSearch] = useState('')
+  const [viewRecipe, setViewRecipe] = useState(null)   // full recipe detail modal (client + coach)
+  const [previewRecipe, setPreviewRecipe] = useState(null) // inline preview in coach picker
   const [privacyMode,setPrivacyMode]= useState(false)
 
   const [highMeals, setHighMeals] = useState(
@@ -1112,8 +1115,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     const uuid    = KNOWN_USERS[email]?.uuid
     const coachId = KNOWN_USERS['coach@eden.io']?.uuid
     if(!uuid||!coachId) return
-    setAssignedRecipes(p=>[...p,{...recipe,meal_name:mealName,db_id:null}])
-    await dbInsert('client_recipes',{client_id:uuid,coach_id:coachId,recipe_name:recipe.name,recipe_data:recipe,meal_name:mealName,assigned_at:new Date().toISOString()})
+    // Embed full recipe content (ingredients + method) so the client gets the complete recipe, not just macros
+    const details    = getRecipeDetails(recipe)
+    const fullRecipe = details ? {...recipe, ingredients:details.ingredients, method:details.method} : recipe
+    setAssignedRecipes(p=>[...p,{...fullRecipe,meal_name:mealName,db_id:null}])
+    await dbInsert('client_recipes',{client_id:uuid,coach_id:coachId,recipe_name:recipe.name,recipe_data:fullRecipe,meal_name:mealName,assigned_at:new Date().toISOString()})
     const rows = await dbGet('client_recipes',`client_id=eq.${uuid}&order=assigned_at.desc`)
     // Only overwrite state if DB returned real rows (dbGet returns [] on error — must guard against wiping optimistic update)
     if(Array.isArray(rows) && rows.length > 0) setAssignedRecipes(rows.map(r=>{
@@ -1404,8 +1410,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <div key={ri} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',
                             borderBottom:ri<mealRecipes.length-1?`1px solid ${C.border}22`:'none'}}>
                             <span style={{fontSize:18,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:700,color:C.gold,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{rName}</div>
+                            <div onClick={()=>setViewRecipe(r)} style={{flex:1,minWidth:0,cursor:'pointer'}} title="View full recipe">
+                              <div style={{fontSize:12,fontWeight:700,color:C.gold,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{rName} <span style={{fontSize:9,fontWeight:400,color:C.muted}}>· view ›</span></div>
                               <div style={{fontSize:10,color:C.muted,marginTop:1}}>
                                 {s!==1&&<span style={{color:C.gold,marginRight:3}}>×{s}</span>}
                                 {Math.round((r.cal||0)*s)} cal · P:{Math.round((r.pro||0)*s)}g · C:{Math.round((r.carb||0)*s)}g · F:{Math.round((r.fat||0)*s)}g
@@ -1470,9 +1476,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   {assignedRecipes.map((r,i)=>(
                     <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 14px',display:'flex',alignItems:'center',gap:12}}>
                       <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
-                      <div style={{flex:1,minWidth:0}}>
+                      <div onClick={()=>setViewRecipe(r)} style={{flex:1,minWidth:0,cursor:'pointer'}} title="View full recipe">
                         <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
-                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g · <span style={{color:C.gold}}>view ›</span></div>
                         {r.meal_name&&<div style={{fontSize:10,color:C.gold,marginTop:3,fontWeight:600}}>📍 {r.meal_name}</div>}
                       </div>
                       <button onClick={()=>removeRecipe(r.db_id, r.name||r.recipe_name)}
@@ -1493,11 +1499,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 <div style={{marginBottom:14}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>📌 Your Recipes from Coach</div>
                   {assignedRecipes.map((r,i)=>(
-                    <div key={i} style={{background:'#0d1a00',border:`1px solid ${C.gold}44`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+                    <div key={i} onClick={()=>setViewRecipe(r)} style={{background:'#0d1a00',border:`1px solid ${C.gold}44`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} title="View full recipe">
                       <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
-                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g · <span style={{color:C.gold}}>view recipe ›</span></div>
                       </div>
                       <span style={{fontSize:9,fontWeight:700,padding:'3px 9px',borderRadius:20,background:`${C.gold}22`,color:C.gold,flexShrink:0}}>✓ Unlocked</span>
                     </div>
@@ -3451,22 +3457,43 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 .map((r,i)=>{
                   const already = assignedRecipes.some(a=>(a.name||a.recipe_name)===r.name)
                   const isPending = pendingRecipe?.name===r.name
+                  const isPreviewing = previewRecipe===r.name
+                  const details = getRecipeDetails(r)
                   return (
-                    <div key={i} onClick={()=>{ if(!already) setPendingRecipe(r) }}
-                      style={{display:'flex',alignItems:'center',gap:12,borderBottom:`1px solid ${C.border}`,
-                        cursor:already?'default':'pointer',background:isPending?`${C.gold}11`:'none',
-                        margin:'0 -16px',padding:'12px 16px'}}>
-                      <span style={{fontSize:24,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:already?C.gold:isPending?C.gold:C.white}}>{r.name}</div>
-                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                    <div key={i} style={{margin:'0 -16px',borderBottom:`1px solid ${C.border}`,background:isPending?`${C.gold}11`:'none'}}>
+                      <div onClick={()=>{ if(!already) setPendingRecipe(r) }}
+                        style={{display:'flex',alignItems:'center',gap:12,
+                          cursor:already?'default':'pointer',padding:'12px 16px'}}>
+                        <span style={{fontSize:24,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:already?C.gold:isPending?C.gold:C.white}}>{r.name}</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                        </div>
+                        {details&&(
+                          <button onClick={e=>{e.stopPropagation();setPreviewRecipe(isPreviewing?null:r.name)}}
+                            style={{background:isPreviewing?`${C.gold}22`:'none',border:`1px solid ${isPreviewing?C.gold:C.border}`,borderRadius:6,padding:'4px 9px',color:isPreviewing?C.gold:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                            {isPreviewing?'Hide':'👁 Preview'}
+                          </button>
+                        )}
+                        {already?(
+                          <span style={{fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}>✓ Assigned</span>
+                        ):isPending?(
+                          <span style={{fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}>↓ Pick meal</span>
+                        ):(
+                          <span style={{fontSize:18,color:C.gold,flexShrink:0,lineHeight:1}}>+</span>
+                        )}
                       </div>
-                      {already?(
-                        <span style={{fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}>✓ Assigned</span>
-                      ):isPending?(
-                        <span style={{fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}>↓ Pick meal</span>
-                      ):(
-                        <span style={{fontSize:18,color:C.gold,flexShrink:0,lineHeight:1}}>+</span>
+                      {isPreviewing&&details&&(
+                        <div style={{padding:'0 16px 14px 52px'}}>
+                          <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Ingredients</div>
+                          <ul style={{margin:'0 0 10px',paddingLeft:16}}>
+                            {details.ingredients.map((ing,ii)=>(<li key={ii} style={{fontSize:11,color:C.white,lineHeight:1.7}}>{ing}</li>))}
+                          </ul>
+                          <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Method</div>
+                          <ol style={{margin:0,paddingLeft:16}}>
+                            {details.method.map((st,si)=>(<li key={si} style={{fontSize:11,color:C.muted,lineHeight:1.7,marginBottom:3}}>{st}</li>))}
+                          </ol>
+                        </div>
                       )}
                     </div>
                   )
@@ -3594,6 +3621,62 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           </div>
         </div>
       )}
+
+      {/* ── Full Recipe Detail Modal (client + coach) ─────────── */}
+      {viewRecipe&&(()=>{
+        const vr = viewRecipe
+        const vName = vr.name||vr.recipe_name
+        const vDetails = getRecipeDetails(vr)
+        const vs = vr.servings||1
+        return (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.9)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+            onClick={e=>{if(e.target===e.currentTarget)setViewRecipe(null)}}>
+            <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'88vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+                <span style={{fontSize:26}}>{RECIPE_CAT_EMOJI[vr.category]||'🍽'}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:800,color:C.white}}>{vName}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>
+                    {vr.category||'Recipe'}{vr.meal_name?` · 📍 ${vr.meal_name}`:''}{vs!==1?` · ×${vs} servings`:''}
+                  </div>
+                </div>
+                <button onClick={()=>setViewRecipe(null)} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>×</button>
+              </div>
+              <div style={{flex:1,overflowY:'auto',padding:16}}>
+                {/* Macros */}
+                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:14,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+                  {[['cal',Math.round((vr.cal||0)*vs),''],['protein',Math.round((vr.pro||0)*vs),'g'],['carbs',Math.round((vr.carb||0)*vs),'g'],['fat',Math.round((vr.fat||0)*vs),'g'],['fiber',Math.round((vr.fib||0)*vs),'g']].map(([l,v,u])=>(
+                    <div key={l} style={{textAlign:'center',minWidth:48}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.gold}}>{v}{u}</div>
+                      <div style={{fontSize:9,color:C.muted,marginTop:2,textTransform:'capitalize'}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                {vDetails?(
+                  <>
+                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🛒 Ingredients{vs!==1?' (per 1 serving)':''}</div>
+                    <ul style={{margin:'0 0 16px',paddingLeft:18}}>
+                      {vDetails.ingredients.map((ing,ii)=>(<li key={ii} style={{fontSize:13,color:C.white,lineHeight:1.8}}>{ing}</li>))}
+                    </ul>
+                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>👨‍🍳 Method</div>
+                    <ol style={{margin:0,paddingLeft:18}}>
+                      {vDetails.method.map((st,si)=>(<li key={si} style={{fontSize:13,color:C.white,lineHeight:1.7,marginBottom:8}}>{st}</li>))}
+                    </ol>
+                  </>
+                ):(
+                  <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'20px 0'}}>Full ingredients & instructions aren't available for this recipe yet.<br/>Ask your coach for details.</div>
+                )}
+              </div>
+              <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                <button onClick={()=>setViewRecipe(null)}
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:'11px 0',fontWeight:800,color:C.black,fontSize:14,cursor:'pointer'}}>
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

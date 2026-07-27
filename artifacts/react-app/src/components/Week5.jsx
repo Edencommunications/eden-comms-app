@@ -42,6 +42,8 @@ const H = {
   'Prefer':'return=representation',
 }
 
+import { getRecipeDetails } from './recipeDetails'
+
 async function dbGet(table, params='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
   if (!r.ok) return []
@@ -207,12 +209,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [recipeCat,     setRecipeCat]     = useState('All')
   const [selectedRecipe,setSelectedRecipe]= useState(null)
   const [hasRecipeAccess,setHasRecipeAccess]= useState(false)
+  const [assignedRecipeNames,setAssignedRecipeNames]= useState(new Set()) // per-recipe unlocks from coach assignments
 
   useEffect(()=>{
     if (!profileReady) return   // wait until company/tier is known so Eden content never flashes for white-label users
     loadCourses()
     loadLiveRecipes()
-    if (myUUID) checkRecipeAccess()
+    if (myUUID) { checkRecipeAccess(); loadAssignedRecipes() }
   },[profileReady, myUUID, companyCtx?.companyId, companyCtx?.tierCourses])
 
   // ── Load courses based on role ────────────────────────────
@@ -394,6 +397,12 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   async function checkRecipeAccess() {
     const data = await dbGet('recipe_access',`user_id=eq.${myUUID}`)
     setHasRecipeAccess(Array.isArray(data)&&data.length>0)
+  }
+  // Recipes a coach specifically assigned to this client are unlocked individually,
+  // without requiring full Recipe Book access
+  async function loadAssignedRecipes() {
+    const rows = await dbGet('client_recipes',`client_id=eq.${myUUID}&select=recipe_name`)
+    if (Array.isArray(rows)) setAssignedRecipeNames(new Set(rows.map(r=>r.recipe_name).filter(Boolean)))
   }
   async function grantRecipeAccess() {
     await fetch(`${SUPABASE_URL}/rest/v1/recipe_access`,{
@@ -793,6 +802,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                     <div style={{fontSize:12,fontWeight:600,color:selectedRecipe?.name===r.name?C.gold:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
                     <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.cal} cal · P:{r.pro}g C:{r.carb}g F:{r.fat}g</div>
                     {r.isLive&&<span style={{fontSize:8,background:`${C.success}22`,color:C.success,padding:'1px 5px',borderRadius:4,fontWeight:700}}>LIVE</span>}
+                    {!hasRecipeAccess&&isClient&&assignedRecipeNames.has(r.name)&&<span style={{fontSize:8,background:`${C.gold}22`,color:C.gold,padding:'1px 5px',borderRadius:4,fontWeight:700}}>✓ UNLOCKED</span>}
                   </div>
                 </button>
               ))}
@@ -828,10 +838,29 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:13,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:12}}>
                   + Pull Into Diet Plan
                 </button>
-                {(hasRecipeAccess||isAdmin||isCoach)?(
+                {(hasRecipeAccess||isAdmin||isCoach||assignedRecipeNames.has(selectedRecipe.name))?(
                   <Card>
-                    <Lbl t="Recipe Details"/>
-                    <div style={{fontSize:13,color:C.white,lineHeight:1.7}}>{selectedRecipe.method||'Full instructions in the LOE Recipe Book.'}</div>
+                    {!hasRecipeAccess&&!isAdmin&&!isCoach&&assignedRecipeNames.has(selectedRecipe.name)&&(
+                      <div style={{fontSize:10,fontWeight:700,color:C.gold,background:`${C.gold}18`,border:`1px solid ${C.gold}33`,borderRadius:6,padding:'5px 10px',marginBottom:12,display:'inline-block'}}>
+                        ✓ Unlocked — assigned by your coach
+                      </div>
+                    )}
+                    {(()=>{
+                      const det = getRecipeDetails(selectedRecipe)
+                      if(!det) return <><Lbl t="Recipe Details"/><div style={{fontSize:13,color:C.white,lineHeight:1.7}}>{selectedRecipe.method||'Full instructions in the LOE Recipe Book.'}</div></>
+                      return (
+                        <>
+                          <Lbl t="🛒 Ingredients"/>
+                          <ul style={{margin:'0 0 14px',paddingLeft:18}}>
+                            {det.ingredients.map((ing,ii)=>(<li key={ii} style={{fontSize:13,color:C.white,lineHeight:1.8}}>{ing}</li>))}
+                          </ul>
+                          <Lbl t="👨‍🍳 Method"/>
+                          <ol style={{margin:0,paddingLeft:18}}>
+                            {det.method.map((st,si)=>(<li key={si} style={{fontSize:13,color:C.white,lineHeight:1.7,marginBottom:8}}>{st}</li>))}
+                          </ol>
+                        </>
+                      )
+                    })()}
                     <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
                       style={{display:'block',textAlign:'center',fontSize:12,color:C.gold,textDecoration:'none',padding:'10px',border:`1px solid ${C.gold}33`,borderRadius:8,marginTop:12}}>
                       View Full Recipe Book →
