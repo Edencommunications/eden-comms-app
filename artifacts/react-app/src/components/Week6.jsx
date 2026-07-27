@@ -442,16 +442,20 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'coach'}).catch(()=>{})
     addAudit('Eden Admin','Removed Head Coach designation',coach.name,'')
   }
-  // Sync deactivations + coach transfers FROM the database so every
-  // device (coach, admin, anywhere) sees the same state.
-  useEffect(()=>{
+  // Sync deactivations + coach transfers + coach removals FROM the database so
+  // every device (coach, admin, anywhere) sees the same state. Runs on mount
+  // and then polls, so a second open admin session picks up changes made
+  // elsewhere without a page reload.
+  const allCoachesRef = useRef([])
+  allCoachesRef.current = allCoaches
+  function syncLifecycleFromDb() {
     // Head coach designations from DB (source of truth)
     dbGet('user_profiles','role=eq.head_coach&select=email')
       .then(rows=>{
         if (!Array.isArray(rows)) return
         const hcEmails = new Set(rows.map(r=>r.email))
-        const next = allCoaches.filter(c=>hcEmails.has(c.email)).map(c=>c.uuid)
-        setHeadCoaches(prev=>{
+        const next = allCoachesRef.current.filter(c=>hcEmails.has(c.email)).map(c=>c.uuid)
+        setHeadCoaches(()=>{
           const merged = [...new Set([...next])]
           localStorage.setItem('eden_head_coaches', JSON.stringify(merged))
           return merged
@@ -477,6 +481,30 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           return next
         })
       }).catch(()=>{})
+    // Coach removals — a removed coach is marked is_active=false in the DB
+    dbGet('user_profiles','role=in.(coach,head_coach)&select=id,is_active')
+      .then(rows=>{
+        if (!Array.isArray(rows)) return
+        const inactive = new Set(rows.filter(r=>r.is_active===false).map(r=>r.id))
+        const active   = new Set(rows.filter(r=>r.is_active!==false).map(r=>r.id))
+        setRemovedCoaches(prev=>{
+          // DB is the source of truth: add coaches removed elsewhere, drop restored ones
+          const next = [...new Set([...prev.filter(id=>!active.has(id)), ...inactive])]
+          if (next.length===prev.length && next.every(id=>prev.includes(id))) return prev
+          localStorage.setItem('eden_removed_coaches', JSON.stringify(next))
+          return next
+        })
+      }).catch(()=>{})
+    // Keep org card coach/client counts live too (admin dashboard only)
+    if (isAdmin) refreshOrgCounts()
+  }
+  useEffect(()=>{
+    syncLifecycleFromDb()
+    // Poll so other open sessions converge without a reload; pause when hidden
+    const id = setInterval(()=>{ if (!document.hidden) syncLifecycleFromDb() }, 10000)
+    const onVis = ()=>{ if (!document.hidden) syncLifecycleFromDb() }
+    document.addEventListener('visibilitychange', onVis)
+    return ()=>{ clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
   },[])
 
   const [archiveOpen,       setArchiveOpen]       = useState(false)
