@@ -310,7 +310,7 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
         <div style={{ background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, padding:"32px 20px 24px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid #1a1a1a` }}>
           {brandOrg ? <OrgLogo org={brandOrg} size={72}/> : <EdenLogo size={72}/>}
           <h1 style={{ fontSize:22, fontWeight:800, color:"#ffffff", margin:"16px 0 4px", textAlign:"center" }}>{brandOrg ? brandOrg.name : "Eden Communications"}</h1>
-          <p style={{ fontSize:12, color:"#888888", margin:0, textAlign:"center" }}>{brandOrg ? "The private platform for coaches and clients" : "The private platform for Lifestyle of Eden coaches and clients"}</p>
+          <p style={{ fontSize:12, color:"#888888", margin:0, textAlign:"center" }}>{brandOrg ? `The private platform for ${brandOrg.name} coaches and clients` : "The private platform for Lifestyle of Eden coaches and clients"}</p>
         </div>
       ) : (
         <div style={{ flex:1, background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, borderRight:`1px solid #1a1a1a`, minWidth:0 }}>
@@ -319,7 +319,7 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
             {brandOrg ? brandOrg.name : <>Eden<br/>Communications</>}
           </h1>
           <p style={{ fontSize:14, color:"#888888", margin:"0 0 32px", textAlign:"center", lineHeight:1.6 }}>
-            {brandOrg ? <>The private platform for<br/>coaches and clients</> : <>The private platform for<br/>Lifestyle of Eden coaches and clients</>}
+            {brandOrg ? <>The private platform for<br/>{brandOrg.name} coaches and clients</> : <>The private platform for<br/>Lifestyle of Eden coaches and clients</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
             {["🔒 HIPAA-grade encryption","🛡 End-to-end secure messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
