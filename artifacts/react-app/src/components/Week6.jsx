@@ -251,7 +251,21 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       })
       // Real coach/client counts per org — chained after the org list lands so it
       // can't be overwritten by the zero-count initial mapping above.
-      .then(()=>dbGet('user_profiles','role=in.(coach,head_coach,client)&select=company_id,role,is_active'))
+      .then(refreshOrgCounts)
+    // Probe for the brand_colors palette column (added later — needs its SQL run once)
+    dbGet('organizations','select=id,brand_colors')
+      .then(rows=>{
+        if (Array.isArray(rows)&&rows.length) {
+          setColorsColSupported(true)
+          setOrgs(prev=>prev.map(o=>{ const m=rows.find(r=>r.id===o.id); return m?{...o,brandColors:m.brand_colors||[]}:o }))
+        }
+      }).catch(()=>{})
+  },[isAdmin])
+
+  // Recompute each org card's coach/client counts from the database — the same
+  // query the page-load effect uses, so live updates always match a reload.
+  function refreshOrgCounts() {
+    return dbGet('user_profiles','role=in.(coach,head_coach,client)&select=company_id,role,is_active')
       .then(rows=>{
         if (!Array.isArray(rows)) return
         const counts = {}
@@ -265,15 +279,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           return c ? { ...o, coachCount:c.coaches, clientCount:c.clients } : { ...o, coachCount:0, clientCount:0 }
         }))
       }).catch(()=>{})
-    // Probe for the brand_colors palette column (added later — needs its SQL run once)
-    dbGet('organizations','select=id,brand_colors')
-      .then(rows=>{
-        if (Array.isArray(rows)&&rows.length) {
-          setColorsColSupported(true)
-          setOrgs(prev=>prev.map(o=>{ const m=rows.find(r=>r.id===o.id); return m?{...o,brandColors:m.brand_colors||[]}:o }))
-        }
-      }).catch(()=>{})
-  },[isAdmin])
+  }
 
   const planOptions = packages.length ? packages.map(p=>p.name) : ['standard','professional','enterprise']
 
@@ -501,7 +507,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setDeactivatedMap(next)
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
     // Enforce in the database — blocks login from ANY device
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:false}).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:false}).then(refreshOrgCounts).catch(()=>{})
     addAudit('Eden Admin','Deactivated client',client.name,'Account deactivated — data preserved, coach still has full access')
     if (selectedClient?.uuid === client.uuid) setSelectedClient({ ...client, _deactivated: true })
   }
@@ -512,7 +518,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setDeactivatedMap(next)
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
     // Restore login access in the database
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:true}).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:true}).then(refreshOrgCounts).catch(()=>{})
     addAudit('Eden Admin','Reactivated client',client.name,'Account restored — client can now log in again')
     setSelectedClient({ ...client, _deactivated: false })
   }
@@ -550,6 +556,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const next = [...removedCoaches, pendingRemoval.uuid]
     setRemovedCoaches(next)
     localStorage.setItem('eden_removed_coaches', JSON.stringify(next))
+    // Persist the removal so DB-driven org counts (and every other device) reflect it
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(pendingRemoval.email)}`,{is_active:false}).then(refreshOrgCounts).catch(()=>{})
     addAudit('Eden Admin','Removed coach',pendingRemoval.name,
       transferred>0?`${transferred} client${transferred!==1?'s':''} transferred to ${targetCoach?.name||'new coach'}`:'No active clients to transfer')
     setShowTransferModal(false)
@@ -705,6 +713,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (newUser.role==='client') setClients(prev=>[...prev,localUser])
     if (newUser.role==='va'||newUser.role==='head_coach')
       setSupportStaff(prev=>[...prev,{ id:localUser.uuid, name:localUser.name, email:localUser.email, role:newUser.role }])
+
+    // New profile row is in the DB — refresh the org cards' coach/client counts
+    refreshOrgCounts()
 
     // Show setup instructions card
     setLastAdded({ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role, tempPass })
