@@ -549,7 +549,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       }
       const result = await dbInsert('user_profiles', payload)
       profileId = Array.isArray(result)?result[0]?.id:result?.id
-    } catch(e) { /* DB write failed — user still added to local state */ }
+    } catch(e) { /* handled below */ }
+    if (!profileId) {
+      alert('Could not save this user to the database — their login will NOT work. Please check the details and try again.')
+      return
+    }
 
     // If client, create a client_access record linking to their coach
     if (newUser.role==='client' && newUser.coachId && profileId && adminCompanyId) {
@@ -603,7 +607,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const dbId = Array.isArray(inserted)?inserted[0]?.id:inserted?.id
     if (!dbId) { alert('Could not create the organization — please try again.'); return }
     // user_profiles.company_id references the companies table — mirror the org there with the same id
-    await dbInsert('companies',{ id:dbId, name:newOrg.name })
+    const mirrored = await dbInsert('companies',{ id:dbId, name:newOrg.name, slug })
+    if (!mirrored) {
+      // Without the mirror row, admins for this org can't be created — roll back and surface the error
+      await dbDelete('organizations', `id=eq.${dbId}`)
+      alert('Could not finish creating the organization — please try again.')
+      return
+    }
     const org = {
       id:           dbId,
       name:         newOrg.name,

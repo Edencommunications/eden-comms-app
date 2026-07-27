@@ -3719,6 +3719,17 @@ const WARNING_SECS = 60;               // 60 s to respond before forced logout
 
 const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
+  // White-label branding: if this user belongs to a white-label company, brand the shell as theirs
+  const [wlOrg, setWlOrg] = useState<any>(null);
+  useEffect(() => { (async () => {
+    try {
+      const prof = await sbGet('user_profiles', `email=eq.${encodeURIComponent((user.email||'').toLowerCase())}&select=company_id&limit=1`);
+      const cid = prof?.[0]?.company_id;
+      if (!cid || cid === EDEN_ORG_ID) { setWlOrg(null); return; }
+      const org = await sbGet('organizations', `id=eq.${cid}&select=id,name,brand_color,is_white_label&limit=1`);
+      setWlOrg(org?.[0]?.is_white_label ? org[0] : null);
+    } catch { setWlOrg(null); }
+  })(); }, [user.email]);
   const [loomMode,     setLoomMode]     = useState(false);
   const [loomFeatured, setLoomFeatured] = useState<Set<string>>(new Set());
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
@@ -3973,8 +3984,8 @@ const AppShell = ({ user, onLogout }) => {
           )}
           <HoneycombLogo size={30}/>
           <div>
-            <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>Eden Communications</p>
-            {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>🔒 HIPAA Secure · edencommunications.io</p>}
+            <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{wlOrg ? wlOrg.name : "Eden Communications"}</p>
+            {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>{wlOrg ? "🔒 HIPAA Secure" : "🔒 HIPAA Secure · edencommunications.io"}</p>}
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
@@ -4070,9 +4081,9 @@ const AppShell = ({ user, onLogout }) => {
               </button>
             ))}
             <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.border}` }}>
-              <div style={{ padding:"8px 10px", background:B.goldDim, border:`1px solid ${B.goldMid}`, borderRadius:8 }}>
-                <p style={{ fontSize:9, color:B.gold, margin:0, fontWeight:700, letterSpacing:0.8 }}>LIFESTYLE OF EDEN</p>
-                <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>Powered by Eden Comms</p>
+              <div style={{ padding:"8px 10px", background: wlOrg ? `${wlOrg.brand_color||B.gold}15` : B.goldDim, border:`1px solid ${wlOrg ? `${wlOrg.brand_color||B.gold}44` : B.goldMid}`, borderRadius:8 }}>
+                <p style={{ fontSize:9, color: wlOrg ? (wlOrg.brand_color||B.gold) : B.gold, margin:0, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase" }}>{wlOrg ? wlOrg.name : "LIFESTYLE OF EDEN"}</p>
+                {!wlOrg && <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>Powered by Eden Comms</p>}
               </div>
             </div>
           </div>

@@ -141,27 +141,33 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const isCoach = roleEff==='coach'
   const isClient= roleEff==='client'
 
+  const [profileReady, setProfileReady] = useState(false) // don't load content until we know who this is
   useEffect(()=>{ (async()=>{
     if (!email) return
-    const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,role,company_id`)
-    const p = rows?.[0]; if (!p) return
-    setDbProfile(p)
-    if (p.company_id && p.company_id!==EDEN_ORG_ID) {
-      const org = await dbGet('organizations',`id=eq.${p.company_id}&select=id,plan,is_white_label`)
-      let tierCourses=false, tierRecipes=false
-      if (org?.[0]?.plan) {
-        const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(org[0].plan)}&active=eq.true&limit=1`)
-        tierCourses=!!pkg?.[0]?.includes_courses; tierRecipes=!!pkg?.[0]?.includes_recipes
+    try {
+      const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,role,company_id`)
+      const p = rows?.[0]
+      if (p) {
+        setDbProfile(p)
+        if (p.company_id && p.company_id!==EDEN_ORG_ID) {
+          const org = await dbGet('organizations',`id=eq.${p.company_id}&select=id,plan,is_white_label`)
+          let tierCourses=false, tierRecipes=false
+          if (org?.[0]?.plan) {
+            const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(org[0].plan)}&active=eq.true&limit=1`)
+            tierCourses=!!pkg?.[0]?.includes_courses; tierRecipes=!!pkg?.[0]?.includes_recipes
+          }
+          setCompanyCtx({companyId:p.company_id, isWhiteLabel:!!org?.[0]?.is_white_label, tierCourses, tierRecipes})
+        } else {
+          setCompanyCtx(null)
+        }
       }
-      setCompanyCtx({companyId:p.company_id, isWhiteLabel:!!org?.[0]?.is_white_label, tierCourses, tierRecipes})
-    } else {
-      setCompanyCtx(null)
-    }
+    } finally { setProfileReady(true) }
   })() },[email])
 
   // White-label tier gates (Eden users always get everything)
   const isWL = !!companyCtx?.isWhiteLabel
-  const recipesAllowed = !isWL || companyCtx.tierRecipes
+  // Hide the Recipes tab until the company lookup finishes so white-label users never see a flash of Eden content
+  const recipesAllowed = profileReady && (!isWL || companyCtx.tierRecipes)
 
   const [tab, setTab] = useState('course')
 
@@ -203,10 +209,11 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [hasRecipeAccess,setHasRecipeAccess]= useState(false)
 
   useEffect(()=>{
+    if (!profileReady) return   // wait until company/tier is known so Eden content never flashes for white-label users
     loadCourses()
     loadLiveRecipes()
     if (myUUID) checkRecipeAccess()
-  },[myUUID, companyCtx?.companyId, companyCtx?.tierCourses])
+  },[profileReady, myUUID, companyCtx?.companyId, companyCtx?.tierCourses])
 
   // ── Load courses based on role ────────────────────────────
   // A course belongs to Eden when it has no company_id (or Eden's)
@@ -215,9 +222,10 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   async function loadCourses() {
     let data
     if (isAdmin) {
-      data = await dbGet('courses','order=sort_order.asc')
-      // White-label admin manages only their own company's courses
-      if (isWL) data = (data||[]).filter(c=>c.company_id===companyCtx.companyId)
+      // White-label admin: scope the query itself to their company — never fetch other tenants' rows
+      data = isWL
+        ? await dbGet('courses',`company_id=eq.${companyCtx.companyId}&order=sort_order.asc`)
+        : await dbGet('courses','order=sort_order.asc')
     } else {
       if (!myUUID) { setCourses([]); return }
       // Coach/client: only courses they have access to
@@ -230,7 +238,12 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
         c.company_id===companyCtx.companyId || (isEdenCourse(c)&&companyCtx.tierCourses))
     }
     setCourses(data||[])
-    if (data?.length>0) openCourse(data[0])
+    if (data?.length>0) {
+      // Keep the open course only if it's still in the visible list
+      if (!activeCourse || !data.some(c=>c.id===activeCourse.id)) openCourse(data[0])
+    } else {
+      setActiveCourse(null); setModules([]); setCourseView('catalog')
+    }
   }
 
   async function openCourse(course) {
