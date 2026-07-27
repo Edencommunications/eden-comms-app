@@ -697,6 +697,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   // ── Consultation data — client receives from coach (Week6 Consultation tab) ──
   const [clientIntake,  setClientIntake]  = useState({notes:'',startDate:'',startWeight:''})
+  const [consultDocs,   setConsultDocs]   = useState([]) // onboarding / monthly / emergency docs from admin
   const [callNotesList, setCallNotesList] = useState([])
 
   // ── Notifications ──────────────────────────────────────────
@@ -1006,6 +1007,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       }).catch(()=>{})
     dbGet('consultation_notes',`client_id=eq.${uuid}&order=call_date.desc&limit=50`)
       .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCallNotesList(rows) })
+      .catch(()=>{})
+    // Documents routed into the consultation sections (onboarding / monthly / emergency)
+    dbGet('client_documents',`client_id=eq.${uuid}&doc_type=in.(onboarding,monthly,emergency)&order=created_at.desc`)
+      .then(rows=>{ if(Array.isArray(rows)) setConsultDocs(rows) })
       .catch(()=>{})
   },[email])
 
@@ -2262,11 +2267,47 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       )}
                     </div>
                   )}
+
+                  {/* Onboarding documents from your coach/admin */}
+                  {consultDocs.filter(d=>d.doc_type==='onboarding').length>0&&(
+                    <div style={{marginTop:14}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Onboarding Documents</div>
+                      {consultDocs.filter(d=>d.doc_type==='onboarding').map(doc=>(
+                        <div key={doc.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
+                          <span style={{fontSize:16,flexShrink:0}}>🌱</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:700,color:C.white}}>{doc.title}</div>
+                            <div style={{fontSize:10,color:C.muted,marginTop:2}}>Onboarding Consultation · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}</div>
+                            {doc.content&&<div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5}}>{doc.content}</div>}
+                            {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.gold,marginTop:4,display:'block'}}>View File →</a>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Call notes history ── */}
                 <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:4}}>Call Notes History</div>
-                <div style={{fontSize:10,color:C.muted,marginBottom:12}}>Monthly calls, therapy sessions, strategy calls</div>
+                <div style={{fontSize:10,color:C.muted,marginBottom:12}}>Monthly calls, emergency calls, therapy sessions, strategy calls</div>
+
+                {/* Monthly / emergency call documents from your coach/admin */}
+                {consultDocs.filter(d=>d.doc_type==='monthly'||d.doc_type==='emergency').length>0&&(
+                  <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'6px 16px 10px',marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'8px 0 2px'}}>Call Documents</div>
+                    {consultDocs.filter(d=>d.doc_type==='monthly'||d.doc_type==='emergency').map(doc=>(
+                      <div key={doc.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
+                        <span style={{fontSize:16,flexShrink:0}}>{doc.doc_type==='emergency'?'🚨':'📆'}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:700,color:C.white}}>{doc.title}</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:2}}>{doc.doc_type==='emergency'?'Emergency Call':'Monthly Check-In'} · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}</div>
+                          {doc.content&&<div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5}}>{doc.content}</div>}
+                          {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.gold,marginTop:4,display:'block'}}>View File →</a>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {callNotesList.length===0?(
                   <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:32,textAlign:'center'}}>

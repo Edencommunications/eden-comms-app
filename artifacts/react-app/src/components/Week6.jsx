@@ -77,6 +77,16 @@ const DEMO_ORGS = [
 
 const CHECK_IN_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 const CALL_TYPES = ['Monthly Check-In','Intake / Onboarding','Lab Review','Therapy / Support','Strategy Call','Emergency Call','Other']
+const DOC_TYPES = [
+  {v:'lab',        l:'Lab Results',                                icon:'🧪', dest:'Appears in the client\u2019s Labs section'},
+  {v:'onboarding', l:'Onboarding Consultation (Initial Intake)',   icon:'🌱', dest:'Appears in the Onboarding Consultation section'},
+  {v:'monthly',    l:'Monthly Check-In',                           icon:'📆', dest:'Appears with Call Notes History'},
+  {v:'emergency',  l:'Emergency Call',                             icon:'🚨', dest:'Appears with Call Notes History'},
+  {v:'form',       l:'Form',                                       icon:'📋', dest:'Appears in the client\u2019s Documents list'},
+  {v:'note',       l:'Note',                                       icon:'📝', dest:'Appears in the client\u2019s Documents list'},
+  {v:'document',   l:'Other Document',                             icon:'📄', dest:'Appears in the client\u2019s Documents list'},
+]
+const docTypeLabel = t=>DOC_TYPES.find(d=>d.v===t)?.l||t
 
 // ── Mini UI ───────────────────────────────────────────────────
 function Card({children,sx={}}) {
@@ -135,7 +145,7 @@ function Sel({label,value,onChange,options}) {
       {label&&<div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
       <select value={value} onChange={e=>onChange(e.target.value)}
         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none'}}>
-        {options.map(o=><option key={o} value={o}>{o}</option>)}
+        {options.map(o=>{const v=typeof o==='object'?o.value:o, l=typeof o==='object'?o.label:o; return <option key={v} value={v}>{l}</option>})}
       </select>
     </div>
   )
@@ -316,7 +326,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .catch(()=>{})
   },[selectedClient?.uuid])
 
-  const docTypeIcon = t=>({lab:'🧪',form:'📋',note:'📝',document:'📄'}[t]||'📄')
+  const docTypeIcon = t=>DOC_TYPES.find(d=>d.v===t)?.icon||'📄'
 
   async function addAdminDoc() {
     if (!newDoc.title.trim()||!selectedClient?.uuid) return
@@ -340,6 +350,20 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     await dbDelete('client_documents',`id=eq.${id}`)
     setAdminDocs(prev=>prev.filter(d=>d.id!==id))
   }
+
+  // Compact renderer for documents routed into the Consultation tab sections
+  const renderDocRow = doc=>(
+    <div key={doc.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
+      <span style={{fontSize:16,flexShrink:0}}>{docTypeIcon(doc.doc_type)}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.white}}>{doc.title}</div>
+        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{docTypeLabel(doc.doc_type)} · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}</div>
+        {doc.content&&<div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5}}>{doc.content}</div>}
+        {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.gold,marginTop:4,display:'block'}}>View File →</a>}
+      </div>
+      {isAdmin&&<button onClick={()=>deleteAdminDoc(doc.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,padding:0,lineHeight:1,flexShrink:0}}>×</button>}
+    </div>
+  )
 
   // ── Audit log ─────────────────────────────────────────────
   const [auditLog, setAuditLog] = useState([
@@ -1128,8 +1152,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         <span style={{fontSize:18,flexShrink:0}}>{docTypeIcon(doc.doc_type)}</span>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:12,fontWeight:700,color:C.white}}>{doc.title}</div>
-                          <div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:'capitalize'}}>
-                            {doc.doc_type} · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}
+                          <div style={{fontSize:10,color:C.muted,marginTop:2}}>
+                            {docTypeLabel(doc.doc_type)} · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}
                           </div>
                           {doc.content&&<div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5}}>{doc.content}</div>}
                           {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.gold,marginTop:4,display:'block'}}>View File →</a>}
@@ -1506,13 +1530,21 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Save Intake Record
               </button>
             )}
+
+            {/* Onboarding documents pushed from the admin Documents panel */}
+            {adminDocs.filter(d=>d.doc_type==='onboarding').length>0&&(
+              <div style={{marginTop:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Onboarding Documents</div>
+                {adminDocs.filter(d=>d.doc_type==='onboarding').map(renderDocRow)}
+              </div>
+            )}
           </Card>
 
           {/* Part 2: Ongoing call notes */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:C.white}}>Call Notes History</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:2}}>Monthly calls, therapy sessions, strategy calls</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:2}}>Monthly calls, emergency calls, therapy sessions, strategy calls</div>
             </div>
             {(isCoach||isAdmin)&&(
               <button onClick={()=>setShowNewCall(true)}
@@ -1521,6 +1553,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               </button>
             )}
           </div>
+
+          {/* Monthly check-in / emergency call documents pushed from the admin Documents panel */}
+          {adminDocs.filter(d=>d.doc_type==='monthly'||d.doc_type==='emergency').length>0&&(
+            <Card sx={{marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Call Documents</div>
+              {adminDocs.filter(d=>d.doc_type==='monthly'||d.doc_type==='emergency').map(renderDocRow)}
+            </Card>
+          )}
 
           {callNotes.length===0&&(
             <Card>
@@ -1627,7 +1667,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:4}}>Add Document</div>
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>For {selectedClient?.name} — visible to their coach and to them in the app</div>
             <Sel label="Type" value={newDoc.doc_type} onChange={v=>setNewDoc(p=>({...p,doc_type:v}))}
-              options={['note','form','lab','document']}/>
+              options={DOC_TYPES.map(d=>({value:d.v,label:d.l}))}/>
+            <div style={{fontSize:10,color:C.gold,margin:'-4px 0 10px'}}>
+              {DOC_TYPES.find(d=>d.v===newDoc.doc_type)?.dest}
+            </div>
             <Inp label="Title *" value={newDoc.title} onChange={v=>setNewDoc(p=>({...p,title:v}))}
               placeholder="e.g. GI Map Results · July 2026"/>
             <Inp label="Content / Notes" value={newDoc.content} onChange={v=>setNewDoc(p=>({...p,content:v}))}
