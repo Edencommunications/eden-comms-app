@@ -147,7 +147,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
   const [dbProfile,  setDbProfile]  = useState(null)   // DB-auth users (white-label) resolved from user_profiles
-  const [companyCtx, setCompanyCtx] = useState(null)   // {companyId,isWhiteLabel,tierCourses,tierRecipes} — null = Eden
+  const [companyCtx, setCompanyCtx] = useState(null)   // {companyId,isWhiteLabel,tierRecipes,packageId} — null = Eden
   const myUUID  = info.uuid || dbProfile?.id || null
   const roleEff = KNOWN_USERS[email] ? info.role : (dbProfile?.role || 'client')
   const isAdmin = roleEff==='super_admin'
@@ -164,13 +164,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
         setDbProfile(p)
         if (p.company_id && p.company_id!==EDEN_ORG_ID) {
           const org = await dbGet('organizations',`id=eq.${p.company_id}&select=id,plan,is_white_label`)
-          let tierCourses=false, tierRecipes=false, packageId=null
+          let tierRecipes=false, packageId=null
           if (org?.[0]?.plan) {
             const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(org[0].plan)}&active=eq.true&limit=1`)
-            tierCourses=!!pkg?.[0]?.includes_courses; tierRecipes=!!pkg?.[0]?.includes_recipes
+            tierRecipes=!!pkg?.[0]?.includes_recipes
             packageId=pkg?.[0]?.id||null
           }
-          setCompanyCtx({companyId:p.company_id, isWhiteLabel:!!org?.[0]?.is_white_label, tierCourses, tierRecipes, packageId})
+          setCompanyCtx({companyId:p.company_id, isWhiteLabel:!!org?.[0]?.is_white_label, tierRecipes, packageId})
         } else {
           setCompanyCtx(null)
         }
@@ -246,7 +246,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     loadCourses()
     loadLiveRecipes()
     if (myUUID) { checkRecipeAccess(); loadAssignedRecipes() }
-  },[profileReady, myUUID, companyCtx?.companyId, companyCtx?.tierCourses, companyCtx?.packageId])
+  },[profileReady, myUUID, companyCtx?.companyId, companyCtx?.packageId])
 
   // ── Load courses based on role ────────────────────────────
   // A course belongs to Eden when it has no company_id (or Eden's)
@@ -1164,7 +1164,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                     <div style={{flex:1}}>
                       <div style={{fontSize:12,fontWeight:700,color:C.white,textTransform:'capitalize'}}>{pkg.name}</div>
                       <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                        ${pkg.price}/mo{pkg.includes_courses?' · has full-library access':''}
+                        ${pkg.price}/mo
                       </div>
                     </div>
                     {on&&<span style={{fontSize:12,color:C.success,fontWeight:700}}>✓</span>}

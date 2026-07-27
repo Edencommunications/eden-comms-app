@@ -224,8 +224,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // ── Packages / pricing tiers (drive org plans + MRR) ─────
   const [packages,    setPackages]    = useState([])   // [{id,name,price,active}]
   const [pkgsLoaded,  setPkgsLoaded]  = useState(false)
-  const [newPkg,      setNewPkg]      = useState({name:'',price:'',includes_courses:false,includes_recipes:false})
-  const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price,includes_courses,includes_recipes} being edited
+  const [newPkg,      setNewPkg]      = useState({name:'',price:'',includes_recipes:false})
+  const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price,includes_recipes} being edited
   const [edenCourses, setEdenCourses] = useState([])    // Eden courses w/ per-course tier distribution (courses.tiers)
   const [pkgCoursesOpen, setPkgCoursesOpen] = useState(null) // package id whose Eden course list is expanded
   const [manageOrg,   setManageOrg]   = useState(null)  // org being edited in the Manage modal
@@ -263,17 +263,17 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   async function addPackage() {
     const name = newPkg.name.trim(); const price = parseFloat(newPkg.price)
     if (!name || isNaN(price)) return
-    const res = await dbInsert('packages',{ name, price, includes_courses:newPkg.includes_courses, includes_recipes:newPkg.includes_recipes })
+    const res = await dbInsert('packages',{ name, price, includes_recipes:newPkg.includes_recipes })
     const row = Array.isArray(res)?res[0]:res
-    if (row?.id) { setPackages(p=>[...p,row].sort((a,b)=>a.price-b.price)); setNewPkg({name:'',price:'',includes_courses:false,includes_recipes:false}) }
+    if (row?.id) { setPackages(p=>[...p,row].sort((a,b)=>a.price-b.price)); setNewPkg({name:'',price:'',includes_recipes:false}) }
     else alert('Could not save the tier. Make sure the packages table exists (run the SQL I gave you), then try again.')
   }
   async function savePackage() {
     if (!editPkg) return
     const name = editPkg.name.trim(); const price = parseFloat(editPkg.price)
     if (!name || isNaN(price)) return
-    await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price, includes_courses:!!editPkg.includes_courses, includes_recipes:!!editPkg.includes_recipes })
-    setPackages(p=>p.map(x=>x.id===editPkg.id?{...x,name,price,includes_courses:!!editPkg.includes_courses,includes_recipes:!!editPkg.includes_recipes}:x).sort((a,b)=>a.price-b.price))
+    await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price, includes_recipes:!!editPkg.includes_recipes })
+    setPackages(p=>p.map(x=>x.id===editPkg.id?{...x,name,price,includes_recipes:!!editPkg.includes_recipes}:x).sort((a,b)=>a.price-b.price))
     setEditPkg(null)
   }
   async function saveManagedOrg() {
@@ -1368,9 +1368,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       <span style={{fontSize:11,color:C.muted}}>/mo</span>
                     </div>
                     <label style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>
-                      <input type="checkbox" checked={!!editPkg.includes_courses} onChange={e=>setEditPkg(p=>({...p,includes_courses:e.target.checked}))}/>🎓 Eden Courses
-                    </label>
-                    <label style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>
                       <input type="checkbox" checked={!!editPkg.includes_recipes} onChange={e=>setEditPkg(p=>({...p,includes_recipes:e.target.checked}))}/>🍽 Recipe Book
                     </label>
                     <button onClick={savePackage}
@@ -1383,7 +1380,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     <div style={{flex:2}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.white,textTransform:'capitalize'}}>{pkg.name}</div>
                       <div style={{fontSize:9,color:C.muted,marginTop:2}}>
-                        Includes: {[pkg.includes_courses&&'🎓 Eden Courses',pkg.includes_recipes&&'🍽 Recipe Book'].filter(Boolean).join(' · ')||'their own content only'}
+                        Includes: {pkg.includes_recipes?'🍽 Recipe Book':'their own content only'} · 🎓 Eden Courses set per course below
                       </div>
                       {(()=>{ const list = edenCourses.filter(c=>Array.isArray(c.tiers)&&c.tiers.includes(pkg.id)); return (
                         <div style={{marginTop:4}}>
@@ -1404,7 +1401,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       )})()}
                     </div>
                     <div style={{flex:1,fontSize:13,fontWeight:700,color:C.gold}}>${Number(pkg.price)}/mo</div>
-                    <button onClick={()=>setEditPkg({id:pkg.id,name:pkg.name,price:String(pkg.price),includes_courses:!!pkg.includes_courses,includes_recipes:!!pkg.includes_recipes})}
+                    <button onClick={()=>setEditPkg({id:pkg.id,name:pkg.name,price:String(pkg.price),includes_recipes:!!pkg.includes_recipes})}
                       style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>Edit</button>
                     <button onClick={()=>deletePackage(pkg)}
                       style={{background:`${C.danger}18`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 10px',color:C.danger,fontSize:11,cursor:'pointer'}}>✕</button>
@@ -1422,9 +1419,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   opacity:(!newPkg.name.trim()||isNaN(parseFloat(newPkg.price)))?.5:1}}>+ Add Tier</button>
             </div>
             <div style={{display:'flex',gap:14,marginTop:8}}>
-              <label style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:C.muted,cursor:'pointer'}}>
-                <input type="checkbox" checked={newPkg.includes_courses} onChange={e=>setNewPkg(p=>({...p,includes_courses:e.target.checked}))}/>Includes 🎓 Eden Courses
-              </label>
               <label style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:C.muted,cursor:'pointer'}}>
                 <input type="checkbox" checked={newPkg.includes_recipes} onChange={e=>setNewPkg(p=>({...p,includes_recipes:e.target.checked}))}/>Includes 🍽 Recipe Book
               </label>
@@ -1481,7 +1475,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
                   <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Included by their tier{t?` (${t.name})`:''}</div>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    {[['🎓 Eden Courses',!!t?.includes_courses],['🍽 Recipe Book',!!t?.includes_recipes]].map(([label,on])=>(
+                    {[['🍽 Recipe Book',!!t?.includes_recipes]].map(([label,on])=>(
                       <span key={label} style={{fontSize:10,background:on?`${C.success}22`:`${C.danger}15`,border:`1px solid ${on?C.success:C.danger}33`,borderRadius:6,padding:'3px 8px',color:on?C.success:C.danger}}>
                         {on?'✓':'✕'} {label}
                       </span>
@@ -1494,7 +1488,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   </div>
                   <div style={{fontSize:9,color:C.muted,marginTop:6}}>
                     {!t&&'⚠ Their plan doesn\u2019t match any current tier — open Manage to assign one. '}
-                    Eden Courses & Recipe Book follow the tier. Connect links, calendar, and their own courses are managed by their admin.
+                    Recipe Book follows the tier; Eden Courses are distributed per course from the course library. Connect links, calendar, and their own courses are managed by their admin.
                   </div>
                 </div>
               )})()}
