@@ -23,6 +23,7 @@ import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
 import Wearables from "./components/Wearables";
 import InstallBanner from "./components/InstallBanner";
+import { supabase } from "./supabaseClient";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
@@ -71,7 +72,7 @@ const DEMO_USERS = {
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
 // @ts-nocheck
-const Ic = ({ n, size = 20, s, c = B.muted }) => {
+const Ic = ({ n, size = 20, s = undefined, c = B.muted }) => {
   const sz = size ?? s ?? 20;
   const d = {
     msg:      <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none" stroke={c} strokeWidth="1.8"/></>,
@@ -277,20 +278,63 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
             } catch {}
           }
         }
+        // Demo accounts predate real auth — sync a matching Supabase Auth
+        // session so admin actions (user provisioning) and password APIs work.
+        try {
+          const sync = await fetch('/api/auth/demo-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.toLowerCase(), password: pass }),
+          });
+          if (sync.ok) await supabase.auth.signInWithPassword({ email: email.toLowerCase(), password: pass });
+        } catch {}
         onLogin({ email, ...user });
       } else {
-        // Not a demo account — check user_profiles for an admin-created account
-        // with a temporary password (until real Supabase Auth is wired up)
+        // Real authentication — Supabase Auth (hashed passwords).
+        const emailNorm = email.toLowerCase();
+        const finishAuthLogin = async (authUser: any) => {
+          // Profile stays the app's identity record — load it by email
+          let p: any = null;
+          try {
+            const rows = await sbGet('user_profiles',
+              `email=eq.${encodeURIComponent(emailNorm)}&select=id,name,full_name,email,role,is_active`);
+            p = Array.isArray(rows) ? rows[0] : null;
+          } catch {}
+          if (p && p.is_active === false) {
+            await supabase.auth.signOut().catch(()=>{});
+            setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
+            return;
+          }
+          onLogin({
+            email: emailNorm,
+            name: p?.name || p?.full_name || authUser?.user_metadata?.name || emailNorm,
+            role: p?.role || 'client',
+            mustChangePassword: authUser?.user_metadata?.must_change_password === true,
+          });
+        };
         try {
-          const rows = await sbGet('user_profiles',
-            `email=eq.${encodeURIComponent(email.toLowerCase())}&select=id,name,full_name,email,role,temp_password,is_active`);
-          const p = Array.isArray(rows) ? rows[0] : null;
-          if (p && p.temp_password && p.temp_password === pass) {
-            if (p.is_active === false) {
-              setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
-            } else {
-              onLogin({ email: email.toLowerCase(), name: p.name || p.full_name || email, role: p.role || 'client' });
+          const { data, error: authErr } = await supabase.auth.signInWithPassword({ email: emailNorm, password: pass });
+          if (!authErr && data?.user) {
+            await finishAuthLogin(data.user);
+            setLoading(false);
+            return;
+          }
+          // Wrong password OR a legacy account that predates Supabase Auth —
+          // try the one-time server-side migration of the old temp password.
+          const mig = await fetch('/api/auth/migrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailNorm, password: pass }),
+          });
+          if (mig.ok) {
+            const retry = await supabase.auth.signInWithPassword({ email: emailNorm, password: pass });
+            if (!retry.error && retry.data?.user) {
+              await finishAuthLogin(retry.data.user);
+              setLoading(false);
+              return;
             }
+          } else if (mig.status === 403) {
+            setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
             setLoading(false);
             return;
           }
@@ -385,10 +429,25 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
   );
 };
 
-// FORGOT PASSWORD
+// FORGOT PASSWORD — sends a real Supabase Auth recovery email
 const ForgotScreen = ({ onBack }) => {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState("");
+  const sendReset = async () => {
+    setErr(""); setSending(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: window.location.origin + import.meta.env.BASE_URL,
+      });
+      if (error) { setErr(error.message || "Could not send the reset email — please try again."); setSending(false); return; }
+      setSent(true);
+    } catch {
+      setErr("Could not send the reset email — please check your connection and try again.");
+    }
+    setSending(false);
+  };
   return (
     <div style={{ minHeight:"100vh", background:`linear-gradient(160deg, #1a1a00 0%, #000000 50%, #0d0800 100%)`, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
       <div style={{ width:"100%", maxWidth:520 }}>
@@ -400,18 +459,127 @@ const ForgotScreen = ({ onBack }) => {
           {!sent ? (
             <>
               <p style={{ fontSize:13, color:B.muted, marginBottom:20, lineHeight:1.6 }}>Enter the email address on your account and we will send you a secure reset link.</p>
-              <Input label="Email Address" type="email" value={email} onChange={setEmail} placeholder="you@example.com" icon={<Ic n="mail" size={16} c={B.muted}/>}/>
-              <Btn onClick={()=>setSent(true)} fullWidth disabled={!email}>Send Reset Link</Btn>
+              <Input label="Email Address" type="email" value={email} onChange={setEmail} placeholder="you@example.com" icon={<Ic n="mail" size={16} c={B.muted}/>} error={err}/>
+              <Btn onClick={sendReset} fullWidth disabled={!email || sending}>{sending ? "Sending…" : "Send Reset Link"}</Btn>
             </>
           ) : (
             <div style={{ textAlign:"center", padding:"12px 0" }}>
               <div style={{ fontSize:40, marginBottom:12 }}>✉️</div>
               <h3 style={{ color:B.text, fontSize:16, marginBottom:8 }}>Check your inbox</h3>
-              <p style={{ fontSize:13, color:B.muted, lineHeight:1.6 }}>A password reset link has been sent to <strong style={{ color:B.text }}>{email}</strong>. It expires in 15 minutes.</p>
+              <p style={{ fontSize:13, color:B.muted, lineHeight:1.6 }}>If an account exists for <strong style={{ color:B.text }}>{email}</strong>, a password reset link is on its way. The link expires after a short time — use it soon.</p>
             </div>
           )}
         </Card>
         <button onClick={onBack} style={{ background:"none", border:"none", cursor:"pointer", color:B.muted, fontSize:13, marginTop:20, display:"block", margin:"20px auto 0" }}>← Back to Sign In</button>
+      </div>
+    </div>
+  );
+};
+
+// SET PASSWORD — shared by the first-login "set your own password" prompt
+// (mode="first") and the emailed reset-link landing (mode="recovery").
+// Requires an active Supabase Auth session (sign-in or recovery link).
+const SetPasswordScreen = ({ mode, onDone, onCancel }) => {
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [show, setShow] = useState(false);
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setErr("");
+    if (pw1.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (pw1 !== pw2) { setErr("Passwords do not match."); return; }
+    setSaving(true);
+    const { error } = await supabase.auth.updateUser({
+      password: pw1,
+      data: { must_change_password: false },
+    });
+    setSaving(false);
+    if (error) {
+      setErr(/same.*password|different from the old/i.test(error.message || "")
+        ? "New password must be different from your current one."
+        : (error.message || "Could not update your password — please try again."));
+      return;
+    }
+    onDone();
+  };
+  return (
+    <div style={{ minHeight:"100vh", background:`linear-gradient(160deg, #1a1a00 0%, #000000 50%, #0d0800 100%)`, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ width:"100%", maxWidth:520 }}>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", marginBottom:28 }}>
+          <HoneycombLogo size={56}/>
+          <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:"12px 0 4px" }}>
+            {mode === "recovery" ? "Choose a New Password" : "Set Your Password"}
+          </h1>
+          <p style={{ fontSize:12, color:B.muted, textAlign:"center" }}>
+            {mode === "recovery"
+              ? "Enter a new password for your account."
+              : "For your security, replace the temporary password with one only you know."}
+          </p>
+        </div>
+        <Card>
+          <Input label="New Password" type={show?"text":"password"} value={pw1} onChange={setPw1} placeholder="At least 8 characters"
+            icon={<Ic n="lock" size={16} c={B.muted}/>}
+            rightIcon={<Ic n={show?"eyeoff":"eye"} size={16} c={B.muted}/>} onRightClick={()=>setShow(!show)}/>
+          <Input label="Confirm New Password" type={show?"text":"password"} value={pw2} onChange={setPw2} placeholder="Repeat it"
+            icon={<Ic n="lock" size={16} c={B.muted}/>} error={err}/>
+          <Btn onClick={save} fullWidth disabled={saving || !pw1 || !pw2}>{saving ? "Saving…" : "Save Password"}</Btn>
+        </Card>
+        {onCancel && (
+          <button onClick={onCancel} style={{ background:"none", border:"none", cursor:"pointer", color:B.muted, fontSize:13, display:"block", margin:"20px auto 0" }}>← Back to Sign In</button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// CHANGE PASSWORD — small modal available from the app header once signed in
+// through real auth (demo accounts have no auth session, so it's hidden).
+const ChangePasswordModal = ({ onClose }) => {
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [show, setShow] = useState(false);
+  const [err, setErr] = useState("");
+  const [ok, setOk] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setErr("");
+    if (pw1.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (pw1 !== pw2) { setErr("Passwords do not match."); return; }
+    setSaving(true);
+    const { error } = await supabase.auth.updateUser({ password: pw1, data: { must_change_password: false } });
+    setSaving(false);
+    if (error) {
+      setErr(/same.*password|different from the old/i.test(error.message || "")
+        ? "New password must be different from your current one."
+        : (error.message || "Could not update your password — please try again."));
+      return;
+    }
+    setOk(true);
+  };
+  return (
+    <div onClick={e=>{ if (e.target === e.currentTarget) onClose(); }}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, padding:16 }}>
+      <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:16, width:"100%", maxWidth:420, padding:24 }}>
+        <h3 style={{ fontSize:16, fontWeight:700, color:B.text, margin:"0 0 16px" }}>Change Password</h3>
+        {ok ? (
+          <>
+            <p style={{ fontSize:13, color:B.success, margin:"0 0 16px" }}>✓ Your password has been updated.</p>
+            <Btn onClick={onClose} fullWidth>Done</Btn>
+          </>
+        ) : (
+          <>
+            <Input label="New Password" type={show?"text":"password"} value={pw1} onChange={setPw1} placeholder="At least 8 characters"
+              icon={<Ic n="lock" size={16} c={B.muted}/>}
+              rightIcon={<Ic n={show?"eyeoff":"eye"} size={16} c={B.muted}/>} onRightClick={()=>setShow(!show)}/>
+            <Input label="Confirm New Password" type={show?"text":"password"} value={pw2} onChange={setPw2} placeholder="Repeat it"
+              icon={<Ic n="lock" size={16} c={B.muted}/>} error={err}/>
+            <div style={{ display:"flex", gap:10 }}>
+              <Btn onClick={onClose} variant="secondary" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={save} disabled={saving || !pw1 || !pw2} style={{ flex:1 }}>{saving ? "Saving…" : "Save"}</Btn>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -4159,6 +4327,13 @@ const IDLE_MS      = 14 * 60 * 1000;  // 14 min idle → show warning
 const WARNING_SECS = 60;               // 60 s to respond before forced logout
 
 const AppShell = ({ user, onLogout }) => {
+  // Change-password is only possible with a real Supabase Auth session
+  // (hardcoded demo logins don't have one).
+  const [hasAuthSession, setHasAuthSession] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setHasAuthSession(!!data?.session)).catch(()=>{});
+  }, []);
   const [tab, setTab]           = useState("home");
   // White-label branding: if this user belongs to a white-label company, brand the shell as theirs
   const [wlOrg, setWlOrg] = useState<any>(null);
@@ -4475,6 +4650,13 @@ const AppShell = ({ user, onLogout }) => {
             </button>
           )}
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={setTab}/>
+          {hasAuthSession && !DEMO_USERS[user.email] && (
+            <button onClick={() => setShowChangePw(true)} title="Change password"
+              style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
+              <Ic n="lock" size={14} c={B.muted}/>
+              {!isMobile && <span style={{ fontSize:11, color:B.muted }}>Password</span>}
+            </button>
+          )}
           <div style={{ width:30, height:30, borderRadius:15, background:`linear-gradient(135deg, ${shellPrimary}, ${shellSecondary})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <span style={{ fontSize:13, fontWeight:800, color:B.black }}>{user.name[0]}</span>
           </div>
@@ -4623,14 +4805,31 @@ const AppShell = ({ user, onLogout }) => {
           </div>
         </div>
       )}
+      {showChangePw && <ChangePasswordModal onClose={()=>setShowChangePw(false)}/>}
     </div>
   );
 };
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [authScreen, setAuthScreen] = useState("login");
+
+  // Password-recovery link landing: the emailed reset link signs the visitor
+  // in with a temporary recovery session — show the "choose a new password"
+  // screen instead of the login form.
+  const [recovery, setRecovery] = useState(() => /type=recovery/.test(window.location.hash));
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const fullLogout = () => {
+    setUser(null);
+    supabase.auth.signOut().catch(()=>{});
+  };
 
   // Branded login link: ?org=<slug> loads that org's name + palette before auth.
   // Plain visits keep brandOrg = null → Eden gold login.
@@ -4652,14 +4851,24 @@ export default function App() {
   })() }, []);
 
   if (!user) {
+    if (recovery) return <SetPasswordScreen mode="recovery"
+      onDone={()=>{ setRecovery(false); supabase.auth.signOut().catch(()=>{}); try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch {} }}
+      onCancel={()=>{ setRecovery(false); supabase.auth.signOut().catch(()=>{}); try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch {} }}/>;
     if (authScreen === "forgot") return <ForgotScreen onBack={()=>setAuthScreen("login")}/>;
     if (authScreen === "signup") return <SignupScreen onBack={()=>setAuthScreen("login")}/>;
     return <LoginScreen onLogin={setUser} onForgot={()=>setAuthScreen("forgot")} onSignup={()=>setAuthScreen("signup")} brandOrg={brandOrg}/>;
   }
 
+  // First sign-in with a temporary password — force setting a personal one
+  if (user.mustChangePassword) {
+    return <SetPasswordScreen mode="first"
+      onDone={()=>setUser({ ...user, mustChangePassword: false })}
+      onCancel={fullLogout}/>;
+  }
+
   return (
-    <AuthContext.Provider value={{ user, logout:()=>setUser(null) }}>
-      <AppShell user={user} onLogout={()=>setUser(null)}/>
+    <AuthContext.Provider value={{ user, logout: fullLogout }}>
+      <AppShell user={user} onLogout={fullLogout}/>
       <InstallBanner />
     </AuthContext.Provider>
   );

@@ -10,6 +10,28 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
+import { supabase as authClient } from '../supabaseClient'
+
+// Create a real (Supabase Auth) login for a new user via the API server.
+// Requires the signed-in admin's own auth session (JWT) — the server verifies
+// the token and the super_admin role before provisioning.
+async function provisionLogin(email, password, name) {
+  try {
+    const { data } = await authClient.auth.getSession()
+    const token = data?.session?.access_token
+    if (!token) return { ok:false, error:"Your session can't authorize this — sign out and back in, then try again" }
+    const res = await fetch('/api/auth/provision', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ email, password, name }),
+    })
+    const body = await res.json().catch(()=>({}))
+    if (!res.ok) return { ok:false, error: body.error || 'auth service unavailable' }
+    return { ok:true }
+  } catch(e) {
+    return { ok:false, error:'auth service unreachable' }
+  }
+}
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -373,6 +395,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     for (const r of ready) {
       const initials = r.name.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
       const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
+      // Real login first (Supabase Auth — hashed, must set own password on first sign-in)
+      const authRes = await provisionLogin(r.email, tempPass, r.name)
+      if (!authRes.ok) { failed.push({email:r.email, reason:authRes.error||'Could not create their login'}); continue }
       const payload = {
         id:            crypto.randomUUID(),
         name:          r.name,
@@ -383,7 +408,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         company_id:    adminCompanyId||null,
         coach_id:      acCoachId,
         update_day:    acCheckInDay,
-        temp_password: tempPass,
       }
       const res = await dbInsert('user_profiles', payload)
       const profileId = Array.isArray(res)?res[0]?.id:res?.id
@@ -973,7 +997,20 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const initials = newUser.name.trim().split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
     const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
 
-    // Write to Supabase user_profiles so the record is ready for real auth
+    // Create their real login first (Supabase Auth — hashed password, forced
+    // "set your own password" on first sign-in). No plain-text storage.
+    try {
+      const authRes = await provisionLogin(emailNorm, tempPass, newUser.name.trim())
+      if (!authRes.ok) {
+        alert(`Could not create this user's login: ${authRes.error || 'auth service unavailable'}. No account was created.`)
+        return
+      }
+    } catch(e) {
+      alert('Could not reach the auth service — no account was created. Please try again.')
+      return
+    }
+
+    // Write to Supabase user_profiles (the app identity record — no password stored here)
     let profileId = null
     try {
       // org_admin = a white-label company's admin: stored as super_admin scoped to their org
@@ -987,7 +1024,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         initials,
         company_id: targetOrg ? targetOrg.id : (adminCompanyId||null),
         update_day: newUser.role==='client'?newUser.checkInDay:null,
-        temp_password: tempPass,
       }
       const result = await dbInsert('user_profiles', payload)
       profileId = Array.isArray(result)?result[0]?.id:result?.id
@@ -2084,8 +2120,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <div style={{fontSize:11,fontWeight:700,color:C.success,marginBottom:6}}>📋 What To Do</div>
               <div style={{fontSize:11,color:C.muted,lineHeight:1.7}}>
                 1. Send them these credentials — they can log in right away with this temporary password.<br/>
-                2. Their profile is saved in Supabase, ready for real auth when you enable it.<br/>
-                3. Once Supabase Auth is live, they'll get a proper invite link instead.
+                2. On their first sign-in they'll be asked to set their own password.<br/>
+                3. The temp password is only shown here once — it's stored securely encrypted, never in plain text.
               </div>
             </div>
 

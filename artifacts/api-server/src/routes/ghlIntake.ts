@@ -20,6 +20,7 @@
 import { Router, type IRouter, type Request } from "express";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { logger } from "../lib/logger";
+import { provisionAuthUser } from "./auth";
 
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
 
@@ -221,8 +222,12 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     return fail(422, "rejected", `No coach with email ${coachEmail} found in this organization`);
   }
 
-  // Create the client profile (current demo-auth invite model: temp password)
+  // Create the real (Supabase Auth) login first — hashed password, forced
+  // "set your own password" on first sign-in. No plain-text storage.
   const tempPass = `Eden${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.floor(10 + Math.random() * 90)}!`;
+  const auth = await provisionAuthUser(email, tempPass, name);
+  if (!auth.ok) return fail(500, "error", `Could not create login for client: ${auth.error}`);
+
   const initials = name.split(" ").filter(Boolean).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
   const profile: Record<string, unknown> = {
     id: randomUUID(),
@@ -233,7 +238,6 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     company_id: companyId,
     coach_id: coach?.id || null,
     update_day: "Wednesday",
-    temp_password: tempPass,
   };
   if (phone) profile.phone = phone;
 
@@ -261,7 +265,7 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     const notif = await dbInsert("notifications", {
       recipient_id: coach.id,
       type: "ghl_intake",
-      body: `🤝 New client auto-imported from GHL: ${name} (${email}). Temp password: ${tempPass} — send them their login details.`,
+      body: `🤝 New client auto-imported from GHL: ${name} (${email}). Temp password: ${tempPass} — send them their login details. They'll be asked to set their own password on first sign-in.`,
       is_read: false,
     });
     if (!notif.ok) logger.warn({ error: notif.error }, "[GHL Intake] notification insert failed");
