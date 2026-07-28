@@ -2247,9 +2247,6 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                 </div>
               );
             })}
-            <div style={{ marginTop:6 }}>
-              <Btn variant="secondary" fullWidth><Ic n="upload" size={16} c={B.muted}/>Import Client from GHL</Btn>
-            </div>
           </>
         )}
       </div>

@@ -25,7 +25,7 @@ async function processDue() {
     )
     if (!res.ok) return
 
-    const rows: { id: string }[] = await res.json()
+    const rows = (await res.json()) as { id: string }[]
     if (!rows?.length) return
 
     // Mark each one as sent

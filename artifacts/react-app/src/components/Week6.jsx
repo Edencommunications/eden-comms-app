@@ -359,6 +359,29 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const allCoaches = [...DEMO_COACHES, ...dbCoaches].filter(c=>!removedCoaches.includes(c.uuid))
   const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
 
+  // ── GHL client intake webhook ─────────────────────────────
+  const [intakeSecret, setIntakeSecret] = useState(null) // null=loading, ''=none yet
+  const [showIntake,   setShowIntake]   = useState(false)
+  const [intakeCopied, setIntakeCopied] = useState(false)
+  useEffect(()=>{
+    if (!isAdmin||!adminCompanyId) return
+    dbGet('company_intake_secrets',`company_id=eq.${adminCompanyId}&select=secret`)
+      .then(rows=>setIntakeSecret(Array.isArray(rows)?(rows[0]?.secret||''):''))
+      .catch(()=>setIntakeSecret(''))
+  },[isAdmin,adminCompanyId])
+  async function generateIntakeSecret() {
+    const secret = (crypto.randomUUID()+crypto.randomUUID()).replace(/-/g,'')
+    if (intakeSecret) {
+      // regenerate: old link stops working
+      if (!confirm('Generate a new link? The old webhook link will stop working and you\'ll need to update it in GHL.')) return
+      await dbDelete('company_intake_secrets',`company_id=eq.${adminCompanyId}`)
+    }
+    const r = await dbInsert('company_intake_secrets',{company_id:adminCompanyId,secret})
+    if (r) setIntakeSecret(secret)
+    else alert('Could not create the webhook link — please try again.')
+  }
+  const intakeUrl = intakeSecret ? `${window.location.origin}/api/ghl-intake/${intakeSecret}` : ''
+
   // ── Admin Documents ───────────────────────────────────────
   const [adminDocs,   setAdminDocs]   = useState([])
   const [showAddDoc,  setShowAddDoc]  = useState(false)
@@ -1048,6 +1071,47 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <option>All Coaches</option>
                   {allCoaches.map(c=><option key={c.uuid}>{c.name}</option>)}
                 </select>
+              )}
+              {isAdmin&&(
+                <div style={{marginTop:8}}>
+                  <button onClick={()=>setShowIntake(s=>!s)}
+                    style={{background:'none',border:'none',padding:0,color:C.gold,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                    ⚡ Auto-import from GHL {showIntake?'▾':'▸'}
+                  </button>
+                  {showIntake&&(
+                    <div style={{marginTop:8,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10}}>
+                      <div style={{fontSize:11,color:C.muted,lineHeight:1.5,marginBottom:8}}>
+                        When a contract is signed in GoHighLevel, new clients can be added here automatically — under the coach they're assigned to in GHL. Paste this private link into a GHL workflow's <b style={{color:C.white}}>Webhook</b> action (trigger: Document Signed).
+                      </div>
+                      {intakeSecret===null&&<div style={{fontSize:11,color:C.muted}}>Loading…</div>}
+                      {intakeSecret===''&&(
+                        <button onClick={generateIntakeSecret}
+                          style={{background:C.gold,border:'none',borderRadius:8,padding:'7px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
+                          Create my webhook link
+                        </button>
+                      )}
+                      {intakeSecret&&(
+                        <>
+                          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                            <input readOnly value={intakeUrl} onFocus={e=>e.target.select()}
+                              style={{flex:1,background:C.black,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:10,outline:'none'}}/>
+                            <button onClick={()=>{navigator.clipboard?.writeText(intakeUrl);setIntakeCopied(true);setTimeout(()=>setIntakeCopied(false),1500)}}
+                              style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',fontWeight:700,color:C.black,fontSize:10,cursor:'pointer',whiteSpace:'nowrap'}}>
+                              {intakeCopied?'✓ Copied':'Copy'}
+                            </button>
+                          </div>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+                            <div style={{fontSize:9,color:C.muted}}>Keep this link private — anyone with it can add clients to your company.</div>
+                            <button onClick={generateIntakeSecret}
+                              style={{background:'none',border:'none',padding:0,color:C.muted,fontSize:9,cursor:'pointer',textDecoration:'underline'}}>
+                              Regenerate
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
