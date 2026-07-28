@@ -545,6 +545,7 @@ Training Principles:
   async function handleLabUpload(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!CLIENT_UUID) { alert('Still loading this client\'s profile — try again in a second.'); return }
     setUploading(true)
     try {
       const path   = `labs/${CLIENT_UUID}/${Date.now()}-${file.name}`
@@ -681,6 +682,7 @@ Training Principles:
 
   // ── Save workout log to DB (upsert by client+week) ────────
   async function saveWorkoutLog() {
+    if (!CLIENT_UUID) { alert('Still loading this client\'s profile — try again in a second.'); return }
     setLogSaving(true)
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/client_workout_logs`, {
@@ -750,6 +752,7 @@ Training Principles:
   }
 
   async function saveWorkoutPlan() {
+    if (!CLIENT_UUID) { alert('Still loading this client\'s profile — try again in a second.'); return }
     // Embed principles + cardioWeekStart inside the workouts JSON blob so no schema change is needed
     const payload = { exercises: workouts, principles: trainingPrinciples, cardioWeekStart }
     await fetch(`${SUPABASE_URL}/rest/v1/workout_plans`, {

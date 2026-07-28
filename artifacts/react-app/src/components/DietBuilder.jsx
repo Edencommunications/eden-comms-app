@@ -710,7 +710,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // null until resolved; Eden org id for Eden staff and any user without a profile row.
   const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
   const [myCompanyId, setMyCompanyId] = useState(null)
-  const [myUUID, setMyUUID] = useState(null)
+  const [myUUID, setMyUUID] = useState(()=>KNOWN_USERS[email]?.uuid||null)
   // Does this org's tier include the Recipe Book? Eden always true; WL orgs resolved
   // from organizations.plan → packages.includes_recipes (Eden admin controls both).
   // null = still resolving — hide recipe UI until known.
@@ -724,7 +724,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       const cid = rows?.[0]?.company_id || EDEN_ORG_ID
       if (stale) return
       setMyCompanyId(cid)
-      setMyUUID(rows?.[0]?.id || null)
+      setMyUUID(rows?.[0]?.id || KNOWN_USERS[email]?.uuid || null)
       if (cid===EDEN_ORG_ID) { setTierRecipes(true) }
       else {
         const org = await dbGet('organizations',`id=eq.${cid}&select=plan`)
@@ -890,7 +890,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         }))
       })
       .catch(() => {})
-  }, [demoCheckins, email])
+  }, [demoCheckins, email, myUUID])
 
   // Load client's progress photos — for both client login and coach viewing a client
   useEffect(() => {
@@ -1680,7 +1680,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           })}
 
           {isCoach&&(
-            <button onClick={async()=>{await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});alert('Diet plan saved!')}}
+            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});alert('Diet plan saved!')}}
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
@@ -2922,6 +2922,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )}
 
                 <button onClick={async()=>{
+                  if(!myUUID){alert('Still loading your profile — try again in a second.');return}
                   await dbInsert('weekly_checkins',{
                     client_id:        myUUID,
                     coach_id:         myCoachId,
@@ -2945,7 +2946,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   const _cId = myCoachId
                   const _clId = myUUID
                   if(_cId&&_clId) insertNotification(_cId, _clId, 'new_checkin',
-                    `📋 Jordan submitted their weekly check-in — review it in the Check-In Hub`)
+                    `📋 ${dbProfile?.name||info.name||'A client'} submitted their weekly check-in — review it in the Check-In Hub`)
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                 }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
                   Submit Weekly Check-In
