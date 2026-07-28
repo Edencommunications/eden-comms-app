@@ -1295,12 +1295,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   placeholder="Search clients…"
                   style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                 {isAdmin&&(
-                  <button onClick={()=>setShowNewUser(true)}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
-                    + Add
-                  </button>
-                )}
-                {isAdmin&&(
                   <button onClick={()=>{resetAddClients();setShowAddClients(true)}}
                     title="Add one client or bulk-upload a CSV under a chosen coach"
                     style={{background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
