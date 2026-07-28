@@ -220,7 +220,7 @@ const OrgLogo = ({ org, size = 44 }) => {
 // LOGIN
 // brandOrg: organizations row loaded from a branded link (?org=<slug>) — themes
 // the whole login page with that org's name and palette. Null = Eden default.
-const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
+const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
   const wl = brandOrg ? wlPalette(brandOrg) : null;
   const primary = wl ? wl.primary : B.gold;
   const secondary = wl ? wl.secondary : "#ffb733";
@@ -366,7 +366,7 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
             {brandOrg ? <>The private platform for<br/>{brandOrg.name} coaches and clients</> : <>The private platform for<br/>Lifestyle of Eden coaches and clients</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
-            {["🔒 Encrypted in transit & at rest","🛡 End-to-end secure messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
+            {["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
               <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:`${primary}11`, borderRadius:8, border:`1px solid ${primary}22` }}>
                 <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
               </div>
@@ -397,11 +397,6 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
               {loading ? "Signing in…" : "Sign In →"}
             </Btn>
           </Card>
-
-          <p style={{ textAlign:"center", fontSize:13, color:B.muted, marginTop:20 }}>
-            New client?{" "}
-            <button onClick={onSignup} style={{ background:"none", border:"none", cursor:"pointer", color:primary, fontSize:13, fontWeight:600, padding:0 }}>Request Access</button>
-          </p>
 
           {/* Demo credentials helper */}
           <div style={{ marginTop:28, padding:"12px 14px", background:"#1a1a1a", border:"1px solid #2a2a2a", borderRadius:10 }}>
@@ -580,46 +575,6 @@ const ChangePasswordModal = ({ onClose }) => {
             </div>
           </>
         )}
-      </div>
-    </div>
-  );
-};
-
-// REQUEST ACCESS
-const SignupScreen = ({ onBack }) => {
-  const [form, setForm] = useState({ name:"", email:"", phone:"", message:"" });
-  const [sent, setSent] = useState(false);
-  const set = k => v => setForm(f=>({...f,[k]:v}));
-  return (
-    <div style={{ minHeight:"100vh", background:`linear-gradient(160deg, #1a1a00 0%, #000000 50%, #0d0800 100%)`, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-      <div style={{ width:"100%", maxWidth:520 }}>
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", marginBottom:28 }}>
-          <HoneycombLogo size={56}/>
-          <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:"12px 0 4px" }}>Request Access</h1>
-          <p style={{ fontSize:12, color:B.muted }}>Your coach will activate your account</p>
-        </div>
-        {!sent ? (
-          <Card>
-            <Input label="Full Name" value={form.name} onChange={set("name")} placeholder="Your full name"/>
-            <Input label="Email" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" icon={<Ic n="mail" size={16} c={B.muted}/>}/>
-            <Input label="Phone" value={form.phone} onChange={set("phone")} placeholder="+1 (555) 000-0000"/>
-            <div style={{ marginBottom:16 }}>
-              <label style={{ display:"block", fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>Message (optional)</label>
-              <textarea value={form.message} onChange={e=>set("message")(e.target.value)} placeholder="Anything your coach should know..."
-                style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", color:B.text, fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit", resize:"vertical", minHeight:80 }}/>
-            </div>
-            <Btn onClick={()=>setSent(true)} fullWidth disabled={!form.name||!form.email}>Submit Request</Btn>
-          </Card>
-        ) : (
-          <Card>
-            <div style={{ textAlign:"center", padding:"12px 0" }}>
-              <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
-              <h3 style={{ color:B.text, fontSize:16, marginBottom:8 }}>Request Submitted</h3>
-              <p style={{ fontSize:13, color:B.muted, lineHeight:1.6 }}>Your coach will review your request and send you login credentials within 24 hours.</p>
-            </div>
-          </Card>
-        )}
-        <button onClick={onBack} style={{ background:"none", border:"none", cursor:"pointer", color:B.muted, fontSize:13, marginTop:20, display:"block", margin:"20px auto 0" }}>← Back to Sign In</button>
       </div>
     </div>
   );
@@ -4848,8 +4803,7 @@ export default function App() {
       onDone={()=>{ setRecovery(false); supabase.auth.signOut().catch(()=>{}); try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch {} }}
       onCancel={()=>{ setRecovery(false); supabase.auth.signOut().catch(()=>{}); try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch {} }}/>;
     if (authScreen === "forgot") return <ForgotScreen onBack={()=>setAuthScreen("login")}/>;
-    if (authScreen === "signup") return <SignupScreen onBack={()=>setAuthScreen("login")}/>;
-    return <LoginScreen onLogin={setUser} onForgot={()=>setAuthScreen("forgot")} onSignup={()=>setAuthScreen("signup")} brandOrg={brandOrg}/>;
+    return <LoginScreen onLogin={setUser} onForgot={()=>setAuthScreen("forgot")} brandOrg={brandOrg}/>;
   }
 
   // First sign-in with a temporary password — force setting a personal one
