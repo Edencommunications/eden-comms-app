@@ -758,7 +758,9 @@ Training Principles:
 
   // ── Cardio ────────────────────────────────────────────────
   function addCardio() {
-    setCardio(p=>[...p,{type:'Brisk Walk',duration:'30 min',frequency:'3x/week',notes:''}])
+    // Default to the first cardio type still visible for this org (built-ins minus hidden, then company types)
+    const visible = [...CARDIO_TYPES.filter(t=>!hiddenCardio.has(t)),...companyCardioTypes]
+    setCardio(p=>[...p,{type:visible[0]||'Brisk Walk',duration:'30 min',frequency:'3x/week',notes:''}])
   }
   function removeCardio(i) { setCardio(p=>p.filter((_,j)=>j!==i)) }
   function updateCardio(i,field,val) {
@@ -1381,7 +1383,7 @@ Training Principles:
               <div key={i} style={{padding:'12px 0',borderTop:`1px solid ${C.border}`}}>
                 {isCoach?(
                   <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-                    <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={[...CARDIO_TYPES.filter(t=>!hiddenCardio.has(t)),...companyCardioTypes]}/>
+                    <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={(v=>[...(v.includes(c.type)?[]:[c.type]),...v])([...CARDIO_TYPES.filter(t=>!hiddenCardio.has(t)),...companyCardioTypes])}/>
                     <Inp label="Duration" value={c.duration} onChange={v=>updateCardio(i,'duration',v)} placeholder="e.g. 45-60 min"/>
                     <Inp label="Frequency" value={c.frequency} onChange={v=>updateCardio(i,'frequency',v)} placeholder="e.g. Daily"/>
                     <div style={{display:'flex',alignItems:'flex-end',paddingBottom:10}}>

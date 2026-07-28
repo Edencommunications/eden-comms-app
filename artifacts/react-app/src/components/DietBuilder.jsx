@@ -1271,6 +1271,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     ;(Array.isArray(hid)?hid:[]).forEach(r=>h[r.kind]?.add(r.name))
     setHiddenItems(h)
     setResourceLinks(Array.isArray(links)?links:[])
+    // Don't leave admin-hidden built-in habits pre-assigned by default
+    if (h.habit.size) setAssignedHabits(p=>p.filter(x=>!h.habit.has(x.name)))
   }
 
   async function removeCompanyFood(dbId) {
