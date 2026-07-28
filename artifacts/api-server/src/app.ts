@@ -14,7 +14,10 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          // Never log webhook secrets embedded in the path
+          url: req.url
+            ?.split("?")[0]
+            ?.replace(/(\/ghl-intake\/)[^/]+/, "$1[redacted]"),
         };
       },
       res(res) {

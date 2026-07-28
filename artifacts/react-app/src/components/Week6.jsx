@@ -372,9 +372,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   async function generateIntakeSecret() {
     const secret = (crypto.randomUUID()+crypto.randomUUID()).replace(/-/g,'')
     if (intakeSecret) {
-      // regenerate: old link stops working
+      // Regenerate in place (update, not delete+insert) — if it fails, the old link keeps working
       if (!confirm('Generate a new link? The old webhook link will stop working and you\'ll need to update it in GHL.')) return
-      await dbDelete('company_intake_secrets',`company_id=eq.${adminCompanyId}`)
+      const ok = await dbUpdate('company_intake_secrets',`company_id=eq.${adminCompanyId}`,{secret})
+      if (ok) setIntakeSecret(secret)
+      else alert('Could not regenerate the link — your existing link is unchanged and still works.')
+      return
     }
     const r = await dbInsert('company_intake_secrets',{company_id:adminCompanyId,secret})
     if (r) setIntakeSecret(secret)
