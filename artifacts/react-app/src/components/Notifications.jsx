@@ -281,7 +281,7 @@ export default function Notifications({ currentUser, onNavigate }) {
             flexShrink:0, textAlign:'center',
           }}>
             <div style={{ fontSize:10, color:C.muted }}>
-              🔒 Notifications are private and HIPAA-compliant
+              🔒 Notifications are private and encrypted
             </div>
           </div>
         </div>

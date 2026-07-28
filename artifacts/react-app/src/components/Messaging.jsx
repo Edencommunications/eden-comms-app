@@ -1367,7 +1367,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         {/* HIPAA footer */}
         <div style={{ padding:'10px 14px', borderTop:`1px solid ${C.border}` }}>
           <div style={{ fontSize:9, color:C.muted, lineHeight:1.6 }}>
-            🔒 All messages encrypted · HIPAA compliant
+            🔒 All messages encrypted
           </div>
         </div>
       </div>

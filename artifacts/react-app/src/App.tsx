@@ -366,7 +366,7 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
             {brandOrg ? <>The private platform for<br/>{brandOrg.name} coaches and clients</> : <>The private platform for<br/>Lifestyle of Eden coaches and clients</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
-            {["🔒 HIPAA-grade encryption","🛡 End-to-end secure messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
+            {["🔒 Encrypted in transit & at rest","🛡 End-to-end secure messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
               <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:`${primary}11`, borderRadius:8, border:`1px solid ${primary}22` }}>
                 <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
               </div>
@@ -421,7 +421,7 @@ const LoginScreen = ({ onLogin, onForgot, onSignup, brandOrg = null }) => {
           </div>
 
           <p style={{ textAlign:"center", fontSize:10, color:"#444444", marginTop:20, lineHeight:1.6 }}>
-            {brandOrg ? "🔒 All data encrypted · HIPAA compliant" : "🔒 All data encrypted · HIPAA compliant · edencommunications.io"}
+            {brandOrg ? "🔒 All data encrypted" : "🔒 All data encrypted · edencommunications.io"}
           </p>
         </div>
       </div>
@@ -2843,7 +2843,7 @@ const AdminConversationMonitor = ({ user }:any) => {
             {isMobile && <button onClick={()=>setSelected(null)} style={{ background:'none', border:'none', color:B.gold, fontSize:13, fontWeight:700, cursor:'pointer', padding:0 }}>← Back</button>}
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{pName(selected.participant_a_id)} ↔ {pName(selected.participant_b_id)}</p>
-              <p style={{ fontSize:10, color:B.muted, margin:0 }}>Admin read-only · HIPAA audit log active</p>
+              <p style={{ fontSize:10, color:B.muted, margin:0 }}>Admin read-only · access monitored</p>
             </div>
             <button onClick={()=>openConvo(selected)} style={{ background:`${B.gold}22`, border:`1px solid ${B.goldMid}`, borderRadius:6, padding:'5px 10px', color:B.gold, fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}>Refresh</button>
           </div>
@@ -3602,8 +3602,8 @@ const AdminDashboard = ({ user }:any) => {
             </>)}
             <Divider/>
             <div style={{ marginTop:12, padding:"12px 14px", background:`${B.gold}11`, border:`1px solid ${B.gold}33`, borderRadius:10 }}>
-              <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>🔒 HIPAA COMPLIANCE STATUS</p>
-              <p style={{ fontSize:12, color:B.muted, margin:0 }}>AES-256 encryption active · Audit logs enabled · BAA on file · Last access review: Jul 13 2026</p>
+              <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>🔒 SECURITY STATUS</p>
+              <p style={{ fontSize:12, color:B.muted, margin:0 }}>Encrypted in transit (TLS) and at rest (AES-256) · Private client & coach data</p>
             </div>
           </div>
         </div>
@@ -4606,7 +4606,7 @@ const AppShell = ({ user, onLogout }) => {
           {wlOrg ? <OrgLogo org={wlOrg} size={30}/> : <HoneycombLogo size={30}/>}
           <div>
             <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{wlOrg ? wlOrg.name : "Eden Communications"}</p>
-            {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>{wlOrg ? "🔒 HIPAA Secure" : "🔒 HIPAA Secure · edencommunications.io"}</p>}
+            {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>{wlOrg ? "🔒 Encrypted" : "🔒 Encrypted · edencommunications.io"}</p>}
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
@@ -4775,7 +4775,7 @@ const AppShell = ({ user, onLogout }) => {
               Still there?
             </h2>
             <p style={{ fontSize:13, color:B.muted, margin:"0 0 20px", lineHeight:1.6 }}>
-              For HIPAA security, you'll be signed out automatically due to inactivity.
+              For your security, you'll be signed out automatically due to inactivity.
             </p>
             {/* Countdown ring */}
             <div style={{ fontSize:36, fontWeight:900,
