@@ -1299,19 +1299,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setEditHabit(null)
   }
 
-  // ── Company foods (Eden-only: the shared food library is controlled by the parent company) ─
+  // ── Company foods (per-org: each org's admin manages the food list all their coaches see) ─
   async function loadCompanyFoods() {
-    // Everyone (including white-label users) sees Eden's added foods — the food library is shared
-    const data = await dbGet('company_foods',`company_id=eq.${EDEN_ORG_ID}&order=created_at.asc`)
+    if (!myCompanyId) return
+    const data = await dbGet('company_foods',`company_id=eq.${myCompanyId}&order=created_at.asc`)
     setCompanyFoods((data||[]).map(f=>({dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true})))
   }
   async function addCompanyFood() {
-    if (!newFood.name.trim()||!newFood.serving.trim()||isWLOrg) return
+    if (!newFood.name.trim()||!newFood.serving.trim()||!myCompanyId) return
     const body = {
       name: newFood.name.trim(), serving: newFood.serving.trim(), cat: newFood.cat,
       cal: parseFloat(newFood.cal)||0, pro: parseFloat(newFood.pro)||0,
       carb: parseFloat(newFood.carb)||0, fat: parseFloat(newFood.fat)||0,
-      fib: parseFloat(newFood.fib)||0, created_by: myUUID, company_id: EDEN_ORG_ID,
+      fib: parseFloat(newFood.fib)||0, created_by: myUUID, company_id: myCompanyId,
     }
     const inserted = await dbInsert('company_foods', body)
     if (inserted) {
@@ -1324,7 +1324,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     }
   }
   async function removeCompanyFood(dbId) {
-    await fetch(`${SUPABASE_URL}/rest/v1/company_foods?id=eq.${dbId}`,{method:'DELETE',headers:H})
+    if (!window.confirm('Remove this company-wide food for all coaches?')) return
+    await fetch(`${SUPABASE_URL}/rest/v1/company_foods?id=eq.${dbId}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
     setCompanyFoods(p=>p.filter(f=>f.dbId!==dbId))
   }
 
@@ -3565,7 +3566,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             <div style={{fontSize:10,color:C.muted}}>P:{food.pro}g C:{food.carb}g F:{food.fat}g</div>
                           </div>
                         </button>
-                        {isAdmin&&!isWLOrg&&food.fromDB&&(
+                        {isAdmin&&food.fromDB&&(
                           <button onClick={()=>removeCompanyFood(food.dbId)} title="Remove company food"
                             style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 8px',margin:'0 12px 0 4px',color:C.danger,fontSize:11,cursor:'pointer',flexShrink:0}}>✕</button>
                         )}
@@ -3575,7 +3576,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )
               })}
             </div>
-            {isAdmin&&!isWLOrg&&(
+            {isAdmin&&(
               <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
                 {!showAddFood?(
                   <button onClick={()=>setShowAddFood(true)}

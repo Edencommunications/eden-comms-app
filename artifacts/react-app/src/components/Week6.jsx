@@ -57,7 +57,7 @@ async function dbInsert(table, body) {
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
 async function dbDelete(table, params) {
-  try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:SB_H}) } catch {}
+  try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:H}) } catch {}
 }
 async function dbUpdate(table, params, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
@@ -836,10 +836,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Seed the new org with a copy of Eden's current habit & cardio libraries as their starting point.
     // Copies are independent — the org edits theirs freely without affecting Eden's.
     try {
-      const [edenHabits, edenCardio, edenSupps] = await Promise.all([
+      const [edenHabits, edenCardio, edenSupps, edenFoods] = await Promise.all([
         dbGet('company_habits',`company_id=eq.${EDEN_ORG_ID}&select=name,default_target`),
         dbGet('company_cardio_types',`company_id=eq.${EDEN_ORG_ID}&select=name`),
         dbGet('company_supplements',`company_id=eq.${EDEN_ORG_ID}&select=category,name,dose,directions,code,link,sort_order`),
+        dbGet('company_foods',`company_id=eq.${EDEN_ORG_ID}&select=name,serving,cat,cal,pro,carb,fat,fib`),
       ])
       let seedOk = true
       if (edenHabits?.length) {
@@ -852,6 +853,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       }
       if (edenSupps?.length) {
         const r = await dbInsert('company_supplements', edenSupps.map(s=>({...s, company_id:dbId})))
+        if (!r) seedOk = false
+      }
+      if (edenFoods?.length) {
+        const r = await dbInsert('company_foods', edenFoods.map(f=>({...f, company_id:dbId})))
         if (!r) seedOk = false
       }
       if (!seedOk) alert('The organization was created, but copying your starter habit/cardio/supplement lists into it failed. You can re-add them manually, or delete and recreate the organization.')
@@ -899,6 +904,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     ['clients',   '👥 Clients'],
     ['coaches',   '🏋 Staff'],
     ['orgs',      '🏢 Orgs'],
+    ['library',   '📚 Library'],
     ['audit',     '🔐 Audit Log'],
   ]
   const TABS_COACH = [
@@ -1656,6 +1662,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       {/* ══════════════════════════════════════════════════════
           AUDIT LOG (Admin only)
       ══════════════════════════════════════════════════════ */}
+      {tab==='library'&&isAdmin&&(
+        <LibraryTab companyId={adminCompanyId||EDEN_ORG_ID}/>
+      )}
+
       {tab==='audit'&&isAdmin&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
           <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:14}}>Audit Log</div>
@@ -2106,6 +2116,279 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════
+// LIBRARY TAB — company-wide foods, supplements, habits & cardio
+// Every org's admin (Eden or white-label) edits their OWN library;
+// changes go live for all coaches in that org immediately.
+// ════════════════════════════════════════════════════════════
+const FOOD_CATS = ['Proteins','Carbohydrates','Fats','Fruits/Vegetables','Supplements','Drinks/Condiments']
+
+function LibInput({value,onChange,placeholder,flex=1,type='text'}) {
+  return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} type={type}
+    style={{flex,minWidth:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+}
+function LibBtn({onClick,children,kind='gold'}) {
+  const bg = kind==='gold'?C.gold:kind==='danger'?`${C.danger}22`:C.surface
+  const col= kind==='gold'?C.black:kind==='danger'?C.danger:C.muted
+  const bd = kind==='gold'?'none':`1px solid ${kind==='danger'?C.danger+'44':C.border}`
+  return <button onClick={onClick} style={{background:bg,border:bd,borderRadius:8,padding:'8px 14px',fontWeight:700,color:col,fontSize:12,cursor:'pointer',flexShrink:0}}>{children}</button>
+}
+
+function LibraryTab({companyId}) {
+  const [sub,     setSub]     = useState('foods')
+  const [loading, setLoading] = useState(true)
+  const [foods,   setFoods]   = useState([])
+  const [supps,   setSupps]   = useState([])
+  const [habits,  setHabits]  = useState([])
+  const [cardio,  setCardio]  = useState([])
+  const [editRow, setEditRow] = useState(null)  // {kind, ...fields}
+  const [addRow,  setAddRow]  = useState(null)  // {kind, ...fields}
+
+  useEffect(()=>{ let stale=false; (async()=>{
+    setLoading(true)
+    const [f,s,h,c] = await Promise.all([
+      dbGet('company_foods',`company_id=eq.${companyId}&order=created_at.asc`),
+      dbGet('company_supplements',`company_id=eq.${companyId}&order=sort_order.asc,name.asc`),
+      dbGet('company_habits',`company_id=eq.${companyId}&order=created_at.asc`),
+      dbGet('company_cardio_types',`company_id=eq.${companyId}&order=created_at.asc`),
+    ])
+    if (stale) return
+    setFoods(f||[]); setSupps(s||[]); setHabits(h||[]); setCardio(c||[])
+    setLoading(false)
+  })(); return ()=>{ stale=true } },[companyId])
+
+  // ── Foods ──
+  async function saveFood(row) {
+    const body = { name:row.name?.trim(), serving:row.serving?.trim(), cat:row.cat||FOOD_CATS[0],
+      cal:parseFloat(row.cal)||0, pro:parseFloat(row.pro)||0, carb:parseFloat(row.carb)||0,
+      fat:parseFloat(row.fat)||0, fib:parseFloat(row.fib)||0 }
+    if (!body.name||!body.serving) { alert('Name and serving are required.'); return }
+    if (row.id) {
+      await dbUpdate('company_foods',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      setFoods(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+    } else {
+      const ins = await dbInsert('company_foods',{...body,company_id:companyId})
+      const r = Array.isArray(ins)?ins[0]:ins
+      if (!r?.id) { alert('Could not save the food — please try again.'); return }
+      setFoods(p=>[...p,r]); setAddRow(null)
+    }
+  }
+  async function deleteFood(row) {
+    if (!window.confirm(`Remove "${row.name}" for all coaches?`)) return
+    await dbDelete('company_foods',`id=eq.${row.id}&company_id=eq.${companyId}`)
+    setFoods(p=>p.filter(x=>x.id!==row.id))
+  }
+
+  // ── Supplements ──
+  async function saveSupp(row) {
+    const body = { category:row.category?.trim()||'Other', name:row.name?.trim(), dose:row.dose?.trim()||'',
+      directions:row.directions?.trim()||'', code:row.code?.trim()||'', link:row.link?.trim()||'' }
+    if (!body.name) { alert('Name is required.'); return }
+    if (row.id) {
+      await dbUpdate('company_supplements',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      setSupps(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+    } else {
+      const ins = await dbInsert('company_supplements',{...body,company_id:companyId,sort_order:supps.length})
+      const r = Array.isArray(ins)?ins[0]:ins
+      if (!r?.id) { alert('Could not save the supplement — please try again.'); return }
+      setSupps(p=>[...p,r]); setAddRow(null)
+    }
+  }
+  async function deleteSupp(row) {
+    if (!window.confirm(`Remove "${row.name}" for all coaches?`)) return
+    await dbDelete('company_supplements',`id=eq.${row.id}&company_id=eq.${companyId}`)
+    setSupps(p=>p.filter(x=>x.id!==row.id))
+  }
+
+  // ── Habits ──
+  async function saveHabit(row) {
+    const body = { name:row.name?.trim(), default_target:parseInt(row.default_target)||7 }
+    if (!body.name) { alert('Name is required.'); return }
+    if (row.id) {
+      await dbUpdate('company_habits',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      setHabits(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+    } else {
+      const ins = await dbInsert('company_habits',{...body,company_id:companyId})
+      const r = Array.isArray(ins)?ins[0]:ins
+      if (!r?.id) { alert('Could not save the habit — please try again.'); return }
+      setHabits(p=>[...p,r]); setAddRow(null)
+    }
+  }
+  async function deleteHabit(row) {
+    if (!window.confirm(`Remove habit "${row.name}" for all coaches?`)) return
+    await dbDelete('company_habits',`id=eq.${row.id}&company_id=eq.${companyId}`)
+    setHabits(p=>p.filter(x=>x.id!==row.id))
+  }
+
+  // ── Cardio types ──
+  async function saveCardio(row) {
+    const name = row.name?.trim()
+    if (!name) { alert('Name is required.'); return }
+    if (row.id) {
+      await dbUpdate('company_cardio_types',`id=eq.${row.id}&company_id=eq.${companyId}`,{name})
+      setCardio(p=>p.map(x=>x.id===row.id?{...x,name}:x)); setEditRow(null)
+    } else {
+      const ins = await dbInsert('company_cardio_types',{name,company_id:companyId})
+      const r = Array.isArray(ins)?ins[0]:ins
+      if (!r?.id) { alert('Could not save the cardio type — please try again.'); return }
+      setCardio(p=>[...p,r]); setAddRow(null)
+    }
+  }
+  async function deleteCardio(row) {
+    if (!window.confirm(`Remove cardio type "${row.name}" for all coaches?`)) return
+    await dbDelete('company_cardio_types',`id=eq.${row.id}&company_id=eq.${companyId}`)
+    setCardio(p=>p.filter(x=>x.id!==row.id))
+  }
+
+  const SUBS = [['foods','🥗 Foods'],['supps','💊 Supplements'],['habits','✅ Habits'],['cardio','🏃 Cardio Types']]
+  const suppCats = [...new Set(supps.map(s=>s.category||'Other'))]
+
+  const foodForm = (row,setRow,onSave,onCancel)=>(
+    <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8}}>
+      <div style={{display:'flex',gap:6,marginBottom:6}}>
+        <LibInput flex={2} value={row.name||''}    onChange={v=>setRow(p=>({...p,name:v}))}    placeholder="Food name"/>
+        <LibInput value={row.serving||''} onChange={v=>setRow(p=>({...p,serving:v}))} placeholder="Serving (e.g. 4oz)"/>
+        <select value={row.cat||FOOD_CATS[0]} onChange={e=>setRow(p=>({...p,cat:e.target.value}))}
+          style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:8,color:C.white,fontSize:12,outline:'none',cursor:'pointer'}}>
+          {FOOD_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:8}}>
+        {[['cal','Cal'],['pro','Protein g'],['carb','Carbs g'],['fat','Fat g'],['fib','Fiber g']].map(([k,ph])=>(
+          <LibInput key={k} value={row[k]??''} onChange={v=>setRow(p=>({...p,[k]:v}))} placeholder={ph}/>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:6}}><LibBtn onClick={onSave}>Save</LibBtn><LibBtn kind="plain" onClick={onCancel}>Cancel</LibBtn></div>
+    </div>
+  )
+  const suppForm = (row,setRow,onSave,onCancel)=>(
+    <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8}}>
+      <div style={{display:'flex',gap:6,marginBottom:6}}>
+        <LibInput value={row.category||''} onChange={v=>setRow(p=>({...p,category:v}))} placeholder="Protocol / category"/>
+        <LibInput flex={2} value={row.name||''} onChange={v=>setRow(p=>({...p,name:v}))} placeholder="Supplement name"/>
+        <LibInput value={row.dose||''} onChange={v=>setRow(p=>({...p,dose:v}))} placeholder="Dose"/>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:8}}>
+        <LibInput flex={2} value={row.directions||''} onChange={v=>setRow(p=>({...p,directions:v}))} placeholder="Directions"/>
+        <LibInput value={row.code||''} onChange={v=>setRow(p=>({...p,code:v}))} placeholder="Discount code (optional)"/>
+        <LibInput flex={2} value={row.link||''} onChange={v=>setRow(p=>({...p,link:v}))} placeholder="Purchase link (optional)"/>
+      </div>
+      <div style={{display:'flex',gap:6}}><LibBtn onClick={onSave}>Save</LibBtn><LibBtn kind="plain" onClick={onCancel}>Cancel</LibBtn></div>
+    </div>
+  )
+
+  const rowStyle={background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',marginBottom:6,display:'flex',alignItems:'center',gap:10}
+  const editBtn=(row,kind)=><button onClick={()=>{setAddRow(null);setEditRow({kind,...row})}} title="Edit"
+    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',color:C.muted,fontSize:11,cursor:'pointer',flexShrink:0}}>✎</button>
+
+  return (
+    <div style={{flex:1,overflowY:'auto',padding:16}}>
+      <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:4}}>📚 Company Library</div>
+      <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Everything here is shared company-wide — all your coaches see these lists when building client programs.</div>
+
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        {SUBS.map(([k,l])=>(
+          <button key={k} onClick={()=>{setSub(k);setEditRow(null);setAddRow(null)}}
+            style={{background:sub===k?`${C.gold}22`:C.surface,border:`1px solid ${sub===k?C.gold+'66':C.border}`,borderRadius:20,padding:'7px 16px',color:sub===k?C.gold:C.muted,fontSize:12,fontWeight:sub===k?700:400,cursor:'pointer'}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {loading?<div style={{color:C.muted,fontSize:12,padding:20}}>Loading…</div>:(<>
+
+      {sub==='foods'&&(<>
+        {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'food'})}}>＋ Add Food</LibBtn></div>}
+        {addRow?.kind==='food'&&foodForm(addRow,setAddRow,()=>saveFood(addRow),()=>setAddRow(null))}
+        {FOOD_CATS.filter(cat=>foods.some(f=>f.cat===cat)).map(cat=>(
+          <div key={cat} style={{marginBottom:12}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>{cat}</div>
+            {foods.filter(f=>f.cat===cat).map(f=> editRow?.kind==='food'&&editRow.id===f.id
+              ? <div key={f.id}>{foodForm(editRow,setEditRow,()=>saveFood(editRow),()=>setEditRow(null))}</div>
+              : (
+              <div key={f.id} style={rowStyle}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,color:C.white,fontWeight:600}}>{f.name}</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{f.serving} · {f.cal} cal · P:{f.pro}g C:{f.carb}g F:{f.fat}g</div>
+                </div>
+                {editBtn(f,'food')}
+                <LibBtn kind="danger" onClick={()=>deleteFood(f)}>✕</LibBtn>
+              </div>
+            ))}
+          </div>
+        ))}
+        {foods.length===0&&!addRow&&<div style={{color:C.muted,fontSize:12,padding:12}}>No company foods yet — coaches currently see only the standard food list. Add foods here to extend it for everyone.</div>}
+      </>)}
+
+      {sub==='supps'&&(<>
+        {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'supp'})}}>＋ Add Supplement</LibBtn></div>}
+        {addRow?.kind==='supp'&&suppForm(addRow,setAddRow,()=>saveSupp(addRow),()=>setAddRow(null))}
+        {suppCats.map(cat=>(
+          <div key={cat} style={{marginBottom:12}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>{cat}</div>
+            {supps.filter(s=>(s.category||'Other')===cat).map(s=> editRow?.kind==='supp'&&editRow.id===s.id
+              ? <div key={s.id}>{suppForm(editRow,setEditRow,()=>saveSupp(editRow),()=>setEditRow(null))}</div>
+              : (
+              <div key={s.id} style={rowStyle}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,color:C.white,fontWeight:600}}>{s.name} {s.dose&&<span style={{color:C.gold,fontWeight:400,fontSize:11}}>· {s.dose}</span>}</div>
+                  {(s.directions||s.code)&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{s.directions}{s.code?` · Code: ${s.code}`:''}</div>}
+                </div>
+                {editBtn(s,'supp')}
+                <LibBtn kind="danger" onClick={()=>deleteSupp(s)}>✕</LibBtn>
+              </div>
+            ))}
+          </div>
+        ))}
+      </>)}
+
+      {sub==='habits'&&(<>
+        {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'habit',default_target:7})}}>＋ Add Habit</LibBtn></div>}
+        {(addRow?.kind==='habit'||editRow?.kind==='habit')&&(()=>{ const row=addRow?.kind==='habit'?addRow:editRow, setRow=addRow?.kind==='habit'?setAddRow:setEditRow
+          return (
+          <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8,display:'flex',gap:6}}>
+            <LibInput flex={3} value={row.name||''} onChange={v=>setRow(p=>({...p,name:v}))} placeholder="Habit name"/>
+            <LibInput value={row.default_target??7} onChange={v=>setRow(p=>({...p,default_target:v}))} placeholder="Target / week"/>
+            <LibBtn onClick={()=>saveHabit(row)}>Save</LibBtn>
+            <LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn>
+          </div>)})()}
+        {habits.filter(h=>!(editRow?.kind==='habit'&&editRow.id===h.id)).map(h=>(
+          <div key={h.id} style={rowStyle}>
+            <div style={{flex:1}}>
+              <span style={{fontSize:13,color:C.white,fontWeight:600}}>{h.name}</span>
+              <span style={{fontSize:10,color:C.muted,marginLeft:8}}>target {h.default_target}×/week</span>
+            </div>
+            {editBtn(h,'habit')}
+            <LibBtn kind="danger" onClick={()=>deleteHabit(h)}>✕</LibBtn>
+          </div>
+        ))}
+      </>)}
+
+      {sub==='cardio'&&(<>
+        {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'cardio'})}}>＋ Add Cardio Type</LibBtn></div>}
+        {(addRow?.kind==='cardio'||editRow?.kind==='cardio')&&(()=>{ const row=addRow?.kind==='cardio'?addRow:editRow, setRow=addRow?.kind==='cardio'?setAddRow:setEditRow
+          return (
+          <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8,display:'flex',gap:6}}>
+            <LibInput flex={3} value={row.name||''} onChange={v=>setRow(p=>({...p,name:v}))} placeholder="Cardio type (e.g. Incline Walk)"/>
+            <LibBtn onClick={()=>saveCardio(row)}>Save</LibBtn>
+            <LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn>
+          </div>)})()}
+        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+          {cardio.filter(t=>!(editRow?.kind==='cardio'&&editRow.id===t.id)).map(t=>(
+            <div key={t.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'7px 8px 7px 16px',display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:12,color:C.white,fontWeight:600}}>{t.name}</span>
+              {editBtn(t,'cardio')}
+              <LibBtn kind="danger" onClick={()=>deleteCardio(t)}>✕</LibBtn>
+            </div>
+          ))}
+        </div>
+      </>)}
+
+      </>)}
     </div>
   )
 }
