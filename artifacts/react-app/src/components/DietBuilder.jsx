@@ -1143,7 +1143,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       })
       ok = r.ok
     } else {
-      ok = !!(await dbInsert('company_supplements',{...body, company_id:myCompanyId}))
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/company_supplements`,{
+        method:'POST', headers:H, body:JSON.stringify({...body, company_id:myCompanyId})
+      })
+      ok = r.ok
     }
     if (!ok) { alert('Could not save the supplement — please try again.'); return }
     setEditSupp(null)
