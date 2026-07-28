@@ -804,7 +804,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // ── Notifications ──────────────────────────────────────────
   const [notifications,  setNotifications]  = useState([])
   const [showNotifPanel, setShowNotifPanel] = useState(false)
-  const unreadCount = notifications.filter(n=>!n.read).length
+  const unreadCount = notifications.filter(n=>!n.is_read).length
 
   useEffect(() => {
     // Load company-wide habits and foods once we know which org this user belongs to
@@ -1286,14 +1286,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     if (!recipientId) return
     await dbInsert('notifications',{
       recipient_id:recipientId, sender_id:senderId,
-      type, message, read:false, created_at:new Date().toISOString()
+      type, body:message, is_read:false, created_at:new Date().toISOString()
     })
   }
 
   function markAllRead() {
     const uuid = KNOWN_USERS[email]?.uuid
-    setNotifications(p=>p.map(n=>({...n,read:true})))
-    if(uuid) dbUpdate('notifications',`recipient_id=eq.${uuid}&read=eq.false`,{read:true})
+    setNotifications(p=>p.map(n=>({...n,is_read:true})))
+    if(uuid) dbUpdate('notifications',`recipient_id=eq.${uuid}&is_read=eq.false`,{is_read:true,read_at:new Date().toISOString()})
   }
 
 
@@ -1454,7 +1454,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 ):notifications.map(n=>(
                   <div key={n.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}22`,
                     background:n.read?'transparent':`${C.gold}0a`}}>
-                    <div style={{fontSize:12,color:n.read?C.muted:C.white,lineHeight:1.5}}>{n.message}</div>
+                    <div style={{fontSize:12,color:n.is_read?C.muted:C.white,lineHeight:1.5}}>{n.body||n.message}</div>
                     <div style={{fontSize:9,color:C.dim,marginTop:3}}>
                       {n.created_at?new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}
                     </div>
