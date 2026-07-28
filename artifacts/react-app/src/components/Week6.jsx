@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -839,11 +840,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Seed the new org with a copy of Eden's current habit & cardio libraries as their starting point.
     // Copies are independent — the org edits theirs freely without affecting Eden's.
     try {
-      const [edenHabits, edenCardio, edenSupps, edenFoods] = await Promise.all([
+      const [edenHabits, edenCardio, edenSupps, edenFoods, edenLinks] = await Promise.all([
         dbGet('company_habits',`company_id=eq.${EDEN_ORG_ID}&select=name,default_target`),
         dbGet('company_cardio_types',`company_id=eq.${EDEN_ORG_ID}&select=name`),
         dbGet('company_supplements',`company_id=eq.${EDEN_ORG_ID}&select=category,name,dose,directions,code,link,sort_order`),
         dbGet('company_foods',`company_id=eq.${EDEN_ORG_ID}&select=name,serving,cat,cal,pro,carb,fat,fib`),
+        dbGet('company_resource_links',`company_id=eq.${EDEN_ORG_ID}&select=label,url,note,sort_order`).catch(()=>[]),
       ])
       let seedOk = true
       if (edenHabits?.length) {
@@ -862,6 +864,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         const r = await dbInsert('company_foods', edenFoods.map(f=>({...f, company_id:dbId})))
         if (!r) seedOk = false
       }
+      // Resource links: copy Eden's list if Eden has customized one; otherwise seed the built-in defaults
+      const linkSeed = (Array.isArray(edenLinks)&&edenLinks.length)
+        ? edenLinks.map(l=>({...l, company_id:dbId}))
+        : DEFAULT_RESOURCE_LINKS.map(([label,url,note],i)=>({label,url,note:note||'',sort_order:i,company_id:dbId}))
+      const rl = await dbInsert('company_resource_links', linkSeed)
+      if (!rl) seedOk = false
       if (!seedOk) alert('The organization was created, but copying your starter habit/cardio/supplement lists into it failed. You can re-add them manually, or delete and recreate the organization.')
     } catch {
       alert('The organization was created, but copying your starter habit/cardio/supplement lists into it failed. You can re-add them manually, or delete and recreate the organization.')
@@ -2148,21 +2156,61 @@ function LibraryTab({companyId}) {
   const [supps,   setSupps]   = useState([])
   const [habits,  setHabits]  = useState([])
   const [cardio,  setCardio]  = useState([])
+  const [links,   setLinks]   = useState([])           // company_resource_links rows
+  const [hidden,  setHidden]  = useState(new Set())    // hidden built-ins, keys "kind:name"
   const [editRow, setEditRow] = useState(null)  // {kind, ...fields}
   const [addRow,  setAddRow]  = useState(null)  // {kind, ...fields}
 
   useEffect(()=>{ let stale=false; (async()=>{
     setLoading(true)
-    const [f,s,h,c] = await Promise.all([
+    const [f,s,h,c,l,hd] = await Promise.all([
       dbGet('company_foods',`company_id=eq.${companyId}&order=created_at.asc`),
       dbGet('company_supplements',`company_id=eq.${companyId}&order=sort_order.asc,name.asc`),
       dbGet('company_habits',`company_id=eq.${companyId}&order=created_at.asc`),
       dbGet('company_cardio_types',`company_id=eq.${companyId}&order=created_at.asc`),
+      dbGet('company_resource_links',`company_id=eq.${companyId}&order=sort_order.asc,created_at.asc`).catch(()=>[]),
+      dbGet('company_hidden_items',`company_id=eq.${companyId}&select=kind,name`).catch(()=>[]),
     ])
     if (stale) return
     setFoods(f||[]); setSupps(s||[]); setHabits(h||[]); setCardio(c||[])
+    setLinks(Array.isArray(l)?l:[])
+    setHidden(new Set((Array.isArray(hd)?hd:[]).map(r=>`${r.kind}:${r.name}`)))
     setLoading(false)
   })(); return ()=>{ stale=true } },[companyId])
+
+  // ── Hide / restore built-in items (foods, habits, cardio) ──
+  async function hideBuiltIn(kind, name) {
+    if (!window.confirm(`Hide the built-in "${name}" for all coaches in this company? You can restore it any time.`)) return
+    const ins = await dbInsert('company_hidden_items',{company_id:companyId,kind,name})
+    const r = Array.isArray(ins)?ins[0]:ins
+    if (!r?.id) { alert('Could not hide it — please try again. (The company_hidden_items table may not exist yet.)'); return }
+    setHidden(p=>new Set([...p,`${kind}:${name}`]))
+  }
+  async function restoreBuiltIn(kind, name) {
+    await dbDelete('company_hidden_items',`company_id=eq.${companyId}&kind=eq.${kind}&name=eq.${encodeURIComponent(name)}`)
+    setHidden(p=>{const n=new Set(p); n.delete(`${kind}:${name}`); return n})
+  }
+
+  // ── Resource links ──
+  async function saveLink(row) {
+    const body = { label:row.label?.trim(), url:row.url?.trim(), note:row.note?.trim()||'' }
+    if (!body.label||!body.url) { alert('Name and link are required.'); return }
+    if (row.id) {
+      const ok = await dbUpdate('company_resource_links',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      if (!ok) { alert('Could not save the change — please try again.'); return }
+      setLinks(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+    } else {
+      const ins = await dbInsert('company_resource_links',{...body,company_id:companyId,sort_order:links.length})
+      const r = Array.isArray(ins)?ins[0]:ins
+      if (!r?.id) { alert('Could not save the link — please try again.'); return }
+      setLinks(p=>[...p,r]); setAddRow(null)
+    }
+  }
+  async function deleteLink(row) {
+    if (!window.confirm(`Remove "${row.label}" from your resources list?`)) return
+    await dbDelete('company_resource_links',`id=eq.${row.id}&company_id=eq.${companyId}`)
+    setLinks(p=>p.filter(x=>x.id!==row.id))
+  }
 
   // ── Foods ──
   async function saveFood(row) {
@@ -2251,7 +2299,23 @@ function LibraryTab({companyId}) {
     setCardio(p=>p.filter(x=>x.id!==row.id))
   }
 
-  const SUBS = [['foods','🥗 Foods'],['supps','💊 Supplements'],['habits','✅ Habits'],['cardio','🏃 Cardio Types']]
+  const SUBS = [['foods','🥗 Foods'],['supps','💊 Supplements'],['habits','✅ Habits'],['cardio','🏃 Cardio Types'],['links','🔗 Resources']]
+  // Built-in chip with hide/restore — used by foods, habits and cardio sections
+  const builtInRow = (kind, name, sub2) => {
+    const isHidden = hidden.has(`${kind}:${name}`)
+    return (
+      <div key={`bi_${name}`} style={{...rowStyle,opacity:isHidden?0.45:1}}>
+        <div style={{flex:1,minWidth:0}}>
+          <span style={{fontSize:13,color:C.white,fontWeight:600,textDecoration:isHidden?'line-through':'none'}}>{name}</span>
+          <span style={{fontSize:8,fontWeight:700,color:C.muted,marginLeft:8,letterSpacing:0.5,border:`1px solid ${C.border}`,borderRadius:4,padding:'1px 5px',verticalAlign:'middle'}}>BUILT-IN</span>
+          {sub2&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{sub2}</div>}
+        </div>
+        {isHidden
+          ? <LibBtn kind="plain" onClick={()=>restoreBuiltIn(kind,name)}>Restore</LibBtn>
+          : <LibBtn kind="danger" onClick={()=>hideBuiltIn(kind,name)}>Hide</LibBtn>}
+      </div>
+    )
+  }
   const suppCats = [...new Set(supps.map(s=>s.category||'Other'))]
 
   const foodForm = (row,setRow,onSave,onCancel)=>(
@@ -2311,9 +2375,10 @@ function LibraryTab({companyId}) {
       {sub==='foods'&&(<>
         {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'food'})}}>＋ Add Food</LibBtn></div>}
         {addRow?.kind==='food'&&foodForm(addRow,setAddRow,()=>saveFood(addRow),()=>setAddRow(null))}
-        {FOOD_CATS.filter(cat=>foods.some(f=>f.cat===cat)).map(cat=>(
+        {FOOD_CATS.filter(cat=>foods.some(f=>f.cat===cat)||FOODS.some(f=>f.cat===cat)).map(cat=>(
           <div key={cat} style={{marginBottom:12}}>
             <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>{cat}</div>
+            {FOODS.filter(f=>f.cat===cat).map(f=>builtInRow('food',f.name,`${f.serving} · ${f.cal} cal · P:${f.pro}g C:${f.carb}g F:${f.fat}g`))}
             {foods.filter(f=>f.cat===cat).map(f=> editRow?.kind==='food'&&editRow.id===f.id
               ? <div key={f.id}>{foodForm(editRow,setEditRow,()=>saveFood(editRow),()=>setEditRow(null))}</div>
               : (
@@ -2328,7 +2393,7 @@ function LibraryTab({companyId}) {
             ))}
           </div>
         ))}
-        {foods.length===0&&!addRow&&<div style={{color:C.muted,fontSize:12,padding:12}}>No company foods yet — coaches currently see only the standard food list. Add foods here to extend it for everyone.</div>}
+        <div style={{color:C.muted,fontSize:11,padding:'8px 2px'}}>Built-in foods are shared standards — hide any you don't want your coaches to use, and add your own above.</div>
       </>)}
 
       {sub==='supps'&&(<>
@@ -2364,6 +2429,7 @@ function LibraryTab({companyId}) {
             <LibBtn onClick={()=>saveHabit(row)}>Save</LibBtn>
             <LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn>
           </div>)})()}
+        {MASTER_HABITS.map(h=>builtInRow('habit',h.name,`target ${h.defaultTarget}×/week`))}
         {habits.filter(h=>!(editRow?.kind==='habit'&&editRow.id===h.id)).map(h=>(
           <div key={h.id} style={rowStyle}>
             <div style={{flex:1}}>
@@ -2374,7 +2440,7 @@ function LibraryTab({companyId}) {
             <LibBtn kind="danger" onClick={()=>deleteHabit(h)}>✕</LibBtn>
           </div>
         ))}
-        {habits.length===0&&!addRow&&<div style={{color:C.muted,fontSize:12,padding:12}}>Coaches already have the standard built-in habits. Anything you add here appears alongside them for every coach in your company.</div>}
+        <div style={{color:C.muted,fontSize:11,padding:'8px 2px'}}>Hide any built-in habit you don't want your coaches to assign, and add your own above.</div>
       </>)}
 
       {sub==='cardio'&&(<>
@@ -2386,6 +2452,19 @@ function LibraryTab({companyId}) {
             <LibBtn onClick={()=>saveCardio(row)}>Save</LibBtn>
             <LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn>
           </div>)})()}
+        <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10}}>
+          {CARDIO_TYPES.map(name=>{
+            const isHidden = hidden.has(`cardio:${name}`)
+            return (
+              <div key={`bi_${name}`} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'7px 8px 7px 16px',display:'flex',alignItems:'center',gap:6,opacity:isHidden?0.45:1}}>
+                <span style={{fontSize:12,color:C.white,fontWeight:600,textDecoration:isHidden?'line-through':'none'}}>{name}</span>
+                {isHidden
+                  ? <LibBtn kind="plain" onClick={()=>restoreBuiltIn('cardio',name)}>Restore</LibBtn>
+                  : <LibBtn kind="danger" onClick={()=>hideBuiltIn('cardio',name)}>Hide</LibBtn>}
+              </div>
+            )
+          })}
+        </div>
         <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
           {cardio.filter(t=>!(editRow?.kind==='cardio'&&editRow.id===t.id)).map(t=>(
             <div key={t.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'7px 8px 7px 16px',display:'flex',alignItems:'center',gap:6}}>
@@ -2395,7 +2474,43 @@ function LibraryTab({companyId}) {
             </div>
           ))}
         </div>
-        {cardio.length===0&&!addRow&&<div style={{color:C.muted,fontSize:12,padding:12}}>Coaches already have the standard built-in cardio types. Anything you add here appears alongside them for every coach in your company.</div>}
+        <div style={{color:C.muted,fontSize:11,padding:'8px 2px'}}>Hide any built-in cardio type you don't want your coaches to use, and add your own above.</div>
+      </>)}
+
+      {sub==='links'&&(<>
+        {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'link'})}}>＋ Add Resource Link</LibBtn></div>}
+        {(addRow?.kind==='link'||editRow?.kind==='link')&&(()=>{ const row=addRow?.kind==='link'?addRow:editRow, setRow=addRow?.kind==='link'?setAddRow:setEditRow
+          return (
+          <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8}}>
+            <div style={{display:'flex',gap:6,marginBottom:8}}>
+              <LibInput flex={2} value={row.label||''} onChange={v=>setRow(p=>({...p,label:v}))} placeholder="Name (e.g. Blood Work Panel)"/>
+              <LibInput flex={3} value={row.url||''}   onChange={v=>setRow(p=>({...p,url:v}))}   placeholder="Link (https://…)"/>
+              <LibInput flex={2} value={row.note||''}  onChange={v=>setRow(p=>({...p,note:v}))}  placeholder="Note (e.g. Code: YOURCODE10)"/>
+            </div>
+            <div style={{display:'flex',gap:6}}><LibBtn onClick={()=>saveLink(row)}>Save</LibBtn><LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn></div>
+          </div>)})()}
+        {links.filter(l=>!(editRow?.kind==='link'&&editRow.id===l.id)).map(l=>(
+          <div key={l.id} style={rowStyle}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,color:C.white,fontWeight:600}}>{l.label}{l.note&&<span style={{color:C.gold,fontWeight:400,fontSize:11,marginLeft:8}}>{l.note}</span>}</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.url}</div>
+            </div>
+            {editBtn(l,'link')}
+            <LibBtn kind="danger" onClick={()=>deleteLink(l)}>✕</LibBtn>
+          </div>
+        ))}
+        {links.length===0&&!addRow&&(<>
+          <div style={{color:C.muted,fontSize:12,padding:'12px 12px 4px'}}>Your coaches and clients currently see the default resource list below (in Diet Builder → Supps). Add your own links above to replace it.</div>
+          {DEFAULT_RESOURCE_LINKS.map(([label,url,note])=>(
+            <div key={label} style={{...rowStyle,opacity:0.55}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,color:C.white,fontWeight:600}}>{label}{note&&<span style={{color:C.gold,fontWeight:400,fontSize:11,marginLeft:8}}>{note}</span>}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{url}</div>
+              </div>
+              <span style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:0.5,border:`1px solid ${C.border}`,borderRadius:4,padding:'1px 5px'}}>DEFAULT</span>
+            </div>
+          ))}
+        </>)}
       </>)}
 
       </>)}

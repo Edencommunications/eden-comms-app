@@ -87,26 +87,7 @@ function scoreColor(v) {
 }
 
 // ── Master habit list ─────────────────────────────────────────
-const MASTER_HABITS = [
-  {id:'supps',   name:'Take supplements',             defaultTarget:7},
-  {id:'lemon',   name:'20oz Lemon Water upon waking', defaultTarget:7},
-  {id:'water',   name:'1 Gallon Water Daily',         defaultTarget:7},
-  {id:'steps',   name:'Daily Step Goal Hit',          defaultTarget:7},
-  {id:'wake5',   name:'Wake up at 5 AM',              defaultTarget:7},
-  {id:'wake530', name:'Wake up at 5:30 AM',           defaultTarget:7},
-  {id:'wake6',   name:'Wake up at 6 AM',              defaultTarget:7},
-  {id:'workout', name:'Workout',                      defaultTarget:5},
-  {id:'cold',    name:'Cold Shower / Ice Bath',       defaultTarget:7},
-  {id:'sleep8',  name:'8 Hour Sleep Window',          defaultTarget:7},
-  {id:'read',    name:'Read 30 Minutes',              defaultTarget:7},
-  {id:'meditate',name:'Meditate',                     defaultTarget:7},
-  {id:'journal', name:'Journal / Prayer',             defaultTarget:7},
-  {id:'cardio',  name:'45-60 Min Walk / Cardio',      defaultTarget:5},
-  {id:'fast12',  name:'12 Hour No Eating Window',     defaultTarget:7},
-  {id:'fast16',  name:'16 Hour No Eating Window',     defaultTarget:5},
-  {id:'prep',    name:'Meal Prep Done',               defaultTarget:1},
-  {id:'nophone', name:'No Phone First Hour of Day',   defaultTarget:7},
-]
+import { MASTER_HABITS, FOODS, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 
 // ── Recipe Book ──────────────────────────────────────────────
 const RECIPE_BUY = 'https://funnel.lifestyleofeden.com/loe-recipes-5482'
@@ -351,62 +332,6 @@ const SUPP_DB = {
 }
 
 // ── Food database ─────────────────────────────────────────────
-const FOODS = [
-  {name:'Organic Chicken Breast',serving:'4oz',cal:120,pro:21,fat:4,carb:0,fib:0,cat:'Proteins'},
-  {name:'Wild Caught Salmon',serving:'4oz',cal:237,pro:28.7,fat:13.6,carb:0,fib:0,cat:'Proteins'},
-  {name:'Top Sirloin',serving:'4oz',cal:187,pro:34.7,fat:6,carb:0,fib:0,cat:'Proteins'},
-  {name:'99% Lean Ground Turkey',serving:'4oz',cal:120,pro:28,fat:1,carb:0,fib:0,cat:'Proteins'},
-  {name:'Wild Caught Shrimp',serving:'4oz',cal:112,pro:26.7,fat:0.7,carb:0,fib:0,cat:'Proteins'},
-  {name:'Mahi Mahi',serving:'4oz',cal:124,pro:26.7,fat:1.3,carb:0,fib:0,cat:'Proteins'},
-  {name:'Organic Egg Whites',serving:'184g',cal:80,pro:18,fat:0,carb:0,fib:0,cat:'Proteins'},
-  {name:'Whole Omega-3 Egg',serving:'1 egg',cal:90,pro:8.6,fat:6.1,carb:0,fib:0,cat:'Proteins'},
-  {name:'Filet Mignon',serving:'4oz',cal:227,pro:34.7,fat:9.3,carb:0,fib:0,cat:'Proteins'},
-  {name:'Grass-Fed Ground Beef 96/4',serving:'4oz',cal:170,pro:24,fat:8,carb:0,fib:0,cat:'Proteins'},
-  {name:'Medipure Protein',serving:'1 scoop',cal:120,pro:22,fat:2,carb:5,fib:1,cat:'Proteins'},
-  {name:'Wild Caught Tuna (drained)',serving:'4oz',cal:124,pro:28.2,fat:1.1,carb:0,fib:0,cat:'Proteins'},
-  {name:'Brown Rice (cooked)',serving:'195g',cal:218,pro:4.5,fat:1.6,carb:45,fib:3.5,cat:'Carbohydrates'},
-  {name:'White Rice (cooked)',serving:'186g',cal:242,pro:4.4,fat:0.4,carb:53,fib:0.6,cat:'Carbohydrates'},
-  {name:'Oatmeal (dry)',serving:'40g',cal:150,pro:5,fat:3,carb:27,fib:4,cat:'Carbohydrates'},
-  {name:'Red Potato',serving:'148g',cal:150,pro:3,fat:0,carb:26,fib:3,cat:'Carbohydrates'},
-  {name:'Sweet Potato',serving:'130g',cal:112,pro:2,fat:0,carb:26,fib:4,cat:'Carbohydrates'},
-  {name:'Quinoa (cooked)',serving:'185g',cal:222,pro:8,fat:3.6,carb:39,fib:5.2,cat:'Carbohydrates'},
-  {name:'Ezekiel Bread',serving:'1 slice',cal:80,pro:5,fat:0.5,carb:15,fib:3,cat:'Carbohydrates'},
-  {name:'Cream of Rice (dry)',serving:'45g',cal:150,pro:2,fat:0,carb:35,fib:0.3,cat:'Carbohydrates'},
-  {name:'Lentil Pasta (dry)',serving:'56g',cal:200,pro:15,fat:1.5,carb:34,fib:3,cat:'Carbohydrates'},
-  {name:'Extra Virgin Olive Oil',serving:'14g',cal:120,pro:0,fat:14,carb:0,fib:0,cat:'Fats'},
-  {name:'Coconut Oil (unrefined)',serving:'14g',cal:120,pro:0,fat:14,carb:0,fib:0,cat:'Fats'},
-  {name:'Avocado',serving:'50g',cal:80,pro:1,fat:7.3,carb:4.3,fib:3.4,cat:'Fats'},
-  {name:'Almond Butter',serving:'32g',cal:192,pro:6.8,fat:17.4,carb:6.1,fib:3.4,cat:'Fats'},
-  {name:'Almonds',serving:'28g',cal:164,pro:6,fat:14.2,carb:6.1,fib:3.5,cat:'Fats'},
-  {name:'Chia Seeds',serving:'12g',cal:58,pro:2,fat:3.7,carb:5,fib:4.1,cat:'Fats'},
-  {name:'Raw Honey',serving:'7g',cal:20,pro:0,fat:0,carb:6,fib:0,cat:'Fats'},
-  {name:'Blueberries',serving:'100g',cal:68,pro:0.7,fat:0.3,carb:14.5,fib:2.4,cat:'Fruits/Vegetables'},
-  {name:'Mixed Berries (frozen)',serving:'100g',cal:55,pro:0.8,fat:0.3,carb:12,fib:2.5,cat:'Fruits/Vegetables'},
-  {name:'Strawberries',serving:'100g',cal:30,pro:0.8,fat:0.1,carb:6,fib:2,cat:'Fruits/Vegetables'},
-  {name:'Banana',serving:'100g',cal:103,pro:1.2,fat:0.3,carb:23.2,fib:2.6,cat:'Fruits/Vegetables'},
-  {name:'Broccoli',serving:'100g',cal:38,pro:4.4,fat:0.9,carb:1.8,fib:2.6,cat:'Fruits/Vegetables'},
-  {name:'Green Beans (canned)',serving:'100g',cal:21,pro:1,fat:0.4,carb:4.1,fib:1.5,cat:'Fruits/Vegetables'},
-  {name:'Baby Spinach',serving:'100g',cal:29,pro:2.8,fat:0.8,carb:1.6,fib:1.5,cat:'Fruits/Vegetables'},
-  {name:'Asparagus',serving:'100g',cal:29,pro:2.9,fat:0.6,carb:2,fib:2.1,cat:'Fruits/Vegetables'},
-  {name:'Cucumber',serving:'80g',cal:12,pro:0.5,fat:0.1,carb:2.2,fib:0.6,cat:'Fruits/Vegetables'},
-  {name:'Fish Oil 2000mg',serving:'2 caps',cal:20,pro:0,fat:2,carb:0,fib:0,cat:'Supplements'},
-  {name:'Glutamine 20g',serving:'20g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Supplements'},
-  {name:'Bloat Eaze',serving:'1 scoop',cal:10,pro:0,fat:0,carb:2,fib:0,cat:'Supplements'},
-  {name:'Magnesium',serving:'1 scoop',cal:5,pro:0,fat:0,carb:1,fib:0,cat:'Supplements'},
-  {name:'Water (16oz)',serving:'16oz',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-  {name:'Black Coffee',serving:'240ml',cal:5,pro:0.3,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-  {name:'Matcha Green Tea',serving:'240ml',cal:5,pro:0.5,fat:0,carb:1,fib:0,cat:'Drinks/Condiments'},
-  {name:'Green Tea',serving:'240ml',cal:2,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-  {name:'Organic Apple Juice',serving:'250ml',cal:115,pro:0.2,fat:0.3,carb:28,fib:0.5,cat:'Drinks/Condiments'},
-  {name:'Aloe Vera Juice',serving:'59ml',cal:4,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-  {name:'Beef Bone Broth',serving:'150ml',cal:25,pro:5,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-  {name:'Yellow Mustard',serving:'5g',cal:3,pro:0.2,fat:0.1,carb:0.3,fib:0.1,cat:'Drinks/Condiments'},
-  {name:'Hot Sauce',serving:'5g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-  {name:'Salsa',serving:'30g',cal:10,pro:0.4,fat:0,carb:2,fib:0.5,cat:'Drinks/Condiments'},
-  {name:'Himalayan Sea Salt',serving:'1g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-  {name:'Iodized Sea Salt',serving:'1g',cal:0,pro:0,fat:0,carb:0,fib:0,cat:'Drinks/Condiments'},
-]
-
 const PROTOCOLS = [
   '2 High 2 Low Female','2 High 2 Low Male',
   'Base Diet Protocol Female','Base Diet Protocol Male',
@@ -883,7 +808,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   useEffect(() => {
     // Load company-wide habits and foods once we know which org this user belongs to
-    if (myCompanyId) { loadCompanyHabits(); loadCompanyFoods() }
+    if (myCompanyId) { loadCompanyHabits(); loadCompanyFoods(); loadHiddenAndResources() }
   }, [myCompanyId])
 
   useEffect(() => {
@@ -1003,6 +928,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [newHabitTarget,   setNewHabitTarget]   = useState(7)
   // Company-wide foods managed by admin only
   const [companyFoods,     setCompanyFoods]     = useState([])
+  // Built-ins the org's admin has hidden (company_hidden_items; kind→Set of names)
+  const [hiddenItems,      setHiddenItems]      = useState({food:new Set(),habit:new Set(),cardio:new Set()})
+  // Per-org "Helpful Resources & Lab Links" (company_resource_links); null = loading, []→fall back to Eden defaults
+  const [resourceLinks,    setResourceLinks]    = useState(null)
   const [newFood,          setNewFood]          = useState({name:'',serving:'',cal:'',pro:'',carb:'',fat:'',fib:'',cat:'Proteins'})
   const [showAddFood,      setShowAddFood]      = useState(false)
   const setHabitCount = (id,v) => setHabitCounts(p=>({...p,[id]:Math.min(7,Math.max(0,parseInt(v)||0))}))
@@ -1329,6 +1258,21 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       alert('Could not save — the company_foods table may not exist yet in the database.')
     }
   }
+  // Hidden built-ins + per-org resource links
+  async function loadHiddenAndResources() {
+    if (!myCompanyId) return
+    const cid = myCompanyId
+    const [hid, links] = await Promise.all([
+      dbGet('company_hidden_items',`company_id=eq.${cid}&select=kind,name`).catch(()=>[]),
+      dbGet('company_resource_links',`company_id=eq.${cid}&order=sort_order.asc,created_at.asc`).catch(()=>[]),
+    ])
+    if (cid !== myCompanyIdRef.current) return // stale response guard
+    const h = {food:new Set(),habit:new Set(),cardio:new Set()}
+    ;(Array.isArray(hid)?hid:[]).forEach(r=>h[r.kind]?.add(r.name))
+    setHiddenItems(h)
+    setResourceLinks(Array.isArray(links)?links:[])
+  }
+
   async function removeCompanyFood(dbId) {
     if (!window.confirm('Remove this company-wide food for all coaches?')) return
     await fetch(`${SUPABASE_URL}/rest/v1/company_foods?id=eq.${dbId}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
@@ -1426,7 +1370,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     ? Math.round(assignedHabits.reduce((a,h)=>a+(habitCounts[h.id]||0),0)/assignedHabits.reduce((a,h)=>a+h.target,0)*100)
     : 0
 
-  const filteredFoods = [...FOODS,...companyFoods].filter(f=>
+  const filteredFoods = [...FOODS.filter(f=>!hiddenItems.food.has(f.name)),...companyFoods].filter(f=>
     !foodSearch||f.name.toLowerCase().includes(foodSearch.toLowerCase())||f.cat.toLowerCase().includes(foodSearch.toLowerCase())
   )
 
@@ -3514,14 +3458,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           {/* Resource links — both roles */}
           <Card sx={{marginBottom:24}}>
             <Lbl t="Helpful Resources & Lab Links"/>
-            {[
-              ['Male Blood Work Panel',  'https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN',''],
-              ['Female Blood Work Panel','https://shop.advancedvitalityhrt.com/?ref=LIFESTYLEOFEDEN',''],
-              ['DUTCH Test',             'https://www.practitionerdepot.com/products/dutch-test','Code: TOGNIETTI10'],
-              ['GI Map',                 'https://www.practitionerdepot.com/products/gi-map','Code: TOGNIETTI10'],
-              ['Book a Call',            'https://links.lifestyleofeden.com/widget/booking/2kKUGzYZqAaNBVpd5uzA',''],
-              ['NuEthix Supplements',    'https://nuethix.com','Code: TOGNIETTI10'],
-            ].map(([l,u,note])=>(
+            {/* Per-org links from company_resource_links; Eden defaults until the org has its own rows */}
+            {(resourceLinks&&resourceLinks.length
+              ? resourceLinks.map(r=>[r.label,r.url,r.note||''])
+              : DEFAULT_RESOURCE_LINKS
+            ).map(([l,u,note])=>(
               <a key={l} href={u} target="_blank" rel="noreferrer"
                 style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 0',borderBottom:`1px solid ${C.border}`,textDecoration:'none'}}>
                 <div>
@@ -3639,7 +3580,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               <div style={{fontSize:11,color:C.muted}}>Select which habits this client should track this week</div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:'8px 16px'}}>
-              {[...MASTER_HABITS,...companyHabits].map(h=>{
+              {[...MASTER_HABITS.filter(h=>!hiddenItems.habit.has(h.name)),...companyHabits].map(h=>{
                 const assigned=assignedHabits.find(x=>x.id===h.id)
                 return (
                   <div key={h.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>

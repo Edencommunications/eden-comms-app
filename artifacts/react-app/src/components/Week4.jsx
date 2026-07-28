@@ -123,10 +123,7 @@ const EXERCISE_LIBRARY = {
   ],
 }
 
-const CARDIO_TYPES = [
-  'Treadmill','Bike','HIIT','Stairmaster','Brisk Walk','Run',
-  'Swimming','Rowing Machine','Jump Rope','Elliptical',
-]
+import { CARDIO_TYPES } from './libraryDefaults'
 
 const LAB_TYPES = [
   'Blood Work','DUTCH Test','GI-MAP','Hormone Panel',
@@ -437,6 +434,7 @@ Training Principles:
   const [cardioWeekStart, setCardioWeekStart] = useState('Wed')
   // Company-wide cardio types managed by admin only
   const [companyCardioTypes, setCompanyCardioTypes] = useState([])
+  const [hiddenCardio,       setHiddenCardio]       = useState(new Set()) // built-ins hidden by the org's admin
   const [newCardioType,      setNewCardioType]      = useState('')
 
   // ── Calendar state ────────────────────────────────────────
@@ -455,8 +453,12 @@ Training Principles:
 
   // ── Company cardio types (each org's admin manages their own library) ──
   async function loadCompanyCardioTypes(cid) {
-    const data = await dbGet('company_cardio_types',`company_id=eq.${cid}&order=created_at.asc`)
+    const [data, hid] = await Promise.all([
+      dbGet('company_cardio_types',`company_id=eq.${cid}&order=created_at.asc`),
+      dbGet('company_hidden_items',`company_id=eq.${cid}&kind=eq.cardio&select=name`).catch(()=>[]),
+    ])
     setCompanyCardioTypes((data||[]).map(r=>r.name))
+    setHiddenCardio(new Set((Array.isArray(hid)?hid:[]).map(r=>r.name)))
   }
   async function addCompanyCardioType() {
     if (!newCardioType.trim()||!myCompanyId) return
@@ -1379,7 +1381,7 @@ Training Principles:
               <div key={i} style={{padding:'12px 0',borderTop:`1px solid ${C.border}`}}>
                 {isCoach?(
                   <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-                    <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={[...CARDIO_TYPES,...companyCardioTypes]}/>
+                    <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={[...CARDIO_TYPES.filter(t=>!hiddenCardio.has(t)),...companyCardioTypes]}/>
                     <Inp label="Duration" value={c.duration} onChange={v=>updateCardio(i,'duration',v)} placeholder="e.g. 45-60 min"/>
                     <Inp label="Frequency" value={c.frequency} onChange={v=>updateCardio(i,'frequency',v)} placeholder="e.g. Daily"/>
                     <div style={{display:'flex',alignItems:'flex-end',paddingBottom:10}}>
