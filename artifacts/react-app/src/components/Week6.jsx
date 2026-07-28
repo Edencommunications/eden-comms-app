@@ -60,10 +60,13 @@ async function dbDelete(table, params) {
   try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:H}) } catch {}
 }
 async function dbUpdate(table, params, body) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
-    method:'PATCH', headers:H, body:JSON.stringify(body)
-  })
-  if (!r.ok) console.error('UPDATE', await r.text())
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+      method:'PATCH', headers:H, body:JSON.stringify(body)
+    })
+    if (!r.ok) { console.error('UPDATE', await r.text()); return false }
+    return true
+  } catch (e) { console.error('UPDATE', e); return false }
 }
 
 // ── Demo data (Week 6 — replace with real DB calls once auth live) ──
@@ -2168,7 +2171,8 @@ function LibraryTab({companyId}) {
       fat:parseFloat(row.fat)||0, fib:parseFloat(row.fib)||0 }
     if (!body.name||!body.serving) { alert('Name and serving are required.'); return }
     if (row.id) {
-      await dbUpdate('company_foods',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      const ok = await dbUpdate('company_foods',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      if (!ok) { alert('Could not save the change — please try again.'); return }
       setFoods(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_foods',{...body,company_id:companyId})
@@ -2189,7 +2193,8 @@ function LibraryTab({companyId}) {
       directions:row.directions?.trim()||'', code:row.code?.trim()||'', link:row.link?.trim()||'' }
     if (!body.name) { alert('Name is required.'); return }
     if (row.id) {
-      await dbUpdate('company_supplements',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      const ok = await dbUpdate('company_supplements',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      if (!ok) { alert('Could not save the change — please try again.'); return }
       setSupps(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_supplements',{...body,company_id:companyId,sort_order:supps.length})
@@ -2209,7 +2214,8 @@ function LibraryTab({companyId}) {
     const body = { name:row.name?.trim(), default_target:parseInt(row.default_target)||7 }
     if (!body.name) { alert('Name is required.'); return }
     if (row.id) {
-      await dbUpdate('company_habits',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      const ok = await dbUpdate('company_habits',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
+      if (!ok) { alert('Could not save the change — please try again.'); return }
       setHabits(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_habits',{...body,company_id:companyId})
@@ -2229,7 +2235,8 @@ function LibraryTab({companyId}) {
     const name = row.name?.trim()
     if (!name) { alert('Name is required.'); return }
     if (row.id) {
-      await dbUpdate('company_cardio_types',`id=eq.${row.id}&company_id=eq.${companyId}`,{name})
+      const ok = await dbUpdate('company_cardio_types',`id=eq.${row.id}&company_id=eq.${companyId}`,{name})
+      if (!ok) { alert('Could not save the change — please try again.'); return }
       setCardio(p=>p.map(x=>x.id===row.id?{...x,name}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_cardio_types',{name,company_id:companyId})
@@ -2344,6 +2351,7 @@ function LibraryTab({companyId}) {
             ))}
           </div>
         ))}
+        {supps.length===0&&!addRow&&<div style={{color:C.muted,fontSize:12,padding:12}}>No supplements yet — add one above and every coach in your company will see it in their supplement picker.</div>}
       </>)}
 
       {sub==='habits'&&(<>
@@ -2366,6 +2374,7 @@ function LibraryTab({companyId}) {
             <LibBtn kind="danger" onClick={()=>deleteHabit(h)}>✕</LibBtn>
           </div>
         ))}
+        {habits.length===0&&!addRow&&<div style={{color:C.muted,fontSize:12,padding:12}}>Coaches already have the standard built-in habits. Anything you add here appears alongside them for every coach in your company.</div>}
       </>)}
 
       {sub==='cardio'&&(<>
@@ -2386,6 +2395,7 @@ function LibraryTab({companyId}) {
             </div>
           ))}
         </div>
+        {cardio.length===0&&!addRow&&<div style={{color:C.muted,fontSize:12,padding:12}}>Coaches already have the standard built-in cardio types. Anything you add here appears alongside them for every coach in your company.</div>}
       </>)}
 
       </>)}
