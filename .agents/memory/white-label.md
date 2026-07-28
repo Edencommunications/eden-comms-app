@@ -16,3 +16,11 @@ description: How white-label orgs, tiers, and content gating work in the Eden co
 - company_habits & company_cardio_types are scoped by company_id; each org gets an independent COPY of Eden's rows seeded at org creation (Week6 createOrg) — no ongoing sync.
 - company_foods stays Eden-only: everyone reads company_id=Eden; add/remove food UI hidden for WL admins (isWLOrg gate in DietBuilder).
 - company_cardio_types has UNIQUE (company_id, name) — the old global name unique was dropped; deletes must always filter by company_id AND name.
+
+## Supplement library scoping (July 2026)
+- `company_supplements` table: per-org editable copy of the supplement library (category/name/dose/directions/code/link/sort_order).
+- Eden users see the hardcoded `SUPP_DB` in DietBuilder.jsx (source of truth, synced from the master Google Sheet); Eden also has a mirror row-set in `company_supplements` used ONLY as the seed source for new orgs (Week6 createOrg copies it, like habits/cardio).
+- **When re-syncing SUPP_DB from the sheet, also refresh Eden's rows in `company_supplements`** or new orgs get seeded stale.
+- WL org admins (isAdmin && isWLOrg) get add/edit/delete UI in the supplement picker; edits only touch their org's rows.
+- Race rule: picker gates on myCompanyId resolution — never show Eden's SUPP_DB to a WL user before org context resolves.
+- Gotcha: DietBuilder's `dbInsert` helper returns undefined even on success (no Prefer: return=representation); don't use its return value as a success check. Week6's version DOES return rows.
