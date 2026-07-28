@@ -9,7 +9,7 @@ import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { getRecipeDetails } from './recipeDetails'
+import { getRecipeDetails, loadLiveRecipeDetails } from './recipeDetails'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -751,6 +751,8 @@ function CheckInCharts({ checkins }) {
 export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[], onBack}) {
   const isMobile = useIsMobile()
   const [adminFormDocs, setAdminFormDocs] = useState([])
+  const [,setLiveDetailsReady] = useState(false) // re-render once sheet-linked doc details arrive
+  useEffect(()=>{ loadLiveRecipeDetails().then(()=>setLiveDetailsReady(true)) },[])
   useEffect(()=>{
     const em = currentUser?.email||''
     if (!em) return

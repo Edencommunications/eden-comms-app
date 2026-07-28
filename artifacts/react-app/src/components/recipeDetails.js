@@ -158,11 +158,35 @@ export const RECIPE_DETAILS = {
   },
 }
 
-// Get details for a recipe object or name (checks embedded data first, then the shared book)
+// ── Live details auto-imported from the sheet's recipe Google Docs ──
+// The API server extracts the doc links from the Google Sheet's xlsx export
+// and parses each doc's Ingredients/Instructions. This means recipes Eden
+// adds to the sheet get full details here without any code changes.
+let LIVE_RECIPE_DETAILS = {}
+let liveDetailsPromise = null
+
+export function loadLiveRecipeDetails() {
+  if (!liveDetailsPromise) {
+    liveDetailsPromise = fetch('/api/recipe-details')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data && data.recipes) LIVE_RECIPE_DETAILS = data.recipes
+        return LIVE_RECIPE_DETAILS
+      })
+      .catch(() => {
+        liveDetailsPromise = null // allow retry on next call
+        return LIVE_RECIPE_DETAILS
+      })
+  }
+  return liveDetailsPromise
+}
+
+// Get details for a recipe object or name (checks embedded data first, then
+// the hardcoded book, then the live sheet-imported details)
 export function getRecipeDetails(recipe) {
   if (!recipe) return null
   const name = recipe.name || recipe.recipe_name || (typeof recipe === 'string' ? recipe : '')
   const embedded = (Array.isArray(recipe.ingredients) && recipe.ingredients.length) ? recipe : null
   if (embedded) return { ingredients: recipe.ingredients, method: Array.isArray(recipe.method) ? recipe.method : [recipe.method].filter(Boolean) }
-  return RECIPE_DETAILS[name] || null
+  return RECIPE_DETAILS[name] || LIVE_RECIPE_DETAILS[name] || null
 }

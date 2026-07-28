@@ -42,7 +42,7 @@ const H = {
   'Prefer':'return=representation',
 }
 
-import { getRecipeDetails } from './recipeDetails'
+import { getRecipeDetails, loadLiveRecipeDetails } from './recipeDetails'
 
 async function dbGet(table, params='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
@@ -240,11 +240,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [selectedRecipe,setSelectedRecipe]= useState(null)
   const [hasRecipeAccess,setHasRecipeAccess]= useState(false)
   const [assignedRecipeNames,setAssignedRecipeNames]= useState(new Set()) // per-recipe unlocks from coach assignments
+  const [,setLiveDetailsReady]                = useState(false) // re-render once live doc details arrive
 
   useEffect(()=>{
     if (!profileReady) return   // wait until company/tier is known so Eden content never flashes for white-label users
     loadCourses()
     loadLiveRecipes()
+    loadLiveRecipeDetails().then(()=>setLiveDetailsReady(true)) // sheet-linked doc details for new recipes
     if (myUUID) { checkRecipeAccess(); loadAssignedRecipes() }
   },[profileReady, myUUID, companyCtx?.companyId, companyCtx?.packageId])
 
