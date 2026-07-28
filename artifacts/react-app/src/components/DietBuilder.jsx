@@ -774,11 +774,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // null = still resolving — hide recipe UI until known.
   const [tierRecipes, setTierRecipes] = useState(null)
   const isWLOrg = !!myCompanyId && myCompanyId!==EDEN_ORG_ID
-  useEffect(()=>{ (async()=>{
+  useEffect(()=>{ let stale=false; (async()=>{
     if (!email) return
+    setTierRecipes(null) // reset while resolving — recipe UI stays hidden until the new user's tier is known
     try {
       const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,company_id`)
       const cid = rows?.[0]?.company_id || EDEN_ORG_ID
+      if (stale) return
       setMyCompanyId(cid)
       setMyUUID(rows?.[0]?.id || null)
       if (cid===EDEN_ORG_ID) { setTierRecipes(true) }
@@ -786,13 +788,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         const org = await dbGet('organizations',`id=eq.${cid}&select=plan`)
         let inc = false
         if (org?.[0]?.plan) {
-          const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(org[0].plan)}&active=eq.true&limit=1`)
+          const plan = String(org[0].plan).trim()
+          const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(plan)}&active=eq.true&limit=1`)
           inc = !!pkg?.[0]?.includes_recipes
         }
-        setTierRecipes(inc)
+        if (!stale) setTierRecipes(inc)
       }
-    } catch { setMyCompanyId(EDEN_ORG_ID); setTierRecipes(true) }
-  })() },[email])
+    } catch { if(!stale){ setMyCompanyId(EDEN_ORG_ID) } /* tierRecipes stays null on failure — fail closed (recipe UI hidden) */ }
+  })(); return ()=>{ stale=true } },[email])
 
   const [tab,        setTab]        = useState(initialTab)
   const [dayType,    setDayType]    = useState('high')
