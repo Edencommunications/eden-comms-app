@@ -554,15 +554,6 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     const rows = await dbGet('client_recipes',`client_id=eq.${myUUID}&select=recipe_name`)
     if (Array.isArray(rows)) setAssignedRecipeNames(new Set(rows.map(r=>r.recipe_name).filter(Boolean)))
   }
-  async function grantRecipeAccess() {
-    await fetch(`${SUPABASE_URL}/rest/v1/recipe_access`,{
-      method:'POST',
-      headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({user_id:KNOWN_USERS['client@eden.io']?.uuid,granted_by:'admin'}),
-    })
-    alert('Recipe book access granted.')
-  }
-
   async function loadLiveRecipes() {
     setLiveLoading(true)
     try {
@@ -933,7 +924,6 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   <div style={{fontSize:10,color:C.muted,marginTop:1}}>{liveLoading?'Loading from Google Sheets…':`${recipes.length} recipes · auto-updates weekly`}</div>
                 </div>
                 <div style={{display:'flex',gap:6}}>
-                  {isAdmin&&<button onClick={grantRecipeAccess} style={{background:`${C.success}22`,border:`1px solid ${C.success}44`,borderRadius:6,padding:'5px 9px',color:C.success,fontSize:10,fontWeight:700,cursor:'pointer'}}>Grant Access</button>}
                   <button onClick={loadLiveRecipes} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 9px',color:C.muted,fontSize:10,cursor:'pointer'}}>↻</button>
                 </div>
               </div>

@@ -688,6 +688,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   },[currentUser?.email])
   const email   = currentUser?.email||''
   const info    = KNOWN_USERS[email]||{role:'client',name:'User'}
+  // Real identity: resolve the profile from the DB so real (non-demo) users work everywhere.
+  // Demo accounts keep working via KNOWN_USERS; real accounts get their DB row.
+  const [dbProfile, setDbProfile] = useState(null)
+  useEffect(()=>{
+    if (!email) { setDbProfile(null); return }
+    dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,name,role,coach_id,company_id`)
+      .then(rows=>setDbProfile(rows?.[0]||null))
+      .catch(()=>setDbProfile(null))
+  },[email])
+  // The client's assigned coach: demo accounts map to the demo coach; real clients use their DB coach_id
+  const myCoachId = KNOWN_USERS[email] ? KNOWN_USERS['coach@eden.io'].uuid : (dbProfile?.coach_id || null)
   // Prefer the role passed in currentUser (coach viewing a client's tools)
   // over the KNOWN_USERS lookup, which would always return 'client' for client emails
   const role    = currentUser?.role || info.role
@@ -791,7 +802,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     '  May use 4oz of MALK or unsweetened vanilla almond milk as creamer',
     '• Updates due before 9 AM CST on your assigned update day — fasted weight + photos',
   ].join('\n')
-  const loeKey = `eden_loe_${KNOWN_USERS[email]?.uuid||email}`
+  const loeKey = `eden_loe_${myUUID||email}`
   const [loeContent, setLoeContent] = useState(()=>localStorage.getItem(loeKey)||LOE_DEFAULT)
   const [loeEditing, setLoeEditing] = useState(false)
   const saveLoe = (val) => { setLoeContent(val); localStorage.setItem(loeKey, val) }
@@ -822,7 +833,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setExpandedCi(null)
     setEditingCi(null)
 
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     if (!uuid) return
 
     // Load assigned update day — DB first, localStorage fallback (bridge until SQL/RLS is live)
@@ -883,17 +894,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   // Load client's progress photos — for both client login and coach viewing a client
   useEffect(() => {
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     if (!uuid) { setClientPhotos([]); return }
     dbGet('progress_photos', `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)
       .then(rows => setClientPhotos(Array.isArray(rows) && rows.length ? rows : []))
       .catch(() => setClientPhotos([]))
-  }, [email])
+  }, [email, myUUID])
 
   async function uploadProgressPhoto(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     if (!uuid) { alert('Could not identify your account.'); return }
     setPhotoUploading(true)
     try {
@@ -1127,8 +1138,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   function addCoachUpdate() {
     if(!newNote.trim()&&!newLoom.trim()) return
-    const clientId = KNOWN_USERS[email]?.uuid
-    const coachId  = KNOWN_USERS['coach@eden.io']?.uuid
+    const clientId = myUUID
+    const coachId  = myCoachId
     const entry = {id:Date.now(),date:newDate,note:newNote.trim(),loom:newLoom.trim()}
     setCoachOnlyUpdates(p=>[entry,...p])
     setNewNote(''); setNewLoom(''); setShowAddForm(false)
@@ -1143,16 +1154,16 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   // Load coach_updates from DB on mount
   useEffect(()=>{
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     if(!uuid) return
     dbGet('coach_updates',`client_id=eq.${uuid}&order=created_at.desc&limit=50`)
       .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCoachOnlyUpdates(rows.map(r=>({id:r.id,date:r.date,note:r.note||'',loom:r.loom||''}))) })
       .catch(()=>{})
-  },[email])
+  },[email, myUUID])
 
   // Load intake record + call notes (written by coach in Week6 Consultation tab)
   useEffect(()=>{
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     if(!uuid) return
     dbGet('client_intakes',`client_id=eq.${uuid}&order=updated_at.desc&limit=1`)
       .then(rows=>{
@@ -1168,11 +1179,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     dbGet('client_documents',`client_id=eq.${uuid}&doc_type=in.(onboarding,monthly,emergency)&order=created_at.desc`)
       .then(rows=>{ if(Array.isArray(rows)) setConsultDocs(rows) })
       .catch(()=>{})
-  },[email])
+  },[email, myUUID])
 
   // Load + poll notifications every 30 s
   useEffect(()=>{
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     if(!uuid) return
     const load = ()=>
       dbGet('notifications',`recipient_id=eq.${uuid}&order=created_at.desc&limit=40`)
@@ -1181,7 +1192,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     load()
     const iv = setInterval(load, 30000)
     return ()=>clearInterval(iv)
-  },[email])
+  },[email, myUUID])
 
   // ── Company habits (each org's admin manages their own library) ──
   async function loadCompanyHabits() {
@@ -1291,7 +1302,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   function markAllRead() {
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     setNotifications(p=>p.map(n=>({...n,is_read:true})))
     if(uuid) dbUpdate('notifications',`recipient_id=eq.${uuid}&is_read=eq.false`,{is_read:true,read_at:new Date().toISOString()})
   }
@@ -1299,7 +1310,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   // Load assigned recipes from DB
   useEffect(()=>{
-    const uuid = KNOWN_USERS[email]?.uuid
+    const uuid = myUUID
     if(!uuid) return
     dbGet('client_recipes',`client_id=eq.${uuid}&order=assigned_at.desc`)
       .then(rows=>{
@@ -1310,11 +1321,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         }))
       })
       .catch(()=>{})
-  },[email])
+  },[email, myUUID])
 
   async function assignRecipe(recipe, mealName) {
-    const uuid    = KNOWN_USERS[email]?.uuid
-    const coachId = KNOWN_USERS['coach@eden.io']?.uuid
+    const uuid    = myUUID
+    const coachId = myCoachId
     if(!uuid||!coachId) return
     // Embed full recipe content (ingredients + method) so the client gets the complete recipe, not just macros
     const details    = getRecipeDetails(recipe)
@@ -1669,7 +1680,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           })}
 
           {isCoach&&(
-            <button onClick={async()=>{await dbInsert('diet_plans',{client_id:KNOWN_USERS['client@eden.io']?.uuid,coach_id:KNOWN_USERS['coach@eden.io']?.uuid,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});alert('Diet plan saved!')}}
+            <button onClick={async()=>{await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});alert('Diet plan saved!')}}
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
@@ -2151,8 +2162,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                 <button onClick={()=>{
                                   setLocalCheckins(p=>p.map((r,i)=>i===idx?{...r,coachNotes:draftNote.trim(),coachLoom:draftLoom.trim()}:r))
                                   setEditingCi(null)
-                                  const clientId = KNOWN_USERS[email]?.uuid
-                                  const coachId  = KNOWN_USERS['coach@eden.io']?.uuid
+                                  const clientId = myUUID
+                                  const coachId  = myCoachId
                                   if(clientId && coachId) {
                                     dbUpsert('coach_responses',{
                                       client_id:clientId, coach_id:coachId,
@@ -2912,8 +2923,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                 <button onClick={async()=>{
                   await dbInsert('weekly_checkins',{
-                    client_id:        KNOWN_USERS[email]?.uuid,
-                    coach_id:         KNOWN_USERS['coach@eden.io']?.uuid,
+                    client_id:        myUUID,
+                    coach_id:         myCoachId,
                     weight:           ci.weight,           temp:             ci.temp,
                     steps:            ci.steps,            heart_rate:       ci.heartRate,
                     hrv:              ci.hrv,              blood_pressure:   ci.bloodPressure,
@@ -2931,8 +2942,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       ? {...protocolDurations, __others: otherProtocols.length>0 ? otherProtocols : undefined}
                       : null,
                   })
-                  const _cId = KNOWN_USERS['coach@eden.io']?.uuid
-                  const _clId = KNOWN_USERS[email]?.uuid
+                  const _cId = myCoachId
+                  const _clId = myUUID
                   if(_cId&&_clId) insertNotification(_cId, _clId, 'new_checkin',
                     `📋 Jordan submitted their weekly check-in — review it in the Check-In Hub`)
                   alert('Check-in submitted! Your coach will review within 48 hours.')

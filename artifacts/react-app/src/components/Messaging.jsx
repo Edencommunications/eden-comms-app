@@ -1139,9 +1139,6 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const threadReplies = threadRootId
     ? (repliesByParent[threadRootId] || threadInbox.find(t => t.root.id === threadRootId)?.replies || [])
     : []
-  const coachUUID = KNOWN_USERS['coach@eden.io'].uuid
-  const clientUUID = KNOWN_USERS['client@eden.io'].uuid
-
   function isMine(msg) {
     if (isLive) return msg.sender_id === myProfileId
     if (myRole === 'coach') return msg.from === 'coach'

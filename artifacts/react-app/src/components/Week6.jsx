@@ -962,7 +962,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     }
     setCallNotes(prev=>[note,...prev])
 
-    const _clientId = selectedClient?.uuid || KNOWN_USERS['client@eden.io']?.uuid
+    const _clientId = selectedClient?.uuid
+    if (!_clientId) { alert('Select a client first.'); return }
     await dbInsert('consultation_notes',{
       client_id:      _clientId,
       coach_id:       myUUID,

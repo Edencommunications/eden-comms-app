@@ -385,8 +385,18 @@ export default function Week4({currentUser, initialTab='labs', onBack}) {
   const isClient = role==='client'
   const isAdmin  = role==='super_admin'
 
-  const CLIENT_UUID = KNOWN_USERS['client@eden.io'].uuid
-  const COACH_UUID  = KNOWN_USERS['coach@eden.io'].uuid
+  // Real identity: demo accounts keep the demo client/coach; real users resolve
+  // their own profile (and assigned coach) from the DB so labs/workouts save to
+  // the right person instead of the demo account.
+  const [dbProfile, setDbProfile] = useState(null)
+  useEffect(()=>{
+    if (!email || KNOWN_USERS[email]) { setDbProfile(null); return }
+    dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,coach_id`)
+      .then(rows=>setDbProfile(rows?.[0]||null))
+      .catch(()=>setDbProfile(null))
+  },[email])
+  const CLIENT_UUID = KNOWN_USERS[email] ? KNOWN_USERS['client@eden.io'].uuid : (dbProfile?.id || null)
+  const COACH_UUID  = KNOWN_USERS[email] ? KNOWN_USERS['coach@eden.io'].uuid  : (dbProfile?.coach_id || null)
 
   // ── Main tab ──────────────────────────────────────────────
   const [tab, setTab] = useState(initialTab)
@@ -506,11 +516,11 @@ Training Principles:
   }
 
   // ── Load on mount ─────────────────────────────────────────
-  useEffect(()=>{ loadLabs(); loadWorkoutPlan(); loadWeekHistory() },[])
+  useEffect(()=>{ if (CLIENT_UUID) { loadLabs(); loadWorkoutPlan(); loadWeekHistory() } },[CLIENT_UUID])
   useEffect(()=>{ if (myCompanyId) loadCompanyCardioTypes(myCompanyId) },[myCompanyId])
 
   // Reload logs whenever week changes
-  useEffect(()=>{ loadWorkoutLog(activeWeek) },[activeWeek])
+  useEffect(()=>{ if (CLIENT_UUID) loadWorkoutLog(activeWeek) },[activeWeek, CLIENT_UUID])
 
   async function loadLabs() {
     const data = await dbGet('lab_results',
