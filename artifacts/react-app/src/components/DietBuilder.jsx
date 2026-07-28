@@ -769,14 +769,29 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
   const [myCompanyId, setMyCompanyId] = useState(null)
   const [myUUID, setMyUUID] = useState(null)
+  // Does this org's tier include the Recipe Book? Eden always true; WL orgs resolved
+  // from organizations.plan → packages.includes_recipes (Eden admin controls both).
+  // null = still resolving — hide recipe UI until known.
+  const [tierRecipes, setTierRecipes] = useState(null)
   const isWLOrg = !!myCompanyId && myCompanyId!==EDEN_ORG_ID
   useEffect(()=>{ (async()=>{
     if (!email) return
     try {
       const rows = await dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,company_id`)
-      setMyCompanyId(rows?.[0]?.company_id || EDEN_ORG_ID)
+      const cid = rows?.[0]?.company_id || EDEN_ORG_ID
+      setMyCompanyId(cid)
       setMyUUID(rows?.[0]?.id || null)
-    } catch { setMyCompanyId(EDEN_ORG_ID) }
+      if (cid===EDEN_ORG_ID) { setTierRecipes(true) }
+      else {
+        const org = await dbGet('organizations',`id=eq.${cid}&select=plan`)
+        let inc = false
+        if (org?.[0]?.plan) {
+          const pkg = await dbGet('packages',`name=ilike.${encodeURIComponent(org[0].plan)}&active=eq.true&limit=1`)
+          inc = !!pkg?.[0]?.includes_recipes
+        }
+        setTierRecipes(inc)
+      }
+    } catch { setMyCompanyId(EDEN_ORG_ID); setTierRecipes(true) }
   })() },[email])
 
   const [tab,        setTab]        = useState(initialTab)
@@ -1704,8 +1719,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             </button>
           )}
 
-          {/* ── Coach: assign individual recipes ── */}
-          {isCoach&&(
+          {/* ── Coach: assign individual recipes — only when the org's tier includes the Recipe Book ── */}
+          {isCoach&&tierRecipes===true&&(
             <div style={{marginBottom:24}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                 <div>
@@ -1741,8 +1756,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             </div>
           )}
 
-          {/* ── Client: recipe preview + purchase ── */}
-          {isClient&&(
+          {/* ── Client: recipe preview + purchase — hidden entirely for orgs whose tier excludes the Recipe Book ── */}
+          {isClient&&tierRecipes===true&&(
             <div style={{marginBottom:24}}>
 
               {/* Coach-assigned recipes — fully unlocked */}
@@ -3706,7 +3721,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
       {/* ── Supplement picker modal (coach only) ─────────────── */}
       {/* ── Recipe Picker Modal ────────────────────────────────── */}
-      {showRecipePicker&&isCoach&&(
+      {showRecipePicker&&isCoach&&tierRecipes===true&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:200,display:'flex',flexDirection:'column'}}>
           <div style={{flex:1,background:C.black,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
             {/* Header */}

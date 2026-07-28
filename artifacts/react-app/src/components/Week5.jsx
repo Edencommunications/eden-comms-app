@@ -571,8 +571,9 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       if(rows.length>1){
         const parsed=rows.slice(1).map(row=>{
           const c=row.c||[]
-          return{name:c[0]?.v||'',servings:c[2]?.v||1,cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,category:'Recipe',tags:[],isLive:true}
-        }).filter(r=>r.name&&r.cal>0)
+          // c[1] (Recipe/Method column) only has a value for actual recipes — grocery/food rows in the same sheet range are skipped
+          return{name:c[0]?.v||'',hasMethod:!!c[1]?.v,servings:c[2]?.v||1,cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,category:'Recipe',tags:[],isLive:true}
+        }).filter(r=>r.name&&r.cal>0&&r.hasMethod)
         if(parsed.length>0){
           const names=new Set(parsed.map(r=>r.name))
           setRecipes([...parsed,...STATIC_RECIPES.filter(r=>!names.has(r.name))])
@@ -1399,8 +1400,9 @@ export function RecipePicker({onSelect, onClose}) {
         if(rows.length>1){
           const parsed=rows.slice(1).map(row=>{
             const c=row.c||[]
-            return{name:c[0]?.v||'',serving:'1 serving',cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,cat:'Recipes',isRecipe:true}
-          }).filter(r=>r.name&&r.cal>0)
+            // c[1] (Recipe/Method column) only has a value for actual recipes — grocery/food rows in the same sheet range are skipped
+            return{name:c[0]?.v||'',hasMethod:!!c[1]?.v,serving:'1 serving',cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,cat:'Recipes',isRecipe:true}
+          }).filter(r=>r.name&&r.cal>0&&r.hasMethod)
           if(parsed.length>0){const names=new Set(parsed.map(r=>r.name));setRecipes([...parsed,...STATIC_RECIPES.filter(r=>!names.has(r.name)).map(r=>({...r,serving:'1 serving',cat:'Recipes',isRecipe:true}))])}
         }
       }).catch(()=>{}).finally(()=>setLoading(false))
