@@ -287,68 +287,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   })
   const setNU = k=>v=>setNewUser(p=>({...p,[k]:v}))
 
-  // ── Add Clients (manual single / CSV bulk under a chosen coach) ──
+  // ── Add Client (manual single under a chosen coach) ──
   const [showAddClients, setShowAddClients] = useState(false)
   const [acCoachId,      setAcCoachId]      = useState('')
-  const [acMode,         setAcMode]         = useState('single')  // 'single' | 'csv'
   const [acSingle,       setAcSingle]       = useState({name:'',email:'',phone:''})
   const [acCheckInDay,   setAcCheckInDay]   = useState('Wednesday')
   const [acRows,         setAcRows]         = useState([])        // preview rows: {name,email,phone,status,reason}
   const [acStep,         setAcStep]         = useState('input')   // 'input' | 'preview' | 'saving' | 'done'
   const [acResults,      setAcResults]      = useState(null)      // {created:[{name,email,tempPass}], skipped:[{email,reason}]}
-  const [acCsvError,     setAcCsvError]     = useState('')
-  const acFileRef = useRef(null)
 
   function resetAddClients() {
-    setShowAddClients(false); setAcCoachId(''); setAcMode('single')
+    setShowAddClients(false); setAcCoachId('')
     setAcSingle({name:'',email:'',phone:''}); setAcCheckInDay('Wednesday')
-    setAcRows([]); setAcStep('input'); setAcResults(null); setAcCsvError('')
-  }
-
-  // Minimal CSV parser: handles quoted fields, optional header row (name,email,phone)
-  function parseClientCsv(text) {
-    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
-    const parseLine = line => {
-      const out=[]; let cur='', inQ=false
-      for (let i=0;i<line.length;i++) {
-        const ch=line[i]
-        if (inQ) {
-          if (ch==='"' && line[i+1]==='"') { cur+='"'; i++ }
-          else if (ch==='"') inQ=false
-          else cur+=ch
-        } else if (ch==='"') inQ=true
-        else if (ch===',') { out.push(cur); cur='' }
-        else cur+=ch
-      }
-      out.push(cur)
-      return out.map(s=>s.trim())
-    }
-    let rows = lines.map(parseLine)
-    // Header detection: if the first row mentions "name" or "email", map columns by header; otherwise assume name,email,phone order
-    let idx = { name:0, email:1, phone:2 }
-    if (rows.length && rows[0].some(c=>/^(name|email|phone)$/i.test(c))) {
-      const hdr = rows[0].map(c=>c.toLowerCase())
-      idx = { name:hdr.indexOf('name'), email:hdr.indexOf('email'), phone:hdr.indexOf('phone') }
-      rows = rows.slice(1)
-    }
-    return rows.map(r=>({
-      name:  idx.name  >=0 ? (r[idx.name] ||'') : '',
-      email: idx.email >=0 ? (r[idx.email]||'').toLowerCase() : '',
-      phone: idx.phone >=0 ? (r[idx.phone]||'') : '',
-    })).filter(r=>r.name||r.email||r.phone)
-  }
-
-  function onCsvFile(file) {
-    setAcCsvError('')
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const rows = parseClientCsv(String(reader.result||''))
-      if (!rows.length) { setAcCsvError('No rows found in that file. Expected columns: name, email, phone.'); return }
-      setAcRows(rows.map(r=>({...r,status:'',reason:''})))
-    }
-    reader.onerror = () => setAcCsvError('Could not read that file — please try again.')
-    reader.readAsText(file)
+    setAcRows([]); setAcStep('input'); setAcResults(null)
   }
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -356,9 +307,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // Validate rows + flag duplicates (against the DB and within the batch), then show preview
   async function buildClientPreview() {
     if (!acCoachId) { alert('Choose which coach these clients belong to first.'); return }
-    const raw = acMode==='single'
-      ? [{ name:acSingle.name.trim(), email:acSingle.email.trim().toLowerCase(), phone:acSingle.phone.trim() }]
-      : acRows.map(r=>({ name:r.name.trim(), email:r.email.trim().toLowerCase(), phone:r.phone.trim() }))
+    const raw = [{ name:acSingle.name.trim(), email:acSingle.email.trim().toLowerCase(), phone:acSingle.phone.trim() }]
     if (!raw.length) return
 
     // Look up existing profiles by email so duplicates are flagged, never silently created
@@ -566,6 +515,26 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [adminCompanyId,  setAdminCompanyId]  = useState(null)
   const [adminProfileId,  setAdminProfileId]  = useState(null)
 
+  // ── Admin notifications (bell in the tab bar) ────────────
+  const [adminNotifs,     setAdminNotifs]     = useState([])
+  const [showAdminNotifs, setShowAdminNotifs] = useState(false)
+  const adminUnread = adminNotifs.filter(n=>!n.is_read).length
+  useEffect(()=>{
+    if (!isAdmin || !adminProfileId) return
+    const load = ()=>
+      dbGet('notifications',`recipient_id=eq.${adminProfileId}&order=created_at.desc&limit=40`)
+        .then(rows=>{ if(Array.isArray(rows)) setAdminNotifs(rows) })
+        .catch(()=>{})
+    load()
+    const iv = setInterval(load, 30000)
+    return ()=>clearInterval(iv)
+  },[isAdmin, adminProfileId])
+  function markAdminNotifsRead() {
+    if (!adminProfileId) return
+    setAdminNotifs(p=>p.map(n=>({...n,is_read:true})))
+    dbUpdate('notifications',`recipient_id=eq.${adminProfileId}&is_read=eq.false`,{is_read:true,read_at:new Date().toISOString()})
+  }
+
   // Real coaches from the database (merged with the demo coach so transfers/pickers show everyone)
   const [dbCoaches, setDbCoaches] = useState([])
   useEffect(()=>{
@@ -577,6 +546,34 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           .map(r=>({uuid:r.id,name:r.name,email:r.email,role:'coach',checkInDay:'',clientCount:0,active:true}))) })
       .catch(()=>{})
   },[adminCompanyId])
+  // Real clients from the database (GHL-imported or added by any admin) —
+  // merged into the list so admins always see every client in their org,
+  // even ones created outside this browser session.
+  useEffect(()=>{
+    if (!adminCompanyId) return
+    dbGet('user_profiles',`role=eq.client&company_id=eq.${adminCompanyId}&is_active=not.is.false&select=id,name,email,coach_id,update_day,created_at`)
+      .then(rows=>{
+        if (!Array.isArray(rows)) return
+        setClients(prev=>{
+          const have = new Set(prev.map(c=>c.uuid))
+          const haveEmail = new Set(prev.map(c=>(c.email||'').toLowerCase()))
+          const fresh = rows
+            .filter(r=>!have.has(r.id)&&!haveEmail.has((r.email||'').toLowerCase()))
+            .map(r=>{
+              const coach = [...DEMO_COACHES,...dbCoaches].find(c=>c.uuid===r.coach_id)
+              return {
+                uuid:r.id, name:r.name, email:r.email, role:'client',
+                coachId:r.coach_id||null, coachName:coach?.name||'—',
+                checkInDay:r.update_day||'Wednesday',
+                hasUpdate:false, lastSeen:'Never', active:true,
+              }
+            })
+          return fresh.length ? [...prev,...fresh] : prev
+        })
+      })
+      .catch(()=>{})
+  },[adminCompanyId, dbCoaches])
+
   // Removed coach UUIDs — seeded from localStorage, kept in sync with the DB
   // (is_active=false) by syncLifecycleFromDb. Declared here so allCoaches can
   // honor the DB flag: removed coaches (demo or real) never appear anywhere.
@@ -1201,6 +1198,32 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           {isAdmin&&<div style={{fontSize:10,color:C.gold,marginTop:1}}>🛡 Super Admin — Full Access</div>}
         </div>
 
+        {/* Admin notification bell */}
+        {isAdmin&&(
+          <div style={{position:'relative',marginRight:10}}>
+            <button onClick={()=>{ setShowAdminNotifs(s=>!s); if(!showAdminNotifs&&adminUnread) markAdminNotifsRead() }}
+              style={{background:'none',border:'none',cursor:'pointer',fontSize:17,position:'relative',padding:'4px 6px'}}>
+              🔔
+              {adminUnread>0&&(
+                <span style={{position:'absolute',top:-2,right:-2,background:C.danger,color:'#fff',borderRadius:9,minWidth:16,height:16,fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px'}}>{adminUnread}</span>
+              )}
+            </button>
+            {showAdminNotifs&&(
+              <div style={{position:'absolute',right:0,top:34,width:320,maxHeight:380,overflowY:'auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,zIndex:200,boxShadow:'0 8px 30px rgba(0,0,0,.6)'}}>
+                <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,fontWeight:700,color:C.gold}}>Notifications</div>
+                {adminNotifs.length===0?(
+                  <div style={{padding:'22px 14px',textAlign:'center',fontSize:12,color:C.muted}}>No notifications yet</div>
+                ):adminNotifs.map(n=>(
+                  <div key={n.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:12,color:n.is_read?C.muted:C.white,lineHeight:1.5}}>{n.body}</div>
+                    <div style={{fontSize:10,color:C.dim,marginTop:3}}>{n.created_at?new Date(n.created_at).toLocaleString():''}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Check-in counter badge */}
         {(isAdmin||isCoach)&&pendingUpdates>0&&(
           <div style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'5px 12px',marginRight:12,display:'flex',alignItems:'center',gap:6}}>
@@ -1296,9 +1319,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                 {isAdmin&&(
                   <button onClick={()=>{resetAddClients();setShowAddClients(true)}}
-                    title="Add one client or bulk-upload a CSV under a chosen coach"
+                    title="Add a client under a chosen coach"
                     style={{background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
-                    ⇪ Add Clients
+                    + Add Client
                   </button>
                 )}
               </div>
@@ -2196,14 +2219,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         </div>
       )}
 
-      {/* ── Add Clients Modal (single / CSV bulk under a coach) ── */}
+      {/* ── Add Client Modal (single client under a coach) ── */}
       {showAddClients&&isAdmin&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget&&acStep!=='saving')resetAddClients()}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:560,maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
             <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-              <div style={{fontSize:16,fontWeight:700,color:C.white}}>Add Clients</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:2}}>Pick a coach, then add one client or upload a CSV of many</div>
+              <div style={{fontSize:16,fontWeight:700,color:C.white}}>Add Client</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>Pick a coach, then add their new client</div>
             </div>
 
             <div style={{flex:1,overflowY:'auto',padding:20}}>
@@ -2213,50 +2236,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     options={[{value:'',label:'— select coach —'},...allCoaches.map(c=>({value:c.uuid,label:c.name}))]}/>
                   <Sel label="Check-In Day" value={acCheckInDay} onChange={setAcCheckInDay} options={CHECK_IN_DAYS}/>
 
-                  {/* Mode toggle */}
-                  <div style={{display:'flex',gap:8,margin:'14px 0 12px'}}>
-                    {[['single','👤 Single Client'],['csv','📄 CSV Upload']].map(([m,l])=>(
-                      <button key={m} onClick={()=>setAcMode(m)}
-                        style={{flex:1,background:acMode===m?`${C.gold}22`:C.surface,border:`1px solid ${acMode===m?C.gold:C.border}`,borderRadius:8,padding:'9px 12px',color:acMode===m?C.gold:C.muted,fontWeight:700,fontSize:12,cursor:'pointer'}}>
-                        {l}
-                      </button>
-                    ))}
+                  <div style={{marginTop:14}}>
+                    <Inp label="Full Name *" value={acSingle.name} onChange={v=>setAcSingle(p=>({...p,name:v}))} placeholder="e.g. Sarah Johnson"/>
+                    <Inp label="Email Address *" value={acSingle.email} onChange={v=>setAcSingle(p=>({...p,email:v}))} placeholder="e.g. sarah@email.com" type="email"/>
+                    <Inp label="Phone (optional)" value={acSingle.phone} onChange={v=>setAcSingle(p=>({...p,phone:v}))} placeholder="e.g. +1 555 123 4567"/>
                   </div>
 
-                  {acMode==='single'&&(
-                    <>
-                      <Inp label="Full Name *" value={acSingle.name} onChange={v=>setAcSingle(p=>({...p,name:v}))} placeholder="e.g. Sarah Johnson"/>
-                      <Inp label="Email Address *" value={acSingle.email} onChange={v=>setAcSingle(p=>({...p,email:v}))} placeholder="e.g. sarah@email.com" type="email"/>
-                      <Inp label="Phone (optional)" value={acSingle.phone} onChange={v=>setAcSingle(p=>({...p,phone:v}))} placeholder="e.g. +1 555 123 4567"/>
-                    </>
-                  )}
-
-                  {acMode==='csv'&&(
-                    <>
-                      <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.6}}>
-                        Upload a .csv file with columns <span style={{color:C.gold,fontFamily:'monospace'}}>name, email, phone</span> (header row optional, phone optional).
-                      </div>
-                      <input ref={acFileRef} type="file" accept=".csv,text/csv,text/plain" style={{display:'none'}}
-                        onChange={e=>{ onCsvFile(e.target.files?.[0]); e.target.value='' }}/>
-                      <button onClick={()=>acFileRef.current?.click()}
-                        style={{width:'100%',background:C.surface,border:`1px dashed ${C.gold}66`,borderRadius:10,padding:'18px 12px',color:C.gold,fontWeight:700,fontSize:13,cursor:'pointer',marginBottom:10}}>
-                        {acRows.length ? `📄 ${acRows.length} row${acRows.length>1?'s':''} loaded — click to replace` : '📄 Choose CSV file…'}
-                      </button>
-                      {acCsvError&&<div style={{fontSize:11,color:C.danger,marginBottom:10}}>{acCsvError}</div>}
-                      {acRows.length>0&&(
-                        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,maxHeight:160,overflowY:'auto'}}>
-                          {acRows.slice(0,50).map((r,i)=>(
-                            <div key={i} style={{display:'flex',gap:8,padding:'6px 10px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:11}}>
-                              <span style={{color:C.white,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||'—'}</span>
-                              <span style={{color:C.muted,flex:1.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.email||'—'}</span>
-                              <span style={{color:C.muted,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.phone||''}</span>
-                            </div>
-                          ))}
-                          {acRows.length>50&&<div style={{padding:'6px 10px',fontSize:10,color:C.muted}}>…and {acRows.length-50} more</div>}
-                        </div>
-                      )}
-                    </>
-                  )}
                 </>
               )}
 
@@ -2337,16 +2322,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     Cancel
                   </button>
                   <button onClick={buildClientPreview}
-                    disabled={!acCoachId||(acMode==='single'?!(acSingle.name.trim()&&acSingle.email.trim()):!acRows.length)}
+                    disabled={!acCoachId||!(acSingle.name.trim()&&acSingle.email.trim())}
                     style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',
-                      opacity:(acCoachId&&(acMode==='single'?(acSingle.name.trim()&&acSingle.email.trim()):acRows.length))?1:.5}}>
+                      opacity:(acCoachId&&acSingle.name.trim()&&acSingle.email.trim())?1:.5}}>
                     Preview →
                   </button>
                 </>
               )}
               {acStep==='preview'&&(
                 <>
-                  <button onClick={()=>{setAcStep('input');if(acMode==='single')setAcRows([])}}
+                  <button onClick={()=>{setAcStep('input');setAcRows([])}}
                     style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>
                     ← Back
                   </button>

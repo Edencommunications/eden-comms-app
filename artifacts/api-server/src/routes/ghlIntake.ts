@@ -271,6 +271,25 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     if (!notif.ok) logger.warn({ error: notif.error }, "[GHL Intake] notification insert failed");
   }
 
+  // Also notify every admin of this organization
+  try {
+    const admins = await dbGet(
+      "user_profiles",
+      `company_id=eq.${encodeURIComponent(companyId)}&role=eq.super_admin&select=id`,
+    );
+    for (const admin of admins) {
+      const adminNotif = await dbInsert("notifications", {
+        recipient_id: admin.id,
+        type: "ghl_intake",
+        body: `🤝 New client auto-imported from GHL: ${name} (${email})${coach ? ` under coach ${coach.name}` : " — no coach assigned yet"}. They now appear in your Clients tab.`,
+        is_read: false,
+      });
+      if (!adminNotif.ok) logger.warn({ error: adminNotif.error }, "[GHL Intake] admin notification insert failed");
+    }
+  } catch (e) {
+    logger.warn({ error: String(e) }, "[GHL Intake] admin notification lookup failed");
+  }
+
   logWebhook({
     at: new Date().toISOString(),
     companyId,
