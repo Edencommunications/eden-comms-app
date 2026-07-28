@@ -4,4 +4,5 @@
 - [Per-org content libraries](org-content-libraries.md) — foods/supps/habits/cardio are company_id-scoped; new orgs seeded from Eden; habits/cardio DB rows extend static defaults.
 - [GHL intake webhook](ghl-intake-webhook.md) — per-org secrets are HMAC-derived (no DDL possible); live `notifications` table uses body/is_read, not the .sql file's message/title.
 - [Supabase Auth model](supabase-auth.md) — passwords only in Supabase Auth (server-provisioned, pre-confirmed, must_change_password); user_profiles is identity only; dashboard Site URL/SMTP are user-owned constraints.
+- [Task board proposal behavior](task-board-behavior.md) — each new proposal batch cancels prior PROPOSED tasks; keep master list in notes, propose only the next batch.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.
