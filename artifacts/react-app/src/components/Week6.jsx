@@ -950,6 +950,20 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   async function addUser() {
     if (!newUser.name.trim()||!newUser.email.trim()) return
+    const emailNorm = newUser.email.trim().toLowerCase()
+
+    // Check for an existing account with this email before inserting (same guard as bulk Add Clients)
+    try {
+      const existing = await dbGet('user_profiles', `email=eq.${encodeURIComponent(emailNorm)}&select=id`)
+      if (Array.isArray(existing) && existing.length > 0) {
+        alert('This email already has an account. Use a different email, or find the existing user instead of adding a new one.')
+        return
+      }
+    } catch(e) {
+      alert('Could not verify whether this email already has an account — please try again.')
+      return
+    }
+
     const initials = newUser.name.trim().split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
     const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
 
