@@ -1,152 +1,284 @@
-import { Router, type IRouter } from "express";
-import crypto from "node:crypto";
+// ghlIntake.ts — GHL "contract signed" → auto-create client under the right coach.
+//
+// POST /api/webhooks/ghl-intake/:companyId   (secret required)
+//   Body (GHL / Zapier friendly — several field spellings accepted):
+//     { name | full_name | first_name+last_name, email, phone,
+//       coach_email | assigned_user_email | user_email }
+//   Creates the client profile (company + coach scoped), a client_access
+//   record, and an in-app notification to the coach containing the client's
+//   temp password (current demo-auth invite model).
+//
+// GET /api/webhooks/ghl-intake/:companyId/config
+//   Returns the org's webhook URL + shared secret (shown in the Admin Panel).
+//
+// GET /api/webhooks/ghl-intake/:companyId/recent
+//   Last received webhooks for this org (in-memory, for troubleshooting).
+//
+// Config + recent require a verified super_admin (x-admin-id header, checked
+// server-side against user_profiles role + org membership).
+
+import { Router, type IRouter, type Request } from "express";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { logger } from "../lib/logger";
 
-// ── GHL client intake webhook ───────────────────────────────────────────
-// Each company has a secret intake key (company_intake_secrets table).
-// GHL workflows POST contact data to /api/ghl-intake/:secret when a
-// contract is signed. We resolve the company from the secret, resolve the
-// coach from the assigned user's email, create the client profile, and
-// link it to the coach via client_access.
+const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU";
 
-const HEADERS = {
+const H = {
   apikey: SUPABASE_ANON,
   Authorization: `Bearer ${SUPABASE_ANON}`,
   "Content-Type": "application/json",
+  Prefer: "return=representation",
 };
 
-async function sbGet(table: string, query: string): Promise<any[]> {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    headers: HEADERS,
-  });
-  const j = await r.json();
-  return Array.isArray(j) ? j : [];
+async function dbGet<T = any>(table: string, params: string): Promise<T[]> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: H });
+  if (!r.ok) return [];
+  return r.json() as Promise<T[]>;
 }
-
-async function sbInsert(table: string, body: unknown): Promise<any[] | null> {
+async function dbInsert(table: string, body: unknown): Promise<{ ok: boolean; rows: any[] | null; error?: string }> {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
-    headers: { ...HEADERS, Prefer: "return=representation" },
+    headers: H,
     body: JSON.stringify(body),
   });
-  if (!r.ok) {
-    logger.error({ table, status: r.status, body: await r.text() }, "ghl-intake insert failed");
-    return null;
-  }
-  return (await r.json()) as any[];
+  const text = await r.text();
+  if (!r.ok) return { ok: false, rows: null, error: text };
+  return { ok: true, rows: text ? JSON.parse(text) : null };
 }
 
-/** Pull a usable string out of the loosely-typed GHL/Zapier payload. */
-function pick(...vals: unknown[]): string {
-  for (const v of vals) if (typeof v === "string" && v.trim()) return v.trim();
+// ── Per-org shared secret ─────────────────────────────────────────
+// Deterministic HMAC of the company id keyed by the server secret, so no
+// schema changes are needed and the secret is stable across restarts.
+const SECRET_KEY = process.env.SESSION_SECRET || "eden-ghl-intake-dev-key";
+export function webhookSecretFor(companyId: string): string {
+  return createHmac("sha256", SECRET_KEY).update(`ghl-intake:${companyId}`).digest("hex").slice(0, 32);
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+// Webhook auth: either the shared secret in the x-webhook-secret header, or a
+// signed payload — x-webhook-signature: t=<unix seconds>,v1=<hex hmac> where
+// v1 = HMAC-SHA256(secret, `${t}.${rawBody}`), with a 5-minute tolerance.
+function webhookAuthorized(req: Request, companyId: string): boolean {
+  const secret = webhookSecretFor(companyId);
+  const headerSecret = String(req.get("x-webhook-secret") || "").trim();
+  if (headerSecret) return safeEqual(headerSecret, secret);
+
+  const sig = String(req.get("x-webhook-signature") || "").trim();
+  if (sig) {
+    const m = /^t=(\d+),v1=([0-9a-f]+)$/i.exec(sig);
+    if (!m) return false;
+    const t = Number(m[1]);
+    if (!Number.isFinite(t) || Math.abs(Date.now() / 1000 - t) > 300) return false;
+    const raw = (req as unknown as { rawBody?: Buffer }).rawBody;
+    if (!raw) return false;
+    const expected = createHmac("sha256", secret).update(`${m[1]}.`).update(raw).digest("hex");
+    return safeEqual(m[2].toLowerCase(), expected);
+  }
+  return false;
+}
+
+// Admin auth for the config/troubleshooting endpoints: the caller must present
+// the profile id of a super_admin (x-admin-id header). The role and org
+// membership are verified server-side against user_profiles — the admin must
+// belong to this org, or to Eden (the platform owner manages all orgs).
+async function requireAdmin(req: Request, companyId: string): Promise<boolean> {
+  const adminId = String(req.get("x-admin-id") || "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(adminId)) return false;
+  const rows = await dbGet(
+    "user_profiles",
+    `id=eq.${encodeURIComponent(adminId)}&role=eq.super_admin&is_active=not.is.false&select=id,company_id`,
+  );
+  const admin = rows[0];
+  if (!admin) return false;
+  return admin.company_id === companyId || admin.company_id === EDEN_ORG_ID;
+}
+
+// ── Recent webhook log (in-memory ring buffer for troubleshooting) ─
+type WebhookLogEntry = {
+  at: string;
+  companyId: string;
+  status: string;
+  detail: string;
+  payload?: unknown;
+};
+const recentWebhooks: WebhookLogEntry[] = [];
+function logWebhook(entry: WebhookLogEntry) {
+  recentWebhooks.unshift(entry);
+  if (recentWebhooks.length > 100) recentWebhooks.length = 100;
+  logger.info({ ghlIntake: entry }, "[GHL Intake] webhook received");
+}
+
+// ── Payload parsing (accept GHL & Zapier field spellings) ─────────
+function pick(obj: any, keys: string[]): string {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
   return "";
 }
+function parsePayload(body: any) {
+  const b = body || {};
+  const contact = b.contact || b;
+  const first = pick(contact, ["first_name", "firstName"]);
+  const last = pick(contact, ["last_name", "lastName"]);
+  const name =
+    pick(contact, ["name", "full_name", "fullName", "contact_name"]) ||
+    [first, last].filter(Boolean).join(" ");
+  const email = pick(contact, ["email", "contact_email"]).toLowerCase();
+  const phone = pick(contact, ["phone", "phone_number", "contact_phone"]);
+  const coachEmail = pick(b, [
+    "coach_email",
+    "coachEmail",
+    "assigned_user_email",
+    "assignedUserEmail",
+    "user_email",
+    "assigned_to_email",
+  ]).toLowerCase();
+  return { name, email, phone, coachEmail };
+}
 
-const ghlIntakeRouter: IRouter = Router();
+const router: IRouter = Router();
 
-ghlIntakeRouter.post("/ghl-intake/:secret", async (req, res) => {
-  try {
-    const secret = req.params.secret || "";
-    if (secret.length < 20) return res.status(403).json({ ok: false, error: "invalid key" });
-
-    const rows = await sbGet(
-      "company_intake_secrets",
-      `secret=eq.${encodeURIComponent(secret)}&select=company_id`,
-    );
-    const companyId = rows[0]?.company_id;
-    if (!companyId) return res.status(403).json({ ok: false, error: "invalid key" });
-
-    const b: any = req.body || {};
-    const cd: any = b.customData || b.custom_data || {};
-
-    const email = pick(cd.email, b.email, b.contact_email, b.contact?.email).toLowerCase();
-    const name = pick(
-      cd.name, b.full_name, b.name,
-      [pick(b.first_name, b.firstName), pick(b.last_name, b.lastName)].filter(Boolean).join(" "),
-      b.contact?.name,
-    );
-    const phone = pick(cd.phone, b.phone, b.contact?.phone);
-    const coachEmail = pick(
-      cd.coach_email, cd.coachEmail,
-      b.user?.email, b.assigned_user_email, b.assignedUserEmail, b.owner_email,
-    ).toLowerCase();
-
-    if (!email || !name) {
-      logger.warn({ body: b }, "ghl-intake missing name/email");
-      return res.status(400).json({ ok: false, error: "missing contact name or email" });
-    }
-
-    // Duplicate? Same email already in this company → acknowledge, don't recreate.
-    const dupes = await sbGet(
-      "user_profiles",
-      `email=eq.${encodeURIComponent(email)}&company_id=eq.${companyId}&select=id`,
-    );
-    if (dupes.length) {
-      logger.info({ email, companyId }, "ghl-intake duplicate ignored");
-      return res.json({ ok: true, status: "duplicate", message: "client already exists" });
-    }
-
-    // Resolve coach by email within this company
-    let coach: any = null;
-    if (coachEmail) {
-      const coaches = await sbGet(
-        "user_profiles",
-        `email=eq.${encodeURIComponent(coachEmail)}&company_id=eq.${companyId}&role=in.(coach,head_coach)&select=id,name`,
-      );
-      coach = coaches[0] || null;
-    }
-
-    const initials = name.split(" ").filter(Boolean).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
-    const tempPass = `Eden${crypto.randomBytes(3).toString("hex").toUpperCase()}!`;
-    const inserted = await sbInsert("user_profiles", {
-      id: crypto.randomUUID(),
-      name,
-      email,
-      role: "client",
-      initials,
-      company_id: companyId,
-      update_day: "Wednesday",
-      temp_password: tempPass,
-      phone: phone || null,
-    });
-    let clientId = inserted?.[0]?.id;
-    if (!clientId && inserted === null) {
-      // phone column may not exist — retry without it
-      const retry = await sbInsert("user_profiles", {
-        id: crypto.randomUUID(),
-        name, email, role: "client", initials,
-        company_id: companyId, update_day: "Wednesday", temp_password: tempPass,
-      });
-      clientId = retry?.[0]?.id;
-    }
-    if (!clientId) return res.status(500).json({ ok: false, error: "could not create client" });
-
-    if (coach) {
-      await sbInsert("client_access", {
-        company_id: companyId,
-        staff_id: coach.id,
-        client_id: clientId,
-        permissions: { messages: true, diet: true, labs: true, workout: true, checkins: true, habits: true },
-        assigned_by: null,
-      });
-    }
-
-    logger.info({ email, companyId, coach: coach?.name || null }, "ghl-intake client created");
-    return res.json({
-      ok: true,
-      status: "created",
-      client: { name, email },
-      coach: coach ? coach.name : null,
-      note: coach ? undefined : "No matching coach found for this company — client created unassigned; assign a coach in the admin panel.",
-    });
-  } catch (err) {
-    logger.error({ err }, "ghl-intake error");
-    return res.status(500).json({ ok: false, error: "internal error" });
+// Config endpoint for the Admin Panel (per-org webhook URL + secret).
+// Requires a verified super_admin of this org (or of Eden, the platform owner).
+router.get("/webhooks/ghl-intake/:companyId/config", async (req, res) => {
+  const { companyId } = req.params;
+  if (!(await requireAdmin(req, companyId))) {
+    return res.status(403).json({ error: "Admin access required" });
   }
+  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=id,name`);
+  if (!orgs.length) return res.status(404).json({ error: "Unknown organization" });
+  const host = req.get("x-forwarded-host") || req.get("host");
+  const proto = req.get("x-forwarded-proto") || "https";
+  return res.json({
+    url: `${proto}://${host}/api/webhooks/ghl-intake/${companyId}`,
+    secret: webhookSecretFor(companyId),
+    header: "x-webhook-secret",
+  });
 });
 
-export default ghlIntakeRouter;
+// Recent webhook activity for one org (admin-only, for troubleshooting)
+router.get("/webhooks/ghl-intake/:companyId/recent", async (req, res) => {
+  const { companyId } = req.params;
+  if (!(await requireAdmin(req, companyId))) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  return res.json(recentWebhooks.filter((e) => e.companyId === companyId).slice(0, 25));
+});
+
+// The webhook itself
+router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
+  const { companyId } = req.params;
+  const fail = (code: number, status: string, detail: string) => {
+    logWebhook({ at: new Date().toISOString(), companyId, status, detail, payload: req.body });
+    return res.status(code).json({ ok: false, error: detail });
+  };
+
+  if (!webhookAuthorized(req, companyId)) {
+    return fail(401, "rejected", "Invalid or missing webhook secret/signature");
+  }
+
+  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=id,name,is_active`);
+  if (!orgs.length) return fail(404, "rejected", "Unknown organization");
+
+  const { name, email, phone, coachEmail } = parsePayload(req.body);
+  if (!name || !email) return fail(400, "rejected", "Missing client name or email");
+
+  // Duplicate check — same email already has a profile
+  const existing = await dbGet(
+    "user_profiles",
+    `email=eq.${encodeURIComponent(email)}&select=id,company_id,role`,
+  );
+  if (existing.length) {
+    logWebhook({
+      at: new Date().toISOString(),
+      companyId,
+      status: "duplicate",
+      detail: `${email} already exists — no changes made`,
+    });
+    return res.status(200).json({ ok: true, duplicate: true, message: `${email} already has a profile` });
+  }
+
+  // Resolve the coach by email within this company
+  let coach: any = null;
+  if (coachEmail) {
+    const coaches = await dbGet(
+      "user_profiles",
+      `email=eq.${encodeURIComponent(coachEmail)}&company_id=eq.${encodeURIComponent(companyId)}&role=in.(coach,head_coach)&select=id,name,email`,
+    );
+    coach = coaches[0] || null;
+  }
+  if (coachEmail && !coach) {
+    return fail(422, "rejected", `No coach with email ${coachEmail} found in this organization`);
+  }
+
+  // Create the client profile (current demo-auth invite model: temp password)
+  const tempPass = `Eden${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.floor(10 + Math.random() * 90)}!`;
+  const initials = name.split(" ").filter(Boolean).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+  const profile: Record<string, unknown> = {
+    id: randomUUID(),
+    name,
+    email,
+    role: "client",
+    initials,
+    company_id: companyId,
+    coach_id: coach?.id || null,
+    update_day: "Wednesday",
+    temp_password: tempPass,
+  };
+  if (phone) profile.phone = phone;
+
+  let ins = await dbInsert("user_profiles", profile);
+  if (!ins.ok && phone) {
+    // phone column may not exist — retry without it
+    delete profile.phone;
+    ins = await dbInsert("user_profiles", profile);
+  }
+  if (!ins.ok) return fail(500, "error", `Could not create client profile: ${ins.error}`);
+  const profileId = ins.rows?.[0]?.id || profile.id;
+
+  // Link client to coach
+  if (coach) {
+    const access = await dbInsert("client_access", {
+      company_id: companyId,
+      staff_id: coach.id,
+      client_id: profileId,
+      permissions: { messages: true, diet: true, labs: true, workout: true, checkins: true, habits: true },
+      assigned_by: null,
+    });
+    if (!access.ok) logger.warn({ error: access.error }, "[GHL Intake] client_access insert failed");
+
+    // In-app "invite" notification to the coach with the temp password
+    const notif = await dbInsert("notifications", {
+      recipient_id: coach.id,
+      type: "ghl_intake",
+      body: `🤝 New client auto-imported from GHL: ${name} (${email}). Temp password: ${tempPass} — send them their login details.`,
+      is_read: false,
+    });
+    if (!notif.ok) logger.warn({ error: notif.error }, "[GHL Intake] notification insert failed");
+  }
+
+  logWebhook({
+    at: new Date().toISOString(),
+    companyId,
+    status: "created",
+    detail: `Created client ${name} <${email}>${coach ? ` under coach ${coach.name}` : " (no coach assigned)"}`,
+  });
+  return res.status(201).json({
+    ok: true,
+    client_id: profileId,
+    coach: coach ? { id: coach.id, name: coach.name } : null,
+    temp_password: tempPass,
+  });
+});
+
+export default router;

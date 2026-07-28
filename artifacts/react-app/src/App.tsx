@@ -2247,6 +2247,9 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                 </div>
               );
             })}
+            <div style={{ marginTop:6, textAlign:"center", fontSize:11, color:B.muted, padding:"8px 0" }}>
+              New clients are added automatically when their GHL contract is signed.
+            </div>
           </>
         )}
       </div>

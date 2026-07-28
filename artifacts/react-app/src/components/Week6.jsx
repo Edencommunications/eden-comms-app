@@ -146,6 +146,55 @@ function ColorRow({primary, colors=[], onPrimary, onColors}) {
     </div>
   )
 }
+// ── GHL intake webhook config (per-org URL + secret, from the API server) ──
+function GhlWebhookSection({ companyId, adminId }) {
+  const [cfg, setCfg]       = useState(null)
+  const [err, setErr]       = useState(false)
+  const [copied, setCopied] = useState('')
+  useEffect(() => {
+    let alive = true
+    setCfg(null); setErr(false)
+    fetch(`/api/webhooks/ghl-intake/${companyId}/config`, { headers: { 'x-admin-id': adminId || '' } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => { if (alive) setCfg(d) })
+      .catch(() => { if (alive) setErr(true) })
+    return () => { alive = false }
+  }, [companyId, adminId])
+  const copy = (label, text) => {
+    navigator.clipboard?.writeText(text).then(()=>{ setCopied(label); setTimeout(()=>setCopied(''),1500) }).catch(()=>{})
+  }
+  const Row = ({ label, value }) => (
+    <div style={{marginBottom:8}}>
+      <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:3}}>{label}</div>
+      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+        <div style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 9px',fontSize:10,color:C.white,fontFamily:'monospace',overflowWrap:'anywhere'}}>{value}</div>
+        <button onClick={()=>copy(label, value)}
+          style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'7px 10px',color:C.gold,fontSize:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+          {copied===label?'✓ Copied':'Copy'}
+        </button>
+      </div>
+    </div>
+  )
+  return (
+    <div style={{marginTop:4,marginBottom:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.white,marginBottom:2}}>🔗 GHL Client Auto-Import</div>
+      <div style={{fontSize:10,color:C.muted,marginBottom:10,lineHeight:1.5}}>
+        Paste this webhook into a GHL workflow (trigger: Document/Contract Signed) or Zapier. When a contract is signed,
+        the client is created here under their coach automatically. Send the contact's <b>name</b>, <b>email</b>, <b>phone</b>,
+        and the coach's email as <b>coach_email</b>. Include the secret as an <b>x-webhook-secret</b> header on the request.
+      </div>
+      {err && <div style={{fontSize:10,color:C.danger}}>Couldn't load the webhook config — make sure the API server is running.</div>}
+      {!err && !cfg && <div style={{fontSize:10,color:C.muted}}>Loading webhook config…</div>}
+      {cfg && (
+        <>
+          <Row label="Webhook URL" value={cfg.url}/>
+          <Row label="Secret" value={cfg.secret}/>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Sel({label,value,onChange,options}) {
   return (
     <div style={{marginBottom:10}}>
@@ -358,32 +407,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   })
   const allCoaches = [...DEMO_COACHES, ...dbCoaches].filter(c=>!removedCoaches.includes(c.uuid))
   const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
-
-  // ── GHL client intake webhook ─────────────────────────────
-  const [intakeSecret, setIntakeSecret] = useState(null) // null=loading, ''=none yet
-  const [showIntake,   setShowIntake]   = useState(false)
-  const [intakeCopied, setIntakeCopied] = useState(false)
-  useEffect(()=>{
-    if (!isAdmin||!adminCompanyId) return
-    dbGet('company_intake_secrets',`company_id=eq.${adminCompanyId}&select=secret`)
-      .then(rows=>setIntakeSecret(Array.isArray(rows)?(rows[0]?.secret||''):''))
-      .catch(()=>setIntakeSecret(''))
-  },[isAdmin,adminCompanyId])
-  async function generateIntakeSecret() {
-    const secret = (crypto.randomUUID()+crypto.randomUUID()).replace(/-/g,'')
-    if (intakeSecret) {
-      // Regenerate in place (update, not delete+insert) — if it fails, the old link keeps working
-      if (!confirm('Generate a new link? The old webhook link will stop working and you\'ll need to update it in GHL.')) return
-      const ok = await dbUpdate('company_intake_secrets',`company_id=eq.${adminCompanyId}`,{secret})
-      if (ok) setIntakeSecret(secret)
-      else alert('Could not regenerate the link — your existing link is unchanged and still works.')
-      return
-    }
-    const r = await dbInsert('company_intake_secrets',{company_id:adminCompanyId,secret})
-    if (r) setIntakeSecret(secret)
-    else alert('Could not create the webhook link — please try again.')
-  }
-  const intakeUrl = intakeSecret ? `${window.location.origin}/api/ghl-intake/${intakeSecret}` : ''
 
   // ── Admin Documents ───────────────────────────────────────
   const [adminDocs,   setAdminDocs]   = useState([])
@@ -1074,47 +1097,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <option>All Coaches</option>
                   {allCoaches.map(c=><option key={c.uuid}>{c.name}</option>)}
                 </select>
-              )}
-              {isAdmin&&(
-                <div style={{marginTop:8}}>
-                  <button onClick={()=>setShowIntake(s=>!s)}
-                    style={{background:'none',border:'none',padding:0,color:C.gold,fontSize:11,fontWeight:600,cursor:'pointer'}}>
-                    ⚡ Auto-import from GHL {showIntake?'▾':'▸'}
-                  </button>
-                  {showIntake&&(
-                    <div style={{marginTop:8,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10}}>
-                      <div style={{fontSize:11,color:C.muted,lineHeight:1.5,marginBottom:8}}>
-                        When a contract is signed in GoHighLevel, new clients can be added here automatically — under the coach they're assigned to in GHL. Paste this private link into a GHL workflow's <b style={{color:C.white}}>Webhook</b> action (trigger: Document Signed).
-                      </div>
-                      {intakeSecret===null&&<div style={{fontSize:11,color:C.muted}}>Loading…</div>}
-                      {intakeSecret===''&&(
-                        <button onClick={generateIntakeSecret}
-                          style={{background:C.gold,border:'none',borderRadius:8,padding:'7px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
-                          Create my webhook link
-                        </button>
-                      )}
-                      {intakeSecret&&(
-                        <>
-                          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                            <input readOnly value={intakeUrl} onFocus={e=>e.target.select()}
-                              style={{flex:1,background:C.black,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:10,outline:'none'}}/>
-                            <button onClick={()=>{navigator.clipboard?.writeText(intakeUrl);setIntakeCopied(true);setTimeout(()=>setIntakeCopied(false),1500)}}
-                              style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',fontWeight:700,color:C.black,fontSize:10,cursor:'pointer',whiteSpace:'nowrap'}}>
-                              {intakeCopied?'✓ Copied':'Copy'}
-                            </button>
-                          </div>
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
-                            <div style={{fontSize:9,color:C.muted}}>Keep this link private — anyone with it can add clients to your company.</div>
-                            <button onClick={generateIntakeSecret}
-                              style={{background:'none',border:'none',padding:0,color:C.muted,fontSize:9,cursor:'pointer',textDecoration:'underline'}}>
-                              Regenerate
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
               )}
             </div>
 
@@ -2084,6 +2066,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Organization active {!manageOrg.active&&<span style={{fontSize:10,color:C.danger}}>(inactive orgs don't count toward MRR)</span>}
               </label>
             )}
+            <GhlWebhookSection companyId={manageOrg.id} adminId={adminProfileId}/>
             <div style={{display:'flex',gap:10,marginTop:6}}>
               <button onClick={()=>setManageOrg(null)}
                 style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>

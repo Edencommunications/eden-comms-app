@@ -2,4 +2,5 @@
 - [White-label architecture](white-label.md) — orgs mirror into legacy `companies` (FK target); tier flags gate Eden content; all tenant isolation is app-level query scoping + load gating.
 - [Staff access & messaging](staff-permissions.md) — client_access scopes (client/coach/company), separate coach_convo perm, participant-based conversations with nullable legacy coach_id/client_id.
 - [Per-org content libraries](org-content-libraries.md) — foods/supps/habits/cardio are company_id-scoped; new orgs seeded from Eden; habits/cardio DB rows extend static defaults.
+- [GHL intake webhook](ghl-intake-webhook.md) — per-org secrets are HMAC-derived (no DDL possible); live `notifications` table uses body/is_read, not the .sql file's message/title.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.
