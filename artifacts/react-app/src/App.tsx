@@ -3601,13 +3601,6 @@ const AdminDashboard = ({ user }:any) => {
             ))}
             </>)}
             <Divider/>
-            <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Platform Actions</p>
-            {["Add New Organization","Add Coach Account","View All Client Data","Audit Log","Zapier / GHL Webhooks","Stripe Subscription Overview"].map(action=>(
-              <button key={action} style={{ width:"100%", background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", marginBottom:8, textAlign:"left" }}>
-                <span style={{ fontSize:13, color:B.text }}>{action}</span>
-                <span style={{ color:B.gold }}>→</span>
-              </button>
-            ))}
             <div style={{ marginTop:12, padding:"12px 14px", background:`${B.gold}11`, border:`1px solid ${B.gold}33`, borderRadius:10 }}>
               <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>🔒 HIPAA COMPLIANCE STATUS</p>
               <p style={{ fontSize:12, color:B.muted, margin:0 }}>AES-256 encryption active · Audit logs enabled · BAA on file · Last access review: Jul 13 2026</p>
