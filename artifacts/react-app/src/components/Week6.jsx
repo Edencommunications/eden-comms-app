@@ -265,6 +265,160 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   })
   const setNU = k=>v=>setNewUser(p=>({...p,[k]:v}))
 
+  // ── Add Clients (manual single / CSV bulk under a chosen coach) ──
+  const [showAddClients, setShowAddClients] = useState(false)
+  const [acCoachId,      setAcCoachId]      = useState('')
+  const [acMode,         setAcMode]         = useState('single')  // 'single' | 'csv'
+  const [acSingle,       setAcSingle]       = useState({name:'',email:'',phone:''})
+  const [acCheckInDay,   setAcCheckInDay]   = useState('Wednesday')
+  const [acRows,         setAcRows]         = useState([])        // preview rows: {name,email,phone,status,reason}
+  const [acStep,         setAcStep]         = useState('input')   // 'input' | 'preview' | 'saving' | 'done'
+  const [acResults,      setAcResults]      = useState(null)      // {created:[{name,email,tempPass}], skipped:[{email,reason}]}
+  const [acCsvError,     setAcCsvError]     = useState('')
+  const acFileRef = useRef(null)
+
+  function resetAddClients() {
+    setShowAddClients(false); setAcCoachId(''); setAcMode('single')
+    setAcSingle({name:'',email:'',phone:''}); setAcCheckInDay('Wednesday')
+    setAcRows([]); setAcStep('input'); setAcResults(null); setAcCsvError('')
+  }
+
+  // Minimal CSV parser: handles quoted fields, optional header row (name,email,phone)
+  function parseClientCsv(text) {
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
+    const parseLine = line => {
+      const out=[]; let cur='', inQ=false
+      for (let i=0;i<line.length;i++) {
+        const ch=line[i]
+        if (inQ) {
+          if (ch==='"' && line[i+1]==='"') { cur+='"'; i++ }
+          else if (ch==='"') inQ=false
+          else cur+=ch
+        } else if (ch==='"') inQ=true
+        else if (ch===',') { out.push(cur); cur='' }
+        else cur+=ch
+      }
+      out.push(cur)
+      return out.map(s=>s.trim())
+    }
+    let rows = lines.map(parseLine)
+    // Header detection: if the first row mentions "name" or "email", map columns by header; otherwise assume name,email,phone order
+    let idx = { name:0, email:1, phone:2 }
+    if (rows.length && rows[0].some(c=>/^(name|email|phone)$/i.test(c))) {
+      const hdr = rows[0].map(c=>c.toLowerCase())
+      idx = { name:hdr.indexOf('name'), email:hdr.indexOf('email'), phone:hdr.indexOf('phone') }
+      rows = rows.slice(1)
+    }
+    return rows.map(r=>({
+      name:  idx.name  >=0 ? (r[idx.name] ||'') : '',
+      email: idx.email >=0 ? (r[idx.email]||'').toLowerCase() : '',
+      phone: idx.phone >=0 ? (r[idx.phone]||'') : '',
+    })).filter(r=>r.name||r.email||r.phone)
+  }
+
+  function onCsvFile(file) {
+    setAcCsvError('')
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const rows = parseClientCsv(String(reader.result||''))
+      if (!rows.length) { setAcCsvError('No rows found in that file. Expected columns: name, email, phone.'); return }
+      setAcRows(rows.map(r=>({...r,status:'',reason:''})))
+    }
+    reader.onerror = () => setAcCsvError('Could not read that file — please try again.')
+    reader.readAsText(file)
+  }
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  // Validate rows + flag duplicates (against the DB and within the batch), then show preview
+  async function buildClientPreview() {
+    if (!acCoachId) { alert('Choose which coach these clients belong to first.'); return }
+    const raw = acMode==='single'
+      ? [{ name:acSingle.name.trim(), email:acSingle.email.trim().toLowerCase(), phone:acSingle.phone.trim() }]
+      : acRows.map(r=>({ name:r.name.trim(), email:r.email.trim().toLowerCase(), phone:r.phone.trim() }))
+    if (!raw.length) return
+
+    // Look up existing profiles by email so duplicates are flagged, never silently created
+    const emails = [...new Set(raw.map(r=>r.email).filter(e=>EMAIL_RE.test(e)))]
+    let existing = new Set()
+    if (emails.length) {
+      const inList = encodeURIComponent(emails.map(e=>`"${e}"`).join(','))
+      const found = await dbGet('user_profiles',`select=email&email=in.(${inList})`)
+      if (Array.isArray(found)) existing = new Set(found.map(f=>(f.email||'').toLowerCase()))
+    }
+
+    const seen = new Set()
+    const checked = raw.map(r=>{
+      let status='ready', reason=''
+      if (!r.name)                    { status='invalid';   reason='Missing name' }
+      else if (!r.email)              { status='invalid';   reason='Missing email' }
+      else if (!EMAIL_RE.test(r.email)){ status='invalid';  reason='Invalid email' }
+      else if (existing.has(r.email)) { status='duplicate'; reason='Already exists in the system' }
+      else if (seen.has(r.email))     { status='duplicate'; reason='Repeated in this upload' }
+      if (status==='ready') seen.add(r.email)
+      return {...r,status,reason}
+    })
+    setAcRows(checked)
+    setAcStep('preview')
+  }
+
+  // Confirm: create every "ready" row in user_profiles under the chosen coach + this admin's org
+  async function confirmAddClients() {
+    const ready = acRows.filter(r=>r.status==='ready')
+    if (!ready.length) { alert('There are no new clients to add — every row is a duplicate or invalid.'); return }
+    setAcStep('saving')
+    const created=[], failed=[]
+    const coachName = allCoaches.find(c=>c.uuid===acCoachId)?.name||''
+    for (const r of ready) {
+      const initials = r.name.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
+      const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
+      const payload = {
+        id:            crypto.randomUUID(),
+        name:          r.name,
+        email:         r.email,
+        phone:         r.phone||null,
+        role:          'client',
+        initials,
+        company_id:    adminCompanyId||null,
+        coach_id:      acCoachId,
+        update_day:    acCheckInDay,
+        temp_password: tempPass,
+      }
+      const res = await dbInsert('user_profiles', payload)
+      const profileId = Array.isArray(res)?res[0]?.id:res?.id
+      if (!profileId) { failed.push({email:r.email, reason:'Could not save to the database'}); continue }
+      // Coach access record — same convention as the single Add User flow
+      if (adminCompanyId) {
+        try {
+          await dbInsert('client_access',{
+            company_id:  adminCompanyId,
+            staff_id:    acCoachId,
+            client_id:   profileId,
+            permissions: {messages:true,diet:true,labs:true,workout:true,checkins:true,habits:true},
+            assigned_by: adminProfileId||null,
+          })
+        } catch(e) {}
+      }
+      created.push({name:r.name, email:r.email, tempPass})
+      setClients(prev=>[...prev,{
+        uuid:profileId, name:r.name, email:r.email, role:'client',
+        coachId:acCoachId, coachName, checkInDay:acCheckInDay,
+        hasUpdate:false, lastSeen:'Never', active:true,
+      }])
+    }
+    const skipped = [
+      ...acRows.filter(r=>r.status!=='ready').map(r=>({email:r.email||'(no email)', reason:r.reason})),
+      ...failed,
+    ]
+    if (created.length) {
+      setAuditLog(prev=>[{id:Date.now(),actor:info.name,action:`Added ${created.length} client${created.length>1?'s':''}`,target:`Coach: ${coachName}`,detail:created.map(c=>c.email).join(', '),time:new Date().toLocaleString()},...prev])
+      refreshOrgCounts()
+    }
+    setAcResults({created, skipped})
+    setAcStep('done')
+  }
+
   // ── White-label org ───────────────────────────────────────
   const [orgs,       setOrgs]       = useState(DEMO_ORGS)
   const [showNewOrg, setShowNewOrg] = useState(false)
@@ -1088,6 +1242,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <button onClick={()=>setShowNewUser(true)}
                     style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
                     + Add
+                  </button>
+                )}
+                {isAdmin&&(
+                  <button onClick={()=>{resetAddClients();setShowAddClients(true)}}
+                    title="Add one client or bulk-upload a CSV under a chosen coach"
+                    style={{background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
+                    ⇪ Add Clients
                   </button>
                 )}
               </div>
@@ -1980,6 +2141,180 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newUser.name.trim()&&newUser.email.trim()?1:.5}}>
                 Add User
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Clients Modal (single / CSV bulk under a coach) ── */}
+      {showAddClients&&isAdmin&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget&&acStep!=='saving')resetAddClients()}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:560,maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.white}}>Add Clients</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>Pick a coach, then add one client or upload a CSV of many</div>
+            </div>
+
+            <div style={{flex:1,overflowY:'auto',padding:20}}>
+              {acStep==='input'&&(
+                <>
+                  <Sel label="Assign to Coach *" value={acCoachId} onChange={setAcCoachId}
+                    options={[{value:'',label:'— select coach —'},...allCoaches.map(c=>({value:c.uuid,label:c.name}))]}/>
+                  <Sel label="Check-In Day" value={acCheckInDay} onChange={setAcCheckInDay} options={CHECK_IN_DAYS}/>
+
+                  {/* Mode toggle */}
+                  <div style={{display:'flex',gap:8,margin:'14px 0 12px'}}>
+                    {[['single','👤 Single Client'],['csv','📄 CSV Upload']].map(([m,l])=>(
+                      <button key={m} onClick={()=>setAcMode(m)}
+                        style={{flex:1,background:acMode===m?`${C.gold}22`:C.surface,border:`1px solid ${acMode===m?C.gold:C.border}`,borderRadius:8,padding:'9px 12px',color:acMode===m?C.gold:C.muted,fontWeight:700,fontSize:12,cursor:'pointer'}}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+
+                  {acMode==='single'&&(
+                    <>
+                      <Inp label="Full Name *" value={acSingle.name} onChange={v=>setAcSingle(p=>({...p,name:v}))} placeholder="e.g. Sarah Johnson"/>
+                      <Inp label="Email Address *" value={acSingle.email} onChange={v=>setAcSingle(p=>({...p,email:v}))} placeholder="e.g. sarah@email.com" type="email"/>
+                      <Inp label="Phone (optional)" value={acSingle.phone} onChange={v=>setAcSingle(p=>({...p,phone:v}))} placeholder="e.g. +1 555 123 4567"/>
+                    </>
+                  )}
+
+                  {acMode==='csv'&&(
+                    <>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.6}}>
+                        Upload a .csv file with columns <span style={{color:C.gold,fontFamily:'monospace'}}>name, email, phone</span> (header row optional, phone optional).
+                      </div>
+                      <input ref={acFileRef} type="file" accept=".csv,text/csv,text/plain" style={{display:'none'}}
+                        onChange={e=>{ onCsvFile(e.target.files?.[0]); e.target.value='' }}/>
+                      <button onClick={()=>acFileRef.current?.click()}
+                        style={{width:'100%',background:C.surface,border:`1px dashed ${C.gold}66`,borderRadius:10,padding:'18px 12px',color:C.gold,fontWeight:700,fontSize:13,cursor:'pointer',marginBottom:10}}>
+                        {acRows.length ? `📄 ${acRows.length} row${acRows.length>1?'s':''} loaded — click to replace` : '📄 Choose CSV file…'}
+                      </button>
+                      {acCsvError&&<div style={{fontSize:11,color:C.danger,marginBottom:10}}>{acCsvError}</div>}
+                      {acRows.length>0&&(
+                        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,maxHeight:160,overflowY:'auto'}}>
+                          {acRows.slice(0,50).map((r,i)=>(
+                            <div key={i} style={{display:'flex',gap:8,padding:'6px 10px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:11}}>
+                              <span style={{color:C.white,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||'—'}</span>
+                              <span style={{color:C.muted,flex:1.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.email||'—'}</span>
+                              <span style={{color:C.muted,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.phone||''}</span>
+                            </div>
+                          ))}
+                          {acRows.length>50&&<div style={{padding:'6px 10px',fontSize:10,color:C.muted}}>…and {acRows.length-50} more</div>}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+
+              {(acStep==='preview'||acStep==='saving')&&(
+                <>
+                  <div style={{fontSize:12,color:C.muted,marginBottom:10}}>
+                    Coach: <span style={{color:C.gold,fontWeight:700}}>{allCoaches.find(c=>c.uuid===acCoachId)?.name||'—'}</span>
+                    {' · '}Check-in day: <span style={{color:C.white,fontWeight:600}}>{acCheckInDay}</span>
+                  </div>
+                  {(()=>{
+                    const nReady = acRows.filter(r=>r.status==='ready').length
+                    const nDup   = acRows.filter(r=>r.status==='duplicate').length
+                    const nBad   = acRows.filter(r=>r.status==='invalid').length
+                    return (
+                      <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+                        <span style={{fontSize:11,fontWeight:700,color:C.success,background:`${C.success}15`,border:`1px solid ${C.success}33`,borderRadius:6,padding:'4px 10px'}}>✓ {nReady} will be added</span>
+                        {nDup>0&&<span style={{fontSize:11,fontWeight:700,color:C.gold,background:`${C.gold}15`,border:`1px solid ${C.gold}33`,borderRadius:6,padding:'4px 10px'}}>⚠ {nDup} duplicate{nDup>1?'s':''} — skipped</span>}
+                        {nBad>0&&<span style={{fontSize:11,fontWeight:700,color:C.danger,background:`${C.danger}15`,border:`1px solid ${C.danger}33`,borderRadius:6,padding:'4px 10px'}}>✕ {nBad} invalid — skipped</span>}
+                      </div>
+                    )
+                  })()}
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,maxHeight:260,overflowY:'auto'}}>
+                    {acRows.map((r,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:11,opacity:r.status==='ready'?1:.75}}>
+                        <span style={{width:14,flexShrink:0,color:r.status==='ready'?C.success:r.status==='duplicate'?C.gold:C.danger,fontWeight:700}}>
+                          {r.status==='ready'?'✓':r.status==='duplicate'?'⚠':'✕'}
+                        </span>
+                        <span style={{color:C.white,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||'—'}</span>
+                        <span style={{color:C.muted,flex:1.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.email||'—'}</span>
+                        {r.reason&&<span style={{color:r.status==='duplicate'?C.gold:C.danger,fontSize:10,flexShrink:0}}>{r.reason}</span>}
+                      </div>
+                    ))}
+                  </div>
+                  {acStep==='saving'&&<div style={{fontSize:12,color:C.gold,fontWeight:700,marginTop:12}}>Saving clients…</div>}
+                </>
+              )}
+
+              {acStep==='done'&&acResults&&(
+                <>
+                  <div style={{fontSize:13,fontWeight:700,color:C.success,marginBottom:12}}>
+                    ✅ {acResults.created.length} client{acResults.created.length!==1?'s':''} added under {allCoaches.find(c=>c.uuid===acCoachId)?.name||'their coach'}
+                  </div>
+                  {acResults.created.length>0&&(
+                    <div style={{background:C.surface,borderRadius:10,padding:'12px 14px',marginBottom:12}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Send These Credentials</div>
+                      {acResults.created.map((c,i)=>(
+                        <div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'5px 0',borderTop:i?`1px solid ${C.border}`:'none'}}>
+                          <span style={{fontSize:11,color:C.white,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.email}</span>
+                          <span style={{fontSize:11,color:C.gold,fontWeight:700,fontFamily:'monospace',flexShrink:0}}>{c.tempPass}</span>
+                        </div>
+                      ))}
+                      <button onClick={()=>{navigator.clipboard?.writeText(acResults.created.map(c=>`${c.name}\t${c.email}\t${c.tempPass}`).join('\n')).then(()=>alert('Copied to clipboard.')).catch(()=>{})}}
+                        style={{marginTop:10,width:'100%',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px',color:C.gold,fontWeight:700,fontSize:11,cursor:'pointer'}}>
+                        📋 Copy All Credentials
+                      </button>
+                    </div>
+                  )}
+                  {acResults.skipped.length>0&&(
+                    <div style={{background:`${C.gold}0d`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'12px 14px'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Skipped ({acResults.skipped.length})</div>
+                      {acResults.skipped.map((s,i)=>(
+                        <div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:11,padding:'4px 0'}}>
+                          <span style={{color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.email}</span>
+                          <span style={{color:C.muted,flexShrink:0}}>{s.reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{padding:'14px 20px',borderTop:`1px solid ${C.border}`,display:'flex',gap:10,flexShrink:0}}>
+              {acStep==='input'&&(
+                <>
+                  <button onClick={resetAddClients}
+                    style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                    Cancel
+                  </button>
+                  <button onClick={buildClientPreview}
+                    disabled={!acCoachId||(acMode==='single'?!(acSingle.name.trim()&&acSingle.email.trim()):!acRows.length)}
+                    style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',
+                      opacity:(acCoachId&&(acMode==='single'?(acSingle.name.trim()&&acSingle.email.trim()):acRows.length))?1:.5}}>
+                    Preview →
+                  </button>
+                </>
+              )}
+              {acStep==='preview'&&(
+                <>
+                  <button onClick={()=>{setAcStep('input');if(acMode==='single')setAcRows([])}}
+                    style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                    ← Back
+                  </button>
+                  <button onClick={confirmAddClients} disabled={!acRows.some(r=>r.status==='ready')}
+                    style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:acRows.some(r=>r.status==='ready')?1:.5}}>
+                    Confirm — Add {acRows.filter(r=>r.status==='ready').length} Client{acRows.filter(r=>r.status==='ready').length!==1?'s':''}
+                  </button>
+                </>
+              )}
+              {acStep==='saving'&&(
+                <button disabled style={{flex:1,background:C.dim,border:'none',borderRadius:8,padding:11,fontWeight:700,color:C.muted,fontSize:13}}>Saving…</button>
+              )}
+              {acStep==='done'&&(
+                <button onClick={resetAddClients}
+                  style={{flex:1,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  Done
+                </button>
+              )}
             </div>
           </div>
         </div>
