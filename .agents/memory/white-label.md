@@ -24,3 +24,6 @@ description: How white-label orgs, tiers, and content gating work in the Eden co
 - WL org admins (isAdmin && isWLOrg) get add/edit/delete UI in the supplement picker; edits only touch their org's rows.
 - Race rule: picker gates on myCompanyId resolution — never show Eden's SUPP_DB to a WL user before org context resolves.
 - Gotcha: DietBuilder's `dbInsert` helper returns undefined even on success (no Prefer: return=representation); don't use its return value as a success check. Week6's version DOES return rows.
+
+## GHL client intake webhooks
+Each org has one row in `company_intake_secrets` (secret in URL path: `POST /api/ghl-intake/:secret` on the api-server). Coach resolved by GHL assigned-user email within the org; duplicates by email+company acknowledged not recreated; unknown coach → client created unassigned. Regenerate = UPDATE in place (never delete+insert, or a failed insert leaves the org keyless). api-server request logging redacts the secret path segment — keep that if the route moves.
