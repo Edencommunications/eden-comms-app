@@ -555,12 +555,25 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .then(rows=>{
         if (!Array.isArray(rows)) return
         setClients(prev=>{
-          const have = new Set(prev.map(c=>c.uuid))
-          const haveEmail = new Set(prev.map(c=>(c.email||'').toLowerCase()))
+          // Demo clients belong to the Eden org only — never show them to white-label admins
+          const base = adminCompanyId===EDEN_ORG_ID
+            ? prev
+            : prev.filter(c=>!DEMO_CLIENTS.some(d=>d.uuid===c.uuid))
+          const byId = new Map(rows.map(r=>[r.id,r]))
+          const coachFor = id => [...DEMO_COACHES,...dbCoaches].find(c=>c.uuid===id)
+          // Refresh coach assignment / check-in day on rows we already have
+          const updated = base.map(c=>{
+            const r = byId.get(c.uuid)
+            if (!r) return c
+            const coach = coachFor(r.coach_id)
+            return {...c, coachId:r.coach_id||null, coachName:coach?.name||c.coachName||'—', checkInDay:r.update_day||c.checkInDay}
+          })
+          const have = new Set(updated.map(c=>c.uuid))
+          const haveEmail = new Set(updated.map(c=>(c.email||'').toLowerCase()))
           const fresh = rows
             .filter(r=>!have.has(r.id)&&!haveEmail.has((r.email||'').toLowerCase()))
             .map(r=>{
-              const coach = [...DEMO_COACHES,...dbCoaches].find(c=>c.uuid===r.coach_id)
+              const coach = coachFor(r.coach_id)
               return {
                 uuid:r.id, name:r.name, email:r.email, role:'client',
                 coachId:r.coach_id||null, coachName:coach?.name||'—',
@@ -568,7 +581,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 hasUpdate:false, lastSeen:'Never', active:true,
               }
             })
-          return fresh.length ? [...prev,...fresh] : prev
+          return [...updated,...fresh]
         })
       })
       .catch(()=>{})
