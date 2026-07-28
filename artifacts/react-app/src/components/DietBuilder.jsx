@@ -1123,16 +1123,24 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   // ── Org supplement library (white-label orgs manage their own copy) ──
-  async function loadOrgSupps() {
-    if (!myCompanyId || !isWLOrg) return
-    const rows = await dbGet('company_supplements',`company_id=eq.${myCompanyId}&order=category.asc,sort_order.asc,created_at.asc`)
+  async function loadOrgSupps(forCompanyId) {
+    const cid = forCompanyId || myCompanyId
+    if (!cid || cid===EDEN_ORG_ID) return
+    const rows = await dbGet('company_supplements',`company_id=eq.${cid}&order=category.asc,sort_order.asc,created_at.asc`)
+    // Guard against stale responses: only apply if the org context hasn't changed since we asked
+    if (cid !== myCompanyIdRef.current) return
     const grouped = {}
     ;(rows||[]).forEach(r=>{
       (grouped[r.category]=grouped[r.category]||[]).push({dbId:r.id,name:r.name,dose:r.dose||'',directions:r.directions||'',code:r.code||'',link:r.link||''})
     })
     setOrgSuppDB(grouped)
   }
-  useEffect(()=>{ if (isWLOrg) loadOrgSupps() },[myCompanyId])
+  const myCompanyIdRef = useRef(myCompanyId)
+  useEffect(()=>{
+    myCompanyIdRef.current = myCompanyId
+    setOrgSuppDB(null) // reset so a stale org's library never renders for the new org
+    if (isWLOrg) loadOrgSupps(myCompanyId)
+  },[myCompanyId])
   async function saveOrgSupp() {
     if (!editSupp?.name?.trim() || !editSupp?.category?.trim()) { alert('Please fill in at least a category and name.'); return }
     const body = { category:editSupp.category.trim(), name:editSupp.name.trim(), dose:editSupp.dose||'', directions:editSupp.directions||'', code:editSupp.code||'', link:editSupp.link||'' }
@@ -1385,8 +1393,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     !foodSearch||f.name.toLowerCase().includes(foodSearch.toLowerCase())||f.cat.toLowerCase().includes(foodSearch.toLowerCase())
   )
 
-  // White-label orgs see their own editable library; Eden sees the built-in one
-  const suppDB = isWLOrg ? (orgSuppDB||{}) : SUPP_DB
+  // White-label orgs see their own editable library; Eden sees the built-in one.
+  // Until org context resolves (myCompanyId null), show nothing rather than risking Eden's list for a WL user.
+  const suppDBReady = !!myCompanyId && (!isWLOrg || orgSuppDB!==null)
+  const suppDB = !myCompanyId ? {} : isWLOrg ? (orgSuppDB||{}) : SUPP_DB
   const canEditSupps = isAdmin && isWLOrg
 
   const allSuppSearch = Object.entries(suppDB).flatMap(([cat,supps])=>
@@ -3805,7 +3815,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               ):(
                 <div style={{padding:'8px 0'}}>
                   <div style={{padding:'5px 16px 8px',fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>Apply Full Protocol</div>
-                  {isWLOrg&&orgSuppDB===null&&(
+                  {!suppDBReady&&(
                     <div style={{padding:'20px 16px',color:C.muted,fontSize:13}}>Loading your supplement library…</div>
                   )}
                   {isWLOrg&&orgSuppDB!==null&&Object.keys(orgSuppDB).length===0&&(
