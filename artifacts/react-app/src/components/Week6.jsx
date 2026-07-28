@@ -836,9 +836,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Seed the new org with a copy of Eden's current habit & cardio libraries as their starting point.
     // Copies are independent — the org edits theirs freely without affecting Eden's.
     try {
-      const [edenHabits, edenCardio] = await Promise.all([
+      const [edenHabits, edenCardio, edenSupps] = await Promise.all([
         dbGet('company_habits',`company_id=eq.${EDEN_ORG_ID}&select=name,default_target`),
         dbGet('company_cardio_types',`company_id=eq.${EDEN_ORG_ID}&select=name`),
+        dbGet('company_supplements',`company_id=eq.${EDEN_ORG_ID}&select=category,name,dose,directions,code,link,sort_order`),
       ])
       let seedOk = true
       if (edenHabits?.length) {
@@ -849,9 +850,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         const r = await dbInsert('company_cardio_types', edenCardio.map(t=>({name:t.name, company_id:dbId})))
         if (!r) seedOk = false
       }
-      if (!seedOk) alert('The organization was created, but copying your starter habit/cardio lists into it failed. You can re-add them manually, or delete and recreate the organization.')
+      if (edenSupps?.length) {
+        const r = await dbInsert('company_supplements', edenSupps.map(s=>({...s, company_id:dbId})))
+        if (!r) seedOk = false
+      }
+      if (!seedOk) alert('The organization was created, but copying your starter habit/cardio/supplement lists into it failed. You can re-add them manually, or delete and recreate the organization.')
     } catch {
-      alert('The organization was created, but copying your starter habit/cardio lists into it failed. You can re-add them manually, or delete and recreate the organization.')
+      alert('The organization was created, but copying your starter habit/cardio/supplement lists into it failed. You can re-add them manually, or delete and recreate the organization.')
     }
     const org = {
       id:           dbId,

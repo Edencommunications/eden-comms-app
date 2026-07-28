@@ -996,6 +996,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [suppSearch,     setSuppSearch]     = useState('')
   const [suppCategory,   setSuppCategory]   = useState(Object.keys(SUPP_DB)[0])
   const [customSuppText, setCustomSuppText] = useState('')
+  // White-label orgs use their own editable copy of the supplement library (company_supplements);
+  // Eden users use the built-in SUPP_DB. null = not loaded yet.
+  const [orgSuppDB,  setOrgSuppDB]  = useState(null)
+  const [editSupp,   setEditSupp]   = useState(null) // {dbId?, category, name, dose, directions, code, link} — modal open when set
   const [coachNotes,     setCoachNotes]     = useState('')
   // Client's own notes on their supplement experience
   const [clientSuppNotes, setClientSuppNotes] = useState('')
@@ -1114,8 +1118,42 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
   function addSuppProtocol(cat) {
     // protocolGroup marks these as a full protocol so the UI renders them under a named header
-    SUPP_DB[cat]?.forEach(s=>addSuppFromDB({...s,category:cat,protocolGroup:cat}))
+    suppDB[cat]?.forEach(s=>addSuppFromDB({...s,category:cat,protocolGroup:cat}))
     setShowSuppPicker(false)
+  }
+
+  // ── Org supplement library (white-label orgs manage their own copy) ──
+  async function loadOrgSupps() {
+    if (!myCompanyId || !isWLOrg) return
+    const rows = await dbGet('company_supplements',`company_id=eq.${myCompanyId}&order=category.asc,sort_order.asc,created_at.asc`)
+    const grouped = {}
+    ;(rows||[]).forEach(r=>{
+      (grouped[r.category]=grouped[r.category]||[]).push({dbId:r.id,name:r.name,dose:r.dose||'',directions:r.directions||'',code:r.code||'',link:r.link||''})
+    })
+    setOrgSuppDB(grouped)
+  }
+  useEffect(()=>{ if (isWLOrg) loadOrgSupps() },[myCompanyId])
+  async function saveOrgSupp() {
+    if (!editSupp?.name?.trim() || !editSupp?.category?.trim()) { alert('Please fill in at least a category and name.'); return }
+    const body = { category:editSupp.category.trim(), name:editSupp.name.trim(), dose:editSupp.dose||'', directions:editSupp.directions||'', code:editSupp.code||'', link:editSupp.link||'' }
+    let ok
+    if (editSupp.dbId) {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/company_supplements?id=eq.${editSupp.dbId}&company_id=eq.${myCompanyId}`,{
+        method:'PATCH', headers:{...H,'Content-Type':'application/json'}, body:JSON.stringify(body)
+      })
+      ok = r.ok
+    } else {
+      ok = !!(await dbInsert('company_supplements',{...body, company_id:myCompanyId}))
+    }
+    if (!ok) { alert('Could not save the supplement — please try again.'); return }
+    setEditSupp(null)
+    loadOrgSupps()
+  }
+  async function deleteOrgSupp(dbId) {
+    if (!confirm('Remove this supplement from your library?')) return
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/company_supplements?id=eq.${dbId}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
+    if (!r.ok) { alert('Could not delete — please try again.'); return }
+    loadOrgSupps()
   }
   function removeSupp(id) { setClientSupps(p=>p.filter(s=>s.id!==id)) }
   function updateSuppField(id,field,val) {
@@ -1344,7 +1382,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     !foodSearch||f.name.toLowerCase().includes(foodSearch.toLowerCase())||f.cat.toLowerCase().includes(foodSearch.toLowerCase())
   )
 
-  const allSuppSearch = Object.entries(SUPP_DB).flatMap(([cat,supps])=>
+  // White-label orgs see their own editable library; Eden sees the built-in one
+  const suppDB = isWLOrg ? (orgSuppDB||{}) : SUPP_DB
+  const canEditSupps = isAdmin && isWLOrg
+
+  const allSuppSearch = Object.entries(suppDB).flatMap(([cat,supps])=>
     supps.filter(s=>s.name.toLowerCase().includes(suppSearch.toLowerCase())).map(s=>({...s,category:cat}))
   )
 
@@ -3760,12 +3802,18 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               ):(
                 <div style={{padding:'8px 0'}}>
                   <div style={{padding:'5px 16px 8px',fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>Apply Full Protocol</div>
-                  {Object.keys(SUPP_DB).map(cat=>(
+                  {isWLOrg&&orgSuppDB===null&&(
+                    <div style={{padding:'20px 16px',color:C.muted,fontSize:13}}>Loading your supplement library…</div>
+                  )}
+                  {isWLOrg&&orgSuppDB!==null&&Object.keys(orgSuppDB).length===0&&(
+                    <div style={{padding:'20px 16px',color:C.muted,fontSize:13}}>Your supplement library is empty.{canEditSupps?' Use "+ Add Supplement" below to build it.':''}</div>
+                  )}
+                  {Object.keys(suppDB).map(cat=>(
                     <div key={cat} style={{borderBottom:`1px solid ${C.border}`}}>
                       <div style={{padding:'10px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                         <div>
                           <div style={{fontSize:13,color:C.white,fontWeight:600}}>{cat}</div>
-                          <div style={{fontSize:10,color:C.muted,marginTop:1}}>{SUPP_DB[cat].length} supplements</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:1}}>{suppDB[cat].length} supplements</div>
                         </div>
                         <div style={{display:'flex',gap:8}}>
                           <button onClick={()=>setSuppCategory(suppCategory===cat?null:cat)}
@@ -3780,26 +3828,74 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       </div>
                       {suppCategory===cat&&(
                         <div style={{background:C.surface,borderTop:`1px solid ${C.border}`}}>
-                          {SUPP_DB[cat].map((s,i)=>(
-                            <button key={i} onClick={()=>addSuppFromDB({...s,category:cat})}
-                              style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'8px 20px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}
-                              onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}08`}
-                              onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                              <div>
-                                <div style={{fontSize:12,color:C.white,fontWeight:500}}>{s.name}</div>
-                                <div style={{fontSize:10,color:C.muted,marginTop:1}}>{s.dose}</div>
-                                {s.code&&<div style={{fontSize:10,color:C.gold}}>Code: {s.code}</div>}
-                              </div>
-                              <span style={{color:C.gold,fontSize:16,flexShrink:0,marginLeft:8}}>+</span>
-                            </button>
+                          {suppDB[cat].map((s,i)=>(
+                            <div key={s.dbId||i} style={{display:'flex',alignItems:'center',borderBottom:`1px solid ${C.border}`}}>
+                              <button onClick={()=>addSuppFromDB({...s,category:cat})}
+                                style={{flex:1,minWidth:0,textAlign:'left',background:'none',border:'none',padding:'8px 20px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                                onMouseEnter={e=>e.currentTarget.style.background=`${C.gold}08`}
+                                onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                                <div>
+                                  <div style={{fontSize:12,color:C.white,fontWeight:500}}>{s.name}</div>
+                                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{s.dose}</div>
+                                  {s.code&&<div style={{fontSize:10,color:C.gold}}>Code: {s.code}</div>}
+                                </div>
+                                <span style={{color:C.gold,fontSize:16,flexShrink:0,marginLeft:8}}>+</span>
+                              </button>
+                              {canEditSupps&&s.dbId&&(
+                                <div style={{display:'flex',gap:4,padding:'0 10px',flexShrink:0}}>
+                                  <button onClick={()=>setEditSupp({dbId:s.dbId,category:cat,name:s.name,dose:s.dose,directions:s.directions,code:s.code,link:s.link})} title="Edit supplement"
+                                    style={{background:`${C.gold}15`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'5px 8px',color:C.gold,fontSize:11,cursor:'pointer'}}>✎</button>
+                                  <button onClick={()=>deleteOrgSupp(s.dbId)} title="Remove from library"
+                                    style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'5px 8px',color:C.danger,fontSize:11,cursor:'pointer'}}>✕</button>
+                                </div>
+                              )}
+                            </div>
                           ))}
+                          {canEditSupps&&(
+                            <button onClick={()=>setEditSupp({category:cat,name:'',dose:'',directions:'',code:'',link:''})}
+                              style={{width:'100%',background:'none',border:'none',borderBottom:`1px solid ${C.border}`,padding:'8px 20px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer',textAlign:'left'}}>
+                              + Add supplement to {cat}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   ))}
+                  {canEditSupps&&(
+                    <div style={{padding:'10px 16px'}}>
+                      <button onClick={()=>setEditSupp({category:'',name:'',dose:'',directions:'',code:'',link:''})}
+                        style={{width:'100%',background:`${C.gold}15`,border:`1px dashed ${C.gold}66`,borderRadius:8,padding:9,color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                        ⚙️ Add Supplement (new or existing category)
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+            {/* ── Org supplement editor modal (white-label admins) ── */}
+            {editSupp&&(
+              <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+                onClick={e=>{if(e.target===e.currentTarget)setEditSupp(null)}}>
+                <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:14,width:'100%',maxWidth:440,maxHeight:'85vh',overflowY:'auto',padding:18}}>
+                  <div style={{fontSize:14,fontWeight:800,color:C.white,marginBottom:12}}>{editSupp.dbId?'Edit Supplement':'Add Supplement'}</div>
+                  {[['category','Protocol / Category','e.g. Extra Supplements'],['name','Supplement Name','e.g. Magnesium Glycinate'],['dose','Dose / Directions For Use','e.g. 350mg 1hr before bed'],['directions','Notes','e.g. Weeks 1-6 only'],['code','Discount Code','e.g. YOURCODE10'],['link','Purchase Link','https://…']].map(([f,label,ph])=>(
+                    <div key={f} style={{marginBottom:10}}>
+                      <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>{label}</div>
+                      <input value={editSupp[f]||''} onChange={e=>setEditSupp(p=>({...p,[f]:e.target.value}))} placeholder={ph}
+                        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                    </div>
+                  ))}
+                  <div style={{display:'flex',gap:8,marginTop:14}}>
+                    <button onClick={()=>setEditSupp(null)}
+                      style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
+                    <button onClick={saveOrgSupp}
+                      style={{flex:1,background:`linear-gradient(135deg,#ffb733,${C.gold})`,border:'none',borderRadius:8,padding:10,color:'#000',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+                      {editSupp.dbId?'Save Changes':'Add Supplement'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
               <button onClick={()=>setShowSuppPicker(false)}
                 style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
