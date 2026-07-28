@@ -487,9 +487,20 @@ Training Principles:
   }
   async function removeCompanyCardioType(name) {
     if (!myCompanyId) return
+    if (!window.confirm(`Remove "${name}" from your company's cardio types?`)) return
     // Scope by org so one org's removal never touches another org's identically-named type
     await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types?name=eq.${encodeURIComponent(name)}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
     setCompanyCardioTypes(p=>p.filter(t=>t!==name))
+  }
+  async function renameCompanyCardioType(oldName) {
+    if (!myCompanyId) return
+    const newName = window.prompt(`Rename cardio type "${oldName}" to:`, oldName)
+    if (!newName || !newName.trim() || newName.trim()===oldName) return
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types?name=eq.${encodeURIComponent(oldName)}&company_id=eq.${myCompanyId}`,{
+      method:'PATCH', headers:H, body:JSON.stringify({name:newName.trim()})
+    })
+    if (!r.ok) { alert('Could not rename — an identically-named type may already exist.'); return }
+    setCompanyCardioTypes(p=>p.map(t=>t===oldName?newName.trim():t))
   }
 
   // ── Load on mount ─────────────────────────────────────────
@@ -1324,6 +1335,8 @@ Training Principles:
                         <button onClick={()=>pushCardioTypeToAllOrgs(t)} title="Push to all orgs"
                           style={{background:'none',border:'none',color:C.gold,cursor:'pointer',fontSize:10,fontWeight:700,padding:0,lineHeight:1}}>→ orgs</button>
                       )}
+                      <button onClick={()=>renameCompanyCardioType(t)} title="Rename"
+                        style={{background:'none',border:'none',color:C.gold,cursor:'pointer',fontSize:11,padding:0,lineHeight:1}}>✎</button>
                       <button onClick={()=>removeCompanyCardioType(t)}
                         style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>✕</button>
                     </div>

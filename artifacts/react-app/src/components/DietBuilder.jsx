@@ -1000,6 +1000,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // Eden users use the built-in SUPP_DB. null = not loaded yet.
   const [orgSuppDB,  setOrgSuppDB]  = useState(null)
   const [editSupp,   setEditSupp]   = useState(null) // {dbId?, category, name, dose, directions, code, link} — modal open when set
+  const [editHabit,  setEditHabit]  = useState(null) // {id, name, target} — company habit editor modal
   const [coachNotes,     setCoachNotes]     = useState('')
   // Client's own notes on their supplement experience
   const [clientSuppNotes, setClientSuppNotes] = useState('')
@@ -1125,7 +1126,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // ── Org supplement library (white-label orgs manage their own copy) ──
   async function loadOrgSupps(forCompanyId) {
     const cid = forCompanyId || myCompanyId
-    if (!cid || cid===EDEN_ORG_ID) return
+    if (!cid) return
     const rows = await dbGet('company_supplements',`company_id=eq.${cid}&order=category.asc,sort_order.asc,created_at.asc`)
     // Guard against stale responses: only apply if the org context hasn't changed since we asked
     if (cid !== myCompanyIdRef.current) return
@@ -1139,7 +1140,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   useEffect(()=>{
     myCompanyIdRef.current = myCompanyId
     setOrgSuppDB(null) // reset so a stale org's library never renders for the new org
-    if (isWLOrg) loadOrgSupps(myCompanyId)
+    if (myCompanyId) loadOrgSupps(myCompanyId)
   },[myCompanyId])
   async function saveOrgSupp() {
     if (!editSupp?.name?.trim() || !editSupp?.category?.trim()) { alert('Please fill in at least a category and name.'); return }
@@ -1264,9 +1265,20 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     else { console.error('PUSH HABIT', await res.text()); alert('Push failed — please try again.') }
   }
   async function removeCompanyHabit(id) {
-    await fetch(`${SUPABASE_URL}/rest/v1/company_habits?id=eq.${id}`,{method:'DELETE',headers:H})
+    if (!confirm('Remove this habit from your company library?')) return
+    await fetch(`${SUPABASE_URL}/rest/v1/company_habits?id=eq.${id}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
     setCompanyHabits(p=>p.filter(h=>h.id!==id))
     setAssignedHabits(p=>p.filter(h=>h.id!==id))
+  }
+  async function saveCompanyHabit() {
+    if (!editHabit?.name?.trim()) { alert('Please enter a habit name.'); return }
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/company_habits?id=eq.${editHabit.id}&company_id=eq.${myCompanyId}`,{
+      method:'PATCH', headers:H, body:JSON.stringify({name:editHabit.name.trim(), default_target:editHabit.target})
+    })
+    if (!r.ok) { alert('Could not save the habit — please try again.'); return }
+    setCompanyHabits(p=>p.map(h=>h.id===editHabit.id?{...h,name:editHabit.name.trim(),defaultTarget:editHabit.target}:h))
+    setAssignedHabits(p=>p.map(h=>h.id===editHabit.id?{...h,name:editHabit.name.trim()}:h))
+    setEditHabit(null)
   }
 
   // ── Company foods (Eden-only: the shared food library is controlled by the parent company) ─
@@ -1393,11 +1405,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     !foodSearch||f.name.toLowerCase().includes(foodSearch.toLowerCase())||f.cat.toLowerCase().includes(foodSearch.toLowerCase())
   )
 
-  // White-label orgs see their own editable library; Eden sees the built-in one.
-  // Until org context resolves (myCompanyId null), show nothing rather than risking Eden's list for a WL user.
-  const suppDBReady = !!myCompanyId && (!isWLOrg || orgSuppDB!==null)
-  const suppDB = !myCompanyId ? {} : isWLOrg ? (orgSuppDB||{}) : SUPP_DB
-  const canEditSupps = isAdmin && isWLOrg
+  // Every org (including Eden) uses its own editable supplement library from the database.
+  // Until org context resolves (myCompanyId null), show nothing rather than risking the wrong org's list.
+  const suppDBReady = !!myCompanyId && orgSuppDB!==null
+  const suppDB = suppDBReady ? orgSuppDB : {}
+  const canEditSupps = isAdmin
 
   const allSuppSearch = Object.entries(suppDB).flatMap(([cat,supps])=>
     supps.filter(s=>s.name.toLowerCase().includes(suppSearch.toLowerCase())).map(s=>({...s,category:cat}))
@@ -3619,6 +3631,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>→ All orgs</button>
                     )}
                     {isAdmin&&h.fromDB&&(
+                      <button onClick={()=>setEditHabit({id:h.id,name:h.name,target:h.defaultTarget||7})} title="Edit habit"
+                        style={{background:`${C.gold}15`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 8px',color:C.gold,fontSize:11,cursor:'pointer',flexShrink:0}}>✎</button>
+                    )}
+                    {isAdmin&&h.fromDB&&(
                       <button onClick={()=>removeCompanyHabit(h.id)}
                         style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'6px 8px',color:C.danger,fontSize:11,cursor:'pointer',flexShrink:0}}>✕</button>
                     )}
@@ -3661,6 +3677,29 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 Done — {assignedHabits.length} habits assigned
               </button>
             </div>
+            {/* ── Company habit editor (admins) ── */}
+            {editHabit&&(
+              <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:1100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+                onClick={e=>{if(e.target===e.currentTarget)setEditHabit(null)}}>
+                <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:14,width:'100%',maxWidth:380,padding:18}}>
+                  <div style={{fontSize:14,fontWeight:800,color:C.white,marginBottom:12}}>Edit Company Habit</div>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Habit Name</div>
+                  <input value={editHabit.name} onChange={e=>setEditHabit(p=>({...p,name:e.target.value}))}
+                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',marginBottom:10}}/>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Default Target</div>
+                  <select value={editHabit.target} onChange={e=>setEditHabit(p=>({...p,target:Number(e.target.value)}))}
+                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',cursor:'pointer',boxSizing:'border-box'}}>
+                    {[1,2,3,4,5,6,7].map(n=><option key={n} value={n}>{n}x/week</option>)}
+                  </select>
+                  <div style={{display:'flex',gap:8,marginTop:14}}>
+                    <button onClick={()=>setEditHabit(null)}
+                      style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
+                    <button onClick={saveCompanyHabit}
+                      style={{flex:1,background:C.gold,border:'none',borderRadius:8,padding:10,color:C.black,fontSize:13,fontWeight:700,cursor:'pointer'}}>Save Changes</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3818,7 +3857,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   {!suppDBReady&&(
                     <div style={{padding:'20px 16px',color:C.muted,fontSize:13}}>Loading your supplement library…</div>
                   )}
-                  {isWLOrg&&orgSuppDB!==null&&Object.keys(orgSuppDB).length===0&&(
+                  {suppDBReady&&Object.keys(orgSuppDB).length===0&&(
                     <div style={{padding:'20px 16px',color:C.muted,fontSize:13}}>Your supplement library is empty.{canEditSupps?' Use "+ Add Supplement" below to build it.':''}</div>
                   )}
                   {Object.keys(suppDB).map(cat=>(
