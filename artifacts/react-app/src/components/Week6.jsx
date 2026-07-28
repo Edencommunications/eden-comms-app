@@ -559,7 +559,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [removedCoaches, setRemovedCoaches] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eden_removed_coaches') || '[]') } catch { return [] }
   })
-  const allCoaches = [...DEMO_COACHES, ...dbCoaches].filter(c=>!removedCoaches.includes(c.uuid))
+  // Demo coaches belong to the Eden org only — white-label admins must never
+  // see or assign clients to them (tenant isolation is app-level scoping).
+  // Until the admin's company resolves, show no demo coaches rather than leak them.
+  const allCoaches = [
+    ...(adminCompanyId === EDEN_ORG_ID ? DEMO_COACHES : []),
+    ...dbCoaches,
+  ].filter(c=>!removedCoaches.includes(c.uuid))
   const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
 
   // ── Admin Documents ───────────────────────────────────────
