@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext, useCallback } from "react";
+import { useState, useEffect, useRef, createContext, useContext, useCallback, useMemo } from "react";
 import { sbBearer } from './lib/sbAuth'
 import {
   ResponsiveContainer, LineChart, AreaChart, BarChart,
@@ -2607,6 +2607,105 @@ const StaffAccessManager = ({ user }:any) => {
 };
 
 // ─── ADMIN CONVERSATION MONITOR ──────────────────────────────────────────────
+// ── Admin Activity Log — who did what, and when ──────────────────
+const ACTION_LABELS:Record<string,{label:string,icon:string}> = {
+  message_deleted:    { label:'Message deleted',    icon:'🗑' },
+  community_archived: { label:'Community archived', icon:'📦' },
+  community_created:  { label:'Community created',  icon:'➕' },
+  course_granted:     { label:'Course granted',     icon:'🎓' },
+  course_revoked:     { label:'Course revoked',     icon:'🚫' },
+  client_deactivated: { label:'Client deactivated', icon:'⏸' },
+  client_reactivated: { label:'Client reactivated', icon:'▶️' },
+  client_transferred: { label:'Client transferred', icon:'🔁' },
+};
+const actionMeta = (a:string) => ACTION_LABELS[a] || { label:(a||'action').replace(/_/g,' '), icon:'•' };
+const centralTime = (iso:string) => {
+  try {
+    return new Date(iso).toLocaleString('en-US', { timeZone:'America/Chicago',
+      month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) + ' CT';
+  } catch { return iso; }
+};
+
+const AdminActivityLog = () => {
+  const [rows, setRows]     = useState<any[]|null>(null);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    let alive = true;
+    sbGet('audit_logs', 'select=*&order=created_at.desc&limit=300')
+      .then((r:any[]) => { if (alive) setRows(Array.isArray(r) ? r : []); });
+    return () => { alive = false; };
+  }, []);
+
+  const actions = useMemo(() => Array.from(new Set((rows||[]).map(r=>r.action).filter(Boolean))), [rows]);
+  const shown = useMemo(() => {
+    let list = rows || [];
+    if (filter !== 'all') list = list.filter(r => r.action === filter);
+    const q = search.trim().toLowerCase();
+    if (q) list = list.filter(r =>
+      (r.actor_name||'').toLowerCase().includes(q) ||
+      (r.action||'').toLowerCase().includes(q) ||
+      JSON.stringify(r.details||{}).toLowerCase().includes(q) ||
+      (r.target_type||'').toLowerCase().includes(q));
+    return list;
+  }, [rows, filter, search]);
+
+  const detailText = (r:any) => {
+    const d = r.details || {};
+    const bits:string[] = [];
+    if (d.name) bits.push(`"${d.name}"`);
+    if (d.content) bits.push(`"${String(d.content).slice(0,80)}${String(d.content).length>80?'…':''}"`);
+    if (d.sender_name && d.sender_name !== r.actor_name) bits.push(`by ${d.sender_name}`);
+    if (d.context) bits.push(`(${d.context})`);
+    if (!bits.length && r.target_type) bits.push(r.target_type);
+    return bits.join(' ');
+  };
+
+  return (
+    <div style={{ overflowY:'auto', flex:1, padding:'16px 20px' }}>
+      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by person or action…"
+          style={{ flex:'1 1 220px', padding:'9px 12px', borderRadius:8, border:`1px solid ${B.border}`,
+            background:B.surface, color:B.text, fontSize:13, outline:'none' }}/>
+        <select value={filter} onChange={e=>setFilter(e.target.value)}
+          style={{ padding:'9px 12px', borderRadius:8, border:`1px solid ${B.border}`,
+            background:B.surface, color:B.text, fontSize:13 }}>
+          <option value="all">All actions</option>
+          {actions.map(a => <option key={a} value={a}>{actionMeta(a).label}</option>)}
+        </select>
+      </div>
+
+      {rows === null && <p style={{ color:B.muted, fontSize:13 }}>Loading activity…</p>}
+      {rows !== null && shown.length === 0 && (
+        <Card><p style={{ color:B.muted, fontSize:13, margin:0, textAlign:'center' }}>
+          {rows.length === 0 ? 'No activity recorded yet. Actions like message deletions, community changes, and account changes will appear here.' : 'Nothing matches your search.'}
+        </p></Card>
+      )}
+
+      {shown.map((r:any) => {
+        const m = actionMeta(r.action);
+        return (
+          <Card key={r.id} style={{ marginBottom:8, padding:'12px 14px' }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
+              <span style={{ fontSize:14 }}>{m.icon}</span>
+              <span style={{ fontSize:13, fontWeight:700, color:B.text }}>{r.actor_name || 'Unknown'}</span>
+              {r.actor_role && <span style={{ fontSize:10, fontWeight:700, color:B.gold, border:`1px solid ${B.gold}44`,
+                borderRadius:4, padding:'1px 6px', textTransform:'uppercase', letterSpacing:0.5 }}>{r.actor_role}</span>}
+              <span style={{ fontSize:13, color:B.text }}>{m.label.toLowerCase()}</span>
+              <span style={{ fontSize:12, color:B.muted }}>{detailText(r)}</span>
+              <span style={{ fontSize:11, color:B.muted, marginLeft:'auto' }}>{centralTime(r.created_at)}</span>
+            </div>
+          </Card>
+        );
+      })}
+      {rows !== null && rows.length >= 300 && (
+        <p style={{ color:B.muted, fontSize:11, textAlign:'center' }}>Showing the 300 most recent events.</p>
+      )}
+    </div>
+  );
+};
+
 const AdminConversationMonitor = ({ user }:any) => {
   const isMobile = useIsMobile();
   const [convos,      setConvos]      = useState<any[]>([]);
@@ -3331,7 +3430,7 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Tab bar */}
       <div style={{ display:'flex', borderBottom:`1px solid ${B.border}`, background:B.surface, padding:'0 20px', flexShrink:0 }}>
-        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations']].map(([key,label])=>(
+        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations'],['activity','📋 Activity']].map(([key,label])=>(
           <button key={key} onClick={()=>setAdminTab(key)}
             style={{ padding:'12px 16px', background:'none', border:'none', borderBottom:`2px solid ${adminTab===key?B.gold:'transparent'}`,
               color:adminTab===key?B.gold:B.muted, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
@@ -3504,6 +3603,9 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Conversations — admin reads all coach↔client threads */}
       {adminTab==='convos' && <AdminConversationMonitor user={user}/>}
+
+      {/* Activity — audit trail: who did what, and when */}
+      {adminTab==='activity' && <AdminActivityLog/>}
 
       {/* Eden HQ: edit an org's name, colors & logo */}
       {manageOrg && (

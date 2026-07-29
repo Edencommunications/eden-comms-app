@@ -19,8 +19,10 @@ description: Agreed run order and prerequisites for the Supabase/COO session (fr
 2. Branded password-reset emails (re-propose; not currently on board).
 3. Real team logins ✅ DONE (July 29): 3 staff provisioned (Alissa super_admin, Nick coach, Owner super_admin) with must_change_password + credential emails; demo accounts fully retired (profiles deactivated, auth users deleted, DEMO_USERS/demo-session/login-panel code removed). Owner = OWNER_EMAIL constant in App.tsx (no DB column); to swap owner email, edit the constant + update the Supabase Auth email.
 4. Admin settings moved into the database (re-propose; not currently on board).
-5. #66 — RLS lockdown (per-user database security rules).
-6. #67 — Full audit tracking/logging with admin review screen (audit_logs table already exists and receives message-deletion entries).
+5. RLS lockdown ✅ DONE (July 29, phases 1+2 — see rls-lockdown.md for the scheme and gotchas). Phase-2 policy source kept at artifacts/api-server/sql/rls_phase2.sql.
+6. Audit screen ✅ DONE (July 29): AdminActivityLog component in App.tsx ('activity' tab in Eden admin panel); durable audit_logs writes added for course grant/revoke (Week5) and client deactivate/reactivate/transfer (Week6).
+
+**Launch plan complete.** Remaining board items are older tasks (#10, #30, #32, #40, #41, #47, #50).
 
 **Why:** Email-dependent features must come after SMTP works; RLS lockdown must come after real logins exist (RLS needs real auth identities); audit screen last since audit_logs is already collecting data.
 

@@ -507,6 +507,9 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       }),
     })
     setAccessList(prev=>[...prev,{user_id:user.uuid,user_name:user.name,user_role:user.role}])
+    dbInsert('audit_logs',{ action:'course_granted', actor_id:myUUID, actor_name:(dbProfile?.name||info.name),
+      actor_role:roleEff, target_type:'course_access', target_id:user.uuid,
+      details:{ name:course.title, user:user.name } }).catch(()=>{})
   }
 
   // ── ADMIN: Grant access to ALL clients under a coach ─────
@@ -533,6 +536,10 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   // ── ADMIN: Revoke access ──────────────────────────────────
   async function revokeAccess(userId, course) {
     await dbUpdate('course_access',`course_id=eq.${course.id}&user_id=eq.${userId}`,{ revoked:true })
+    const revoked = accessList.find(a=>a.user_id===userId)
+    dbInsert('audit_logs',{ action:'course_revoked', actor_id:myUUID, actor_name:(dbProfile?.name||info.name),
+      actor_role:roleEff, target_type:'course_access', target_id:userId,
+      details:{ name:course.title, user:revoked?.user_name } }).catch(()=>{})
     setAccessList(prev=>prev.filter(a=>a.user_id!==userId))
   }
 

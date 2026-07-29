@@ -852,6 +852,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
     // Enforce in the database — blocks login from ANY device
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:false}).then(refreshOrgCounts).catch(()=>{})
+    dbInsert('audit_logs',{ action:'client_deactivated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'user_profile', target_id:client.uuid||null, details:{ name:client.name } }).catch(()=>{})
     addAudit('Eden Admin','Deactivated client',client.name,'Account deactivated — data preserved, coach still has full access')
     if (selectedClient?.uuid === client.uuid) setSelectedClient({ ...client, _deactivated: true })
   }
@@ -863,6 +865,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
     // Restore login access in the database
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:true}).then(refreshOrgCounts).catch(()=>{})
+    dbInsert('audit_logs',{ action:'client_reactivated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'user_profile', target_id:client.uuid||null, details:{ name:client.name } }).catch(()=>{})
     addAudit('Eden Admin','Reactivated client',client.name,'Account restored — client can now log in again')
     setSelectedClient({ ...client, _deactivated: false })
   }
@@ -873,6 +877,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
     // Persist new coach assignment in the database
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(clientEmail)}`,{coach_id:newCoachUuid}).catch(()=>{})
+    dbInsert('audit_logs',{ action:'client_transferred', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'user_profile', details:{ name:clientEmail } }).catch(()=>{})
   }
 
   function confirmRemoveCoach(coach) {
