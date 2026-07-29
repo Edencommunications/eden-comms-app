@@ -7,4 +7,5 @@
 - [Task board proposal behavior](task-board-behavior.md) — each new proposal batch cancels prior PROPOSED tasks; keep master list in notes, propose only the next batch.
 - [COO launch plan](coo-launch-plan.md) — Supabase Pro + SMTP first, then run order: client login emails → branded resets → real team logins → admin settings in DB → RLS → audit screen.
 - [Communities & messaging moderation](communities-messaging.md) — communities/community_messages tables, per-user pins, soft delete + audit_logs, community_only login for offboarded clients.
+- [RLS lockdown](rls-lockdown.md) — RLS on all tables (org-scoped via JWT-email helper); frontend sends live JWT via sbAuth.js getters; legacy allow-all policies had to be wiped.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.
