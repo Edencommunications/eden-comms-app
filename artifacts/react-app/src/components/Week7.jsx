@@ -61,6 +61,13 @@ async function dbInsert(table, body) {
   if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
+async function dbUpdate(table, params, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    method:'PATCH', headers:H, body:JSON.stringify(body)
+  })
+  if (!r.ok) console.error('UPDATE', table, await r.text())
+  return r.ok
+}
 
 function timeAgo(ts) {
   if (!ts) return ''

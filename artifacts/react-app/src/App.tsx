@@ -238,6 +238,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
       const user = DEMO_USERS[email.toLowerCase()];
       if (user && user.password === pass) {
         // Block deactivated client accounts
+        let demoCommunityOnly = false;
         if (user.role === 'client') {
           // Database is the source of truth — check it first
           let dbAnswered = false;
@@ -256,9 +257,9 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
                 setLoading(false);
                 return;
               }
-              // Offboarded but community_only → allowed in; app restricts them to Messages/Communities
+              // Offboarded but community_only → allowed in, restricted to Messages/Communities (session-only flag)
               if (rows[0] && rows[0].is_active === false && rows[0].community_only === true) {
-                (user as any).communityOnly = true;
+                demoCommunityOnly = true;
               }
               // DB says active — clear any stale local deactivation entry
               try {
@@ -292,7 +293,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
           });
           if (sync.ok) await supabase.auth.signInWithPassword({ email: email.toLowerCase(), password: pass });
         } catch {}
-        onLogin({ email, ...user });
+        onLogin({ email, ...user, communityOnly: demoCommunityOnly });
       } else {
         // Real authentication — Supabase Auth (hashed passwords).
         const emailNorm = email.toLowerCase();

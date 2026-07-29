@@ -5,4 +5,6 @@
 - [GHL intake webhook](ghl-intake-webhook.md) — per-org secrets are HMAC-derived (no DDL possible); live `notifications` table uses body/is_read, not the .sql file's message/title.
 - [Supabase Auth model](supabase-auth.md) — passwords only in Supabase Auth (server-provisioned, pre-confirmed, must_change_password); user_profiles is identity only; dashboard Site URL/SMTP are user-owned constraints.
 - [Task board proposal behavior](task-board-behavior.md) — each new proposal batch cancels prior PROPOSED tasks; keep master list in notes, propose only the next batch.
+- [COO launch plan](coo-launch-plan.md) — Supabase Pro + SMTP first, then run order: client login emails → branded resets → real team logins → admin settings in DB → RLS → audit screen.
+- [Communities & messaging moderation](communities-messaging.md) — communities/community_messages tables, per-user pins, soft delete + audit_logs, community_only login for offboarded clients.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.
