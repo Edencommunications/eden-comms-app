@@ -431,7 +431,7 @@ Training Principles:
   const [exSearch,           setExSearch]            = useState('')
   const [exCategory,         setExCategory]          = useState('Push')
   const [activeWeek,         setActiveWeek]          = useState(1)
-  const [workoutLogs,        setWorkoutLogs]         = useState(DEMO_WEEK_LOGS[6]||{})
+  const [workoutLogs,        setWorkoutLogs]         = useState({})
   const [logSaving,          setLogSaving]           = useState(false)
   const [principlesEditing,  setPrinciplesEditing]   = useState(false)
   // weekHistory: [{week, saved_at}] sorted most-recent first
@@ -644,43 +644,26 @@ Training Principles:
       const data = await dbGet('client_workout_logs',
         `client_id=eq.${CLIENT_UUID}&order=week.desc&select=week,saved_at`
       )
-      // Always show all 6 demo weeks; swap in real DB dates where they exist
-      const dbMap = new Map((data||[]).map(r=>[r.week, r.saved_at]))
-      const merged = DEMO_WEEK_HISTORY.map(({week,saved_at})=>({
-        week, saved_at: dbMap.has(week) ? dbMap.get(week) : saved_at
-      }))
-      // Append any DB weeks beyond the demo range (week > 6)
-      for (const r of (data||[])) {
-        if (!merged.find(m=>m.week===r.week)) merged.push(r)
-      }
+      // Only show weeks this client actually saved — no demo filler
+      const merged = [...(data||[])]
       merged.sort((a,b)=>b.week-a.week)
       setWeekHistory(merged)
-      setActiveWeek(merged[0].week)
+      setActiveWeek(merged[0]?.week ?? 1)
     } catch(e) {
-      // table may not exist yet — fall back to demo history
-      setWeekHistory(DEMO_WEEK_HISTORY)
-      setActiveWeek(6)
+      setWeekHistory([])
+      setActiveWeek(1)
     }
   }
 
   // ── Load workout logs for a given week ────────────────────
   async function loadWorkoutLog(week) {
-    const demo = DEMO_WEEK_LOGS[week] || {}
     try {
       const data = await dbGet('client_workout_logs',
         `client_id=eq.${CLIENT_UUID}&week=eq.${week}&limit=1`
       )
-      const saved = data?.[0]?.logs
-      if (saved && Object.keys(saved).length > 0) {
-        // If saved log has no cardio keys, supplement with demo cardio so the
-        // Cardio tab always shows data for all 6 weeks
-        const hasCardio = Object.keys(saved).some(k=>k.includes('_cardio_'))
-        setWorkoutLogs(hasCardio ? saved : {...demo, ...saved})
-      } else {
-        setWorkoutLogs(demo)
-      }
+      setWorkoutLogs(data?.[0]?.logs || {})
     } catch(e) {
-      setWorkoutLogs(demo)
+      setWorkoutLogs({})
     }
   }
 
