@@ -6,3 +6,9 @@ id = "v0bl7xhuwnh0G32oYWu3v"
 uri = "file://artifacts/react-app/supabase-schema.sql"
 type = "unspecified"
 title = "Eden Communications — Complete Supabase Schema (fixed)"
+
+[[outputs]]
+id = "tDrdPhX8B7TW2VFKIKKWv"
+uri = "file://exports/eden-comms-codebase.zip"
+type = "unspecified"
+title = "Eden Communications — complete codebase"
