@@ -805,7 +805,26 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const loeKey = `eden_loe_${myUUID||email}`
   const [loeContent, setLoeContent] = useState(()=>localStorage.getItem(loeKey)||LOE_DEFAULT)
   const [loeEditing, setLoeEditing] = useState(false)
+  // Local echo while typing; the database copy is written on Done/Reset.
   const saveLoe = (val) => { setLoeContent(val); localStorage.setItem(loeKey, val) }
+  // Org-wide copy lives in admin_settings (key 'loe_guidelines') so every
+  // device — and every client in the org — sees the same edited standards.
+  useEffect(()=>{
+    if (!myCompanyId) return
+    dbGet('admin_settings', `company_id=eq.${myCompanyId}&key=eq.loe_guidelines&select=value`)
+      .then(rows=>{
+        if (Array.isArray(rows) && rows[0] && typeof rows[0].value === 'string' && rows[0].value.trim()) {
+          setLoeContent(rows[0].value)
+          localStorage.setItem(loeKey, rows[0].value)
+        }
+      }).catch(()=>{})
+  },[myCompanyId])
+  const persistLoe = (val) => {
+    if (!myCompanyId) return
+    dbUpsert('admin_settings',
+      { company_id: myCompanyId, key: 'loe_guidelines', value: val, updated_at: new Date().toISOString() },
+      'company_id,key')
+  }
 
   // ── Consultation data — client receives from coach (Week6 Consultation tab) ──
   const [clientIntake,  setClientIntake]  = useState({notes:'',startDate:'',startWeight:''})
@@ -1534,11 +1553,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {isCoach&&(
                   loeEditing
                     ? <div style={{display:'flex',gap:6}}>
-                        <button onClick={()=>setLoeEditing(false)}
+                        <button onClick={()=>{setLoeEditing(false);persistLoe(loeContent)}}
                           style={{fontSize:9,padding:'2px 8px',background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:5,color:C.gold,cursor:'pointer',fontWeight:700}}>
                           ✓ Done
                         </button>
-                        <button onClick={()=>{setLoeContent(LOE_DEFAULT);localStorage.setItem(loeKey,LOE_DEFAULT);setLoeEditing(false)}}
+                        <button onClick={()=>{setLoeContent(LOE_DEFAULT);localStorage.setItem(loeKey,LOE_DEFAULT);setLoeEditing(false);persistLoe(LOE_DEFAULT)}}
                           style={{fontSize:9,padding:'2px 8px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,cursor:'pointer'}}>
                           Reset
                         </button>
