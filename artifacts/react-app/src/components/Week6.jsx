@@ -244,10 +244,18 @@ function Stat({label,value,color=C.gold,sub}) {
 export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}}) {
   const isMobile = useIsMobile()
   const email    = currentUser?.email||''
-  const info     = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
-  const myUUID   = info.uuid
+  // Real logins carry their role from App.tsx; KNOWN_USERS only covers legacy demo emails.
+  const info     = KNOWN_USERS[email]||{role:currentUser?.role||'client',name:currentUser?.name||'User',uuid:null}
+  // Real users aren't in KNOWN_USERS — resolve their profile id from the DB.
+  const [dbUUID, setDbUUID] = useState(null)
+  useEffect(()=>{
+    if (info.uuid || !email) return
+    dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id`)
+      .then(rows=>{ if (Array.isArray(rows)&&rows[0]?.id) setDbUUID(rows[0].id) }).catch(()=>{})
+  },[email])
+  const myUUID   = info.uuid||dbUUID
   const isAdmin  = info.role==='super_admin'
-  const isCoach  = info.role==='coach'
+  const isCoach  = info.role==='coach'||info.role==='head_coach'
   const isClient = info.role==='client'
 
   const [tab, setTab] = useState(isAdmin?'dashboard':isCoach?'clients':'consultation')
