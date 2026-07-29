@@ -243,7 +243,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
           let dbAnswered = false;
           try {
             const resp = await fetch(
-              `https://jzdoojlwgpqlmworwcsr.supabase.co/rest/v1/user_profiles?email=eq.${encodeURIComponent(email.toLowerCase())}&select=is_active`,
+              `https://jzdoojlwgpqlmworwcsr.supabase.co/rest/v1/user_profiles?email=eq.${encodeURIComponent(email.toLowerCase())}&select=is_active,community_only`,
               { headers: {
                   apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU",
                   Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU",
@@ -251,10 +251,14 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             const rows = await resp.json();
             if (Array.isArray(rows)) {
               dbAnswered = true;
-              if (rows[0] && rows[0].is_active === false) {
+              if (rows[0] && rows[0].is_active === false && rows[0].community_only !== true) {
                 setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
                 setLoading(false);
                 return;
+              }
+              // Offboarded but community_only → allowed in; app restricts them to Messages/Communities
+              if (rows[0] && rows[0].is_active === false && rows[0].community_only === true) {
+                (user as any).communityOnly = true;
               }
               // DB says active — clear any stale local deactivation entry
               try {
@@ -297,10 +301,10 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
           let p: any = null;
           try {
             const rows = await sbGet('user_profiles',
-              `email=eq.${encodeURIComponent(emailNorm)}&select=id,name,full_name,email,role,is_active`);
+              `email=eq.${encodeURIComponent(emailNorm)}&select=id,name,full_name,email,role,is_active,community_only`);
             p = Array.isArray(rows) ? rows[0] : null;
           } catch {}
-          if (p && p.is_active === false) {
+          if (p && p.is_active === false && p.community_only !== true) {
             await supabase.auth.signOut().catch(()=>{});
             setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
             return;
@@ -309,6 +313,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             email: emailNorm,
             name: p?.name || p?.full_name || authUser?.user_metadata?.name || emailNorm,
             role: p?.role || 'client',
+            communityOnly: p?.is_active === false && p?.community_only === true,
             mustChangePassword: authUser?.user_metadata?.must_change_password === true,
           });
         };
@@ -4438,10 +4443,14 @@ const AppShell = ({ user, onLogout }) => {
     { key:"team", icon:"team", label:"Team Hub"   },
   ];
 
-  const tabs = user.role === "super_admin" ? adminTabs
+  // Offboarded clients with community-only access: Messages/Communities is all they get
+  const communityOnly = (user as any).communityOnly === true;
+  const tabs = communityOnly ? [{ key:"msgs", icon:"msg", label:"Messages" }]
+             : user.role === "super_admin" ? adminTabs
              : user.role === "coach"       ? coachTabs
              : isStaff                     ? staffTabs
              : clientTabs;
+  useEffect(() => { if (communityOnly && tab !== "msgs") setTab("msgs"); }, [communityOnly, tab]);
 
   const SPLIT_PANELS = [
     { key:'msgs',    label:'Messages',  icon:'chat' },

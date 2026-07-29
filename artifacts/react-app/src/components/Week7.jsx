@@ -7,6 +7,7 @@
 //   {tab === 'team' && <Week7 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import Communities from './Communities'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -165,6 +166,84 @@ export default function Week7({ currentUser }) {
     ]
   })
   const [newMessage,   setNewMessage]   = useState('')
+
+  // ── Live team chat: load real messages from the DB (demo rows stay as fallback) ──
+  const liveLoadedRef = useRef(false)
+  async function loadTeamChat() {
+    try {
+      const rows = await dbGet('team_messages', `org_id=eq.${orgId}&order=created_at.asc&limit=500`)
+      if (!Array.isArray(rows) || !rows.length) return
+      liveLoadedRef.current = true
+      const roots = [], reps = {}, dms = {}
+      for (const r of rows) {
+        const m = { id:r.id, senderId:r.sender_id, senderName:r.sender_name, senderRole:r.sender_role,
+          content:r.content, createdAt:r.created_at, isDm:!!r.is_dm, threadId:r.thread_id,
+          deletedAt:r.deleted_at, deletedByName:r.deleted_by_name, replyCount:0 }
+        if (r.is_dm) {
+          if (r.sender_id===myUUID || r.dm_to_id===myUUID) {
+            const key = [r.sender_id, r.dm_to_id].sort().join('_')
+            ;(dms[key] ||= []).push(m)
+          }
+        } else if (r.thread_id) {
+          ;(reps[r.thread_id] ||= []).push(m)
+        } else {
+          roots.push(m)
+        }
+      }
+      for (const m of roots) m.replyCount = (reps[m.id]||[]).length
+      setMessages(roots)
+      setThreadReplies(reps)
+      setDmMessages(prev => ({ ...prev, ...dms }))
+    } catch {}
+  }
+  useEffect(() => {
+    if (!orgId) return
+    loadTeamChat()
+    const iv = setInterval(loadTeamChat, 8000)
+    return () => clearInterval(iv)
+  }, [orgId, myUUID])
+
+  // ── @Mentions: parse against the team roster and notify tagged people ──
+  function findMentions(text) {
+    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const hits = []
+    for (const t of team) {
+      if (t.uuid===myUUID || !t.name) continue
+      const first = t.name.split(' ')[0]
+      const re = new RegExp(`@(${esc(t.name)}|${esc(first)})(\\b|$)`, 'i')
+      if (re.test(text)) hits.push(t)
+    }
+    return hits
+  }
+  function notifyMentions(text, where) {
+    for (const t of findMentions(text)) {
+      dbInsert('notifications', {
+        recipient_id: t.uuid, sender_id: myUUID, sender_name: myName,
+        type: 'mention', body: `💬 ${myName} tagged you in ${where}: "${text.slice(0,80)}"`,
+        is_read: false,
+      })
+    }
+  }
+  // Render message text with highlighted @mentions
+  function renderMentions(text, baseColor) {
+    const parts = String(text||'').split(/(@[A-Za-z][A-Za-z'-]*(?:\s[A-Z][A-Za-z'-]*)?)/g)
+    return parts.map((p,i) => p.startsWith('@')
+      ? <span key={i} style={{color:C.gold,fontWeight:700}}>{p}</span>
+      : <span key={i} style={{color:baseColor}}>{p}</span>)
+  }
+
+  // ── Delete rules: admin deletes anything; everyone else only their own ──
+  const isAdminRole = myRole==='super_admin' || myRole==='company_admin'
+  function canDeleteTeamMsg(m) { return typeof m.id==='string' && m.id.length===36 && (isAdminRole || m.senderId===myUUID) }
+  async function deleteTeamMsg(m) {
+    if (!window.confirm('Delete this message for everyone?\nIt stays permanently visible in the admin audit log.')) return
+    const ok = await dbUpdate('team_messages', `id=eq.${m.id}`, { deleted_at:new Date().toISOString(), deleted_by:myUUID, deleted_by_name:myName })
+    if (!ok) { alert('Could not delete — run the database update first.'); return }
+    dbInsert('audit_logs', { action:'message_deleted', actor_id:myUUID, actor_name:myName, actor_role:myRole,
+      target_type:'team_message', target_id:String(m.id),
+      details:{ content:m.content, sender_id:m.senderId, sender_name:m.senderName, context:'team_hub', org_id:orgId } })
+    loadTeamChat()
+  }
   const [activeThread, setActiveThread] = useState(null)
   const [newReply,     setNewReply]     = useState('')
   const [dmTarget,     setDmTarget]     = useState(null)
@@ -224,6 +303,8 @@ export default function Week7({ currentUser }) {
     setMessages(prev => [...prev, msg])
     setNewMessage('')
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, sender_role:myRole, content:msg.content, is_dm:false })
+      .then(() => loadTeamChat())
+    notifyMentions(msg.content, 'Team Hub #general')
   }
 
   function sendReply() {
@@ -236,6 +317,8 @@ export default function Week7({ currentUser }) {
     setMessages(prev => prev.map(m => m.id===activeThread.id ? {...m, replyCount:(m.replyCount||0)+1} : m))
     setNewReply('')
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, sender_role:myRole, content:reply.content, thread_id:activeThread.id, is_dm:false })
+      .then(() => loadTeamChat())
+    notifyMentions(reply.content, 'a Team Hub thread')
   }
 
   function sendDm() {
@@ -245,6 +328,7 @@ export default function Week7({ currentUser }) {
     setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
     setNewDm('')
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name })
+      .then(() => loadTeamChat())
   }
 
   // ── Huddle helpers ──────────────────────────────────────────
@@ -274,6 +358,7 @@ export default function Week7({ currentUser }) {
   // ─── Sidebar nav items ─────────────────────────────────────
   const NAV = [
     { key:'chat',     icon:'💬', label:'Team Chat'   },
+    { key:'communities', icon:'👥', label:'Communities' },
     { key:'calendar', icon:'🗓',  label:'My Calendar' },
     { key:'huddle',   icon:'🎙',  label:'Huddle',     badge: huddleActive },
   ]
@@ -388,10 +473,20 @@ export default function Week7({ currentUser }) {
                               {msg.senderRole==='super_admin' && <span style={{fontSize:9,background:`${C.gold}22`,color:C.gold,padding:'1px 5px',borderRadius:4,fontWeight:700}}>ADMIN</span>}
                               <span style={{fontSize:10,color:C.muted}}>{timeAgo(msg.createdAt)}</span>
                             </div>
-                            <div style={{fontSize:13,color:C.white,lineHeight:1.5,background:C.card,borderRadius:8,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-                              {msg.content}
-                            </div>
+                            {msg.deletedAt ? (
+                              <div style={{fontSize:12,color:C.muted,fontStyle:'italic',background:'none',borderRadius:8,padding:'10px 12px',border:`1px dashed ${C.border}`}}>
+                                {isAdminRole ? <>🗑 Deleted by {msg.deletedByName||'staff'} (admins only): <span style={{fontStyle:'normal'}}>{msg.content}</span></> : <>Message deleted{msg.deletedByName?` by ${msg.deletedByName}`:''}</>}
+                              </div>
+                            ) : (
+                              <div style={{fontSize:13,lineHeight:1.5,background:C.card,borderRadius:8,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+                                {renderMentions(msg.content, C.white)}
+                              </div>
+                            )}
                             <div style={{display:'flex',gap:8,marginTop:5,alignItems:'center'}}>
+                              {!msg.deletedAt && canDeleteTeamMsg(msg) && (
+                                <button onClick={() => deleteTeamMsg(msg)} title="Delete (kept in admin audit log)"
+                                  style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>🗑</button>
+                              )}
                               <button onClick={() => { setActiveThread(msg); setChatView('thread') }}
                                 style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0,display:'flex',alignItems:'center',gap:4,fontWeight:msg.replyCount>0?600:400}}>
                                 {msg.replyCount > 0 ? (
@@ -470,7 +565,17 @@ export default function Week7({ currentUser }) {
                                 <span style={{fontSize:11,fontWeight:700,color:isMine?C.gold:C.white}}>{r.senderName}</span>
                                 <span style={{fontSize:9,color:C.muted}}>{timeAgo(r.createdAt)}</span>
                               </div>
-                              <div style={{fontSize:12,color:C.white,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{r.content}</div>
+                              {r.deletedAt ? (
+                                <div style={{fontSize:11,color:C.muted,fontStyle:'italic',borderRadius:7,padding:'8px 10px',border:`1px dashed ${C.border}`}}>
+                                  {isAdminRole ? `🗑 Deleted by ${r.deletedByName||'staff'}: ${r.content||''}` : `Message deleted${r.deletedByName?` by ${r.deletedByName}`:''}`}
+                                </div>
+                              ) : (
+                                <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderMentions(r.content, C.white)}</div>
+                              )}
+                              {!r.deletedAt && canDeleteTeamMsg(r) && (
+                                <button onClick={() => deleteTeamMsg(r)} title="Delete (kept in admin audit log)"
+                                  style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:'2px 0 0'}}>🗑 delete</button>
+                              )}
                             </div>
                           </div>
                         )
@@ -554,6 +659,12 @@ export default function Week7({ currentUser }) {
         {/* ══════════════════════════════════════════════════
             MY CALENDAR — coach's personal Google Calendar
         ══════════════════════════════════════════════════ */}
+        {section==='communities' && (
+          <div style={{flex:1, overflow:'hidden'}}>
+            <Communities me={{ id: myUUID, name: myName, role: myRole }} companyId={orgId} context="team" isMobile={isMobile}/>
+          </div>
+        )}
+
         {section==='calendar' && (
           <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
             <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:12}}>

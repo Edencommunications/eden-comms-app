@@ -442,6 +442,8 @@ Training Principles:
   ])
   // Coach-configurable day the tracking week starts on (default Wed)
   const [cardioWeekStart, setCardioWeekStart] = useState('Wed')
+  // Per-client daily step goal set by the coach (stored in the workouts JSON blob)
+  const [stepGoal, setStepGoal] = useState('')
   // Company-wide cardio types managed by admin only
   const [companyCardioTypes, setCompanyCardioTypes] = useState([])
   const [hiddenCardio,       setHiddenCardio]       = useState(new Set()) // built-ins hidden by the org's admin
@@ -626,6 +628,7 @@ Training Principles:
           if (raw.exercises) setWorkouts(raw.exercises)
           if (raw.principles) setTrainingPrinciples(raw.principles)
           if (raw.cardioWeekStart) setCardioWeekStart(raw.cardioWeekStart)
+          if (raw.stepGoal!==undefined&&raw.stepGoal!==null) setStepGoal(String(raw.stepGoal))
         }
       } catch(e) {}
       try {
@@ -754,7 +757,7 @@ Training Principles:
   async function saveWorkoutPlan() {
     if (!CLIENT_UUID) { alert('Still loading this client\'s profile — try again in a second.'); return }
     // Embed principles + cardioWeekStart inside the workouts JSON blob so no schema change is needed
-    const payload = { exercises: workouts, principles: trainingPrinciples, cardioWeekStart }
+    const payload = { exercises: workouts, principles: trainingPrinciples, cardioWeekStart, stepGoal: stepGoal.trim() }
     await fetch(`${SUPABASE_URL}/rest/v1/workout_plans`, {
       method: 'POST',
       headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
@@ -1365,6 +1368,31 @@ Training Principles:
               )}
             </Card>
           )}
+
+          {/* ── Daily Step Goal (per client, set by coach) ── */}
+          <Card sx={{marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+              <div>
+                <Lbl t="Daily Step Goal"/>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>
+                  {isCoach?'Set a daily step target for this client — saved with the workout plan.':'Your coach\u2019s daily step target for you.'}
+                </div>
+              </div>
+              {isCoach?(
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <input type="number" min="0" step="500" value={stepGoal}
+                    onChange={e=>setStepGoal(e.target.value)}
+                    placeholder="e.g. 10000"
+                    style={{width:120,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none'}}/>
+                  <span style={{fontSize:12,color:C.muted,fontWeight:600}}>steps/day</span>
+                </div>
+              ):(
+                <div style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:10,padding:'10px 16px',fontSize:16,fontWeight:800,color:C.gold}}>
+                  {stepGoal?`👟 ${Number(stepGoal).toLocaleString()} steps/day`:'No step goal set yet'}
+                </div>
+              )}
+            </div>
+          </Card>
 
           <Card sx={{marginBottom:12}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>

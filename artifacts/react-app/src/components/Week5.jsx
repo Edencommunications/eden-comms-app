@@ -416,7 +416,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
   async function saveModuleEdit() {
     if (!modEdit?.title?.trim()) return
-    await dbUpdate('course_modules',`id=eq.${modEdit.id}`,{title:modEdit.title.trim(),duration:modEdit.duration?.trim()||null,updated_at:new Date().toISOString()})
+    await dbUpdate('course_modules',`id=eq.${modEdit.id}`,{title:modEdit.title.trim(),duration:modEdit.duration?.trim()||null,admin_notes:modEdit.admin_notes?.trim()||null,updated_at:new Date().toISOString()})
     await refreshModules(activeCourse.id)
     setModEdit(null)
   }
@@ -466,17 +466,35 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── ADMIN: Open access management ─────────────────────────
+  // Real coaches & clients from the DB (scoped to the admin's org) — the access
+  // manager must grant to real profile IDs, never the old demo placeholder list.
+  const [rosterCoaches, setRosterCoaches] = useState([])
+  const [rosterClients, setRosterClients] = useState([])
+  async function loadRoster() {
+    const cid = companyCtx?.companyId || EDEN_ORG_ID
+    const rows = await dbGet('user_profiles',
+      `company_id=eq.${cid}&role=in.(coach,client)&select=id,name,role,coach_id,is_active&order=name.asc`)
+    const coaches = (rows||[]).filter(r=>r.role==='coach')
+    const nameById = Object.fromEntries(coaches.map(c=>[c.id,c.name]))
+    setRosterCoaches(coaches.map(c=>({uuid:c.id,name:c.name,role:'coach'})))
+    setRosterClients((rows||[]).filter(r=>r.role==='client'&&r.is_active!==false)
+      .map(c=>({uuid:c.id,name:c.name,role:'client',coachId:c.coach_id,coachName:nameById[c.coach_id]||''})))
+  }
+
   async function openAccessManager(course) {
     setAccessCourse(course)
-    const data = await dbGet('course_access',`course_id=eq.${course.id}&revoked=eq.false`)
+    const [data] = await Promise.all([
+      dbGet('course_access',`course_id=eq.${course.id}&revoked=eq.false`),
+      loadRoster(),
+    ])
     setAccessList(data||[])
     setShowAccess(true)
   }
 
   // ── ADMIN: Grant access to specific user ─────────────────
-  async function grantAccess(user, course) {
+  async function grantAccess(user, course, opts={}) {
     const already = accessList.find(a=>a.user_id===user.uuid)
-    if (already) { alert(`${user.name} already has access.`); return }
+    if (already) { if(!opts.silent) alert(`${user.name} already has access.`); return }
     await fetch(`${SUPABASE_URL}/rest/v1/course_access`,{
       method:'POST',
       headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
@@ -492,20 +510,19 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
 
   // ── ADMIN: Grant access to ALL clients under a coach ─────
   async function grantToCoachClients(coachId, coachName, course) {
-    const clients = DEMO_CLIENTS.filter(c=>c.coachId===coachId)
-    if (!clients.length) { alert('No clients found under this coach.'); return }
+    const clients = rosterClients.filter(c=>c.coachId===coachId)
+    // Always grant to the coach, even if they have no clients yet
+    const coach = rosterCoaches.find(c=>c.uuid===coachId)
+    if (coach) await grantAccess(coach, course, {silent:true})
     for (const client of clients) {
-      await grantAccess(client, course)
+      await grantAccess(client, course, {silent:true})
     }
-    // Also grant to coach
-    const coach = DEMO_COACHES.find(c=>c.uuid===coachId)
-    if (coach) await grantAccess(coach, course)
-    alert(`Access granted to ${coachName} and all ${clients.length} client(s).`)
+    alert(`Access granted to ${coachName}${clients.length?` and all ${clients.length} client(s)`:''}.`)
   }
 
   // ── ADMIN: Grant access to everyone ──────────────────────
   async function grantToEveryone(course) {
-    const everyone = [...DEMO_COACHES, ...DEMO_CLIENTS]
+    const everyone = [...rosterCoaches, ...rosterClients]
     for (const user of everyone) {
       await grantAccess(user, course)
     }
@@ -874,6 +891,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                 </div>
 
                 <div style={{flex:1,overflowY:'auto',padding:16}}>
+                  {/* Admin-written notes for this module — visible to anyone viewing it */}
+                  {activeModule.admin_notes&&(
+                    <div style={{background:C.surface,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'12px 14px',marginBottom:12}}>
+                      <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>📝 Module Notes</div>
+                      <div style={{fontSize:13,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{activeModule.admin_notes}</div>
+                    </div>
+                  )}
                   {/* Only coaches and clients can mark complete, not admins managing */}
                   {!isAdmin&&(
                     !completed.has(activeModule.module_id)?(
@@ -1062,8 +1086,8 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   </button>
                 </div>
                 <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>By Coach</div>
-                {DEMO_COACHES.map(coach=>{
-                  const coachClients = DEMO_CLIENTS.filter(c=>c.coachId===coach.uuid)
+                {rosterCoaches.map(coach=>{
+                  const coachClients = rosterClients.filter(c=>c.coachId===coach.uuid)
                   return (
                     <div key={coach.uuid} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
                       <div>
@@ -1081,7 +1105,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
 
               {/* Individual grant */}
               <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Individual Access</div>
-              {[...DEMO_COACHES,...DEMO_CLIENTS].map(user=>{
+              {[...rosterCoaches,...rosterClients].map(user=>{
                 const hasIt = accessList.find(a=>a.user_id===user.uuid)
                 return (
                   <div key={user.uuid} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderTop:`1px solid ${C.border}`}}>
@@ -1228,15 +1252,20 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                     <div style={{padding:'6px 10px'}}>
                       {secMods.map(m=>(
                         modEdit?.id===m.id?(
-                          <div key={m.id} style={{display:'flex',gap:6,alignItems:'center',padding:'6px 0'}}>
-                            <input autoFocus value={modEdit.title} onChange={e=>setModEdit({...modEdit,title:e.target.value})}
-                              style={{flex:1,background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none'}}/>
-                            <input value={modEdit.duration||''} onChange={e=>setModEdit({...modEdit,duration:e.target.value})} placeholder="e.g. 12 min"
-                              style={{width:70,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:11,outline:'none'}}/>
-                            <button onClick={saveModuleEdit}
-                              style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
-                            <button onClick={()=>setModEdit(null)}
-                              style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
+                          <div key={m.id} style={{padding:'6px 0'}}>
+                            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                              <input autoFocus value={modEdit.title} onChange={e=>setModEdit({...modEdit,title:e.target.value})}
+                                style={{flex:1,background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none'}}/>
+                              <input value={modEdit.duration||''} onChange={e=>setModEdit({...modEdit,duration:e.target.value})} placeholder="e.g. 12 min"
+                                style={{width:70,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+                              <button onClick={saveModuleEdit}
+                                style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
+                              <button onClick={()=>setModEdit(null)}
+                                style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
+                            </div>
+                            <textarea value={modEdit.admin_notes||''} onChange={e=>setModEdit({...modEdit,admin_notes:e.target.value})}
+                              placeholder="Module notes (visible to anyone viewing this module)…" rows={2}
+                              style={{width:'100%',marginTop:6,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
                           </div>
                         ):(
                           <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 2px',borderBottom:`1px solid ${C.border}`}}>
@@ -1248,7 +1277,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                                 <span style={{color:m.video_url?C.success:C.danger}}>{m.video_url?'▶ video added':'no video yet'}</span>
                               </div>
                             </div>
-                            <button onClick={()=>setModEdit({id:m.id,title:m.title,duration:m.duration||''})}
+                            <button onClick={()=>setModEdit({id:m.id,title:m.title,duration:m.duration||'',admin_notes:m.admin_notes||''})}
                               style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',color:C.muted,fontSize:9,cursor:'pointer',flexShrink:0}}>Edit</button>
                             <button onClick={()=>deleteModule(m)}
                               style={{background:'none',border:`1px solid ${C.danger}44`,borderRadius:6,padding:'3px 8px',color:C.danger,fontSize:9,fontWeight:700,cursor:'pointer',flexShrink:0}}>✕</button>

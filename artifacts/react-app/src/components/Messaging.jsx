@@ -2,6 +2,7 @@
 // Messaging.jsx — Multi-client conversation list
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import Communities from './Communities'
 
 function useIsMobile(bp = 640) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -179,6 +180,10 @@ async function dbInsert(table, body) {
   if (!res.ok) { console.error('INSERT error', await res.text()); return null }
   const text = await res.text()
   return text ? JSON.parse(text) : null
+}
+async function dbDelete(table, params) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method: 'DELETE', headers: H })
+  return res.ok
 }
 async function dbUpdate(table, params, body) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
@@ -749,6 +754,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const [myProfileId,      setMyProfileId]      = useState(myUUID)
 
   const [showBroadcast, setShowBroadcast] = useState(false)
+  const [mainView,      setMainView]      = useState('messages') // 'messages' | 'communities'
   const [convoSearch,   setConvoSearch]   = useState('')
 
   const isAdmin = myRole === 'super_admin' || myRole === 'company_admin'
@@ -1064,6 +1070,60 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     if (data) setLiveFiles(data)
   }
 
+  // ── Message pins (per-user — pinning never affects the other person) ──
+  const [pins, setPins] = useState([])
+  async function loadPins() {
+    if (!activeConvo?.supabaseConvoId || !myProfileId) return
+    const data = await dbGet('message_pins', `conversation_id=eq.${activeConvo.supabaseConvoId}&user_id=eq.${myProfileId}`)
+    if (Array.isArray(data)) setPins(data)
+  }
+  useEffect(() => { setPins([]); if (activeConvo?.supabaseConvoId) loadPins() }, [activeId, myProfileId])
+  const pinnedIds = new Set(pins.map(p => p.message_id))
+
+  async function togglePin(msg) {
+    if (!myProfileId) return
+    if (pinnedIds.has(msg.id)) {
+      await dbDelete('message_pins', `message_id=eq.${msg.id}&user_id=eq.${myProfileId}`)
+    } else {
+      const r = await dbInsert('message_pins', {
+        message_id: msg.id, conversation_id: msg.conversation_id, context: 'dm',
+        user_id: myProfileId, pinned_by: myProfileId, pinned_by_name: myName,
+      })
+      if (r === null) { alert('Pinning is not set up yet — run the database update first.'); return }
+    }
+    loadPins()
+  }
+  // Admin/VA: pin a message for every participant in this conversation
+  async function pinForAll(msg) {
+    const convo = await dbGetOne('conversations', `id=eq.${msg.conversation_id}&select=participant_a_id,participant_b_id`)
+    const targets = [...new Set([myProfileId, convo?.participant_a_id, convo?.participant_b_id].filter(Boolean))]
+    for (const uid of targets) {
+      await dbInsert('message_pins', {
+        message_id: msg.id, conversation_id: msg.conversation_id, context: 'dm',
+        user_id: uid, pinned_by: myProfileId, pinned_by_name: myName,
+      }) // duplicate pins fail silently on the unique constraint — that's fine
+    }
+    loadPins()
+    alert('Pinned for everyone in this conversation.')
+  }
+
+  // ── Message delete (soft delete — always visible in the admin audit log) ──
+  const canDeleteAnyMsg = ['coach', 'head_coach', 'super_admin', 'company_admin'].includes(myRole)
+  async function deleteMsg(msg) {
+    if (!window.confirm('Delete this message for everyone in the chat?\nIt stays permanently visible in the admin audit log.')) return
+    const ok = await dbUpdate('messages', `id=eq.${msg.id}`, {
+      deleted_at: new Date().toISOString(), deleted_by: myProfileId, deleted_by_name: myName,
+    })
+    if (!ok) { alert('Could not delete the message — run the database update first.'); return }
+    dbInsert('audit_logs', {
+      action: 'message_deleted', actor_id: myProfileId, actor_name: myName, actor_role: myRole,
+      target_type: 'message', target_id: String(msg.id),
+      details: { content: msg.content || null, file_url: msg.file_url || null, file_name: msg.file_name || null,
+        conversation_id: msg.conversation_id, sender_id: msg.sender_id, context: 'dm' },
+    })
+    loadLiveMessages()
+  }
+
   async function sendMessage() {
     const text = newMsg.trim()
     if (!text || !myProfileId || !isLive) return
@@ -1166,7 +1226,26 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const showChat  = !isMobile || activeId !== null
 
   return (
-    <div style={{ display:'flex', height:'100%', background:C.black, overflow:'hidden', position:'relative' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', background:C.black, overflow:'hidden', position:'relative' }}>
+
+      {/* ── Messages | Communities switcher ── */}
+      <div style={{ display:'flex', background:C.surface, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+        {[['messages','💬 Messages'],['communities','👥 Communities']].map(([k,label]) => (
+          <button key={k} onClick={() => setMainView(k)}
+            style={{ flex: isMobile ? 1 : 'none', padding: isMobile ? '12px 10px' : '11px 22px', background:'none', border:'none',
+              borderBottom:`2px solid ${mainView===k?C.gold:'transparent'}`,
+              color: mainView===k?C.gold:C.muted, fontSize:12, fontWeight: mainView===k?800:500, cursor:'pointer' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mainView === 'communities' ? (
+        <div style={{ flex:1, overflow:'hidden' }}>
+          <Communities me={{ id: myProfileId, name: myName, role: myRole }} context="clients" isMobile={isMobile}/>
+        </div>
+      ) : (
+      <div style={{ flex:1, display:'flex', overflow:'hidden', position:'relative' }}>
 
       {/* ── LEFT SIDEBAR ──────────────────────────────────────── */}
       <div style={{
@@ -1419,7 +1498,19 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   <div style={{ maxWidth:'85%' }}>
                     <div style={{ background: mine ? C.gold : C.card, border: mine ? 'none' : `1px solid ${C.border}`,
                       borderRadius: mine ? '12px 12px 4px 12px' : '12px 12px 12px 4px', padding:'8px 11px' }}>
-                      <div style={{ fontSize:12, color: mine ? C.black : C.white, lineHeight:1.5, wordBreak:'break-word' }}>{r.content}</div>
+                      {r.deleted_at ? (
+                        <div style={{ fontSize:11, color: mine ? 'rgba(0,0,0,.5)' : C.muted, fontStyle:'italic' }}>
+                          {isAdmin ? `🗑 Deleted by ${r.deleted_by_name||'staff'}: ${r.content||''}` : `Message deleted${r.deleted_by_name?` by ${r.deleted_by_name}`:''}`}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:12, color: mine ? C.black : C.white, lineHeight:1.5, wordBreak:'break-word' }}>{r.content}</div>
+                      )}
+                      {!r.deleted_at && canDeleteAnyMsg && (
+                        <button onClick={() => deleteMsg(r)} title="Delete reply (kept in admin audit log)"
+                          style={{ background:'none', border:'none', color: mine ? 'rgba(0,0,0,.4)' : C.muted, fontSize:10, cursor:'pointer', padding:'2px 0 0', lineHeight:1 }}>
+                          🗑 delete
+                        </button>
+                      )}
                     </div>
                     <div style={{ fontSize:9, color:C.muted, marginTop:2, textAlign: mine ? 'right' : 'left' }}>{formatTime(r.created_at)}</div>
                   </div>
@@ -1554,6 +1645,27 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               </div>
             )}
 
+            {/* Pinned messages bar — personal to this user's perspective */}
+            {isLive && pins.length > 0 && (
+              <div style={{ background:`${C.gold}11`, borderBottom:`1px solid ${C.gold}33`, padding:'8px 14px', maxHeight:120, overflowY:'auto', flexShrink:0 }}>
+                <div style={{ fontSize:9, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>📌 Pinned</div>
+                {pins.map(p => {
+                  const m = liveMessages.find(x => x.id === p.message_id)
+                  if (!m || m.deleted_at) return null
+                  return (
+                    <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'3px 0' }}>
+                      <div style={{ flex:1, fontSize:12, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {m.content || m.file_name || '📎 Attachment'}
+                      </div>
+                      <span style={{ fontSize:9, color:C.muted, flexShrink:0 }}>{formatTime(m.created_at)}</span>
+                      <button onClick={() => togglePin(m)} title="Unpin"
+                        style={{ background:'none', border:'none', color:C.muted, fontSize:11, cursor:'pointer', padding:2, flexShrink:0 }}>✕</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Messages */}
             <div style={{ flex:1, overflowY:'auto', padding: isMobile ? '12px 10px' : '16px' }}>
               {displayMessages.length === 0 && (
@@ -1564,8 +1676,30 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               {displayMessages.map((msg, i) => {
                 const mine = isMine(msg)
                 const type = msgType(msg)
+                // Soft-deleted messages: admins still see the content (flagged); everyone else sees a placeholder
+                if (isLive && msg.deleted_at) {
+                  return (
+                    <div key={msg.id || i} style={{ display:'flex', justifyContent:mine?'flex-end':'flex-start', marginBottom:10 }}>
+                      <div style={{ maxWidth: isMobile ? '82%' : '68%' }}>
+                        <div style={{ background:'none', border:`1px dashed ${C.border}`, borderRadius:12, padding:'8px 12px' }}>
+                          {isAdmin ? (
+                            <>
+                              <div style={{ fontSize:9, fontWeight:700, color:C.danger, letterSpacing:.8, textTransform:'uppercase', marginBottom:3 }}>
+                                🗑 Deleted by {msg.deleted_by_name || 'staff'} — visible to admins only
+                              </div>
+                              <div style={{ fontSize:12, color:C.muted, lineHeight:1.5, wordBreak:'break-word' }}>{msg.content || msg.file_name || '📎 Attachment'}</div>
+                            </>
+                          ) : (
+                            <div style={{ fontSize:12, color:C.muted, fontStyle:'italic' }}>Message deleted{msg.deleted_by_name?` by ${msg.deleted_by_name}`:''}</div>
+                          )}
+                        </div>
+                        <div style={{ fontSize:9, color:C.muted, marginTop:3, textAlign: mine ? 'right' : 'left' }}>{msgTime(msg)}</div>
+                      </div>
+                    </div>
+                  )
+                }
                 return (
-                  <div key={msg.id || i} style={{ display:'flex', justifyContent:mine?'flex-end':'flex-start', marginBottom:10, alignItems:'flex-end' }}>
+                  <div key={msg.id || i} className="msg-row" style={{ display:'flex', justifyContent:mine?'flex-end':'flex-start', marginBottom:10, alignItems:'flex-end' }}>
                     {!mine && (
                       <div style={{ width:26, height:26, borderRadius:13, background:C.card, border:`1px solid ${C.border}`,
                         display:'flex', alignItems:'center', justifyContent:'center',
@@ -1574,6 +1708,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                       </div>
                     )}
                     <div style={{ maxWidth: isMobile ? '82%' : '68%', minWidth:0 }}>
+                      {isLive && pinnedIds.has(msg.id) && (
+                        <div style={{ fontSize:9, color:C.gold, fontWeight:700, marginBottom:2, textAlign: mine ? 'right' : 'left' }}>📌 Pinned</div>
+                      )}
                       <div style={{
                         background: mine ? C.gold : C.card,
                         border: mine ? 'none' : `1px solid ${C.border}`,
@@ -1611,6 +1748,27 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                             style={{ background:'none', border:'none', color:C.muted, fontSize:11,
                               cursor:'pointer', padding:'2px 4px', lineHeight:1 }}>
                             ↪
+                          </button>
+                        )}
+                        {isLive && (
+                          <button onClick={() => togglePin(msg)} title={pinnedIds.has(msg.id)?'Unpin':'Pin to top (only for you)'}
+                            style={{ background:'none', border:'none', color:pinnedIds.has(msg.id)?C.gold:C.muted, fontSize:11,
+                              cursor:'pointer', padding:'2px 4px', lineHeight:1 }}>
+                            📌
+                          </button>
+                        )}
+                        {isLive && (isAdmin || myRole === 'va') && (
+                          <button onClick={() => pinForAll(msg)} title="Pin for everyone in this conversation"
+                            style={{ background:'none', border:'none', color:C.muted, fontSize:10,
+                              cursor:'pointer', padding:'2px 4px', lineHeight:1, fontWeight:700 }}>
+                            📌ALL
+                          </button>
+                        )}
+                        {isLive && canDeleteAnyMsg && (
+                          <button onClick={() => deleteMsg(msg)} title="Delete message (kept in admin audit log)"
+                            style={{ background:'none', border:'none', color:C.muted, fontSize:11,
+                              cursor:'pointer', padding:'2px 4px', lineHeight:1 }}>
+                            🗑
                           </button>
                         )}
                       </div>
@@ -1747,6 +1905,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         </>)}
         {/* end activeConvo guard */}
       </div>
+      </div>
+      )}
     </div>
   )
 }

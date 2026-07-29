@@ -1,0 +1,15 @@
+Before We get to the COO concepts and things we need to do to knock out all the tasks you and i have on todays agenda, i need a couple minor things done:
+
+Inside the app for my company and all white labels, we need to have a community section under messages so that we can make certain community chats with specific people we want in it, we can name the community and have someone in multiple communities if the coach or admin desire to add them to it. Admin needs to be able to make communities and add/take away people to them under each coach, and each coach needs to be able to do the same for the activated clients under their roster and to. There needs to be ability to make community inside the Team Hub as well so if coaches wanted to have one or admin and VA's etc. Communities need threads and the ability to tag another person inside of the community. Under Team hub there needs to be the ability to tag someone as well and within the communities within team hub, and these need to show up properly for the individuals inside notifications. Admins need to be able to decide if a client offboards then the admin can still give them community access only or access to that coach and the admin or anyone else like the VA that the admin gives right to, but not access to other things
+
+In messages we also need to have ability as coaches to delete any messages within any message thread whether the coach sent it or the client, the admin also needs to be able to delete them as well if needed, but even if they are deleted, but even if deleted it still needs to show up under the audit log/tracking in an admins login. Inside communities the coach or admin can delete messages and inside Team hub only the Admin can delete any messages and each team member can only delete their own messages.
+
+In messages, the coach or the client need to be able to pin a message if its important so it sits at the top of that message thread for their perspective, so if a coach pins a message, it doesnt pin it for the client or for others if in a community message or team hub. Inside. Admins need to be able to also pin messages for a coach or a client or any other role, and then VA's should be able to as well if they are given access
+
+We need to add a spot under cardio for a daily step goal that coaches can create per client if that directly does not exist already
+
+Even though as the admin i have given access to coach marcus or his client to have access to the mindset of a ceo course, i dont see it in coach login or client login under learn, why is that? Each module place needs to have a place to put notes that the admin can place in there so the coach or client or viewer can see with that module so a section to add notes per module
+
+FOr labs we need to make sure there is a comment section that allows clients to ut full notes into, and then ability for the coach to comment back to those notes and make there own notes
+
+After these, we need to run whats needed with my coo to do supabase and everything else to move forward so let me know exactly whats needed and we will do those after these 6 above
