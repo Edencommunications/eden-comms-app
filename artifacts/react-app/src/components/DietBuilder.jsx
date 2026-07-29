@@ -2597,6 +2597,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         </div>
                       )}
 
+                      {note.other_links&&(
+                        <div style={{marginTop:10}}>
+                          <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🔗 Other Links</div>
+                          {note.other_links.split(/\s*\n\s*/).filter(Boolean).map((ln,i)=>(
+                            /^https?:\/\//i.test(ln.trim())
+                              ? <a key={i} href={ln.trim()} target="_blank" rel="noopener noreferrer"
+                                  style={{display:'block',fontSize:12,color:C.gold,marginBottom:4,wordBreak:'break-all'}}>{ln.trim()}</a>
+                              : <div key={i} style={{fontSize:12,color:C.white,marginBottom:4}}>{ln.trim()}</div>
+                          ))}
+                        </div>
+                      )}
                       {embed&&(
                         <div style={{marginTop:10}}>
                           <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🎥 Loom Recording</div>

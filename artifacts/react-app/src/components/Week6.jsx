@@ -276,7 +276,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [showNewCall,   setShowNewCall]   = useState(false)
   const [newCall, setNewCall] = useState({
     callDate: new Date().toISOString().slice(0,10),
-    callType:'Monthly Check-In', summary:'', focusPoints:'', actionItems:'', nextCallDate:'', loomUrl:'',
+    callType:'Monthly Check-In', summary:'', focusPoints:'', actionItems:'', nextCallDate:'', loomUrl:'', otherLinks:'',
   })
   const setNC = k=>v=>setNewCall(p=>({...p,[k]:v}))
 
@@ -915,7 +915,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .catch(()=>{})
     setCallNotes([])
     dbGet('consultation_notes',`client_id=eq.${client.uuid}&order=call_date.desc`)
-      .then(rows=>{ if (openClientRef.current!==client.uuid) return; if (Array.isArray(rows)) setCallNotes(rows.map(n=>({ id:n.id, callDate:n.call_date, callType:n.call_type, summary:n.summary, focusPoints:n.focus_points, actionItems:n.action_items, nextCallDate:n.next_call_date, loomUrl:n.loom_url }))) })
+      .then(rows=>{ if (openClientRef.current!==client.uuid) return; if (Array.isArray(rows)) setCallNotes(rows.map(n=>({ id:n.id, callDate:n.call_date, callType:n.call_type, summary:n.summary, focusPoints:n.focus_points, actionItems:n.action_items, nextCallDate:n.next_call_date, loomUrl:n.loom_url, otherLinks:n.other_links }))) })
       .catch(()=>{})
     // Load saved update_day from DB and sync into local state
     dbGet('user_profiles', `id=eq.${client.uuid}&select=update_day`)
@@ -951,20 +951,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   async function saveCallNote() {
     if (!newCall.summary.trim()) return
-    const note = {
-      id: Date.now(),
-      callDate:     newCall.callDate,
-      callType:     newCall.callType,
-      summary:      newCall.summary,
-      focusPoints:  newCall.focusPoints,
-      actionItems:  newCall.actionItems,
-      nextCallDate: newCall.nextCallDate,
-    }
-    setCallNotes(prev=>[note,...prev])
-
     const _clientId = selectedClient?.uuid
     if (!_clientId) { alert('Select a client first.'); return }
-    await dbInsert('consultation_notes',{
+    const payload = {
       client_id:      _clientId,
       coach_id:       myUUID,
       call_date:      newCall.callDate,
@@ -974,8 +963,33 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       action_items:   newCall.actionItems,
       next_call_date: newCall.nextCallDate||null,
       loom_url:       newCall.loomUrl||null,
-    })
-    if(_clientId) await dbInsert('notifications',{
+      other_links:    newCall.otherLinks||null,
+    }
+    let linksDropped = false
+    let inserted = await dbInsert('consultation_notes', payload)
+    if (inserted===null && payload.other_links!==null) {
+      // Fallback for a database that doesn't have the other_links column yet
+      const { other_links, ...withoutLinks } = payload
+      inserted = await dbInsert('consultation_notes', withoutLinks)
+      if (inserted!==null) linksDropped = true
+    }
+    if (inserted===null) {
+      alert('Could not save the call note — please try again. If it keeps failing, contact support.')
+      return
+    }
+    const note = {
+      id: (Array.isArray(inserted)&&inserted[0]?.id)||Date.now(),
+      callDate:     newCall.callDate,
+      callType:     newCall.callType,
+      summary:      newCall.summary,
+      focusPoints:  newCall.focusPoints,
+      actionItems:  newCall.actionItems,
+      nextCallDate: newCall.nextCallDate,
+      loomUrl:      newCall.loomUrl,
+      otherLinks:   linksDropped ? '' : newCall.otherLinks,
+    }
+    setCallNotes(prev=>[note,...prev])
+    await dbInsert('notifications',{
       recipient_id: _clientId,
       sender_id:    myUUID,
       type:         'consultation',
@@ -984,9 +998,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       created_at:   new Date().toISOString()
     })
 
-    setNewCall({callDate:new Date().toISOString().slice(0,10),callType:'Monthly Check-In',summary:'',focusPoints:'',actionItems:'',nextCallDate:'',loomUrl:''})
+    setNewCall({callDate:new Date().toISOString().slice(0,10),callType:'Monthly Check-In',summary:'',focusPoints:'',actionItems:'',nextCallDate:'',loomUrl:'',otherLinks:''})
     setShowNewCall(false)
-    alert('Call note saved.')
+    alert(linksDropped && payload.other_links
+      ? 'Call note saved — but the "Other Links" could not be saved yet. The database needs the other_links column added (one-line SQL in the Supabase dashboard).'
+      : 'Call note saved.')
   }
 
   async function addUser() {
@@ -2107,6 +2123,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 </div>
               )}
 
+              {/* Other links */}
+              {(note.otherLinks||note.other_links)&&(
+                <div style={{marginTop:12}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🔗 Other Links</div>
+                  {(note.otherLinks||note.other_links||'').split(/\s*\n\s*/).filter(Boolean).map((ln,i)=>(
+                    /^https?:\/\//i.test(ln.trim())
+                      ? <a key={i} href={ln.trim()} target="_blank" rel="noopener noreferrer"
+                          style={{display:'block',fontSize:12,color:C.gold,marginBottom:4,wordBreak:'break-all'}}>{ln.trim()}</a>
+                      : <div key={i} style={{fontSize:12,color:C.white,marginBottom:4}}>{ln.trim()}</div>
+                  ))}
+                </div>
+              )}
+
               {/* Loom recording embed */}
               {(note.loomUrl||note.loom_url)&&(()=>{
                 const raw = note.loomUrl||note.loom_url||''
@@ -2405,6 +2434,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
               </div>
               <Inp label="Next Call Date (optional)" value={newCall.nextCallDate} onChange={setNC('nextCallDate')} type="date"/>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Other Links (optional)</div>
+                <textarea value={newCall.otherLinks} onChange={e=>setNC('otherLinks')(e.target.value)}
+                  placeholder={'One link per line, e.g.\nhttps://docs.google.com/…\nhttps://youtu.be/…'}
+                  rows={3}
+                  style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                <div style={{fontSize:10,color:C.muted,marginTop:4}}>Any other resources for this call — docs, videos, articles. The client will see these as clickable links.</div>
+              </div>
               <div style={{marginBottom:12}}>
                 <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Loom Recording URL (optional)</div>
                 <input value={newCall.loomUrl} onChange={e=>setNC('loomUrl')(e.target.value)}
