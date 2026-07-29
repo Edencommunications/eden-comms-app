@@ -439,10 +439,14 @@ const ForgotScreen = ({ onBack }) => {
   const sendReset = async () => {
     setErr(""); setSending(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: window.location.origin + import.meta.env.BASE_URL,
+      // Branded reset email sent by our API server (org name + styling),
+      // instead of Supabase's generic template.
+      const r = await fetch('/api/auth/reset-request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
-      if (error) { setErr(error.message || "Could not send the reset email — please try again."); setSending(false); return; }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) { setErr(j.error || "Could not send the reset email — please try again."); setSending(false); return; }
       setSent(true);
     } catch {
       setErr("Could not send the reset email — please check your connection and try again.");

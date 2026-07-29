@@ -14,6 +14,7 @@ description: Agreed run order and prerequisites for the Supabase/COO session (fr
 
 **Agreed run order after prerequisites (re-propose as project tasks in this order):**
 1. #46 — Auto-email new clients their login details after GHL import. ✅ DONE
+1b. Branded reset emails ✅ DONE: POST /api/auth/reset-request on the API server (rate-limited, anti-enumeration: instant generic response, background send; server-owned redirect only — APP_URL env or Supabase Site URL fallback). ForgotScreen in App.tsx now calls it instead of supabase.auth.resetPasswordForEmail.
 2. User is on US Central time — always report times in Central.
 2. Branded password-reset emails (re-propose; not currently on board).
 3. #65 — Real team logins, retire demo accounts, plus Owner account & email-swap flow.

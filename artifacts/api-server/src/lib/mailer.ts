@@ -77,6 +77,46 @@ function esc(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// ── Branded password-reset email ─────────────────────────────────
+export function resetEmail(params: {
+  name: string;
+  orgName: string;
+  actionLink: string;
+}): { subject: string; html: string; text: string } {
+  const { name, orgName, actionLink } = params;
+  const firstName = (name || "").split(" ")[0] || "there";
+  const subject = `Reset your ${orgName} password`;
+
+  const text = [
+    `Hi ${firstName},`,
+    ``,
+    `We received a request to reset your ${orgName} password.`,
+    `Use this secure link to choose a new one (it expires soon):`,
+    actionLink,
+    ``,
+    `If you didn't request this, you can safely ignore this email — your password won't change.`,
+    ``,
+    `The ${orgName} Team`,
+  ].join("\n");
+
+  const safeLink = /^https?:\/\//i.test(actionLink) ? actionLink : "";
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;background:#111111;border-radius:12px;overflow:hidden">
+    <div style="background:#1a1a1a;padding:28px 32px;border-bottom:2px solid #ffa600">
+      <h1 style="margin:0;color:#ffa600;font-size:20px;letter-spacing:1px">${esc(orgName)}</h1>
+    </div>
+    <div style="padding:32px;color:#e8e8e8;font-size:14px;line-height:1.7">
+      <p style="margin:0 0 16px">Hi ${esc(firstName)},</p>
+      <p style="margin:0 0 20px">We received a request to reset your <strong>${esc(orgName)}</strong> password. Click below to choose a new one — the link expires soon.</p>
+      ${safeLink ? `<p style="margin:0 0 24px;text-align:center"><a href="${esc(safeLink)}" style="background:#ffa600;color:#111;text-decoration:none;font-weight:bold;padding:12px 28px;border-radius:8px;display:inline-block">Reset My Password</a></p>` : ""}
+      <p style="margin:0 0 16px;color:#999;font-size:12px">If you didn't request this, you can safely ignore this email — your password won't change.</p>
+      <p style="margin:0">The ${esc(orgName)} Team</p>
+    </div>
+  </div>`;
+
+  return { subject, html, text };
+}
+
 // ── Welcome / login-details email for newly imported clients ─────
 export function welcomeEmail(params: {
   clientName: string;

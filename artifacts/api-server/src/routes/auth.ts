@@ -29,6 +29,7 @@
 
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+import { mailerConfigured, resetEmail, sendEmail } from "../lib/mailer";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
@@ -196,6 +197,67 @@ router.post("/auth/migrate", async (req: Request, res: Response) => {
 
   logger.info({ email: emailRaw }, "[Auth] migrated legacy temp-password login to Supabase Auth");
   return res.json({ ok: true });
+});
+
+// POST /api/auth/reset-request — branded password-reset email.
+// Generates a Supabase recovery link server-side and sends it through the
+// org-branded mailer. Always responds generically (no account probing).
+router.post("/auth/reset-request", async (req: Request, res: Response) => {
+  const emailRaw = String((req.body || {}).email || "").trim().toLowerCase();
+  if (!emailRaw || !EMAIL_RE.test(emailRaw)) {
+    return res.status(400).json({ ok: false, error: "Valid email required" });
+  }
+  if (rateLimited(`reset:${emailRaw}`, 4, 15 * 60_000) || rateLimited(`reset-ip:${clientIp(req)}`, 15, 15 * 60_000)) {
+    return res.status(429).json({ ok: false, error: "Too many attempts — try again later" });
+  }
+
+  // Respond immediately and identically for every well-formed request —
+  // the actual lookup/link/send happens in the background, so neither the
+  // body nor the response time reveals whether the account exists.
+  res.json({ ok: true, message: "If an account exists, a reset link is on its way." });
+
+  void (async () => {
+    try {
+      if (!SERVICE_KEY || !mailerConfigured()) {
+        logger.warn("[Auth] reset-request but auth/mailer not configured");
+        return;
+      }
+      const rows = await dbGet(
+        "user_profiles",
+        `email=eq.${encodeURIComponent(emailRaw)}&select=id,name,company_id,is_active`,
+      );
+      const profile = rows[0];
+      if (!profile || profile.is_active === false) return;
+
+      // Org branding for the email
+      let orgName = "Eden Comms";
+      if (profile.company_id) {
+        const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(profile.company_id)}&select=name`);
+        if (orgs[0]?.name) orgName = orgs[0].name;
+      }
+
+      // Server-owned destination only — caller input is never trusted here.
+      // With no APP_URL set, Supabase falls back to its configured Site URL.
+      const redirectTo = /^https?:\/\//i.test(process.env.APP_URL || "") ? process.env.APP_URL : undefined;
+      const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+        method: "POST",
+        headers: restHeaders(SERVICE_KEY),
+        body: JSON.stringify({ type: "recovery", email: emailRaw, ...(redirectTo ? { redirect_to: redirectTo } : {}) }),
+      });
+      const linkBody: any = await linkRes.json().catch(() => ({}));
+      const actionLink = String(linkBody?.action_link || "");
+      if (!linkRes.ok || !actionLink) {
+        logger.warn({ status: linkRes.status, body: linkBody?.msg }, "[Auth] generate_link failed");
+        return;
+      }
+
+      const msg = resetEmail({ name: profile.name || "", orgName, actionLink });
+      const sent = await sendEmail({ to: emailRaw, fromName: orgName, ...msg });
+      if (!sent.ok) logger.warn({ error: sent.error }, "[Auth] reset email send failed");
+    } catch (e) {
+      logger.warn({ error: String(e) }, "[Auth] reset-request background task failed");
+    }
+  })();
 });
 
 router.post("/auth/demo-session", async (req: Request, res: Response) => {
