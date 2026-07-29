@@ -17,7 +17,7 @@ description: Agreed run order and prerequisites for the Supabase/COO session (fr
 1b. Branded reset emails ✅ DONE: POST /api/auth/reset-request on the API server (rate-limited, anti-enumeration: instant generic response, background send; server-owned redirect only — APP_URL env or Supabase Site URL fallback). ForgotScreen in App.tsx now calls it instead of supabase.auth.resetPasswordForEmail.
 2. User is on US Central time — always report times in Central.
 2. Branded password-reset emails (re-propose; not currently on board).
-3. #65 — Real team logins, retire demo accounts, plus Owner account & email-swap flow.
+3. Real team logins ✅ DONE (July 29): 3 staff provisioned (Alissa super_admin, Nick coach, Owner super_admin) with must_change_password + credential emails; demo accounts fully retired (profiles deactivated, auth users deleted, DEMO_USERS/demo-session/login-panel code removed). Owner = OWNER_EMAIL constant in App.tsx (no DB column); to swap owner email, edit the constant + update the Supabase Auth email.
 4. Admin settings moved into the database (re-propose; not currently on board).
 5. #66 — RLS lockdown (per-user database security rules).
 6. #67 — Full audit tracking/logging with admin review screen (audit_logs table already exists and receives message-deletion entries).

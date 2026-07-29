@@ -60,15 +60,10 @@ const wlPalette = (org) => {
 const AuthContext = createContext(null);
 const useAuth = () => useContext(AuthContext);
 
-// ─── DEMO USERS (replace with Supabase auth) ──────────────────────────────────
-const DEMO_USERS = {
-  "admin@edencomms.io":   { password: "Admin1234!", role: "super_admin",  name: "Eden Admin",      org: "eden" },
-  "coach@eden.io":        { password: "Coach1234!", role: "coach",        name: "Coach Marcus",    org: "eden" },
-  "client@eden.io":       { password: "Client123!", role: "client",       name: "Jordan Williams", org: "eden", coach: "coach@eden.io" },
-  "va@eden.io":           { password: "VA1234!",    role: "va",           name: "Sarah (VA)",      org: "eden" },
-  "headcoach@eden.io":    { password: "HC1234!",    role: "head_coach",   name: "Head Coach Nia",  org: "eden" },
-  "coach@partnerbrand.io":{ password: "Coach1234!", role: "coach",        name: "Coach Rivera",    org: "partner_brand" },
-};
+// ─── OWNER ────────────────────────────────────────────────────────────────────
+// The account that sits above super admin. Change this address (and the
+// matching Supabase Auth email) to swap the owner login.
+const OWNER_EMAIL = "info@edencommunications.io";
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
 // @ts-nocheck
@@ -235,66 +230,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
     if (!email || !pass) { setError("Please enter your email and password."); return; }
     setLoading(true);
     setTimeout(async () => {
-      const user = DEMO_USERS[email.toLowerCase()];
-      if (user && user.password === pass) {
-        // Block deactivated client accounts
-        let demoCommunityOnly = false;
-        if (user.role === 'client') {
-          // Database is the source of truth — check it first
-          let dbAnswered = false;
-          try {
-            const resp = await fetch(
-              `https://jzdoojlwgpqlmworwcsr.supabase.co/rest/v1/user_profiles?email=eq.${encodeURIComponent(email.toLowerCase())}&select=is_active,community_only`,
-              { headers: {
-                  apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU",
-                  Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU",
-              }});
-            const rows = await resp.json();
-            if (Array.isArray(rows)) {
-              dbAnswered = true;
-              if (rows[0] && rows[0].is_active === false && rows[0].community_only !== true) {
-                setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
-                setLoading(false);
-                return;
-              }
-              // Offboarded but community_only → allowed in, restricted to Messages/Communities (session-only flag)
-              if (rows[0] && rows[0].is_active === false && rows[0].community_only === true) {
-                demoCommunityOnly = true;
-              }
-              // DB says active — clear any stale local deactivation entry
-              try {
-                const cache = JSON.parse(localStorage.getItem('eden_deactivated_clients') || '{}');
-                if (cache[email.toLowerCase()]) {
-                  delete cache[email.toLowerCase()];
-                  localStorage.setItem('eden_deactivated_clients', JSON.stringify(cache));
-                }
-              } catch {}
-            }
-          } catch {} // network failure — fall back to local cache below
-          // Fallback only when the DB was unreachable
-          if (!dbAnswered) {
-            try {
-              const deactivated = JSON.parse(localStorage.getItem('eden_deactivated_clients') || '{}');
-              if (deactivated[email.toLowerCase()]) {
-                setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
-                setLoading(false);
-                return;
-              }
-            } catch {}
-          }
-        }
-        // Demo accounts predate real auth — sync a matching Supabase Auth
-        // session so admin actions (user provisioning) and password APIs work.
-        try {
-          const sync = await fetch('/api/auth/demo-session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.toLowerCase(), password: pass }),
-          });
-          if (sync.ok) await supabase.auth.signInWithPassword({ email: email.toLowerCase(), password: pass });
-        } catch {}
-        onLogin({ email, ...user, communityOnly: demoCommunityOnly });
-      } else {
+      {
         // Real authentication — Supabase Auth (hashed passwords).
         const emailNorm = email.toLowerCase();
         const finishAuthLogin = async (authUser: any) => {
@@ -403,23 +339,6 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
               {loading ? "Signing in…" : "Sign In →"}
             </Btn>
           </Card>
-
-          {/* Demo credentials helper */}
-          <div style={{ marginTop:28, padding:"12px 14px", background:"#1a1a1a", border:"1px solid #2a2a2a", borderRadius:10 }}>
-            <p style={{ fontSize:10, fontWeight:700, color:primary, margin:"0 0 8px", letterSpacing:1 }}>DEMO LOGINS</p>
-            {[
-              ["Super Admin","admin@edencomms.io","Admin1234!"],
-              ["Coach","coach@eden.io","Coach1234!"],
-              ["Client","client@eden.io","Client123!"],
-              ["Head Coach","headcoach@eden.io","HC1234!"],
-              ["VA","va@eden.io","VA1234!"],
-            ].map(([role,em,pw])=>(
-              <button key={role} onClick={()=>{setEmail(em);setPass(pw);}}
-                style={{ display:"block", width:"100%", textAlign:"left", background:"none", border:"none", cursor:"pointer", padding:"4px 0" }}>
-                <span style={{ fontSize:11, color:B.muted }}><span style={{ color:primary, fontWeight:600 }}>{role}:</span> {em}</span>
-              </button>
-            ))}
-          </div>
 
           <p style={{ textAlign:"center", fontSize:10, color:"#444444", marginTop:20, lineHeight:1.6 }}>
             {brandOrg ? "🔒 All data encrypted" : "🔒 All data encrypted · edencommunications.io"}
@@ -4612,7 +4531,7 @@ const AppShell = ({ user, onLogout }) => {
             </button>
           )}
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={setTab}/>
-          {hasAuthSession && !DEMO_USERS[user.email] && (
+          {hasAuthSession && (
             <button onClick={() => setShowChangePw(true)} title="Change password"
               style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
               <Ic n="lock" size={14} c={B.muted}/>
@@ -4639,7 +4558,7 @@ const AppShell = ({ user, onLogout }) => {
             boxShadow:"0 12px 40px rgba(0,0,0,0.7)", overflow:"hidden", paddingBottom:6 }}>
             <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.border}`, marginBottom:4 }}>
               <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
-                {user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
+                {(user.email || "").toLowerCase() === OWNER_EMAIL ? "Owner" : user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
               </p>
               <p style={{ fontSize:13, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
@@ -4666,7 +4585,7 @@ const AppShell = ({ user, onLogout }) => {
           <div style={{ width:200, background:B.surface, borderRight:`1px solid ${B.border}`, flexShrink:0, display:"flex", flexDirection:"column", padding:"12px 0" }}>
             <div style={{ padding:"0 14px 16px", borderBottom:`1px solid ${B.border}`, marginBottom:8 }}>
               <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
-                {user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
+                {(user.email || "").toLowerCase() === OWNER_EMAIL ? "Owner" : user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
               </p>
               <p style={{ fontSize:12, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>

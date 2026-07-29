@@ -16,19 +16,6 @@ const post = (path, body, headers = {}) =>
     body: JSON.stringify(body),
   });
 
-async function demoToken(email, password) {
-  const sync = await post("/auth/demo-session", { email, password });
-  assert.equal(sync.status, 200, `demo-session should accept the demo account ${email}`);
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: SUPABASE_ANON, "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  const j = await r.json();
-  assert.ok(j.access_token, "demo account should obtain a Supabase session");
-  return j.access_token;
-}
-
 const target = { email: "authztest-should-never-exist@example.com", password: "Whatever123!" };
 
 test("provision rejects requests with no token", async () => {
@@ -43,12 +30,6 @@ test("provision rejects a forged/garbage token", async () => {
 
 test("provision rejects the public anon key used as a token", async () => {
   const r = await post("/auth/provision", target, { Authorization: `Bearer ${SUPABASE_ANON}` });
-  assert.equal(r.status, 403);
-});
-
-test("provision rejects a valid session of a NON-admin user", async () => {
-  const token = await demoToken("client@eden.io", "Client123!");
-  const r = await post("/auth/provision", target, { Authorization: `Bearer ${token}` });
   assert.equal(r.status, 403);
 });
 
@@ -72,9 +53,7 @@ test("migrate rate-limits repeated attempts for the same email", async () => {
   assert.equal(last, 429);
 });
 
-test("demo-session rejects non-demo emails and wrong passwords", async () => {
-  const r1 = await post("/auth/demo-session", { email: "random@person.io", password: "Admin1234!" });
-  assert.equal(r1.status, 401);
-  const r2 = await post("/auth/demo-session", { email: "admin@edencomms.io", password: "wrong" });
-  assert.equal(r2.status, 401);
+test("demo-session endpoint is retired (404)", async () => {
+  const r = await post("/auth/demo-session", { email: "admin@edencomms.io", password: "Admin1234!" });
+  assert.equal(r.status, 404);
 });

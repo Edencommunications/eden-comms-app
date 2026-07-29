@@ -207,7 +207,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   async function fetchRoster() {
     let rows = []
     if (context === 'team') {
-      rows = (await dbGet('user_profiles', `company_id=eq.${companyId}&role=neq.client&select=id,name,full_name,email,role,is_active,community_only&order=name.asc.nullslast`)) || []
+      rows = (await dbGet('user_profiles', `company_id=eq.${companyId}&role=neq.client&is_active=not.is.false&select=id,name,full_name,email,role,is_active,community_only&order=name.asc.nullslast`)) || []
     } else if (isAdmin) {
       rows = (await dbGet('user_profiles', `company_id=eq.${companyId}&select=id,name,full_name,email,role,is_active,community_only,coach_id&order=name.asc.nullslast`)) || []
     } else {

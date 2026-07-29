@@ -141,7 +141,7 @@ export default function Week7({ currentUser }) {
           if (me) setSelf({ uuid:me.id, name:me.name||me.full_name||currentUser?.name||'User', role:me.role, orgId:me.company_id||EDEN_ORG_ID })
         }).catch(()=>{})
     }
-    dbGet('user_profiles', `role=neq.client&select=id,name,full_name,role&order=name.asc.nullslast`)
+    dbGet('user_profiles', `role=neq.client&is_active=not.is.false&select=id,name,full_name,role&order=name.asc.nullslast`)
       .then(rows=>{
         if (!Array.isArray(rows)||!rows.length) return
         const seen = new Set()

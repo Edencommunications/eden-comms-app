@@ -37,18 +37,6 @@ const SUPABASE_ANON =
 
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-// Mirror of the client-side DEMO_USERS (these credentials are intentionally
-// public — they are printed on the login screen). Only these emails can be
-// synced by /auth/demo-session.
-const DEMO_ACCOUNTS: Record<string, string> = {
-  "admin@edencomms.io": "Admin1234!",
-  "coach@eden.io": "Coach1234!",
-  "client@eden.io": "Client123!",
-  "va@eden.io": "VA1234!",
-  "headcoach@eden.io": "HC1234!",
-  "coach@partnerbrand.io": "Coach1234!",
-};
-
 const restHeaders = (key: string) => ({
   apikey: key,
   Authorization: `Bearer ${key}`,
@@ -260,38 +248,7 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
   })();
 });
 
-router.post("/auth/demo-session", async (req: Request, res: Response) => {
-  const emailRaw = String((req.body || {}).email || "").trim().toLowerCase();
-  const password = String((req.body || {}).password || "");
-  if (rateLimited(`demo-ip:${clientIp(req)}`, 30, 15 * 60_000)) {
-    return res.status(429).json({ ok: false, error: "Too many attempts — try again later" });
-  }
-  const expected = DEMO_ACCOUNTS[emailRaw];
-  if (!expected || expected !== password) {
-    return res.status(401).json({ ok: false, error: "Not a demo account" });
-  }
-  if (!SERVICE_KEY) return res.status(503).json({ ok: false, error: "Auth service is not configured" });
-
-  // Create the auth user (no forced password change for demo accounts), or —
-  // if it exists — reset its password back to the fixed demo credential so
-  // the demo login can always obtain a session.
-  const result = await provisionAuthUser(emailRaw, password, undefined, false);
-  if (!result.ok) return res.status(502).json({ ok: false, error: result.error });
-  if (result.existed) {
-    const list = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1000`, {
-      headers: restHeaders(SERVICE_KEY),
-    });
-    const body: any = await list.json().catch(() => ({}));
-    const found = (body?.users || []).find((u: any) => (u.email || "").toLowerCase() === emailRaw);
-    if (found) {
-      await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${found.id}`, {
-        method: "PUT",
-        headers: restHeaders(SERVICE_KEY),
-        body: JSON.stringify({ password, user_metadata: { ...found.user_metadata, must_change_password: false } }),
-      }).catch(() => {});
-    }
-  }
-  return res.json({ ok: true });
-});
+// /auth/demo-session removed — demo accounts retired (task #71). Everyone
+// signs in with a real Supabase Auth login.
 
 export default router;
