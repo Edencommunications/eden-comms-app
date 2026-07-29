@@ -19,6 +19,7 @@
 
 import { Router, type IRouter, type Request } from "express";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { sendEmail, welcomeEmail } from "../lib/mailer";
 import { logger } from "../lib/logger";
 import { provisionAuthUser } from "./auth";
 
@@ -250,6 +251,27 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
   if (!ins.ok) return fail(500, "error", `Could not create client profile: ${ins.error}`);
   const profileId = ins.rows?.[0]?.id || profile.id;
 
+  // Email the client their login details (task #46). Falls back to the
+  // coach/admin notification path below if sending fails.
+  let emailSent = false;
+  let emailError = "";
+  {
+    const orgName = orgs[0].name || "Eden Comms";
+    const msg = welcomeEmail({
+      clientName: name,
+      email,
+      tempPassword: tempPass,
+      orgName,
+      coachName: coach?.name || null,
+    });
+    const sent = await sendEmail({ to: email, fromName: orgName, ...msg });
+    emailSent = sent.ok;
+    if (!sent.ok) {
+      emailError = sent.error;
+      logger.warn({ error: sent.error, email }, "[GHL Intake] welcome email failed");
+    }
+  }
+
   // Link client to coach
   if (coach) {
     const access = await dbInsert("client_access", {
@@ -265,7 +287,9 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     const notif = await dbInsert("notifications", {
       recipient_id: coach.id,
       type: "ghl_intake",
-      body: `🤝 New client auto-imported from GHL: ${name} (${email}). Temp password: ${tempPass} — send them their login details. They'll be asked to set their own password on first sign-in.`,
+      body: emailSent
+        ? `🤝 New client auto-imported from GHL: ${name} (${email}). They've been emailed their login details and will set their own password on first sign-in.`
+        : `🤝 New client auto-imported from GHL: ${name} (${email}). ⚠️ The login email could NOT be sent — temp password: ${tempPass}. Please send them their login details manually.`,
       is_read: false,
     });
     if (!notif.ok) logger.warn({ error: notif.error }, "[GHL Intake] notification insert failed");
@@ -281,7 +305,7 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
       const adminNotif = await dbInsert("notifications", {
         recipient_id: admin.id,
         type: "ghl_intake",
-        body: `🤝 New client auto-imported from GHL: ${name} (${email})${coach ? ` under coach ${coach.name}` : " — no coach assigned yet"}. They now appear in your Clients tab.`,
+        body: `🤝 New client auto-imported from GHL: ${name} (${email})${coach ? ` under coach ${coach.name}` : " — no coach assigned yet"}. ${emailSent ? "They've been emailed their login details." : `⚠️ Login email failed — temp password: ${tempPass}. Send it to them manually.`} They now appear in your Clients tab.`,
         is_read: false,
       });
       if (!adminNotif.ok) logger.warn({ error: adminNotif.error }, "[GHL Intake] admin notification insert failed");
@@ -294,13 +318,13 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     at: new Date().toISOString(),
     companyId,
     status: "created",
-    detail: `Created client ${name} <${email}>${coach ? ` under coach ${coach.name}` : " (no coach assigned)"}`,
+    detail: `Created client ${name} <${email}>${coach ? ` under coach ${coach.name}` : " (no coach assigned)"}${emailSent ? " — login email sent" : ` — login email FAILED (${emailError})`}`,
   });
   return res.status(201).json({
     ok: true,
     client_id: profileId,
     coach: coach ? { id: coach.id, name: coach.name } : null,
-    temp_password: tempPass,
+    login_email_sent: emailSent,
   });
 });
 

@@ -10,8 +10,11 @@ description: Agreed run order and prerequisites for the Supabase/COO session (fr
 2. Configure custom SMTP in the Supabase dashboard (Auth → SMTP) so emails send from their domain.
 3. Set the Site URL in Supabase Auth settings to the production app URL.
 
+**Status July 29, 2026:** Prereqs done (Supabase Pro? unconfirmed, but SMTP works — Gmail app password; a "personal provider" deliverability warning stands; recommend Resend/Postmark before volume). Step 1 (#46) DONE: API server sends the login email itself via `src/lib/mailer.ts` (nodemailer, secrets SMTP_SENDER_EMAIL + SMTP_APP_PASSWORD, optional APP_URL/SMTP_HOST/SMTP_PORT). GHL webhook verified end-to-end. Temp password now only appears in coach/admin notifications when the email fails.
+
 **Agreed run order after prerequisites (re-propose as project tasks in this order):**
-1. #46 — Auto-email new clients their login details after GHL import.
+1. #46 — Auto-email new clients their login details after GHL import. ✅ DONE
+2. User is on US Central time — always report times in Central.
 2. Branded password-reset emails (re-propose; not currently on board).
 3. #65 — Real team logins, retire demo accounts, plus Owner account & email-swap flow.
 4. Admin settings moved into the database (re-propose; not currently on board).
