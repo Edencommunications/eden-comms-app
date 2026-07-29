@@ -417,7 +417,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
             {!loaded && <div style={{ padding:20, textAlign:'center', color:C.muted, fontSize:12 }}>Loading…</div>}
             {loaded && communities.length === 0 && (
               <div style={{ padding:'24px 12px', textAlign:'center', color:C.muted, fontSize:12, lineHeight:1.6 }}>
-                No communities yet.{canManage ? ' Tap ＋ New to create one.' : ' Your coach can add you to one.'}
+                No communities yet.{canManage ? ' Tap ＋ New to create one.' : (context === 'team' ? ' An admin can add you to one.' : ' Your coach can add you to one.')}
               </div>
             )}
             {communities.map(c => (
