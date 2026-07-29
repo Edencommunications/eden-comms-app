@@ -92,6 +92,8 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   const [roster,      setRoster]      = useState(null)   // candidates for adding
   const [rosterSearch,setRosterSearch]= useState('')
   const bottomRef = useRef(null)
+  const listRef = useRef(null)
+  const msgCountRef = useRef(-1)   // -1 = community just opened (force scroll once)
 
   const active = communities.find(c => c.id === activeId) || null
 
@@ -127,8 +129,17 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     if (!cid) return
     const rows = await dbGet('community_messages', `community_id=eq.${cid}&order=created_at.asc&limit=500`)
     if (Array.isArray(rows)) {
+      // Only auto-scroll on first open, or when new messages arrive while the user
+      // is already near the bottom — never yank them down while reading old messages.
+      const el = listRef.current
+      const nearBottom = !el || (el.scrollHeight - el.scrollTop - el.clientHeight < 150)
+      const firstLoad = msgCountRef.current < 0
+      const grew = rows.length > msgCountRef.current
+      msgCountRef.current = rows.length
       setMessages(rows)
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
+      if (firstLoad || (grew && nearBottom)) {
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
+      }
     }
   }
   async function loadPins(cid = activeId) {
@@ -138,6 +149,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   }
   useEffect(() => {
     setMembers([]); setMessages([]); setPins([]); setReplyTo(null)
+    msgCountRef.current = -1
     if (!activeId) return
     loadMembers(); loadMessages(); loadPins()
     const iv = setInterval(() => loadMessages(), 6000)
@@ -452,7 +464,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
             )}
 
             {/* Messages */}
-            <div style={{ flex:1, overflowY:'auto', padding:'14px 14px 8px' }}>
+            <div ref={listRef} style={{ flex:1, overflowY:'auto', padding:'14px 14px 8px' }}>
               {roots.length === 0 && (
                 <div style={{ textAlign:'center', padding:40, color:C.muted, fontSize:12 }}>No messages yet — start the conversation.</div>
               )}

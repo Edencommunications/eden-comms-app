@@ -845,6 +845,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const [fileTab,      setFileTab]      = useState('all')
   const [uploading,    setUploading]    = useState(false)
   const bottomRef = useRef(null)
+  const listRef = useRef(null)          // messages scroll container
+  const msgCountRef = useRef(-1)        // -1 = convo just opened (force scroll once)
   const fileRef   = useRef(null)
 
   const isLive = !!activeConvo?.supabaseConvoId
@@ -878,7 +880,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // Load all thread replies across my conversations → Threads inbox
   async function loadThreadInbox() {
     try {
-      const ids = conversations.map(c => c.supabaseConvoId).filter(Boolean)
+      // Own conversations only — monitor (oversight) convos are excluded so the
+      // inbox query stays bounded and the inbox only shows threads the admin is part of.
+      const ids = conversations.filter(c => !c.monitor).map(c => c.supabaseConvoId).filter(Boolean)
       if (!ids.length) return
       const replies = await dbGet('messages',
         `conversation_id=in.(${ids.join(',')})&parent_id=not.is.null&order=created_at.desc&limit=200`)
@@ -905,6 +909,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const unreadThreadCount = threadInbox.filter(threadUnread).length
 
   async function sendThreadReply() {
+    if (activeConvo?.monitor) return  // oversight threads are read-only
     const text = threadMsg.trim()
     if (!text || !myProfileId || !threadRootId) return
     const root = liveMessages.find(m => m.id === threadRootId) || threadInbox.find(t => t.root.id === threadRootId)?.root
@@ -1028,6 +1033,29 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           pushConvo(user, convoId)
         }
 
+        // Admin oversight: every OTHER conversation in the company (e.g. coach ↔ client),
+        // shown read-only with sender names. Deleted messages appear flagged with original content.
+        const allConvos = await dbGet('conversations', `company_id=eq.${me.company_id}&order=created_at.asc`)
+        const otherConvos = (allConvos || []).filter(c =>
+          c.participant_a_id && c.participant_b_id &&
+          c.participant_a_id !== me.id && c.participant_b_id !== me.id)
+        if (otherConvos.length) {
+          const profIds = [...new Set(otherConvos.flatMap(c => [c.participant_a_id, c.participant_b_id]))]
+          const profs = await dbGet('user_profiles', `id=in.(${profIds.join(',')})&select=id,name,role`)
+          const byId = Object.fromEntries((profs || []).map(p => [p.id, p]))
+          for (const c of otherConvos) {
+            const a = byId[c.participant_a_id], b = byId[c.participant_b_id]
+            if (!a || !b) continue
+            convos.push({
+              id: `monitor-${c.id}`, name: `${a.name} ↔ ${b.name}`, initials: '👁',
+              supabaseConvoId: c.id, lastMessage: 'Admin oversight — read-only', lastTime: '',
+              unread: 0, online: false, thread: [],
+              monitor: true,
+              senderNames: { [a.id]: a.name, [b.id]: b.name },
+            })
+          }
+        }
+
       } else {
         // Staff (VA, head_coach, etc.) — load all clients from client_access.
         // Teammate DMs happen in the Team Hub tab.
@@ -1048,6 +1076,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     setLiveMessages([])
     setLiveFiles([])
     setTab('chat')
+    msgCountRef.current = -1
     if (isLive) {
       loadLiveMessages()
       loadLiveFiles()
@@ -1060,8 +1089,17 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     if (!activeConvo?.supabaseConvoId) return
     const data = await dbGet('messages', `conversation_id=eq.${activeConvo.supabaseConvoId}&order=created_at.asc`)
     if (data) {
+      // Only auto-scroll on first open, or when NEW messages arrive while the
+      // user is already near the bottom — never yank them down while reading old messages.
+      const el = listRef.current
+      const nearBottom = !el || (el.scrollHeight - el.scrollTop - el.clientHeight < 150)
+      const firstLoad = msgCountRef.current < 0
+      const grew = data.length > msgCountRef.current
+      msgCountRef.current = data.length
       setLiveMessages(data)
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
+      if (firstLoad || (grew && nearBottom)) {
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
+      }
     }
   }
   async function loadLiveFiles() {
@@ -1528,7 +1566,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               )
             })}
           </div>
-          {/* Reply composer */}
+          {/* Reply composer — hidden in read-only oversight threads */}
+          {activeConvo?.monitor ? (
+            <div style={{ padding:'10px 12px 12px', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.gold, fontWeight:700 }}>
+              👁 Admin oversight — read-only
+            </div>
+          ) : (
           <div style={{ padding:'10px 12px 12px', borderTop:`1px solid ${C.border}`, display:'flex', gap:6, flexShrink:0 }}>
             <input value={threadMsg} onChange={e => setThreadMsg(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendThreadReply())}
@@ -1541,6 +1584,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               ↑
             </button>
           </div>
+          )}
         </div>
       )}
 
@@ -1678,7 +1722,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             )}
 
             {/* Messages */}
-            <div style={{ flex:1, overflowY:'auto', padding: isMobile ? '12px 10px' : '16px' }}>
+            <div ref={listRef} style={{ flex:1, overflowY:'auto', padding: isMobile ? '12px 10px' : '16px' }}>
               {displayMessages.length === 0 && (
                 <div style={{ textAlign:'center', padding:40, color:C.muted, fontSize:13 }}>
                   No messages yet.
@@ -1692,6 +1736,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   return (
                     <div key={msg.id || i} style={{ display:'flex', justifyContent:mine?'flex-end':'flex-start', marginBottom:10 }}>
                       <div style={{ maxWidth: isMobile ? '82%' : '68%' }}>
+                        {activeConvo?.monitor && (
+                          <div style={{ fontSize:10, fontWeight:700, color:C.gold, marginBottom:2 }}>
+                            {activeConvo.senderNames?.[msg.sender_id] || 'Unknown'}
+                          </div>
+                        )}
                         <div style={{ background:'none', border:`1px dashed ${C.border}`, borderRadius:12, padding:'8px 12px' }}>
                           {isAdmin ? (
                             <>
@@ -1719,6 +1768,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                       </div>
                     )}
                     <div style={{ maxWidth: isMobile ? '82%' : '68%', minWidth:0 }}>
+                      {activeConvo?.monitor && (
+                        <div style={{ fontSize:10, fontWeight:700, color:C.gold, marginBottom:2 }}>
+                          {activeConvo.senderNames?.[msg.sender_id] || 'Unknown'}
+                        </div>
+                      )}
                       {isLive && pinnedIds.has(msg.id) && (
                         <div style={{ fontSize:9, color:C.gold, fontWeight:700, marginBottom:2, textAlign: mine ? 'right' : 'left' }}>📌 Pinned</div>
                       )}
@@ -1816,8 +1870,15 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               <div ref={bottomRef}/>
             </div>
 
-            {/* Input bar — hidden for demo threads and admin */}
-            {myRole !== 'super_admin' && (isLive || myRole === 'client') && (
+            {/* Read-only banner for admin oversight threads */}
+            {activeConvo?.monitor && (
+              <div style={{ padding:'8px 14px', background:`${C.gold}11`, borderTop:`1px solid ${C.gold}33`,
+                fontSize:11, color:C.gold, fontWeight:700, flexShrink:0 }}>
+                👁 Admin oversight — read-only. Deleted messages are shown flagged with their original content.
+              </div>
+            )}
+            {/* Input bar — hidden for demo threads, admin, and oversight threads */}
+            {!activeConvo?.monitor && myRole !== 'super_admin' && (isLive || myRole === 'client') && (
               <div style={{ padding: isMobile ? '8px 10px 12px' : '10px 14px 14px',
                 background:C.surface, borderTop:`1px solid ${C.border}`,
                 display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
