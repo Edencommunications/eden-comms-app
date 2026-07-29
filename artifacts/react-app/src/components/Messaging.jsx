@@ -1080,6 +1080,16 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   useEffect(() => { setPins([]); if (activeConvo?.supabaseConvoId) loadPins() }, [activeId, myProfileId])
   const pinnedIds = new Set(pins.map(p => p.message_id))
 
+  function jumpToMsg(id) {
+    const el = document.getElementById(`msg-${id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior:'smooth', block:'center' })
+    el.style.transition = 'background 0.4s'
+    el.style.background = `${C.gold}33`
+    el.style.borderRadius = '10px'
+    setTimeout(() => { el.style.background = 'transparent' }, 1600)
+  }
+
   async function togglePin(msg) {
     if (!myProfileId) return
     if (pinnedIds.has(msg.id)) {
@@ -1654,7 +1664,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   if (!m || m.deleted_at) return null
                   return (
                     <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'3px 0' }}>
-                      <div style={{ flex:1, fontSize:12, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <div onClick={() => jumpToMsg(m.id)} title="Jump to message"
+                        style={{ flex:1, fontSize:12, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'pointer' }}>
                         {m.content || m.file_name || '📎 Attachment'}
                       </div>
                       <span style={{ fontSize:9, color:C.muted, flexShrink:0 }}>{formatTime(m.created_at)}</span>
@@ -1699,7 +1710,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   )
                 }
                 return (
-                  <div key={msg.id || i} className="msg-row" style={{ display:'flex', justifyContent:mine?'flex-end':'flex-start', marginBottom:10, alignItems:'flex-end' }}>
+                  <div key={msg.id || i} id={msg.id ? `msg-${msg.id}` : undefined} className="msg-row" style={{ display:'flex', justifyContent:mine?'flex-end':'flex-start', marginBottom:10, alignItems:'flex-end' }}>
                     {!mine && (
                       <div style={{ width:26, height:26, borderRadius:13, background:C.card, border:`1px solid ${C.border}`,
                         display:'flex', alignItems:'center', justifyContent:'center',

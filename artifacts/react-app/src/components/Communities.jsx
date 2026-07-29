@@ -267,6 +267,16 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
 
   // ── Pins ────────────────────────────────────────────────────
   const pinnedIds = new Set(pins.map(p => p.message_id))
+
+  function jumpToMsg(id) {
+    const el = document.getElementById(`cmsg-${id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior:'smooth', block:'center' })
+    el.style.transition = 'background 0.4s'
+    el.style.background = `${C.gold}33`
+    el.style.borderRadius = '10px'
+    setTimeout(() => { el.style.background = 'transparent' }, 1600)
+  }
   async function togglePin(m) {
     if (!myId) return
     if (pinnedIds.has(m.id)) {
@@ -311,7 +321,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   function bubble(m, isReply = false) {
     const mine = m.sender_id === myId
     return (
-      <div key={m.id} style={{ marginBottom: isReply ? 8 : 4, marginLeft: isReply ? 34 : 0, display:'flex', gap:8, alignItems:'flex-start' }}>
+      <div key={m.id} id={`cmsg-${m.id}`} style={{ marginBottom: isReply ? 8 : 4, marginLeft: isReply ? 34 : 0, display:'flex', gap:8, alignItems:'flex-start' }}>
         <div style={{ width: isReply?24:30, height: isReply?24:30, borderRadius:6, background: mine ? C.gold : `${C.gold}22`,
           display:'flex', alignItems:'center', justifyContent:'center', fontSize: isReply?9:11, fontWeight:700,
           color: mine ? C.black : C.gold, flexShrink:0 }}>
@@ -432,7 +442,8 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                   return (
                     <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 0' }}>
                       <span style={{ fontSize:10, fontWeight:700, color:C.gold, flexShrink:0 }}>{m.sender_name}:</span>
-                      <div style={{ flex:1, fontSize:11, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.content}</div>
+                      <div onClick={() => jumpToMsg(m.id)} title="Jump to message"
+                        style={{ flex:1, fontSize:11, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'pointer' }}>{m.content}</div>
                       <button onClick={() => togglePin(m)} title="Unpin" style={{ background:'none', border:'none', color:C.muted, fontSize:10, cursor:'pointer', padding:2, flexShrink:0 }}>✕</button>
                     </div>
                   )
