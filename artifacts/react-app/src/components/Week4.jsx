@@ -7,6 +7,7 @@
 // {tab === 'workout' && <Week4 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { sbBearer } from '../lib/sbAuth'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -39,7 +40,7 @@ const C = {
 
 const H = {
   'apikey':SUPABASE_ANON,
-  'Authorization':`Bearer ${SUPABASE_ANON}`,
+  get Authorization(){ return sbBearer() },
   'Content-Type':'application/json',
   'Prefer':'return=representation',
 }
@@ -553,7 +554,7 @@ Training Principles:
       const path   = `labs/${CLIENT_UUID}/${Date.now()}-${file.name}`
       const upRes  = await fetch(`${SUPABASE_URL}/storage/v1/object/lab-files/${path}`, {
         method:'POST',
-        headers:{'apikey':SUPABASE_ANON,'Authorization':`Bearer ${SUPABASE_ANON}`,'Content-Type':file.type},
+        headers:{'apikey':SUPABASE_ANON,get Authorization(){ return sbBearer() },'Content-Type':file.type},
         body:file,
       })
       const fileUrl = upRes.ok
@@ -692,7 +693,7 @@ Training Principles:
         method: 'POST',
         headers: {
           'apikey':        SUPABASE_ANON,
-          'Authorization': `Bearer ${SUPABASE_ANON}`,
+          get Authorization(){ return sbBearer() },
           'Content-Type':  'application/json',
           'Prefer':        'resolution=merge-duplicates,return=minimal',
         },

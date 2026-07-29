@@ -2,6 +2,7 @@
 // Messaging.jsx — Multi-client conversation list
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { sbBearer } from '../lib/sbAuth'
 import Communities from './Communities'
 
 function useIsMobile(bp = 640) {
@@ -164,7 +165,7 @@ const DEMO_CLIENTS = [
 // ── Supabase helpers ──────────────────────────────────────────
 const H = {
   'apikey': SUPABASE_ANON,
-  'Authorization': `Bearer ${SUPABASE_ANON}`,
+  get Authorization(){ return sbBearer() },
   'Content-Type': 'application/json',
   'Prefer': 'return=representation',
 }
@@ -1179,7 +1180,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       const bucket = file.type.startsWith('image/') ? 'chat-media' : 'lab-files'
       const upRes  = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
         method: 'POST',
-        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}`, 'Content-Type': file.type },
+        headers: { 'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() }, 'Content-Type': file.type },
         body: file,
       })
       if (!upRes.ok) throw new Error('Upload failed')

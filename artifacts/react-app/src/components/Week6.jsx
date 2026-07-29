@@ -8,6 +8,7 @@
 //   {tab === 'admin' && <Week6 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 import { supabase as authClient } from '../supabaseClient'
@@ -62,7 +63,7 @@ const C = {
 
 const H = {
   'apikey':SUPABASE_ANON,
-  'Authorization':`Bearer ${SUPABASE_ANON}`,
+  get Authorization(){ return sbBearer() },
   'Content-Type':'application/json',
   'Prefer':'return=representation',
 }
@@ -779,6 +780,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Realtime: push changes to user_profiles instantly over websocket.
     // Polling below is only a FALLBACK while the channel is not connected.
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
+    // With RLS on, realtime only delivers rows the subscriber may see — authenticate the channel.
+    try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
     let realtimeUp = false
     let debounce = null
     const scheduleSync = ()=>{

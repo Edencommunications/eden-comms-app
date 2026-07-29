@@ -6,6 +6,7 @@
 // Place at: src/components/Week5.jsx
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
+import { sbBearer } from '../lib/sbAuth'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -37,7 +38,7 @@ const C = {
 }
 const H = {
   'apikey':SUPABASE_ANON,
-  'Authorization':`Bearer ${SUPABASE_ANON}`,
+  get Authorization(){ return sbBearer() },
   'Content-Type':'application/json',
   'Prefer':'return=representation',
 }

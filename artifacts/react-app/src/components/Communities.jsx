@@ -6,13 +6,14 @@
 //         message_pins (context='community'), audit_logs, notifications
 // ════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { sbBearer } from '../lib/sbAuth'
 import MentionInput from './MentionInput'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 const EDEN_ORG_ID   = 'b0000000-0000-0000-0000-000000000001'
 const H = {
-  'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}`,
+  'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() },
   'Content-Type': 'application/json',
 }
 const C = {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext, useCallback } from "react";
+import { sbBearer } from './lib/sbAuth'
 import {
   ResponsiveContainer, LineChart, AreaChart, BarChart,
   Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -580,7 +581,7 @@ const HomeScreen = ({ user, wlOrg = null }) => {
 // ─── COMMUNITY / CONNECT SCREEN ──────────────────────────────────────────────
 const CS_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co';
 const CS_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU';
-const CS_H    = { 'apikey':CS_ANON, 'Authorization':`Bearer ${CS_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=representation' };
+const CS_H    = { 'apikey':CS_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':'application/json', 'Prefer':'return=representation' };
 async function csGet(table:string, q='') { try { const r=await fetch(`${CS_URL}/rest/v1/${table}?${q}`,{headers:CS_H}); return r.ok?r.json():[] } catch { return [] } }
 async function csSave(table:string, body:any, id?:string) {
   const url = id ? `${CS_URL}/rest/v1/${table}?id=eq.${id}` : `${CS_URL}/rest/v1/${table}`;
@@ -2325,7 +2326,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
 // ─── SUPABASE HELPERS (admin components) ─────────────────────────────────────
 const SB_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU';
-const SB_H    = { 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=representation' };
+const SB_H    = { 'apikey':SB_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':'application/json', 'Prefer':'return=representation' };
 async function sbGet(table:string, params='') {
   try { const r=await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{headers:SB_H}); if(!r.ok) return []; return r.json(); } catch { return []; }
 }
@@ -2345,7 +2346,7 @@ async function sbUploadLogo(orgId:string, file:File):Promise<string|null> {
     const path = `${orgId}-${Date.now()}.${ext}`;
     const r = await fetch(`${SB_URL}/storage/v1/object/org-logos/${path}`,{
       method:'POST',
-      headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':file.type||'image/png' },
+      headers:{ 'apikey':SB_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':file.type||'image/png' },
       body:file,
     });
     if (!r.ok) return null;
@@ -3637,7 +3638,7 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
     try {
       const path = `${uuid}/${Date.now()}-${file.name}`
       const upRes = await fetch(`${SB_URL}/storage/v1/object/progress-photos/${path}`, {
-        method:'POST', headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':file.type }, body:file,
+        method:'POST', headers:{ 'apikey':SB_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':file.type }, body:file,
       })
       if (!upRes.ok) throw new Error('upload failed')
       const photoUrl = `${SB_URL}/storage/v1/object/public/progress-photos/${path}`

@@ -44,8 +44,9 @@ const restHeaders = (key: string) => ({
 });
 
 async function dbGet<T = any>(table: string, params: string): Promise<T[]> {
+  // RLS blocks the anon key — server-side lookups use the service role key.
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
-    headers: restHeaders(SUPABASE_ANON),
+    headers: restHeaders(SERVICE_KEY || SUPABASE_ANON),
   });
   if (!r.ok) return [];
   return r.json() as Promise<T[]>;

@@ -5,6 +5,7 @@
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { sbBearer } from '../lib/sbAuth'
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -38,7 +39,7 @@ const C = {
 
 const H = {
   'apikey':SUPABASE_ANON,
-  'Authorization':`Bearer ${SUPABASE_ANON}`,
+  get Authorization(){ return sbBearer() },
   'Content-Type':'application/json',
   'Prefer':'return=representation',
 }
@@ -50,14 +51,14 @@ async function dbInsert(table, body) {
 }
 async function dbGet(table, query='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}` }
+    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() } }
   })
   return r.ok ? r.json() : []
 }
 async function dbUpdate(table, query, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     method:'PATCH',
-    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}`,
+    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() },
       'Content-Type':'application/json', 'Prefer':'return=minimal' },
     body:JSON.stringify(body)
   })
@@ -66,7 +67,7 @@ async function dbUpdate(table, query, body) {
 async function dbUpsert(table, body, onConflict) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
     method:'POST',
-    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}`,
+    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() },
       'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates,return=minimal' },
     body:JSON.stringify(body)
   })
@@ -75,7 +76,7 @@ async function dbUpsert(table, body, onConflict) {
 async function dbDelete(table, query) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     method:'DELETE',
-    headers:{ 'apikey':SUPABASE_ANON, 'Authorization':`Bearer ${SUPABASE_ANON}` }
+    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() } }
   })
   if (!r.ok) console.error('DELETE', await r.text())
 }
@@ -930,7 +931,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       const path = `${uuid}/${Date.now()}-${file.name}`
       const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/progress-photos/${path}`, {
         method: 'POST',
-        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}`, 'Content-Type': file.type },
+        headers: { 'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() }, 'Content-Type': file.type },
         body: file,
       })
       if (!upRes.ok) throw new Error('upload failed')

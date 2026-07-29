@@ -6,6 +6,7 @@
 // currentUser.role determines coach vs. client view
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { sbBearer } from '../lib/sbAuth'
 
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
@@ -16,7 +17,7 @@ const C = {
 // ── Supabase (food log persistence) ──────────────────────────
 const SB_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
-const SB_HEADERS = { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}`, 'Content-Type': 'application/json' }
+const SB_HEADERS = { apikey: SB_ANON, get Authorization(){ return sbBearer() }, 'Content-Type': 'application/json' }
 
 const KNOWN_USERS = {
   'client@eden.io':     { uuid:'c1000000-0000-0000-0000-000000000001', name:'Jordan Williams' },

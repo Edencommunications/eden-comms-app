@@ -29,9 +29,12 @@ const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU";
 
+// RLS blocks the anon key — the webhook must read/write with the service role key.
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON;
+
 const H = {
-  apikey: SUPABASE_ANON,
-  Authorization: `Bearer ${SUPABASE_ANON}`,
+  apikey: SB_KEY,
+  Authorization: `Bearer ${SB_KEY}`,
   "Content-Type": "application/json",
   Prefer: "return=representation",
 };

@@ -7,6 +7,7 @@
 //   {tab === 'team' && <Week7 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import { sbBearer } from '../lib/sbAuth'
 import Communities from './Communities'
 import MentionInput from './MentionInput'
 
@@ -45,7 +46,7 @@ const C = {
 
 const H = {
   'apikey': SUPABASE_ANON,
-  'Authorization': `Bearer ${SUPABASE_ANON}`,
+  get Authorization(){ return sbBearer() },
   'Content-Type': 'application/json',
   'Prefer': 'return=representation',
 }
