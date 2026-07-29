@@ -1033,28 +1033,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           pushConvo(user, convoId)
         }
 
-        // Admin oversight: every OTHER conversation in the company (e.g. coach ↔ client),
-        // shown read-only with sender names. Deleted messages appear flagged with original content.
-        const allConvos = await dbGet('conversations', `company_id=eq.${me.company_id}&order=created_at.asc`)
-        const otherConvos = (allConvos || []).filter(c =>
-          c.participant_a_id && c.participant_b_id &&
-          c.participant_a_id !== me.id && c.participant_b_id !== me.id)
-        if (otherConvos.length) {
-          const profIds = [...new Set(otherConvos.flatMap(c => [c.participant_a_id, c.participant_b_id]))]
-          const profs = await dbGet('user_profiles', `id=in.(${profIds.join(',')})&select=id,name,role`)
-          const byId = Object.fromEntries((profs || []).map(p => [p.id, p]))
-          for (const c of otherConvos) {
-            const a = byId[c.participant_a_id], b = byId[c.participant_b_id]
-            if (!a || !b) continue
-            convos.push({
-              id: `monitor-${c.id}`, name: `${a.name} ↔ ${b.name}`, initials: '👁',
-              supabaseConvoId: c.id, lastMessage: 'Admin oversight — read-only', lastTime: '',
-              unread: 0, online: false, thread: [],
-              monitor: true,
-              senderNames: { [a.id]: a.name, [b.id]: b.name },
-            })
-          }
-        }
+        // Admin oversight of other people's conversations lives in the
+        // Conversations tab of the admin panel (AdminConversationMonitor) —
+        // no read-only monitor entries here anymore.
 
       } else {
         // Staff (VA, head_coach, etc.) — load all clients from client_access.

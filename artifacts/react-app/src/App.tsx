@@ -2743,8 +2743,13 @@ const AdminConversationMonitor = ({ user }:any) => {
                   <span style={{ fontSize:11, fontWeight:700, color:B.muted }}>{pName(msg.sender_id)}</span>
                   {msg.created_at && <span style={{ fontSize:9, color:B.border }}>{new Date(msg.created_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
                 </div>
-                <div style={{ marginLeft:28, background:B.card, border:`1px solid ${B.border}`, borderRadius:'4px 12px 12px 12px', padding:'9px 13px' }}>
-                  <p style={{ fontSize:13, color:B.text, margin:0, lineHeight:1.55, wordBreak:'break-word' }}>{msg.content||'📎 File attachment'}</p>
+                <div style={{ marginLeft:28, background:B.card, border:`1px solid ${msg.deleted_at ? '#ff444455' : B.border}`, borderRadius:'4px 12px 12px 12px', padding:'9px 13px' }}>
+                  {msg.deleted_at && (
+                    <p style={{ fontSize:10, fontWeight:700, color:'#ff4444', margin:'0 0 4px' }}>
+                      🗑 Deleted by {msg.deleted_by_name || 'unknown'}
+                    </p>
+                  )}
+                  <p style={{ fontSize:13, color:msg.deleted_at ? B.muted : B.text, margin:0, lineHeight:1.55, wordBreak:'break-word', ...(msg.deleted_at ? { fontStyle:'italic' } : {}) }}>{msg.content||'📎 File attachment'}</p>
                 </div>
               </div>
             ))}
