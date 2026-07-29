@@ -6,6 +6,7 @@
 //         message_pins (context='community'), audit_logs, notifications
 // ════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
+import MentionInput from './MentionInput'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -91,6 +92,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   const [showMembers, setShowMembers] = useState(false)
   const [roster,      setRoster]      = useState(null)   // candidates for adding
   const [rosterSearch,setRosterSearch]= useState('')
+  const [newMembers,  setNewMembers]  = useState([])     // profiles picked in the create modal
   const bottomRef = useRef(null)
   const listRef = useRef(null)
   const msgCountRef = useRef(-1)   // -1 = community just opened (force scroll once)
@@ -172,7 +174,22 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
       community_id: rows[0].id, user_id: myId, user_name: myName, user_role: myRole,
       added_by: myId, added_by_name: myName,
     })
-    setNewName(''); setShowCreate(false)
+    // members picked in the create modal
+    for (const p of newMembers) {
+      if (p.id === myId) continue
+      await dbInsert('community_members', {
+        community_id: rows[0].id, user_id: p.id, user_name: p.name || p.full_name || p.email,
+        user_role: p.role, added_by: myId, added_by_name: myName,
+      })
+      if (p.role === 'client' && p.is_active === false && !p.community_only) {
+        await dbUpdate('user_profiles', `id=eq.${p.id}`, { community_only: true })
+      }
+      dbInsert('notifications', {
+        recipient_id: p.id, sender_id: myId, sender_name: myName, type: 'community',
+        body: `👥 ${myName} added you to the "${name}" community`, is_read: false,
+      })
+    }
+    setNewName(''); setShowCreate(false); setNewMembers([])
     await loadCommunities()
     setActiveId(rows[0].id)
   }
@@ -186,8 +203,8 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   }
 
   // ── Member management ───────────────────────────────────────
-  async function openMembers() {
-    setShowMembers(true); setRoster(null); setRosterSearch('')
+  // Everyone this user is allowed to add (team hub = all staff; clients context per role)
+  async function fetchRoster() {
     let rows = []
     if (context === 'team') {
       rows = (await dbGet('user_profiles', `company_id=eq.${companyId}&role=neq.client&select=id,name,full_name,email,role,is_active,community_only&order=name.asc.nullslast`)) || []
@@ -202,6 +219,11 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
       rows = [...(mine||[]), ...(staff||[])]
     }
     setRoster(rows)
+    return rows
+  }
+  function openMembers() {
+    setShowMembers(true); setRoster(null); setRosterSearch('')
+    fetchRoster()
   }
   async function addMember(p) {
     const r = await dbInsert('community_members', {
@@ -387,7 +409,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
           <div style={{ padding:'14px 14px 8px', display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ flex:1, fontSize:13, fontWeight:800, color:C.white }}>👥 Communities</div>
             {canManage && (
-              <button onClick={() => setShowCreate(true)}
+              <button onClick={() => { setShowCreate(true); setNewMembers([]); setRoster(null); setRosterSearch(''); fetchRoster() }}
                 style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>＋ New</button>
             )}
           </div>
@@ -487,11 +509,12 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                   </div>
                 )}
                 <div style={{ display:'flex', gap:6 }}>
-                  <input value={newMsg} onChange={e => setNewMsg(e.target.value)}
-                    onKeyDown={e => e.key==='Enter' && !e.shiftKey && (e.preventDefault(), send())}
+                  <MentionInput value={newMsg} onChange={setNewMsg} onSubmit={send}
+                    candidates={members.filter(m => m.user_id !== myId).map(m => m.user_name)}
+                    colors={C}
                     placeholder={`Message # ${active.name}… tag people with @Name`}
-                    style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:18,
-                      padding: isMobile ? '11px 14px' : '9px 13px', color:C.white, fontSize:13, outline:'none', minWidth:0 }}/>
+                    inputStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:18,
+                      padding: isMobile ? '11px 14px' : '9px 13px', color:C.white, fontSize:13, outline:'none' }}/>
                   <button onClick={send} disabled={!newMsg.trim()}
                     style={{ background:C.gold, border:'none', borderRadius:18, padding:'9px 16px',
                       fontWeight:800, color:C.black, fontSize:12, cursor:'pointer', opacity:newMsg.trim()?1:.4, flexShrink:0 }}>Send</button>
@@ -518,6 +541,41 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
               onKeyDown={e => e.key==='Enter' && createCommunity()}
               placeholder={context==='team' ? 'e.g. Coach Standup' : 'e.g. Fat Loss Accountability'}
               style={{ width:'100%', boxSizing:'border-box', background:C.card, border:`1px solid ${C.gold}44`, borderRadius:8, padding:'10px 12px', color:C.white, fontSize:13, outline:'none', marginBottom:14 }}/>
+
+            {/* Pick members right away — everyone available in this context */}
+            <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:6 }}>
+              Add members {newMembers.length > 0 && `(${newMembers.length} selected)`}
+            </div>
+            <input value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} placeholder="Search by name or email…"
+              style={{ width:'100%', boxSizing:'border-box', background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', color:C.white, fontSize:12, outline:'none', marginBottom:8 }}/>
+            <div style={{ maxHeight:180, overflowY:'auto', marginBottom:14, border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 8px' }}>
+              {roster === null && <div style={{ fontSize:11, color:C.muted, padding:'8px 0' }}>Loading roster…</div>}
+              {roster !== null && (roster || [])
+                .filter(p => p.id !== myId)
+                .filter(p => {
+                  const q = rosterSearch.trim().toLowerCase()
+                  if (!q) return true
+                  return (p.name || p.full_name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q)
+                })
+                .map(p => {
+                  const picked = newMembers.some(x => x.id === p.id)
+                  return (
+                    <div key={p.id}
+                      onClick={() => setNewMembers(prev => picked ? prev.filter(x => x.id !== p.id) : [...prev, p])}
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 2px', borderBottom:`1px solid ${C.border}`, cursor:'pointer' }}>
+                      <span style={{ width:16, height:16, borderRadius:4, border:`1px solid ${picked ? C.gold : C.border}`,
+                        background: picked ? C.gold : 'transparent', color:C.black, fontSize:11, fontWeight:800,
+                        display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{picked ? '✓' : ''}</span>
+                      <span style={{ flex:1, fontSize:12, color:C.white }}>
+                        {p.name || p.full_name || p.email} <span style={{ fontSize:9, color:C.muted }}>({p.role})</span>
+                        {p.role==='client' && p.is_active===false && <span style={{ fontSize:8, background:'#2a2a2a', color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700, marginLeft:5 }}>OFFBOARDED</span>}
+                      </span>
+                    </div>
+                  )
+                })}
+              {roster !== null && roster.filter(p => p.id !== myId).length === 0 &&
+                <div style={{ fontSize:11, color:C.muted, padding:'8px 0' }}>Nobody available to add yet.</div>}
+            </div>
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
               <button onClick={() => setShowCreate(false)}
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 14px', color:C.muted, fontSize:12, cursor:'pointer' }}>Cancel</button>

@@ -8,6 +8,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import Communities from './Communities'
+import MentionInput from './MentionInput'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -521,10 +522,11 @@ export default function Week7({ currentUser }) {
 
                   <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <input value={newMessage} onChange={e => setNewMessage(e.target.value)}
-                        onKeyDown={e => e.key==='Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
-                        placeholder="Message #general… (Enter to send)"
-                        style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
+                      <MentionInput value={newMessage} onChange={setNewMessage} onSubmit={sendMessage}
+                        candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
+                        colors={C}
+                        placeholder="Message #general… tag with @Name (Enter to send)"
+                        inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
                       <button onClick={sendMessage} disabled={!newMessage.trim()}
                         style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newMessage.trim()?1:.4}}>
                         Send
@@ -591,10 +593,11 @@ export default function Week7({ currentUser }) {
 
                     <div style={{padding:'10px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
                       <div style={{display:'flex',gap:8}}>
-                        <input value={newReply} onChange={e => setNewReply(e.target.value)}
-                          onKeyDown={e => e.key==='Enter' && !e.shiftKey && (e.preventDefault(), sendReply())}
+                        <MentionInput value={newReply} onChange={setNewReply} onSubmit={sendReply}
+                          candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
+                          colors={C}
                           placeholder="Reply in thread…"
-                          style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                          inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                         <button onClick={sendReply} disabled={!newReply.trim()}
                           style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:newReply.trim()?1:.4}}>
                           Reply
@@ -649,10 +652,11 @@ export default function Week7({ currentUser }) {
                 </div>
 
                 <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0,display:'flex',gap:8}}>
-                  <input value={newDm} onChange={e => setNewDm(e.target.value)}
-                    onKeyDown={e => e.key==='Enter' && !e.shiftKey && (e.preventDefault(), sendDm())}
+                  <MentionInput value={newDm} onChange={setNewDm} onSubmit={sendDm}
+                    candidates={[dmTarget.name]}
+                    colors={C}
                     placeholder={`Message ${dmTarget.name.split(' ')[0]}…`}
-                    style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
+                    inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
                   <button onClick={sendDm} disabled={!newDm.trim()}
                     style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newDm.trim()?1:.4}}>
                     Send
