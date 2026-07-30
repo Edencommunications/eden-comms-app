@@ -931,12 +931,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .then(rows=>{ if (openClientRef.current!==client.uuid) return; if (Array.isArray(rows)) setCallNotes(rows.map(n=>({ id:n.id, callDate:n.call_date, callType:n.call_type, summary:n.summary, focusPoints:n.focus_points, actionItems:n.action_items, nextCallDate:n.next_call_date, loomUrl:n.loom_url, otherLinks:n.other_links }))) })
       .catch(()=>{})
     // Load saved update_day from DB and sync into local state
-    dbGet('user_profiles', `id=eq.${client.uuid}&select=update_day`)
+    dbGet('user_profiles', `id=eq.${client.uuid}&select=update_day,start_date`)
       .then(rows => {
-        if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day) {
+        if (Array.isArray(rows) && rows.length > 0) {
           const day = rows[0].update_day
-          setClients(prev => prev.map(c => c.uuid === client.uuid ? {...c, checkInDay: day} : c))
-          setSelectedClient(prev => prev?.uuid === client.uuid ? {...prev, checkInDay: day} : prev)
+          const sd  = rows[0].start_date || ''
+          setClients(prev => prev.map(c => c.uuid === client.uuid ? {...c, ...(day?{checkInDay:day}:{}), startDate: sd} : c))
+          setSelectedClient(prev => prev?.uuid === client.uuid ? {...prev, ...(day?{checkInDay:day}:{}), startDate: sd} : prev)
         }
       })
   }
@@ -1510,6 +1511,21 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
                     {CHECK_IN_DAYS.map(d=><option key={d}>{d}</option>)}
                   </select>
+                )}
+                {/* Coach / Admin: contract start date */}
+                {(isAdmin||isCoach)&&(
+                  <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                    <span style={{fontSize:9,color:C.muted}}>Contract start</span>
+                    <input type="date"
+                      value={selectedClient.startDate||''}
+                      onChange={async e=>{
+                        const sd = e.target.value
+                        setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,startDate:sd}:c))
+                        setSelectedClient(prev=>({...prev,startDate:sd}))
+                        await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{start_date:sd||null})
+                      }}
+                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer',colorScheme:'dark'}}/>
+                  </div>
                 )}
               </div>
 
