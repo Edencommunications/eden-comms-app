@@ -1934,7 +1934,7 @@ function isMissingCheckin(c: any): boolean {
 }
 
 // ── Upcoming contract starts (shared by coach + admin views) ────────────────
-const UpcomingStartsSection = ({ clients }: { clients: any[] }) => {
+const UpcomingStartsSection = ({ clients, loomMode = false }: { clients: any[]; loomMode?: boolean }) => {
   const upcoming = (clients || []).filter(hasNotStarted)
     .sort((a,b) => String(a.startDate).localeCompare(String(b.startDate)));
   if (upcoming.length === 0) return null;
@@ -1946,15 +1946,16 @@ const UpcomingStartsSection = ({ clients }: { clients: any[] }) => {
         <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>
           🗓️ Upcoming Contract Starts ({upcoming.length})
         </p>
-        {upcoming.map((c:any) => {
+        {upcoming.map((c:any, i:number) => {
           const d = daysUntilStart(c);
           const col = tierColor(d);
+          const shownName = loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name;
           return (
             <div key={c.uuid || c.email || c.name} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
               padding:"8px 10px", borderRadius:8, background:d <= 7 ? `${col}11` : "transparent",
               border:`1px solid ${d <= 7 ? col+"44" : "transparent"}`, marginBottom:6 }}>
               <div>
-                <p style={{ fontSize:13, fontWeight:600, color:B.text, margin:0 }}>{c.name}</p>
+                <p style={{ fontSize:13, fontWeight:600, color:B.text, margin:0 }}>{shownName}</p>
                 <p style={{ fontSize:11, color:B.muted, margin:"2px 0 0" }}>
                   Start date: {new Date(`${c.startDate}T00:00:00`).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
                   {c.checkInDay ? ` · update day ${c.checkInDay}` : ""}
@@ -2081,7 +2082,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
         </div>
 
         {/* ── Upcoming contract starts ── */}
-        <UpcomingStartsSection clients={clients}/>
+        <UpcomingStartsSection clients={clients} loomMode={loomMode}/>
 
         {/* ── Missing Check-In Tracker ── */}
         <button onClick={()=>setMissOpen(v=>!v)}
