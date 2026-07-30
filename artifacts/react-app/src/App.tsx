@@ -2066,16 +2066,21 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
   // Guard: ensure loomFeatured is always a Set regardless of how the prop arrives
   const featuredSet: Set<string> = (loomFeatured instanceof Set) ? loomFeatured : new Set();
 
-  // Coach's own check-in deadline timezone
-  const [myTz, setMyTz] = useState(DEFAULT_TZ);
-  const [myTime, setMyTime] = useState(DEFAULT_TIME);
-  const [myTzError, setMyTzError] = useState(false);
+  // Org-level check-in deadline (shared across all coaches/clients in the org)
+  const [myTz,        setMyTz]        = useState(DEFAULT_TZ);
+  const [myTime,      setMyTime]      = useState(DEFAULT_TIME);
+  const [myTzError,   setMyTzError]   = useState(false);
+  const [myCompanyId, setMyCompanyId] = useState<string|null>(null);
   useEffect(() => { (async () => {
     if (!user?.email) return;
     try {
-      const rows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=timezone,deadline_time`);
-      if (Array.isArray(rows) && rows[0]?.timezone) setMyTz(rows[0].timezone);
-      if (Array.isArray(rows) && rows[0]?.deadline_time) setMyTime(rows[0].deadline_time.slice(0,5));
+      const me = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=company_id`);
+      const cid = me?.[0]?.company_id;
+      if (!cid) return;
+      setMyCompanyId(cid);
+      const org = await sbGet('companies', `id=eq.${cid}&select=timezone,deadline_time`);
+      if (Array.isArray(org) && org[0]?.timezone)     setMyTz(org[0].timezone);
+      if (Array.isArray(org) && org[0]?.deadline_time) setMyTime(org[0].deadline_time.slice(0,5));
     } catch {}
   })(); }, [user?.email]);
 
@@ -2144,21 +2149,22 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
 
         {/* ── Check-in timezone (coach's own setting) ── */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8, marginBottom:12 }}>
-          <span style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase" }}>Check-in deadline</span>
-          {myTzError && <span style={{ fontSize:11, color:"#ff5252", fontWeight:700 }}>⚠ Not saved — run the timezone SQL first</span>}
+          <span style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase" }}>Org check-in deadline</span>
+          {myTzError && <span style={{ fontSize:11, color:"#ff5252", fontWeight:700 }}>⚠ Not saved — run the SQL first</span>}
           <input type="time" value={myTime} onChange={async e => {
-              const t = e.target.value; if (!t) return;
+              const t = e.target.value; if (!t || !myCompanyId) return;
               const prev = myTime;
               setMyTime(t); setMyTzError(false);
-              const ok = await sbPatch('user_profiles', `email=eq.${encodeURIComponent(user.email)}`, { deadline_time: t });
+              const ok = await sbPatch('companies', `id=eq.${myCompanyId}`, { deadline_time: t });
               if (!ok) { setMyTime(prev); setMyTzError(true); return; }
               clearTzCache();
             }}
             style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer", colorScheme:"dark" }}/>
           <select value={myTz} onChange={async e => {
               const tz = e.target.value; const prev = myTz;
+              if (!myCompanyId) return;
               setMyTz(tz); setMyTzError(false);
-              const ok = await sbPatch('user_profiles', `email=eq.${encodeURIComponent(user.email)}`, { timezone: tz });
+              const ok = await sbPatch('companies', `id=eq.${myCompanyId}`, { timezone: tz });
               if (!ok) { setMyTz(prev); setMyTzError(true); return; }
               clearTzCache();
             }}

@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
-import { useDeadline } from '../lib/tz'
+import { useDeadline, TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, clearTzCache } from '../lib/tz'
 import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 import { supabase as authClient } from '../supabaseClient'
@@ -438,12 +438,22 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               plan:o.plan, coachCount:old?.coachCount||0, clientCount:old?.clientCount||0,
               active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
               calendarUrl:o.calendar_url||'', billingEmail:o.billing_email||'',
-              brandColors:old?.brandColors }
+              brandColors:old?.brandColors,
+              timezone:old?.timezone||DEFAULT_TZ, deadlineTime:old?.deadlineTime||DEFAULT_TIME }
           }))
       })
       // Real coach/client counts per org — chained after the org list lands so it
       // can't be overwritten by the stale-count initial mapping above.
       .then(refreshOrgCounts)
+      // Load org-level deadline settings from companies table (timezone + deadline_time)
+      .then(()=>dbGet('companies','select=id,timezone,deadline_time'))
+      .then(rows=>{
+        if (Array.isArray(rows)&&rows.length)
+          setOrgs(prev=>prev.map(o=>{
+            const m=rows.find(r=>r.id===o.id)
+            return m?{...o,timezone:m.timezone||DEFAULT_TZ,deadlineTime:(m.deadline_time||DEFAULT_TIME).slice(0,5)}:o
+          }))
+      }).catch(()=>{})
       // Probe for the brand_colors palette column (added later — needs its SQL run once)
       .then(()=>dbGet('organizations','select=id,brand_colors'))
       .then(rows=>{
@@ -512,6 +522,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       ...(colorsColSupported ? { brand_colors: manageOrg.brandColors||[] } : {}),
     })
     if (!ok) { alert("Couldn't save the organization changes — try again."); return }
+    // Save deadline settings to companies table (timezone + deadline_time)
+    await dbUpdate('companies',`id=eq.${manageOrg.id}`,{
+      timezone: manageOrg.timezone || DEFAULT_TZ,
+      deadline_time: manageOrg.deadlineTime || DEFAULT_TIME,
+    })
+    clearTzCache()
     setOrgs(prev=>prev.map(o=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
     setManageOrg(null)
   }
@@ -2536,6 +2552,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               : <div style={{fontSize:11,color:C.muted,margin:'6px 0 10px'}}>Platform owner — no tier applies.</div>}
             <Inp label="Billing Email" value={manageOrg.billingEmail||''} onChange={v=>setManageOrg(p=>({...p,billingEmail:v}))} type="email"/>
             <Inp label="Calendar / Booking URL" value={manageOrg.calendarUrl||''} onChange={v=>setManageOrg(p=>({...p,calendarUrl:v}))} placeholder="Their booking link (they can also manage this)"/>
+            {/* ── Check-in deadline ── */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Check-in Deadline</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="time" value={manageOrg.deadlineTime||DEFAULT_TIME}
+                  onChange={e=>setManageOrg(p=>({...p,deadlineTime:e.target.value}))}
+                  style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',
+                    color:C.gold,fontSize:12,outline:'none',colorScheme:'dark'}}/>
+                <select value={manageOrg.timezone||DEFAULT_TZ}
+                  onChange={e=>setManageOrg(p=>({...p,timezone:e.target.value}))}
+                  style={{flex:1,background:'#111',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',
+                    color:C.gold,fontSize:12,outline:'none',cursor:'pointer'}}>
+                  {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginTop:4}}>Applies to all coaches and clients in this org.</div>
+            </div>
             <ColorRow primary={manageOrg.brandColor} colors={manageOrg.brandColors||[]}
               onPrimary={v=>setManageOrg(p=>({...p,brandColor:v}))}
               onColors={v=>setManageOrg(p=>({...p,brandColors:v}))}/>
