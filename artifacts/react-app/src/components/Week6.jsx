@@ -420,6 +420,24 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [pkgCoursesOpen, setPkgCoursesOpen] = useState(null) // package id whose Eden course list is expanded
   const [orgCoursesOpen, setOrgCoursesOpen] = useState(null) // org id whose Eden course list is expanded
   const [manageOrg,   setManageOrg]   = useState(null)  // org being edited in the Manage modal
+  // Per-coach check-in deadline settings (admin can edit each coach's from the overview)
+  const [coachDeadlines, setCoachDeadlines] = useState({})  // uuid -> { tz, time }
+  useEffect(()=>{
+    dbGet('user_profiles','role=in.(coach,head_coach)&select=id,timezone,deadline_time')
+      .then(rows=>{
+        if (!Array.isArray(rows)) return
+        const map = {}
+        rows.forEach(r=>{ map[r.id] = { tz:r.timezone||null, time:r.deadline_time?r.deadline_time.slice(0,5):null } })
+        setCoachDeadlines(map)
+      }).catch(()=>{})
+  },[])
+  async function saveCoachDeadline(uuid, patch, local) {
+    const prev = coachDeadlines[uuid]||{}
+    setCoachDeadlines(m=>({...m,[uuid]:{...prev,...local}}))
+    const ok = await dbUpdate('user_profiles',`id=eq.${uuid}`,patch)
+    if (!ok) { setCoachDeadlines(m=>({...m,[uuid]:prev})); alert("Couldn't save the deadline change — try again."); return }
+    clearTzCache()
+  }
 
   // Reload the active package tiers from the DB — used on mount and by realtime pushes
   function refreshPackages() {
@@ -438,22 +456,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               plan:o.plan, coachCount:old?.coachCount||0, clientCount:old?.clientCount||0,
               active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
               calendarUrl:o.calendar_url||'', billingEmail:o.billing_email||'',
-              brandColors:old?.brandColors,
-              timezone:old?.timezone||DEFAULT_TZ, deadlineTime:old?.deadlineTime||DEFAULT_TIME }
+              brandColors:old?.brandColors }
           }))
       })
       // Real coach/client counts per org — chained after the org list lands so it
       // can't be overwritten by the stale-count initial mapping above.
       .then(refreshOrgCounts)
-      // Load org-level deadline settings from companies table (timezone + deadline_time)
-      .then(()=>dbGet('companies','select=id,timezone,deadline_time'))
-      .then(rows=>{
-        if (Array.isArray(rows)&&rows.length)
-          setOrgs(prev=>prev.map(o=>{
-            const m=rows.find(r=>r.id===o.id)
-            return m?{...o,timezone:m.timezone||DEFAULT_TZ,deadlineTime:(m.deadline_time||DEFAULT_TIME).slice(0,5)}:o
-          }))
-      }).catch(()=>{})
       // Probe for the brand_colors palette column (added later — needs its SQL run once)
       .then(()=>dbGet('organizations','select=id,brand_colors'))
       .then(rows=>{
@@ -522,12 +530,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       ...(colorsColSupported ? { brand_colors: manageOrg.brandColors||[] } : {}),
     })
     if (!ok) { alert("Couldn't save the organization changes — try again."); return }
-    // Save deadline settings to companies table (timezone + deadline_time)
-    await dbUpdate('companies',`id=eq.${manageOrg.id}`,{
-      timezone: manageOrg.timezone || DEFAULT_TZ,
-      deadline_time: manageOrg.deadlineTime || DEFAULT_TIME,
-    })
-    clearTzCache()
     setOrgs(prev=>prev.map(o=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
     setManageOrg(null)
   }
@@ -1339,13 +1341,28 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             {allCoaches.map(coach=>{
               const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
               const submitted    = coachClients.filter(c=>!c.hasUpdate).length
+              const dl = coachDeadlines[coach.uuid]||{}
               return (
                 <div key={coach.uuid} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,flexWrap:'wrap',gap:6}}>
                     <div style={{fontSize:13,color:C.white,fontWeight:600}}>{coach.name}</div>
-                    <span style={{fontSize:12,color:submitted===coachClients.length?C.success:C.gold,fontWeight:700}}>
-                      {submitted}/{coachClients.length} submitted
-                    </span>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      {isAdmin&&(<>
+                        <input type="time" value={dl.time||DEFAULT_TIME}
+                          onChange={e=>saveCoachDeadline(coach.uuid,{deadline_time:e.target.value||null},{time:e.target.value})}
+                          title={`${coach.name}'s check-in deadline time`}
+                          style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.gold,fontSize:11,outline:'none',colorScheme:'dark'}}/>
+                        <select value={dl.tz||DEFAULT_TZ}
+                          onChange={e=>saveCoachDeadline(coach.uuid,{timezone:e.target.value},{tz:e.target.value})}
+                          title={`${coach.name}'s check-in timezone`}
+                          style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
+                          {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.short}</option>)}
+                        </select>
+                      </>)}
+                      <span style={{fontSize:12,color:submitted===coachClients.length?C.success:C.gold,fontWeight:700}}>
+                        {submitted}/{coachClients.length} submitted
+                      </span>
+                    </div>
                   </div>
                   <div style={{height:6,borderRadius:3,background:C.border}}>
                     <div style={{width:`${coachClients.length?submitted/coachClients.length*100:0}%`,height:'100%',borderRadius:3,background:submitted===coachClients.length?C.success:C.gold,transition:'width .4s'}}/>
@@ -2552,23 +2569,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               : <div style={{fontSize:11,color:C.muted,margin:'6px 0 10px'}}>Platform owner — no tier applies.</div>}
             <Inp label="Billing Email" value={manageOrg.billingEmail||''} onChange={v=>setManageOrg(p=>({...p,billingEmail:v}))} type="email"/>
             <Inp label="Calendar / Booking URL" value={manageOrg.calendarUrl||''} onChange={v=>setManageOrg(p=>({...p,calendarUrl:v}))} placeholder="Their booking link (they can also manage this)"/>
-            {/* ── Check-in deadline ── */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Check-in Deadline</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="time" value={manageOrg.deadlineTime||DEFAULT_TIME}
-                  onChange={e=>setManageOrg(p=>({...p,deadlineTime:e.target.value}))}
-                  style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',
-                    color:C.gold,fontSize:12,outline:'none',colorScheme:'dark'}}/>
-                <select value={manageOrg.timezone||DEFAULT_TZ}
-                  onChange={e=>setManageOrg(p=>({...p,timezone:e.target.value}))}
-                  style={{flex:1,background:'#111',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',
-                    color:C.gold,fontSize:12,outline:'none',cursor:'pointer'}}>
-                  {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div style={{fontSize:10,color:C.muted,marginTop:4}}>Applies to all coaches and clients in this org.</div>
-            </div>
             <ColorRow primary={manageOrg.brandColor} colors={manageOrg.brandColors||[]}
               onPrimary={v=>setManageOrg(p=>({...p,brandColor:v}))}
               onColors={v=>setManageOrg(p=>({...p,brandColors:v}))}/>

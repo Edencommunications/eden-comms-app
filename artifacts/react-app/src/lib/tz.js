@@ -84,18 +84,25 @@ async function get(pathQuery) {
 
 const DEFAULTS = { tz: DEFAULT_TZ, time: DEFAULT_TIME }
 
-// Resolve deadline settings for any user: look up their org's companies row.
-// Coaches and clients in the same org share the same company_id → same deadline.
+// Resolve deadline settings per person:
+//   1. their own user_profiles.timezone / deadline_time (set by them or an admin)
+//   2. if a client and unset → their coach's settings
+//   3. defaults (9 AM Central)
 export async function fetchDeadline(email) {
   if (!email) return DEFAULTS
   if (cache[email]) return cache[email]
   try {
-    const rows = await get(`user_profiles?email=eq.${encodeURIComponent(email)}&select=company_id`)
+    const rows = await get(`user_profiles?email=eq.${encodeURIComponent(email)}&select=role,timezone,deadline_time,coach_id`)
     const me = Array.isArray(rows) ? rows[0] : null
-    if (!me?.company_id) return DEFAULTS
-    const orgs = await get(`companies?id=eq.${me.company_id}&select=timezone,deadline_time`)
-    const org = Array.isArray(orgs) ? orgs[0] : null
-    cache[email] = { tz: org?.timezone || DEFAULT_TZ, time: (org?.deadline_time || DEFAULT_TIME).slice(0,5) }
+    if (!me) return DEFAULTS
+    let tz = me.timezone, time = me.deadline_time
+    if ((!tz || !time) && me.role === 'client' && me.coach_id) {
+      const c = await get(`user_profiles?id=eq.${me.coach_id}&select=timezone,deadline_time`)
+      const coach = Array.isArray(c) ? c[0] : null
+      tz = tz || coach?.timezone
+      time = time || coach?.deadline_time
+    }
+    cache[email] = { tz: tz || DEFAULT_TZ, time: (time || DEFAULT_TIME).slice(0,5) }
     return cache[email]
   } catch { return DEFAULTS }
 }
