@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
+import { TZ_OPTIONS, DEFAULT_TZ, zonedTimeToIso, tzShort } from '../lib/tz'
 import Communities from './Communities'
 
 function useIsMobile(bp = 640) {
@@ -122,6 +123,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
   const [scheduleDates, setScheduleDates] = useState([])      // [{id, date, time}]
   const [newSchedDate,  setNewSchedDate]  = useState('')
   const [newSchedTime,  setNewSchedTime]  = useState('09:00')
+  const [schedTz,       setSchedTz]       = useState(DEFAULT_TZ)
   const [histTab,       setHistTab]       = useState('sent')  // 'sent' | 'scheduled'
 
   useEffect(() => { loadHistory() }, [])
@@ -136,9 +138,9 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
 
   function addScheduleDate() {
     if (!newSchedDate || !newSchedTime) return
-    const iso = new Date(`${newSchedDate}T${newSchedTime}:00`).toISOString()
+    const iso = zonedTimeToIso(newSchedDate, newSchedTime, schedTz)
     if (scheduleDates.find(d => d.iso === iso)) return  // dedupe
-    setScheduleDates(prev => [...prev, { id: Date.now(), date: newSchedDate, time: newSchedTime, iso }])
+    setScheduleDates(prev => [...prev, { id: Date.now(), date: newSchedDate, time: newSchedTime, tz: schedTz, iso }])
     setNewSchedDate(''); setNewSchedTime('09:00')
   }
 
@@ -496,6 +498,14 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
                       style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px',
                         color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', colorScheme:'dark' }}/>
                   </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>Timezone</div>
+                    <select value={schedTz} onChange={e=>setSchedTz(e.target.value)}
+                      style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px',
+                        color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', cursor:'pointer' }}>
+                      {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
                   <button onClick={addScheduleDate} disabled={!newSchedDate||!newSchedTime}
                     style={{ background:newSchedDate&&newSchedTime?C.gold:'#2a2a2a', border:'none', borderRadius:8, padding:'8px 14px',
                       color:newSchedDate&&newSchedTime?C.black:C.muted, fontWeight:700, fontSize:12, cursor:newSchedDate&&newSchedTime?'pointer':'not-allowed', whiteSpace:'nowrap', flexShrink:0 }}>
@@ -513,7 +523,9 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
                       <div key={sd.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
                         padding:'6px 0', borderBottom:`1px solid ${C.gold}22` }}>
                         <span style={{ fontSize:12, color:C.white }}>
-                          {new Date(sd.iso).toLocaleString([],{weekday:'short',month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+                          {sd.tz
+                            ? `${new Date(sd.iso).toLocaleString('en-US',{timeZone:sd.tz,weekday:'short',month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})} ${tzShort(sd.tz)}`
+                            : new Date(sd.iso).toLocaleString([],{weekday:'short',month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}
                         </span>
                         <button onClick={()=>removeScheduleDate(sd.id)}
                           style={{ background:'none', border:'none', color:C.muted, fontSize:16, cursor:'pointer', padding:'0 4px', lineHeight:1 }}>×</button>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext, useCallback, useMemo } from "react";
 import { sbBearer } from './lib/sbAuth'
+import { TZ_OPTIONS, DEFAULT_TZ, useDeadlineTzShort, clearTzCache } from './lib/tz'
 import {
   ResponsiveContainer, LineChart, AreaChart, BarChart,
   Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -513,6 +514,7 @@ const ChangePasswordModal = ({ onClose }) => {
 // ─── DASHBOARD SCREENS ────────────────────────────────────────────────────────
 
 const HomeScreen = ({ user, wlOrg = null }) => {
+  const homeTzS = useDeadlineTzShort(user?.email);
   // White-label palette — falls back to Eden gold when no wl org
   const hp = wlPalette(wlOrg);
   const primary   = wlOrg ? hp.primary   : B.gold;
@@ -538,7 +540,7 @@ const HomeScreen = ({ user, wlOrg = null }) => {
       {/* Announcement banner */}
       <div style={{ margin:"16px 20px 0", background:B.card, border:`1px solid ${primary}33`, borderLeft:`3px solid ${primary}`, borderRadius:10, padding:"12px 14px" }}>
         <p style={{ fontSize:11, fontWeight:700, color:primary, margin:"0 0 3px", letterSpacing:0.8 }}>COACH UPDATE</p>
-        <p style={{ fontSize:13, color:B.text, margin:0 }}>Your weekly check-in is due Wednesday before 9 AM CST. Remember to take your morning weight fasted.</p>
+        <p style={{ fontSize:13, color:B.text, margin:0 }}>Your weekly check-in is due before 9 AM {homeTzS} on your assigned update day. Remember to take your morning weight fasted.</p>
       </div>
 
       {/* This week */}
@@ -1233,6 +1235,7 @@ const HabitTrackerScreen = () => {
 const UPDATE_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
 const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
+  const modalTzS = useDeadlineTzShort(client?.email);
   const isMobile = useIsMobile();
   const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
   const [localHistory, setLocalHistory] = useState<any[]>(client?.checkinHistory || []);
@@ -1413,7 +1416,7 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
             )}
             {updateDay && (
               <p style={{ fontSize:11, color:B.muted, margin:"8px 0 0", lineHeight:1.5 }}>
-                Client sees <strong style={{ color:B.text }}>every {updateDay}</strong> as their weekly deadline (before 9 AM CST).
+                Client sees <strong style={{ color:B.text }}>every {updateDay}</strong> as their weekly deadline (before 9 AM {modalTzS}).
               </p>
             )}
             {!client.uuid && (
@@ -2038,6 +2041,17 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
   // Guard: ensure loomFeatured is always a Set regardless of how the prop arrives
   const featuredSet: Set<string> = (loomFeatured instanceof Set) ? loomFeatured : new Set();
 
+  // Coach's own check-in deadline timezone
+  const [myTz, setMyTz] = useState(DEFAULT_TZ);
+  const [myTzError, setMyTzError] = useState(false);
+  useEffect(() => { (async () => {
+    if (!user?.email) return;
+    try {
+      const rows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=timezone`);
+      if (Array.isArray(rows) && rows[0]?.timezone) setMyTz(rows[0].timezone);
+    } catch {}
+  })(); }, [user?.email]);
+
   function resolveItem(email: string, reason: string) {
     setResolved(prev => {
       const set = new Set(prev[email] || []);
@@ -2099,6 +2113,22 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
               <p style={{ fontSize:10, color:B.muted, margin:0, lineHeight:1.3 }}>{label}</p>
             </Card>
           ))}
+        </div>
+
+        {/* ── Check-in timezone (coach's own setting) ── */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8, marginBottom:12 }}>
+          <span style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase" }}>Check-in deadline timezone</span>
+          {myTzError && <span style={{ fontSize:11, color:"#ff5252", fontWeight:700 }}>⚠ Not saved — run the timezone SQL first</span>}
+          <select value={myTz} onChange={async e => {
+              const tz = e.target.value; const prev = myTz;
+              setMyTz(tz); setMyTzError(false);
+              const ok = await sbPatch('user_profiles', `email=eq.${encodeURIComponent(user.email)}`, { timezone: tz });
+              if (!ok) { setMyTz(prev); setMyTzError(true); return; }
+              clearTzCache();
+            }}
+            style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
+            {TZ_OPTIONS.map((o:any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </div>
 
         {/* ── Upcoming contract starts ── */}

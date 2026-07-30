@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
+import { useDeadlineTzShort } from '../lib/tz'
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -795,13 +796,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [photoUploading,   setPhotoUploading]   = useState(false)
   const photoFileRef = useRef(null)
   const [updateDay, setUpdateDay] = useState(null)
+  const tzS = useDeadlineTzShort(currentUser?.email || '')
 
   const LOE_DEFAULT = [
     '• Organic fruits/veg · Grass-fed/finished beef · Wild caught fish · Raw dairy only',
     '• NO artificial sweeteners — Stevia only · Raw honey only · 6-8g EVOO for cooking',
     '• Black coffee: 1–2 cups/day max · Must be organic · No coffee after 12 noon',
     '  May use 4oz of MALK or unsweetened vanilla almond milk as creamer',
-    '• Updates due before 9 AM CST on your assigned update day — fasted weight + photos',
+    `• Updates due before 9 AM ${tzS} on your assigned update day — fasted weight + photos`,
   ].join('\n')
   const loeKey = `eden_loe_${myUUID||email}`
   const [loeContent, setLoeContent] = useState(()=>localStorage.getItem(loeKey)||LOE_DEFAULT)
@@ -2321,7 +2323,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 <div style={{background:`${C.gold}12`,border:`1.5px solid ${updateDay?C.gold+'55':C.border}`,borderLeft:`3px solid ${updateDay?C.gold:C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
                   <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:.6,textTransform:'uppercase',marginBottom:6}}>📅 Your Update Schedule</div>
                   {updateDay ? (<>
-                    <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:4}}>Every {updateDay} — before 9 AM CST</div>
+                    <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:4}}>Every {updateDay} — before 9 AM {tzS}</div>
                     {nextUpdateDate(updateDay)&&(
                       <div style={{fontSize:11,color:C.muted}}>
                         Next deadline: <span style={{color:C.white,fontWeight:600}}>{nextUpdateDate(updateDay)}</span>
@@ -2725,7 +2727,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* ─── Submit tab ─── */}
               {clientViewTab==='submit'&&(<>
                 <div style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderLeft:`3px solid ${C.danger}`,borderRadius:9,padding:'10px 13px',marginBottom:12,fontSize:12,color:C.danger}}>
-                  ⚠️ All weekly updates MUST be in before 9 AM CST{updateDay
+                  ⚠️ All weekly updates MUST be in before 9 AM {tzS}{updateDay
                     ? <> every <strong>{updateDay}</strong>{nextUpdateDate(updateDay) ? ` (next: ${nextUpdateDate(updateDay)})` : ''}</>
                     : ' on your assigned update day'}. Wake up on empty stomach. Include fasted weight + photos.
                 </div>
