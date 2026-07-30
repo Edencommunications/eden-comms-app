@@ -438,6 +438,25 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (!ok) { setCoachDeadlines(m=>({...m,[uuid]:prev})); alert("Couldn't save the deadline change — try again."); return }
     clearTzCache()
   }
+  // Per-client deadline override, editable from the client detail panel ('' = inherit coach's)
+  const [clientDl, setClientDl] = useState({ tz:'', time:'' })
+  useEffect(()=>{
+    setClientDl({ tz:'', time:'' })
+    if (!selectedClient?.uuid) return
+    dbGet('user_profiles',`id=eq.${selectedClient.uuid}&select=timezone,deadline_time`)
+      .then(rows=>{
+        if (Array.isArray(rows)&&rows.length)
+          setClientDl({ tz:rows[0].timezone||'', time:rows[0].deadline_time?rows[0].deadline_time.slice(0,5):'' })
+      }).catch(()=>{})
+  },[selectedClient?.uuid])
+  async function saveClientDeadline(patch, local) {
+    if (!selectedClient?.uuid) return
+    const prev = clientDl
+    setClientDl(p=>({...p,...local}))
+    const ok = await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,patch)
+    if (!ok) { setClientDl(prev); alert("Couldn't save the deadline change — try again."); return }
+    clearTzCache()
+  }
 
   // Reload the active package tiers from the DB — used on mount and by realtime pushes
   function refreshPackages() {
@@ -1587,6 +1606,30 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         }
                       }}
                       style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer',colorScheme:'dark'}}/>
+                  </div>
+                )}
+                {/* Coach / Admin: per-client deadline override ('' = inherit coach's) */}
+                {(isAdmin||isCoach)&&(
+                  <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                    <span style={{fontSize:9,color:C.muted}}>Deadline {(clientDl.tz||clientDl.time)?'(custom)':"(coach's)"}</span>
+                    <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                      <input type="time" value={clientDl.time}
+                        onChange={e=>saveClientDeadline({deadline_time:e.target.value||null},{time:e.target.value})}
+                        style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:clientDl.time?C.gold:C.muted,fontSize:11,outline:'none',colorScheme:'dark'}}/>
+                      <select value={clientDl.tz}
+                        onChange={e=>saveClientDeadline({timezone:e.target.value||null},{tz:e.target.value})}
+                        style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:clientDl.tz?C.gold:C.muted,fontSize:11,outline:'none',cursor:'pointer'}}>
+                        <option value="">Coach's</option>
+                        {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.short}</option>)}
+                      </select>
+                      {(clientDl.tz||clientDl.time)&&(
+                        <button onClick={()=>saveClientDeadline({deadline_time:null,timezone:null},{tz:'',time:''})}
+                          title="Reset to coach's deadline"
+                          style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 7px',color:C.muted,fontSize:10,cursor:'pointer'}}>
+                          Reset
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
