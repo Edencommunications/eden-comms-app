@@ -148,7 +148,12 @@ function parsePayload(body: any) {
     "user_email",
     "assigned_to_email",
   ]).toLowerCase();
-  return { name, email, phone, coachEmail };
+  // Optional contract start date (client not counted late on updates before it)
+  const startDateRaw = pick(b, ["start_date", "startDate", "contract_start", "contractStart"]);
+  const startDate = /^\d{4}-\d{2}-\d{2}$/.test(startDateRaw.trim())
+    ? startDateRaw.trim()
+    : "";
+  return { name, email, phone, coachEmail, startDate };
 }
 
 const router: IRouter = Router();
@@ -195,7 +200,7 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
   const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=id,name,is_active`);
   if (!orgs.length) return fail(404, "rejected", "Unknown organization");
 
-  const { name, email, phone, coachEmail } = parsePayload(req.body);
+  const { name, email, phone, coachEmail, startDate } = parsePayload(req.body);
   if (!name || !email) return fail(400, "rejected", "Missing client name or email");
 
   // Duplicate check — same email already has a profile
@@ -244,11 +249,13 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     update_day: "Wednesday",
   };
   if (phone) profile.phone = phone;
+  if (startDate) profile.start_date = startDate;
 
   let ins = await dbInsert("user_profiles", profile);
-  if (!ins.ok && phone) {
-    // phone column may not exist — retry without it
+  if (!ins.ok && (phone || startDate)) {
+    // phone/start_date columns may not exist — retry without them
     delete profile.phone;
+    delete profile.start_date;
     ins = await dbInsert("user_profiles", profile);
   }
   if (!ins.ok) return fail(500, "error", `Could not create client profile: ${ins.error}`);

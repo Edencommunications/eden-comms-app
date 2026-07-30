@@ -1229,206 +1229,6 @@ const HabitTrackerScreen = () => {
   );
 };
 
-// COACH VIEW
-const CLIENT_ROSTER = [
-  {
-    name:"Jordan Williams", status:"Active", lastCheckin:"Jul 9", alert:true,
-    uuid:"ece58b33-3f2a-4ce7-bed9-a157c914056c",
-    email:"client@eden.io", phone:"(312) 555-0192", startDate:"Mar 4 2026",
-    protocol:"Base Diet Protocol Female · 2 High / 2 Low",
-    goal:"Fat loss + hormonal balance", currentWeight:"148 lbs", targetWeight:"135 lbs",
-    height:"5'5\"", age:29, gender:"Female",
-    tags:["Gut Protocol","Nervous System","Thyroid"],
-    notes:"Excellent compliance. Adjust protein up 10g on high days next week. Watch cycle days 14-18.",
-    checkInDay:"Wednesday", nextCheckin:"Jul 16", pendingLabs:true,
-    alertReasons:["Stress score elevated last 2 check-ins"],
-    checkinHistory:[
-      { date:"Jul 9 2026", time:"7:23 AM",  weight:"148.0", temp:"97.8", steps:"9,200", heartRate:"62", hrv:"68", bloodPressure:"118/74",
-        energy:7, sleep:6, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:92, mood:"Motivated",
-        sleepWindow:"10:30 PM – 6:00 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once around 3 AM, went back to sleep within 10 min. Otherwise solid.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Feeling leaner, energy is better mid-week. Had one off-meal Saturday.",
-        coachNotes:"Great week. Protein hit targets 6/7 days. Reduce stress load — consider walking at night.",
-        coachLoom:"https://www.loom.com/share/dcd12b7cfc3e42fdaf1e0c0a46a15ab5",
-        habitPct:88, habits:{supps:7,lemon:7,water:7,steps:6,wake5:6,workout:5,cold:6,sleep8:5,read:5} },
-      { date:"Jul 2 2026", time:"6:58 AM",  weight:"149.0", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58", bloodPressure:"122/78",
-        energy:6, sleep:5, bloating:6, brainFog:5, sexDrive:5, hunger:7, stress:7, compliance:85, mood:"Stressed",
-        sleepWindow:"11:00 PM – 6:30 AM", sleepCycles:"3–4 cycles", sleepDisruption:"Woke multiple times — mind racing from work. Hard to fall back asleep after 4 AM.",
-        bowelCount:"1", bowelType:"Mixed",
-        clientNotes:"Work has been crazy. Skipped meal 4 twice. Cravings late at night.",
-        coachNotes:"Understandable week. Add L-Theanine AM. Plan meals 3 and 4 on Sunday prep day.",
-        coachLoom:"", habitPct:71, habits:{supps:6,lemon:5,water:6,steps:5,wake5:4,workout:3,cold:3,sleep8:4,read:3} },
-      { date:"Jun 25 2026", time:"8:14 AM", weight:"150.0", temp:"97.7", steps:"8,500", heartRate:"64", hrv:"62", bloodPressure:"120/76",
-        energy:6, sleep:6, bloating:4, brainFog:6, sexDrive:6, hunger:5, stress:6, compliance:88, mood:"Neutral",
-        sleepWindow:"10:45 PM – 6:15 AM", sleepCycles:"4 cycles", sleepDisruption:"Woke once for bathroom around 2 AM. Light sleep in the early morning hours.",
-        bowelCount:"2", bowelType:"Mixed",
-        clientNotes:"Bloating mid-week, not sure if it was the oats. Sleep okay.",
-        coachNotes:"Swap oats for cream of rice on low days. Continue Bloat Eaze. Good overall week.",
-        habitPct:81, habits:{supps:7,lemon:6,water:7,steps:6,wake5:5,workout:4,cold:5,sleep8:5,read:4} },
-      { date:"Jun 18 2026", time:"10:47 AM", weight:"151.0", temp:"97.4", steps:"6,200", heartRate:"72", hrv:"52", bloodPressure:"124/80",
-        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:3, hunger:8, stress:8, compliance:80, mood:"Tired",
-        sleepWindow:"11:30 PM – 6:00 AM", sleepCycles:"3 cycles", sleepDisruption:"Tossed and turned during cycle days. Night sweats twice. Very restless between 2–4 AM.",
-        bowelCount:"1", bowelType:"Constipated",
-        clientNotes:"Hormones off this week. Very fatigued, cycle week. Cravings terrible.",
-        coachNotes:"Normal for cycle days 14-18. Drop to maintenance calories days 1-3. Increase magnesium.",
-        habitPct:60, habits:{supps:5,lemon:4,water:5,steps:3,wake5:3,workout:2,cold:2,sleep8:3,read:2} },
-      { date:"Jun 11 2026", time:"6:30 AM", weight:"152.0", temp:"98.0", steps:"10,400", heartRate:"60", hrv:"74", bloodPressure:"116/72",
-        energy:8, sleep:8, bloating:8, brainFog:8, sexDrive:7, hunger:3, stress:4, compliance:96, mood:"Great",
-        sleepWindow:"10:00 PM – 6:00 AM", sleepCycles:"5–6 cycles", sleepDisruption:"None — slept completely through. Woke up feeling fully rested.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Best week yet. Energy all day, no bloating, sleep was amazing.",
-        coachNotes:"This is the template. Protocol is working. Keep exact same approach next week.",
-        habitPct:96, habits:{supps:7,lemon:7,water:7,steps:7,wake5:7,workout:5,cold:7,sleep8:7,read:6} },
-      { date:"Jun 4 2026", time:"7:45 AM",  weight:"152.5", temp:"97.9", steps:"9,600", heartRate:"63", hrv:"70", bloodPressure:"119/75",
-        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:4, stress:5, compliance:90, mood:"Good",
-        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once briefly around 2 AM, felt alert for about 20 min, then fell back asleep.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Feeling good. High days felt heavy but manageable. Step goal hit 5/7 days.",
-        coachNotes:"Solid week. Add 1000 steps to daily target. Consider adding Oregano Pro Week 3.",
-        habitPct:87, habits:{supps:7,lemon:7,water:6,steps:5,wake5:6,workout:4,cold:5,sleep8:6,read:5} },
-      { date:"May 28 2026", time:"8:52 AM", weight:"153.0", temp:"97.7", steps:"7,500", heartRate:"65", hrv:"60", bloodPressure:"121/77",
-        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:5, stress:6, compliance:82, mood:"Neutral",
-        sleepWindow:"11:00 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"New protocol adjustments causing some restlessness. Mind active thinking about meal prep.",
-        bowelCount:"2", bowelType:"Mixed",
-        clientNotes:"Adjusting to the new protocol. Still figuring out meal timing.",
-        coachNotes:"Week 1 adjustment is normal. Focus on hitting protein first. Timing comes second.",
-        habitPct:72, habits:{supps:6,lemon:5,water:6,steps:4,wake5:4,workout:3,cold:4,sleep8:5,read:3} },
-    ],
-  },
-  {
-    name:"Alex Martinez", status:"Active", lastCheckin:"Jul 8", alert:false,
-    email:"alex@eden.io", phone:"(773) 555-0341", startDate:"Apr 12 2026",
-    protocol:"Base Diet Protocol Male · Maintenance",
-    goal:"Body recomposition", currentWeight:"182 lbs", targetWeight:"178 lbs",
-    height:"5'11\"", age:34, gender:"Male",
-    tags:["NuEthix Protocol"],
-    notes:"Strong progress. Maintaining current macros. Add 5R Gut in week 6.",
-    checkInDay:"Wednesday", nextCheckin:"Jul 15", pendingLabs:false, alertReasons:[],
-    checkinHistory:[
-      { date:"Jul 8 2026", time:"7:05 AM",  weight:"182.0", temp:"98.2", steps:"11,200", heartRate:"58", hrv:"82", bloodPressure:"124/80",
-        energy:8, sleep:7, bloating:8, brainFog:8, sexDrive:8, hunger:3, stress:4, compliance:94, mood:"Confident",
-        sleepWindow:"10:00 PM – 6:00 AM", sleepCycles:"5 cycles", sleepDisruption:"Minimal — woke once briefly around 5 AM but fell back asleep quickly.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Feeling strong. Lifts are up. Body looking leaner without losing weight.",
-        coachNotes:"Recomp is working. Stay at current calories. Add creatine 5g daily." },
-      { date:"Jul 1 2026", time:"7:38 AM",  weight:"183.0", temp:"98.1", steps:"10,800", heartRate:"60", hrv:"78", bloodPressure:"126/82",
-        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:7, hunger:4, stress:5, compliance:91, mood:"Good",
-        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Slight snoring noted by partner. Used nasal strip — helped somewhat. Woke once.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Consistent week. Hit all meals. Had a cheat meal Sunday — burger and fries.",
-        coachNotes:"One cheat meal is fine. Back on plan Monday. Compliance is very strong." },
-      { date:"Jun 24 2026", time:"9:22 AM", weight:"183.5", temp:"98.0", steps:"8,900", heartRate:"62", hrv:"72", bloodPressure:"128/82",
-        energy:7, sleep:6, bloating:7, brainFog:6, sexDrive:6, hunger:5, stress:6, compliance:88, mood:"Good",
-        sleepWindow:"11:00 PM – 6:00 AM", sleepCycles:"3–4 cycles", sleepDisruption:"Hotel stay — different bed, light sleep first two nights. Improved by night 3.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Travel week — made it work at hotel gym. Ate out a few times but made smart choices.",
-        coachNotes:"Excellent discipline traveling. Proud of the effort. Weight holding steady is great." },
-      { date:"Jun 17 2026", time:"6:45 AM", weight:"184.0", temp:"98.3", steps:"12,100", heartRate:"56", hrv:"88", bloodPressure:"122/78",
-        energy:8, sleep:8, bloating:9, brainFog:9, sexDrive:8, hunger:2, stress:3, compliance:97, mood:"Excellent",
-        sleepWindow:"9:30 PM – 5:45 AM", sleepCycles:"5–6 cycles", sleepDisruption:"None — best sleep of the entire program. Woke up fully alert before the alarm.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Perfect week. Meal prepped Sunday, hit every single meal.",
-        coachNotes:"97% compliance is elite. This week proved what's possible. Use it as your baseline." },
-      { date:"Jun 10 2026", time:"8:17 AM", weight:"184.5", temp:"98.0", steps:"9,200", heartRate:"64", hrv:"68", bloodPressure:"126/80",
-        energy:6, sleep:6, bloating:6, brainFog:5, sexDrive:6, hunger:6, stress:5, compliance:85, mood:"Neutral",
-        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"Slightly restless — possible low carb before bed. Woke around 3 AM feeling hungry.",
-        bowelCount:"2", bowelType:"Mixed",
-        clientNotes:"Little flat energy-wise. Wondering if calories are too low.",
-        coachNotes:"Bump carbs 20g on training days only. Add GDA-MAX Pro with higher carb meals." },
-    ],
-  },
-  {
-    name:"Taylor Reyes", status:"Active", lastCheckin:"Jul 7", alert:false,
-    email:"taylor@eden.io", phone:"(312) 555-0887", startDate:"May 1 2026",
-    protocol:"2 High 2 Low Female · 10% Deficit",
-    goal:"Weight loss + energy", currentWeight:"165 lbs", targetWeight:"148 lbs",
-    height:"5'7\"", age:27, gender:"Female",
-    tags:["Adrenal Protocol","PCOS Protocol"],
-    notes:"Feeling more energy week 4. Keep pushing hydration and step goal.",
-    checkInDay:"Friday", nextCheckin:"Jul 14", pendingLabs:false, alertReasons:[],
-    checkinHistory:[
-      { date:"Jul 7 2026", time:"7:31 AM",  weight:"165.0", temp:"97.8", steps:"9,800", heartRate:"66", hrv:"64", bloodPressure:"112/70",
-        energy:7, sleep:7, bloating:7, brainFog:7, sexDrive:6, hunger:5, stress:5, compliance:89, mood:"Motivated",
-        sleepWindow:"10:30 PM – 6:15 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once for bathroom around 2 AM. Light sleep 3–4 AM but overall decent.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"Noticed waist is smaller even if scale is same. Clothes fitting different.",
-        coachNotes:"Body recomp happening. Scale isn't everything — measurements tell the real story." },
-      { date:"Jun 30 2026", time:"9:48 AM", weight:"166.0", temp:"97.6", steps:"8,600", heartRate:"68", hrv:"60", bloodPressure:"114/72",
-        energy:6, sleep:6, bloating:6, brainFog:6, sexDrive:5, hunger:7, stress:6, compliance:84, mood:"Okay",
-        sleepWindow:"11:00 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"Struggled to fall asleep — hunger pangs kept me up until about midnight.",
-        bowelCount:"2", bowelType:"Mixed",
-        clientNotes:"Struggled with low day hunger. Kept reaching for extra snacks.",
-        coachNotes:"Add cucumber and celery as free foods on low days. Up water to 1 gallon." },
-      { date:"Jun 23 2026", time:"7:53 AM", weight:"167.0", temp:"97.8", steps:"9,200", heartRate:"67", hrv:"62", bloodPressure:"113/71",
-        energy:7, sleep:6, bloating:6, brainFog:7, sexDrive:6, hunger:6, stress:5, compliance:86, mood:"Good",
-        sleepWindow:"10:45 PM – 6:00 AM", sleepCycles:"4–5 cycles", sleepDisruption:"Woke once briefly, went back to sleep quickly. No major disruptions.",
-        bowelCount:"2", bowelType:"Well formed",
-        clientNotes:"High days feel amazing. Low days are a mental battle but getting easier.",
-        coachNotes:"This is the adaptation phase. It gets easier by week 6. Stay the course." },
-      { date:"Jun 16 2026", time:"11:24 AM", weight:"168.0", temp:"97.3", steps:"5,800", heartRate:"74", hrv:"50", bloodPressure:"116/74",
-        energy:5, sleep:5, bloating:4, brainFog:4, sexDrive:3, hunger:8, stress:8, compliance:75, mood:"Struggling",
-        sleepWindow:"11:30 PM – 6:30 AM", sleepCycles:"3 cycles", sleepDisruption:"Period cramps woke me at 2 AM and again at 4 AM. Heating pad helped but sleep was broken all week.",
-        bowelCount:"1", bowelType:"Constipated",
-        clientNotes:"Really hard week. Period cramps, emotional eating Thursday.",
-        coachNotes:"Hormonal week is expected. No guilt. Add Cort Eaze on high-stress days." },
-      { date:"Jun 9 2026", time:"8:06 AM",  weight:"168.5", temp:"97.7", steps:"8,200", heartRate:"68", hrv:"58", bloodPressure:"114/72",
-        energy:6, sleep:7, bloating:6, brainFog:6, sexDrive:5, hunger:5, stress:5, compliance:82, mood:"Neutral",
-        sleepWindow:"10:30 PM – 6:30 AM", sleepCycles:"4 cycles", sleepDisruption:"Slight restlessness falling asleep. Woke once briefly, back to sleep within 5 min.",
-        bowelCount:"2", bowelType:"Mixed",
-        clientNotes:"Getting used to the structure. Meal prep is getting easier.",
-        coachNotes:"Week 5 progress is solid. Drop scale check-ins to 1x/week — focus on how you feel." },
-    ],
-  },
-  {
-    name:"Sam Thompson", status:"Pending check-in", lastCheckin:"Jun 30", alert:true,
-    email:"sam@eden.io", phone:"(847) 555-0563", startDate:"Feb 18 2026",
-    protocol:"Male Leaky Gut Base Diet · 5% Deficit",
-    goal:"Gut healing + lean muscle", currentWeight:"191 lbs", targetWeight:"185 lbs",
-    height:"6'0\"", age:41, gender:"Male",
-    tags:["5R Gut Protocol","Methylation Protocol"],
-    notes:"Check-in overdue. Follow up via message. Labs pending GI Map results.",
-    checkInDay:"Wednesday", nextCheckin:"Overdue", pendingLabs:true,
-    alertReasons:["Check-in overdue — last submitted Jun 30","Elevated stress score 3 weeks in a row"],
-    checkinHistory:[
-      { date:"Jun 30 2026", time:"2:14 PM", weight:"191.0", temp:"97.4", steps:"6,800", heartRate:"72", hrv:"52", bloodPressure:"134/86",
-        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:4, hunger:6, stress:7, compliance:78, mood:"Frustrated",
-        sleepWindow:"11:30 PM – 5:30 AM", sleepCycles:"3 cycles", sleepDisruption:"Woke 2–3 times with gut discomfort and bloating. Had to get up once at 2 AM. Very broken sleep.",
-        bowelCount:"3", bowelType:"Loose",
-        clientNotes:"Gut still acting up. Bloating after every meal. Getting discouraged.",
-        coachNotes:"Stick with protocol — gut healing takes 6-8 weeks minimum. GI Map will show what's happening." },
-      { date:"Jun 23 2026", time:"8:33 AM", weight:"192.0", temp:"97.5", steps:"7,200", heartRate:"70", hrv:"54", bloodPressure:"132/84",
-        energy:5, sleep:5, bloating:3, brainFog:4, sexDrive:4, hunger:5, stress:7, compliance:80, mood:"Neutral",
-        sleepWindow:"11:00 PM – 5:45 AM", sleepCycles:"3 cycles", sleepDisruption:"Gut cramps woke me at 2 AM — had to use the bathroom. Racing mind afterwards. Poor quality overall.",
-        bowelCount:"4", bowelType:"Diarrhea",
-        clientNotes:"Same issues. Some days better than others. Sleep is poor.",
-        coachNotes:"Add Relax Liposomal before bed. Remove raw vegetables temporarily, cook all produce." },
-      { date:"Jun 16 2026", time:"7:19 AM", weight:"192.5", temp:"97.6", steps:"7,800", heartRate:"68", hrv:"58", bloodPressure:"130/82",
-        energy:6, sleep:6, bloating:4, brainFog:5, sexDrive:5, hunger:5, stress:6, compliance:83, mood:"Hopeful",
-        sleepWindow:"10:45 PM – 5:30 AM", sleepCycles:"3–4 cycles", sleepDisruption:"Better than last week — only woke once. Less gut pain at night. Still not deep sleep.",
-        bowelCount:"2", bowelType:"Loose",
-        clientNotes:"Slightly better this week. Less bloating after breakfast at least.",
-        coachNotes:"Green shoots. Morning protocol is working. Focus on that consistency." },
-      { date:"Jun 9 2026", time:"9:55 AM",  weight:"193.0", temp:"97.2", steps:"5,800", heartRate:"76", hrv:"48", bloodPressure:"136/88",
-        energy:5, sleep:4, bloating:2, brainFog:3, sexDrive:3, hunger:6, stress:8, compliance:75, mood:"Tired",
-        sleepWindow:"12:00 AM – 5:30 AM", sleepCycles:"2–3 cycles", sleepDisruption:"Very poor. Gut pain woke me multiple times. Racing mind from work stress. Felt exhausted all week.",
-        bowelCount:"4", bowelType:"Diarrhea",
-        clientNotes:"Very fatigued. Not sleeping well. Work stress is high.",
-        coachNotes:"Cortisol is elevated. Add Cort Eaze 2 caps waking + 2 caps before bed. Prioritize sleep." },
-      { date:"Jun 2 2026", time:"7:42 AM",  weight:"194.0", temp:"97.5", steps:"7,000", heartRate:"70", hrv:"55", bloodPressure:"132/84",
-        energy:6, sleep:6, bloating:3, brainFog:5, sexDrive:4, hunger:6, stress:6, compliance:79, mood:"Okay",
-        sleepWindow:"11:00 PM – 6:00 AM", sleepCycles:"3 cycles", sleepDisruption:"Woke twice with gut discomfort. Fell back asleep okay. Sleep quality improving slightly.",
-        bowelCount:"3", bowelType:"Loose",
-        clientNotes:"Starting to understand the protocol better. Prep has improved.",
-        coachNotes:"Gut healing is slow but progress is real. Labs ordered — GI Map and blood panel." },
-      { date:"May 26 2026", time:"8:28 AM", weight:"194.5", temp:"97.3", steps:"5,400", heartRate:"74", hrv:"50", bloodPressure:"134/86",
-        energy:5, sleep:5, bloating:2, brainFog:4, sexDrive:3, hunger:7, stress:7, compliance:72, mood:"Struggling",
-        sleepWindow:"12:30 AM – 5:30 AM", sleepCycles:"2 cycles", sleepDisruption:"Late nights from work deadlines. Only 5 hours. Woke exhausted. Gut issues compounded poor sleep.",
-        bowelCount:"3", bowelType:"Diarrhea",
-        clientNotes:"Hardest part is meal timing with work schedule. Skipping meals often.",
-        coachNotes:"Use protein shakes as bridge meals. Schedule alarms for meal 3 and 4." },
-    ],
-  },
-];
 
 const UPDATE_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
@@ -1441,11 +1241,14 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
   const [draftLoom,    setDraftLoom]    = useState('');
   const [updateDay,    setUpdateDay]    = useState<string>('');
   const [savingDay,    setSavingDay]    = useState(false);
+  const [startDate,    setStartDate]    = useState<string>('');
+  const [savingStart,  setSavingStart]  = useState(false);
 
   useEffect(() => {
     if (!client?.uuid) return;
-    sbGet('user_profiles', `id=eq.${client.uuid}&select=update_day`)
+    sbGet('user_profiles', `id=eq.${client.uuid}&select=update_day,start_date`)
       .then((rows: any[]) => {
+        if (Array.isArray(rows) && rows.length > 0 && rows[0].start_date) setStartDate(rows[0].start_date);
         if (Array.isArray(rows) && rows.length > 0 && rows[0].update_day) {
           setUpdateDay(rows[0].update_day);
         } else {
@@ -1607,6 +1410,34 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                 Add a uuid to this client's roster entry to enable saving.
               </p>
             )}
+          </div>
+
+          {/* ── Contract Start Date ── */}
+          <div style={{ background:B.card, border:`1px solid ${startDate ? B.gold+"55" : B.border}`, borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
+            <p style={{ fontSize:9, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>🗓️ Contract Start Date</p>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <input type="date" value={startDate}
+                onChange={async e => {
+                  const val = e.target.value;
+                  setStartDate(val);
+                  if (!client.uuid) return;
+                  setSavingStart(true);
+                  await sbPatch('user_profiles', `id=eq.${client.uuid}`, { start_date: val || null });
+                  setSavingStart(false);
+                }}
+                style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px",
+                  color: startDate ? B.gold : B.muted, fontSize:13, outline:"none", colorScheme:"dark" }}/>
+              {savingStart
+                ? <span style={{ fontSize:11, color:B.muted, whiteSpace:"nowrap" }}>Saving…</span>
+                : startDate
+                  ? <span style={{ fontSize:11, color:B.gold, fontWeight:700, whiteSpace:"nowrap" }}>✓ Saved</span>
+                  : null}
+            </div>
+            <p style={{ fontSize:11, color:B.muted, margin:"8px 0 0", lineHeight:1.5 }}>
+              {startDate && new Date(`${startDate}T00:00:00`) > new Date()
+                ? <>Client won't be counted late on updates until <strong style={{ color:B.text }}>{new Date(`${startDate}T00:00:00`).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</strong>.</>
+                : "Set a future date for clients whose contract hasn't started yet — they won't be counted late until then."}
+            </p>
           </div>
 
           {/* Profile */}
@@ -2080,13 +1911,68 @@ function parseLastCheckin(str: string): Date | null {
   const d = new Date(`${str} 2026`);
   return isNaN(d.getTime()) ? null : d;
 }
+function hasNotStarted(c: any): boolean {
+  // Client whose contract start date is in the future — never counted late
+  if (!c?.startDate) return false;
+  const start = new Date(`${c.startDate}T00:00:00`);
+  if (isNaN(start.getTime())) return false;
+  const today = new Date(); today.setHours(0,0,0,0);
+  return start.getTime() > today.getTime();
+}
+function daysUntilStart(c: any): number {
+  const start = new Date(`${c.startDate}T00:00:00`);
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((start.getTime() - today.getTime()) / 86400000);
+}
 function isMissingCheckin(c: any): boolean {
+  if (hasNotStarted(c)) return false;
   if (c.nextCheckin === 'Overdue') return true;
-  const last = parseLastCheckin(c.lastCheckin);
-  if (!last) return true;
+  const last = c.lastCheckinAt ? new Date(c.lastCheckinAt) : parseLastCheckin(c.lastCheckin);
+  if (!last || isNaN(last.getTime())) return true;
   const today = new Date();
   return (today.getTime() - last.getTime()) / 86400000 > 7;
 }
+
+// ── Upcoming contract starts (shared by coach + admin views) ────────────────
+const UpcomingStartsSection = ({ clients }: { clients: any[] }) => {
+  const upcoming = (clients || []).filter(hasNotStarted)
+    .sort((a,b) => String(a.startDate).localeCompare(String(b.startDate)));
+  if (upcoming.length === 0) return null;
+  const tierColor = (d:number) => d <= 1 ? "#ff5252" : d <= 2 ? "#ffa600" : d <= 7 ? B.gold : B.muted;
+  const tierLabel = (d:number) => d === 0 ? "STARTS TODAY" : d === 1 ? "starts tomorrow" : `starts in ${d} days`;
+  return (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ background:B.card, border:`1px solid ${B.gold}44`, borderRadius:10, padding:"12px 14px" }}>
+        <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>
+          🗓️ Upcoming Contract Starts ({upcoming.length})
+        </p>
+        {upcoming.map((c:any) => {
+          const d = daysUntilStart(c);
+          const col = tierColor(d);
+          return (
+            <div key={c.uuid || c.email || c.name} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"8px 10px", borderRadius:8, background:d <= 7 ? `${col}11` : "transparent",
+              border:`1px solid ${d <= 7 ? col+"44" : "transparent"}`, marginBottom:6 }}>
+              <div>
+                <p style={{ fontSize:13, fontWeight:600, color:B.text, margin:0 }}>{c.name}</p>
+                <p style={{ fontSize:11, color:B.muted, margin:"2px 0 0" }}>
+                  Start date: {new Date(`${c.startDate}T00:00:00`).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                  {c.checkInDay ? ` · update day ${c.checkInDay}` : ""}
+                </p>
+              </div>
+              <span style={{ fontSize:11, fontWeight:700, color:col, whiteSpace:"nowrap" }}>
+                {d <= 1 ? "⚠️ " : ""}{tierLabel(d)}
+              </span>
+            </div>
+          );
+        })}
+        <p style={{ fontSize:10, color:B.muted, margin:"6px 0 0" }}>
+          These clients aren't counted late on updates until their start date.
+        </p>
+      </div>
+    </div>
+  );
+};
 
 // ── Coach Dashboard ───────────────────────────────────────────────────────────
 const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured, followedUp, setFollowedUp }) => {
@@ -2098,7 +1984,36 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
   // Track resolved alert reasons per client email
   const [resolved, setResolved]             = useState<Record<string,Set<string>>>({});
   const [checkinDeadline, setCheckinDeadline] = useState("09:00");
-  const clients = CLIENT_ROSTER;
+  // Real roster: this coach's active clients from the database
+  const [clients, setClients] = useState<any[]>([]);
+  useEffect(() => { (async () => {
+    try {
+      const me = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id`);
+      const myId = me?.[0]?.id;
+      if (!myId) { setClients([]); return; }
+      const rows = (await sbGet('user_profiles',
+        `coach_id=eq.${myId}&role=eq.client&is_active=not.is.false&select=id,name,email,initials,update_day,start_date&order=name.asc`)) || [];
+      // Last check-in per client (single batched query)
+      let lastMap: Record<string,string> = {};
+      if (rows.length > 0) {
+        const ids = rows.map((r:any) => r.id).join(',');
+        const cks = (await sbGet('weekly_checkins',
+          `client_id=in.(${ids})&select=client_id,submitted_at&order=submitted_at.desc`)) || [];
+        for (const ck of cks) if (!lastMap[ck.client_id]) lastMap[ck.client_id] = ck.submitted_at;
+      }
+      setClients(rows.map((r:any) => ({
+        uuid: r.id, name: r.name || '', email: r.email || '',
+        initials: r.initials || (r.name || '?').split(' ').map((w:string)=>w[0]).join('').slice(0,2).toUpperCase(),
+        checkInDay: r.update_day || '', startDate: r.start_date || null,
+        lastCheckinAt: lastMap[r.id] || null,
+        lastCheckin: lastMap[r.id]
+          ? new Date(lastMap[r.id]).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+          : '—',
+        status: 'Active', nextCheckin: '', alert: false, alertReasons: [],
+        tags: [], notes: '', checkinHistory: [], pendingLabs: false, protocol: '', goal: '',
+      })));
+    } catch (e) { setClients([]); }
+  })(); }, [user?.email]);
   // Guard: ensure loomFeatured is always a Set regardless of how the prop arrives
   const featuredSet: Set<string> = (loomFeatured instanceof Set) ? loomFeatured : new Set();
 
@@ -2164,6 +2079,9 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
             </Card>
           ))}
         </div>
+
+        {/* ── Upcoming contract starts ── */}
+        <UpcomingStartsSection clients={clients}/>
 
         {/* ── Missing Check-In Tracker ── */}
         <button onClick={()=>setMissOpen(v=>!v)}
@@ -2366,17 +2284,8 @@ const PERM_DEFS = [
 ];
 const DEFAULT_PERMS:any = { messages:true, diet:false, labs:false, workout:false, checkins:false, habits:false, coach_convo:false };
 
-const FALLBACK_STAFF:any[]   = [
-  { id:'s1', name:'Coach Marcus',   role:'coach',      initials:'CM' },
-  { id:'s2', name:'Head Coach Nia', role:'head_coach', initials:'HN' },
-  { id:'s3', name:'Sarah (VA)',      role:'va',         initials:'SA' },
-];
-const FALLBACK_CLIENTS:any[] = [
-  { id:'c1', name:'Jordan Williams', initials:'JW' },
-  { id:'c2', name:'Alex Carter',     initials:'AC' },
-  { id:'c3', name:'Taylor Brooks',   initials:'TB' },
-  { id:'c4', name:'Sam Rivera',      initials:'SR' },
-];
+const FALLBACK_STAFF:any[]   = [];
+const FALLBACK_CLIENTS:any[] = [];
 
 const StaffAccessManager = ({ user }:any) => {
   const [companyId,   setCompanyId]   = useState<string|null>(null);
@@ -3280,6 +3189,22 @@ const AdminDashboard = ({ user }:any) => {
   const [myOrg, setMyOrg] = useState<any>(null);        // white-label admin's own org (for branded login link)
   const [manageOrg, setManageOrg] = useState<any>(null); // Eden HQ: org being edited via "Manage →"
   const [linkCopied, setLinkCopied] = useState(false);
+  // Upcoming contract starts (org-wide, admin view)
+  const [upcomingClients, setUpcomingClients] = useState<any[]>([]);
+  useEffect(() => { (async () => {
+    try {
+      const me = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=company_id`);
+      const cid = me?.[0]?.company_id;
+      if (!cid) return;
+      const t = new Date();
+      const iso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+      const rows = (await sbGet('user_profiles',
+        `company_id=eq.${cid}&role=eq.client&is_active=not.is.false&start_date=gt.${iso}&select=id,name,email,update_day,start_date&order=start_date.asc`)) || [];
+      setUpcomingClients(rows.map((r:any) => ({
+        uuid: r.id, name: r.name, email: r.email, checkInDay: r.update_day || '', startDate: r.start_date,
+      })));
+    } catch (e) {}
+  })(); }, [user?.email]);
   // Logo management (white-label admins)
   const [logoDraft, setLogoDraft] = useState('');
   const [logoSaving, setLogoSaving] = useState(false);
@@ -3451,6 +3376,8 @@ const AdminDashboard = ({ user }:any) => {
                 </Card>
               ))}
             </div>
+            {/* Upcoming contract starts (org-wide) */}
+            <UpcomingStartsSection clients={upcomingClients}/>
             {/* White-label admin: branded login link */}
             {!isOwnerHQ && myOrg && (() => {
               const brandedUrl = `${window.location.origin}${window.location.pathname}?org=${myOrg.slug}`;
@@ -4498,7 +4425,7 @@ const AppShell = ({ user, onLogout }) => {
       : { email: user.email, name: user.name, role: user.role };
     const ciEmail = ((user.role === 'coach' || user.role === 'super_admin') && coachClient)
       ? coachClient.email : user.email;
-    const ciDemoCheckins = CLIENT_ROSTER.find((c:any) => c.email === ciEmail)?.checkinHistory ?? [];
+    const ciDemoCheckins: any[] = [];
     if (panelTab === 'msgs')    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
     if (panelTab === 'diet')    return <DietBuilder key="diet"    currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
     if (panelTab === 'checkin') return <DietBuilder key="checkin" currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins}/>;
@@ -4560,11 +4487,7 @@ const AppShell = ({ user, onLogout }) => {
     const toolUser = (user.role === "coach" || user.role === "super_admin") && coachClient
       ? { ...coachClient, role: user.role }
       : { email: user.email, name: user.name, role: user.role };
-    // Resolve CLIENT_ROSTER demo check-in data for whichever client is in context
-    const ciEmail = ((user.role === "coach" || user.role === "super_admin") && coachClient)
-      ? coachClient.email
-      : user.email;
-    const ciDemoCheckins = CLIENT_ROSTER.find(c => c.email === ciEmail)?.checkinHistory ?? [];
+    const ciDemoCheckins: any[] = [];
     const onBack = coachClient ? () => { setTab(clientNavSource); } : undefined;
     if (tab === "diet")         return <DietBuilder key="diet" currentUser={toolUser} demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "supplements")  return <DietBuilder key="supplements" currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins} onBack={onBack}/>;

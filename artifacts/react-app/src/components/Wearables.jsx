@@ -19,46 +19,9 @@ const SB_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 const SB_HEADERS = { apikey: SB_ANON, get Authorization(){ return sbBearer() }, 'Content-Type': 'application/json' }
 
-const KNOWN_USERS = {
-  'client@eden.io':     { uuid:'c1000000-0000-0000-0000-000000000001', name:'Jordan Williams' },
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus'   },
-  'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin'      },
-}
 
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack']
 
-// ── Demo data ─────────────────────────────────────────────────
-const DEMO_WEARABLE_DATA = {
-  'c1000000-0000-0000-0000-000000000001': {
-    oura: {
-      connected: true,
-      lastSync: '2026-07-19',
-      readings: [
-        { date:'2026-07-19', hrv:51, restingHr:57, sleepScore:85, sleepHours:7.6, steps:10240, bodyTemp:98.1 },
-        { date:'2026-07-18', hrv:44, restingHr:60, sleepScore:74, sleepHours:6.9, steps:8310,  bodyTemp:97.8 },
-        { date:'2026-07-17', hrv:48, restingHr:58, sleepScore:80, sleepHours:7.2, steps:9100,  bodyTemp:97.9 },
-        { date:'2026-07-16', hrv:55, restingHr:56, sleepScore:88, sleepHours:8.0, steps:11200, bodyTemp:98.0 },
-        { date:'2026-07-15', hrv:42, restingHr:62, sleepScore:70, sleepHours:6.5, steps:7800,  bodyTemp:97.7 },
-        { date:'2026-07-14', hrv:48, restingHr:58, sleepScore:82, sleepHours:7.4, steps:9840,  bodyTemp:97.9 },
-        { date:'2026-07-13', hrv:50, restingHr:57, sleepScore:83, sleepHours:7.5, steps:10100, bodyTemp:98.0 },
-      ],
-    },
-    whoop: { connected: false },
-    foodLog: [
-      { id:1,  date:'2026-07-19', meal:'Breakfast', description:'Scrambled eggs (3), avocado ½, black coffee', calories:420 },
-      { id:2,  date:'2026-07-19', meal:'Lunch',     description:'Grilled chicken salad, olive oil + lemon dressing', calories:580 },
-      { id:3,  date:'2026-07-19', meal:'Dinner',    description:'Salmon fillet, roasted broccoli, sweet potato', calories:710 },
-      { id:4,  date:'2026-07-19', meal:'Snack',     description:'Handful of almonds, green tea', calories:180 },
-      { id:5,  date:'2026-07-18', meal:'Breakfast', description:'Protein shake, banana', calories:390 },
-      { id:6,  date:'2026-07-18', meal:'Lunch',     description:'Turkey lettuce wraps x3, side of hummus', calories:520 },
-      { id:7,  date:'2026-07-18', meal:'Dinner',    description:'Ground beef stir-fry with bell peppers and zucchini', calories:680 },
-      { id:8,  date:'2026-07-17', meal:'Breakfast', description:'Greek yogurt, blueberries, chia seeds', calories:310 },
-      { id:9,  date:'2026-07-17', meal:'Lunch',     description:'Tuna salad over mixed greens, olive oil', calories:490 },
-      { id:10, date:'2026-07-17', meal:'Dinner',    description:'Chicken thighs, asparagus, cauliflower rice', calories:640 },
-      { id:11, date:'2026-07-17', meal:'Snack',     description:'Apple with almond butter', calories:220 },
-    ],
-  },
-}
 
 // ── Shared sub-components ─────────────────────────────────────
 function Card({ children, sx = {} }) {
@@ -352,9 +315,17 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
 // ── MAIN COMPONENT ────────────────────────────────────────────
 export default function Wearables({ currentUser }) {
   const email      = currentUser?.email || ''
-  const clientInfo = KNOWN_USERS[email]
-  const clientUUID = clientInfo?.uuid
-  const clientName = clientInfo?.name || currentUser?.name || 'Client'
+  // Resolve real profile UUID from the database (no demo identity fallbacks)
+  const [profileRow, setProfileRow] = useState(null)
+  useEffect(() => {
+    if (!email) return
+    fetch(`${SB_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name`, { headers: SB_HEADERS })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(rows => { if (Array.isArray(rows) && rows[0]) setProfileRow(rows[0]) })
+      .catch(() => {})
+  }, [email])
+  const clientUUID = profileRow?.id
+  const clientName = profileRow?.name || currentUser?.name || 'Client'
   const isCoach    = currentUser?.role === 'coach' || currentUser?.role === 'super_admin' || currentUser?.role === 'head_coach'
 
   const [activeDevice, setActiveDevice] = useState('oura')
@@ -366,7 +337,7 @@ export default function Wearables({ currentUser }) {
   // Primary store: Supabase `food_log_entries` table (syncs across all devices —
   // client logs on phone, coach sees on computer). Falls back to localStorage
   // if the table doesn't exist yet or the network is down.
-  const seedLog    = DEMO_WEARABLE_DATA[clientUUID]?.foodLog ?? []
+  const seedLog    = []
   const storageKey = `eden_foodlog_${(clientUUID || email).replace(/[^a-z0-9]/gi, '_')}`
 
   const [foodEntries, setFoodEntries] = useState(() => {
@@ -406,7 +377,7 @@ export default function Wearables({ currentUser }) {
   // Derive next id from current max so it never collides after deletions
   const nextIdRef = useRef(Math.max(0, ...foodEntries.map(e => e.id ?? 0)) + 1)
 
-  const wearableData = DEMO_WEARABLE_DATA[clientUUID] || {}
+  const wearableData = {}
   const oura  = wearableData.oura  || { connected: false }
   const whoop = wearableData.whoop || { connected: false }
 

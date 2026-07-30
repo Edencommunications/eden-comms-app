@@ -215,23 +215,28 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB'
 }
 
-// ── Demo coaches + clients for broadcast targeting ────────────
-const BROADCAST_COACHES = [
-  {
-    id: '414b1fb3-f38c-4480-bdb2-fe7b1d844051',
-    name: 'Coach Marcus',
-    clients: [
-      { id: 'c-jordan', name: 'Jordan Williams', checkInDay: 'Wednesday' },
-      { id: 'c-alex',   name: 'Alex Carter',     checkInDay: 'Wednesday' },
-      { id: 'c-taylor', name: 'Taylor Reyes',    checkInDay: 'Friday'    },
-      { id: 'c-sam',    name: 'Sam Thompson',    checkInDay: 'Monday'    },
-    ],
-  },
-]
 
 // ── Broadcast Composer ────────────────────────────────────────
-function BroadcastComposer({ onClose, senderName }) {
+function BroadcastComposer({ onClose, senderName, senderEmail }) {
   const [audienceType,    setAudienceType]    = useState('company_wide')
+  // Real coach → client roster from the database (for broadcast targeting)
+  const [broadcastCoaches, setBroadcastCoaches] = useState([])
+  useEffect(() => { (async () => {
+    try {
+      const me = await dbGet('user_profiles', `email=eq.${encodeURIComponent(senderEmail || '')}&select=company_id`)
+      const cid = me?.[0]?.company_id
+      if (!cid) return
+      const [coachRows, clientRows] = await Promise.all([
+        dbGet('user_profiles', `company_id=eq.${cid}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name&order=name.asc`),
+        dbGet('user_profiles', `company_id=eq.${cid}&role=eq.client&is_active=not.is.false&select=id,name,coach_id,update_day&order=name.asc`),
+      ])
+      setBroadcastCoaches((coachRows || []).map(c => ({
+        id: c.id, name: c.name,
+        clients: (clientRows || []).filter(cl => cl.coach_id === c.id)
+          .map(cl => ({ id: cl.id, name: cl.name, checkInDay: cl.update_day || 'Unassigned' })),
+      })))
+    } catch {}
+  })() }, [senderEmail])
   const [selectedCoachId, setSelectedCoachId] = useState('')
   const [selectedDays,    setSelectedDays]    = useState([])
   const [selectedClients, setSelectedClients] = useState(new Set())
@@ -276,7 +281,7 @@ function BroadcastComposer({ onClose, senderName }) {
     } catch {}
   }
 
-  const coach = BROADCAST_COACHES.find(c => c.id === selectedCoachId)
+  const coach = broadcastCoaches.find(c => c.id === selectedCoachId)
 
   const availableDays = coach
     ? [...new Set(coach.clients.map(c => c.checkInDay))].sort()
@@ -489,7 +494,7 @@ function BroadcastComposer({ onClose, senderName }) {
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>2 · Select Coach</div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {BROADCAST_COACHES.map(c => (
+                {broadcastCoaches.map(c => (
                   <button key={c.id} onClick={() => { setSelectedCoachId(c.id); setSelectedDays([]); setSelectedClients(new Set()) }}
                     style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:10,
                       border:`2px solid ${selectedCoachId===c.id ? C.gold : C.border}`,
@@ -773,7 +778,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const baseConversations = (dynConversations && dynConversations.length &&
       (isRealDbUser || dynConversations.length >= demoConversations.length))
     ? dynConversations
-    : demoConversations
+    : (isRealDbUser ? [] : demoConversations) // real users never see demo threads
 
   // Extra stub conversations created on the fly when Follow Up targets a client not yet in the list
   const [extraConvos, setExtraConvos] = useState([])
@@ -1575,7 +1580,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
         {/* Broadcast Composer — full right panel on desktop, full screen on mobile */}
         {showBroadcast && (
-          <BroadcastComposer senderName={myName} onClose={() => setShowBroadcast(false)} />
+          <BroadcastComposer senderName={myName} senderEmail={email} onClose={() => setShowBroadcast(false)} />
         )}
 
         {/* No conversation selected — desktop placeholder */}

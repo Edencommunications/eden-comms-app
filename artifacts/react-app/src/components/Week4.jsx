@@ -173,67 +173,6 @@ function Sel({label,value,onChange,options}) {
   )
 }
 
-// ── Demo / seed data shown before real DB data is saved ─────────
-const DEMO_WORKOUTS = [
-  {
-    name:'Push Day A', notes:'Focus on mind-muscle connection. Rest 90 sec between working sets.',
-    exercises:[
-      {id:'dpa_bench',    name:'Flat BB Bench Press',            sets:4, reps:'10-12', rest:'90 sec', cues:'Retract scapula, arch naturally, drive chest through the bar', videoLink:''},
-      {id:'dpa_incline',  name:'Incline DB Bench Press',         sets:4, reps:'10-12', rest:'90 sec', cues:'30° incline, squeeze at top, full stretch at bottom',           videoLink:''},
-      {id:'dpa_shoulder', name:'Seated DB Shoulder Press',       sets:4, reps:'10-12', rest:'90 sec', cues:'Stop at 90° on the way down, explosive press up',               videoLink:''},
-      {id:'dpa_lateral',  name:'Single Arm Cable Lateral Raise', sets:3, reps:'12',    rest:'60 sec', cues:'Lead with elbow, slight forward lean, squeeze at top',          videoLink:''},
-      {id:'dpa_tri',      name:'Rope Tricep Pushdown',           sets:4, reps:'12',    rest:'60 sec', cues:'Spread rope at bottom, lock elbows at sides, squeeze triceps',  videoLink:''},
-    ],
-  },
-  {
-    name:'Pull Day A', notes:'Initiate every pull with the lats, not the arms.',
-    exercises:[
-      {id:'pla_pulldown', name:'Wide Grip Lat Pulldown',         sets:4, reps:'10-12', rest:'90 sec', cues:'Pull to upper chest, full stretch at top, lead with elbows', videoLink:''},
-      {id:'pla_cable',    name:'Seated Cable Row',               sets:4, reps:'10-12', rest:'90 sec', cues:'Squeeze shoulder blades together at the end of each rep',    videoLink:''},
-      {id:'pla_row',      name:'BB Bent Over Row',               sets:4, reps:'10-12', rest:'90 sec', cues:'Hinge at hip 45°, pull to lower chest, full ROM each rep',   videoLink:''},
-      {id:'pla_hammer',   name:'DB Hammer Curl',                 sets:3, reps:'12',    rest:'60 sec', cues:'Neutral grip, controlled negative, no swinging',              videoLink:''},
-      {id:'pla_preacher', name:'EZ Bar Preacher Curl',           sets:3, reps:'12',    rest:'60 sec', cues:'Full stretch at bottom, squeeze at top, slow negative',       videoLink:''},
-    ],
-  },
-  {
-    name:'Leg Day A', notes:'Warm up knees thoroughly. Depth is non-negotiable.',
-    exercises:[
-      {id:'lda_squat',  name:'BB Back Squat',          sets:5, reps:'10-12', rest:'2 min',  cues:'Hip crease below knee, knees track over toes, chest up',    videoLink:''},
-      {id:'lda_press',  name:'Leg Press',              sets:4, reps:'10-12', rest:'90 sec', cues:"Full ROM, don't lock knees at top, controlled descent",      videoLink:''},
-      {id:'lda_split',  name:'DB Split Squat',         sets:3, reps:'12',    rest:'90 sec', cues:'Back knee touches lightly, keep torso upright',              videoLink:''},
-      {id:'lda_ext',    name:'Seated Leg Extension',   sets:4, reps:'12',    rest:'60 sec', cues:'Squeeze quad at top, 2-second negative',                    videoLink:''},
-      {id:'lda_thrust', name:'BB Hip Thrust',          sets:4, reps:'10-12', rest:'90 sec', cues:'Drive hips through full extension, pause at top',            videoLink:''},
-    ],
-  },
-  {
-    name:'Push Day B', notes:'Shoulder-dominant day. Volume is key.',
-    exercises:[
-      {id:'pdb_press',   name:'Seated DB Shoulder Press', sets:4, reps:'10-12', rest:'90 sec', cues:'Full ROM, no partial reps, control the descent',        videoLink:''},
-      {id:'pdb_lateral', name:'Standing DB Lateral Raise', sets:4, reps:'12',   rest:'60 sec', cues:'Slight bend at elbow, lead with pinky, pause at top',   videoLink:''},
-      {id:'pdb_incline', name:'Incline BB Bench Press',    sets:4, reps:'10-12', rest:'90 sec', cues:'45° incline, bar to upper chest, explosive press',      videoLink:''},
-      {id:'pdb_skull',   name:'EZ Bar Skullcrusher',       sets:4, reps:'10-12', rest:'60 sec', cues:'Keep elbows tucked, lower to forehead, full extension', videoLink:''},
-    ],
-  },
-  {
-    name:'Pull Day B', notes:'Focus on width and thickness. Control every negative.',
-    exercises:[
-      {id:'plb_narrow',  name:'Narrow Grip Lat Pulldown',      sets:4, reps:'10-12', rest:'90 sec', cues:'Drive elbows to hips, lean back slightly, full stretch', videoLink:''},
-      {id:'plb_tbar',    name:'T-Bar Row',                     sets:4, reps:'10-12', rest:'90 sec', cues:'Chest on pad, elbows wide, row to lower chest',          videoLink:''},
-      {id:'plb_single',  name:'Single Arm Bent Over DB Row',   sets:4, reps:'10-12', rest:'90 sec', cues:'Brace on bench, full stretch, pull to hip',              videoLink:''},
-      {id:'plb_cable',   name:'Cable Bicep Curl',              sets:3, reps:'12',    rest:'60 sec', cues:'Elbows stationary, squeeze peak, controlled negative',    videoLink:''},
-      {id:'plb_incurl',  name:'Incline DB Bicep Curl',         sets:3, reps:'12',    rest:'60 sec', cues:'Full stretch at bottom, supinate at top',                 videoLink:''},
-    ],
-  },
-  {
-    name:'Leg Day B', notes:'Hamstring & posterior chain focus. Never skip calf work.',
-    exercises:[
-      {id:'ldb_hack', name:'Hack Squat',                sets:4, reps:'10-12', rest:'90 sec', cues:'High foot placement for glutes, full depth',              videoLink:''},
-      {id:'ldb_sldl', name:'Stiff Leg Deadlift',        sets:4, reps:'10-12', rest:'90 sec', cues:'Feel the hamstring stretch, hinge not squat, flat back',  videoLink:''},
-      {id:'ldb_curl', name:'Lying Machine Leg Curl',    sets:4, reps:'12',    rest:'60 sec', cues:'Full ROM, squeeze glutes, slow 3-count negative',         videoLink:''},
-      {id:'ldb_calf', name:'Seated Machine Calf Raise', sets:4, reps:'15',    rest:'60 sec', cues:'Full stretch at bottom, pause at top, slow movement',     videoLink:''},
-    ],
-  },
-]
 
 // Day ordering helpers
 const ALL_DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
@@ -242,126 +181,6 @@ function orderedDays(startDay) {
   if (i < 0) return ALL_DAYS
   return [...ALL_DAYS.slice(i), ...ALL_DAYS.slice(0, i)]
 }
-
-// 6 weeks of progressive demo logs (keys: `${week}_${exId}_${setIdx}` and cardio)
-function makeLogs(w, bench, inc, sho, lat, tri, cardio) {
-  const k = (id,i) => `${w}_${id}_${i}`
-  return {
-    // Push Day A — Bench
-    [k('dpa_bench',0)]:{weight:bench[0],reps:'12'}, [k('dpa_bench',1)]:{weight:bench[1],reps:'12'},
-    [k('dpa_bench',2)]:{weight:bench[2],reps:'11'}, [k('dpa_bench',3)]:{weight:bench[3],reps:bench[3]>=200?'10':'11'},
-    // Incline DB
-    [k('dpa_incline',0)]:{weight:inc[0],reps:'12'}, [k('dpa_incline',1)]:{weight:inc[1],reps:'12'},
-    [k('dpa_incline',2)]:{weight:inc[2],reps:'11'}, [k('dpa_incline',3)]:{weight:inc[3],reps:'9'},
-    // Shoulder Press
-    [k('dpa_shoulder',0)]:{weight:sho[0],reps:'12'}, [k('dpa_shoulder',1)]:{weight:sho[1],reps:'12'},
-    [k('dpa_shoulder',2)]:{weight:sho[2],reps:'11'}, [k('dpa_shoulder',3)]:{weight:sho[3],reps:'9'},
-    // Lateral Raise (3 sets)
-    [k('dpa_lateral',0)]:{weight:lat[0],reps:'12'}, [k('dpa_lateral',1)]:{weight:lat[1],reps:'12'},
-    [k('dpa_lateral',2)]:{weight:lat[2],reps:'10'},
-    // Tricep Pushdown
-    [k('dpa_tri',0)]:{weight:tri[0],reps:'12'}, [k('dpa_tri',1)]:{weight:tri[1],reps:'12'},
-    [k('dpa_tri',2)]:{weight:tri[2],reps:'11'}, [k('dpa_tri',3)]:{weight:tri[3],reps:'10'},
-    // Pull Day A — Pulldown
-    [k('pla_pulldown',0)]:{weight:String(+bench[0]-15),reps:'12'}, [k('pla_pulldown',1)]:{weight:String(+bench[1]-15),reps:'12'},
-    [k('pla_pulldown',2)]:{weight:String(+bench[2]-15),reps:'10'}, [k('pla_pulldown',3)]:{weight:String(+bench[3]-15),reps:'9'},
-    // Pull Day A — Cable Row
-    [k('pla_cable',0)]:{weight:String(+bench[0]-20),reps:'12'}, [k('pla_cable',1)]:{weight:String(+bench[1]-20),reps:'12'},
-    [k('pla_cable',2)]:{weight:String(+bench[2]-20),reps:'11'}, [k('pla_cable',3)]:{weight:String(+bench[3]-20),reps:'10'},
-    // Pull Day A — Bent Over Row
-    [k('pla_row',0)]:{weight:String(+bench[0]+10),reps:'12'}, [k('pla_row',1)]:{weight:String(+bench[1]+10),reps:'12'},
-    [k('pla_row',2)]:{weight:String(+bench[2]+10),reps:'10'}, [k('pla_row',3)]:{weight:String(+bench[3]+10),reps:'9'},
-    // Pull Day A — Hammer Curl
-    [k('pla_hammer',0)]:{weight:'35',reps:'12'}, [k('pla_hammer',1)]:{weight:'40',reps:'12'},
-    [k('pla_hammer',2)]:{weight:'45',reps:'10'},
-    // Pull Day A — Preacher Curl
-    [k('pla_preacher',0)]:{weight:tri[0],reps:'12'}, [k('pla_preacher',1)]:{weight:tri[1],reps:'12'},
-    [k('pla_preacher',2)]:{weight:tri[2],reps:'10'},
-    // Leg Day A — Squat
-    [k('lda_squat',0)]:{weight:'135',reps:'12'}, [k('lda_squat',1)]:{weight:String(+bench[1]+10),reps:'12'},
-    [k('lda_squat',2)]:{weight:String(+bench[2]+10),reps:'11'}, [k('lda_squat',3)]:{weight:String(+bench[3]+20),reps:'10'},
-    [k('lda_squat',4)]:{weight:String(+bench[3]+30),reps:'9'},
-    // Leg Press
-    [k('lda_press',0)]:{weight:'270',reps:'12'}, [k('lda_press',1)]:{weight:String(270+w*10),reps:'12'},
-    [k('lda_press',2)]:{weight:String(310+w*10),reps:'11'}, [k('lda_press',3)]:{weight:String(330+w*10),reps:'10'},
-    // Split Squat
-    [k('lda_split',0)]:{weight:inc[0],reps:'12'}, [k('lda_split',1)]:{weight:inc[1],reps:'12'},
-    [k('lda_split',2)]:{weight:inc[2],reps:'10'},
-    // Leg Ext
-    [k('lda_ext',0)]:{weight:'90',reps:'12'}, [k('lda_ext',1)]:{weight:String(90+w*5),reps:'12'},
-    [k('lda_ext',2)]:{weight:String(100+w*5),reps:'11'}, [k('lda_ext',3)]:{weight:String(110+w*5),reps:'10'},
-    // Hip Thrust
-    [k('lda_thrust',0)]:{weight:String(+bench[1]+30),reps:'12'}, [k('lda_thrust',1)]:{weight:String(+bench[2]+30),reps:'12'},
-    [k('lda_thrust',2)]:{weight:String(+bench[3]+30),reps:'11'}, [k('lda_thrust',3)]:{weight:String(+bench[3]+40),reps:'10'},
-    // Cardio
-    [`${w}_cardio_Mon_activity`]:cardio.mon, [`${w}_cardio_Mon_steps`]:cardio.monS,
-    [`${w}_cardio_Tue_activity`]:cardio.tue, [`${w}_cardio_Tue_steps`]:cardio.tueS,
-    [`${w}_cardio_Wed_activity`]:cardio.wed, [`${w}_cardio_Wed_steps`]:cardio.wedS,
-    [`${w}_cardio_Thu_activity`]:cardio.thu, [`${w}_cardio_Thu_steps`]:cardio.thuS,
-    [`${w}_cardio_Fri_activity`]:cardio.fri, [`${w}_cardio_Fri_steps`]:cardio.friS,
-    ...(cardio.sat ? {[`${w}_cardio_Sat_activity`]:cardio.sat,[`${w}_cardio_Sat_steps`]:cardio.satS} : {}),
-  }
-}
-
-const DEMO_WEEK_LOGS = {
-  1: makeLogs(1,
-    ['135','155','175','185'], ['50','55','60','65'],
-    ['35','40','45','45'],     ['10','12','15'],
-    ['50','55','60','65'],
-    {mon:'Brisk Walk 45min',monS:'8500', tue:'Treadmill 30min',tueS:'6200',
-     wed:'Brisk Walk 45min',wedS:'9100', thu:'HIIT 20min',thuS:'4500',
-     fri:'Brisk Walk 45min',friS:'8800'}),
-  2: makeLogs(2,
-    ['135','160','180','190'], ['50','55','65','65'],
-    ['35','40','45','50'],     ['12','12','15'],
-    ['55','60','60','70'],
-    {mon:'Brisk Walk 50min',monS:'9200', tue:'Treadmill 35min',tueS:'6800',
-     wed:'Brisk Walk 45min',wedS:'9400', thu:'HIIT 25min',thuS:'5100',
-     fri:'Brisk Walk 50min',friS:'9000'}),
-  3: makeLogs(3,
-    ['145','165','185','190'], ['55','60','65','70'],
-    ['40','40','50','50'],     ['12','15','15'],
-    ['55','60','65','70'],
-    {mon:'Brisk Walk 50min',monS:'9500', tue:'Treadmill 35min',tueS:'7000',
-     wed:'Brisk Walk 50min',wedS:'9800', thu:'HIIT 25min',thuS:'5300',
-     fri:'Brisk Walk 50min',friS:'9200',
-     sat:'Light Walk 30min', satS:'4200'}),
-  4: makeLogs(4,
-    ['145','165','185','195'], ['55','60','65','70'],
-    ['40','45','50','50'],     ['12','15','15'],
-    ['60','65','65','70'],
-    {mon:'Brisk Walk 55min',monS:'10100', tue:'Treadmill 40min',tueS:'7400',
-     wed:'Brisk Walk 55min',wedS:'10400', thu:'HIIT 30min',thuS:'5800',
-     fri:'Brisk Walk 55min',friS:'10000',
-     sat:'Light Walk 30min', satS:'4500'}),
-  5: makeLogs(5,
-    ['155','170','190','200'], ['55','60','70','70'],
-    ['40','45','50','55'],     ['12','15','15'],
-    ['60','65','70','75'],
-    {mon:'Brisk Walk 60min',monS:'10800', tue:'Treadmill 40min',tueS:'7800',
-     wed:'Brisk Walk 60min',wedS:'11200', thu:'HIIT 30min',thuS:'6200',
-     fri:'Brisk Walk 60min',friS:'10600',
-     sat:'Light Walk 35min', satS:'5000'}),
-  6: makeLogs(6,
-    ['155','175','195','205'], ['60','65','70','75'],
-    ['45','45','50','55'],     ['15','15','20'],
-    ['60','65','70','75'],
-    {mon:'Brisk Walk 60min',monS:'11500', tue:'Treadmill 45min',tueS:'8200',
-     wed:'Brisk Walk 60min',wedS:'11800', thu:'HIIT 35min',thuS:'6600',
-     fri:'Brisk Walk 60min',friS:'11200',
-     sat:'Light Walk 40min', satS:'5500'}),
-}
-
-// Sidebar week history — shown when DB table does not yet exist
-const DEMO_WEEK_HISTORY = [
-  {week:6, saved_at:'2025-02-10T09:00:00Z'},
-  {week:5, saved_at:'2025-02-03T09:00:00Z'},
-  {week:4, saved_at:'2025-01-27T09:00:00Z'},
-  {week:3, saved_at:'2025-01-20T09:00:00Z'},
-  {week:2, saved_at:'2025-01-13T09:00:00Z'},
-  {week:1, saved_at:'2025-01-06T09:00:00Z'},
-]
-
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
@@ -424,7 +243,7 @@ Training Principles:
 3. Each set should start with warm-ups leading to the working sets. The last set should push you to absolute failure at 10 to 12 reps.
 4. Increase weight progressively so that if you achieve 12 reps on your last set, increase the weight next session to maintain the challenge.`
 
-  const [workouts,           setWorkouts]           = useState(DEMO_WORKOUTS)
+  const [workouts,           setWorkouts]           = useState([])
   const [trainingPrinciples, setTrainingPrinciples] = useState(DEFAULT_PRINCIPLES)
   const [activeWorkout,      setActiveWorkout]      = useState(0)
   const [showExPicker,       setShowExPicker]        = useState(false)
@@ -1061,6 +880,23 @@ Training Principles:
           </div>
 
           {/* Workout content */}
+          {workouts.length===0 ? (
+            <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10,padding:40,minHeight: isMobile ? '50vh' : 'auto'}}>
+              <div style={{fontSize:30}}>🏋️</div>
+              <div style={{fontSize:15,fontWeight:700,color:C.white}}>No workouts assigned yet</div>
+              <div style={{fontSize:12,color:C.muted,textAlign:'center',maxWidth:300,lineHeight:1.6}}>
+                {isCoach
+                  ? "Create the first workout to start building this client's training program."
+                  : "Your coach hasn't assigned a training program yet — check back soon."}
+              </div>
+              {isCoach && (
+                <button onClick={()=>{setWorkouts([{name:'Workout 1',exercises:[],notes:''}]);setActiveWorkout(0)}}
+                  style={{marginTop:6,background:C.gold,border:'none',borderRadius:10,padding:'10px 18px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  + Create First Workout
+                </button>
+              )}
+            </div>
+          ) : (
           <div style={{flex:1,display:'flex',flexDirection:'column',overflow: isMobile ? 'visible' : 'hidden', minHeight: isMobile ? '80vh' : 'auto'}}>
             {/* Workout header */}
             <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
@@ -1268,6 +1104,7 @@ Training Principles:
               )}
             </div>
           </div>
+          )}
         </div>
       )}
 
