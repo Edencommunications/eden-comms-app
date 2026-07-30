@@ -94,16 +94,10 @@ async function dbUpdate(table, params, body) {
 }
 
 // ── Demo data (Week 6 — replace with real DB calls once auth live) ──
-const DEMO_COACHES = [
-  { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus',  email:'coach@eden.io',   role:'coach',  checkInDay:'Wednesday', clientCount:1, active:true },
-]
-const DEMO_CLIENTS = [
-  { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', email:'client@eden.io',  role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', coachName:'Coach Marcus', checkInDay:'Wednesday', hasUpdate:true, lastSeen:'Jul 19 2026', active:true },
-  { uuid:'bbbbbbbb-0000-0000-0000-000000000002', name:'Alex Carter',      email:'alex@eden.io',    role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', coachName:'Coach Marcus', checkInDay:'Wednesday', hasUpdate:true, lastSeen:'Jul 19 2026', active:true },
-]
-const DEMO_ORGS = [
-  { id:'b0000000-0000-0000-0000-000000000001', name:'Lifestyle of Eden', slug:'eden', isWhiteLabel:false, plan:'Platform Owner', coachCount:1, clientCount:1, active:true, brandColor:'#ffa600' },
-]
+// Demo seed data removed — all rosters load live from the database.
+const DEMO_COACHES = []
+const DEMO_CLIENTS = []
+const DEMO_ORGS = []
 
 const CHECK_IN_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 const CALL_TYPES = ['Monthly Check-In','Intake / Onboarding','Lab Review','Therapy / Support','Strategy Call','Emergency Call','Other']
@@ -560,7 +554,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // even ones created outside this browser session.
   useEffect(()=>{
     if (!adminCompanyId) return
-    dbGet('user_profiles',`role=eq.client&company_id=eq.${adminCompanyId}&is_active=not.is.false&select=id,name,email,coach_id,update_day,created_at`)
+    // Plain coaches see only their own clients; admins/head coaches see the whole org
+    const scope = (info.role==='coach' && adminProfileId) ? `&coach_id=eq.${adminProfileId}` : ''
+    dbGet('user_profiles',`role=eq.client&company_id=eq.${adminCompanyId}&is_active=not.is.false${scope}&select=id,name,email,coach_id,update_day,created_at`)
       .then(rows=>{
         if (!Array.isArray(rows)) return
         setClients(prev=>{
@@ -594,7 +590,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         })
       })
       .catch(()=>{})
-  },[adminCompanyId, dbCoaches])
+  },[adminCompanyId, adminProfileId, dbCoaches])
 
   // Removed coach UUIDs — seeded from localStorage, kept in sync with the DB
   // (is_active=false) by syncLifecycleFromDb. Declared here so allCoaches can
@@ -617,7 +613,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [newDoc,      setNewDoc]      = useState({doc_type:'note',title:'',content:'',file_url:''})
 
   useEffect(()=>{
-    if (!isAdmin) return
+    if (!email || isClient) return // resolve org context for all staff (admin, coach, head coach, VA)
     dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,company_id`)
       .then(rows=>{
         if (Array.isArray(rows)&&rows[0]) {
@@ -1294,10 +1290,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         <div style={{flex:1,overflowY:'auto',padding:16}}>
           {/* Stats row */}
           <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
-            <Stat label="Total Clients"  value={DEMO_CLIENTS.length}  color={C.gold}    sub="Across all coaches"/>
+            <Stat label="Total Clients"  value={clients.length}  color={C.gold}    sub="Across all coaches"/>
             <Stat label="Total Coaches"  value={allCoaches.length}  color={C.success} sub="Active coaches"/>
             <Stat label="Pending Updates" value={pendingUpdates}       color={pendingUpdates>0?C.danger:C.success} sub={`Due ${todayDay}`}/>
-            <Stat label="Orgs"           value={DEMO_ORGS.length}      color='#D4A8F0'   sub="White-label companies"/>
+            <Stat label="Orgs"           value={orgs.length}      color='#D4A8F0'   sub="White-label companies"/>
           </div>
 
           {/* Check-in summary */}
@@ -1307,7 +1303,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <span style={{fontSize:11,color:C.muted}}>{todayDay}</span>
             </div>
             {allCoaches.map(coach=>{
-              const coachClients = DEMO_CLIENTS.filter(c=>c.coachId===coach.uuid)
+              const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
               const submitted    = coachClients.filter(c=>!c.hasUpdate).length
               return (
                 <div key={coach.uuid} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
