@@ -48,8 +48,8 @@ const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
 const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus',    role:'coach',       coachId:null },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', role:'client',      coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051' },
+  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach',       coachId:null },
+  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client',      coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051' },
   'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',      role:'super_admin', coachId:null },
 }
 
@@ -273,9 +273,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   })
   const setI = k=>v=>setIntake(p=>({...p,[k]:v}))
 
-  const [callNotes, setCallNotes] = useState([
-    {id:1, callDate:'2026-07-14', callType:'Monthly Check-In', summary:'Jordan is progressing well. Sleep improved significantly. Step goal being hit 6/7 days. Energy up, bloating down from 7 to 4.', focusPoints:'Increase protein in Meal 3. Add cold shower habit. Continue current supplement protocol.', actionItems:'Adjust Meal 3 protein to 5.5oz. Submit labs by July 18.', nextCallDate:'2026-08-11'},
-  ])
+  const [callNotes, setCallNotes] = useState([])
   const [showNewCall,   setShowNewCall]   = useState(false)
   const [newCall, setNewCall] = useState({
     callDate: new Date().toISOString().slice(0,10),
@@ -676,11 +674,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   )
 
   // ── Audit log ─────────────────────────────────────────────
-  const [auditLog, setAuditLog] = useState([
-    {id:1,actor:'Eden Admin',action:'Granted course access',target:'Jordan Williams',detail:'The Mind Of A CEO',time:'Jul 14 2026 9:02 AM'},
-    {id:2,actor:'Coach Marcus',action:'Saved diet plan',target:'Jordan Williams',detail:'Base Diet Protocol Male',time:'Jul 13 2026 3:44 PM'},
-    {id:3,actor:'Jordan Williams',action:'Submitted check-in',target:'Self',detail:'Week of Jul 13',time:'Jul 13 2026 7:58 AM'},
-  ])
+  const [auditLog, setAuditLog] = useState([])
 
   // ── Client lifecycle management (all persisted to localStorage) ──
   // Keyed by client email so the LoginScreen can read the same store.
@@ -706,14 +700,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setHeadCoaches(next)
     localStorage.setItem('eden_head_coaches', JSON.stringify(next))
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'head_coach'}).catch(()=>{})
-    addAudit('Eden Admin','Promoted to Head Coach',coach.name,'')
+    addAudit(info.name,'Promoted to Head Coach',coach.name,'')
   }
   function demoteFromHeadCoach(coach) {
     const next = headCoaches.filter(id=>id!==coach.uuid)
     setHeadCoaches(next)
     localStorage.setItem('eden_head_coaches', JSON.stringify(next))
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'coach'}).catch(()=>{})
-    addAudit('Eden Admin','Removed Head Coach designation',coach.name,'')
+    addAudit(info.name,'Removed Head Coach designation',coach.name,'')
   }
   // Sync deactivations + coach transfers + coach removals FROM the database so
   // every device (coach, admin, anywhere) sees the same state. Runs on mount
@@ -850,7 +844,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:false}).then(refreshOrgCounts).catch(()=>{})
     dbInsert('audit_logs',{ action:'client_deactivated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:client.uuid||null, details:{ name:client.name } }).catch(()=>{})
-    addAudit('Eden Admin','Deactivated client',client.name,'Account deactivated — data preserved, coach still has full access')
+    addAudit(info.name,'Deactivated client',client.name,'Account deactivated — data preserved, coach still has full access')
     if (selectedClient?.uuid === client.uuid) setSelectedClient({ ...client, _deactivated: true })
   }
 
@@ -863,7 +857,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:true}).then(refreshOrgCounts).catch(()=>{})
     dbInsert('audit_logs',{ action:'client_reactivated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:client.uuid||null, details:{ name:client.name } }).catch(()=>{})
-    addAudit('Eden Admin','Reactivated client',client.name,'Account restored — client can now log in again')
+    addAudit(info.name,'Reactivated client',client.name,'Account restored — client can now log in again')
     setSelectedClient({ ...client, _deactivated: false })
   }
 
@@ -896,7 +890,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     let transferred = 0
     activeCoachClients.forEach(c=>{
       transferClient(c.email, transferTargetId)
-      addAudit('Eden Admin','Transferred client',c.name,`→ ${targetCoach?.name||'New Coach'}`)
+      addAudit(info.name,'Transferred client',c.name,`→ ${targetCoach?.name||'New Coach'}`)
       transferred++
     })
     const next = [...removedCoaches, pendingRemoval.uuid]
@@ -904,7 +898,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     localStorage.setItem('eden_removed_coaches', JSON.stringify(next))
     // Persist the removal so DB-driven org counts (and every other device) reflect it
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(pendingRemoval.email)}`,{is_active:false}).then(refreshOrgCounts).catch(()=>{})
-    addAudit('Eden Admin','Removed coach',pendingRemoval.name,
+    addAudit(info.name,'Removed coach',pendingRemoval.name,
       transferred>0?`${transferred} client${transferred!==1?'s':''} transferred to ${targetCoach?.name||'new coach'}`:'No active clients to transfer')
     setShowTransferModal(false)
     setPendingRemoval(null)

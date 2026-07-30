@@ -26,8 +26,8 @@ const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
 const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus',    role:'coach' },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', role:'client' },
+  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach' },
+  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client' },
   'admin@edencomms.io': { uuid:null,                                    name:'Eden Admin',      role:'super_admin' },
 }
 
@@ -2455,7 +2455,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           {/* Coach response — read-only */}
                           {ci.coachNotes?(
                             <div style={{background:`${C.gold}0d`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'12px 14px'}}>
-                              <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>💬 Coach Marcus</div>
+                              <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>💬 Coach Response</div>
                               <p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{ci.coachNotes}</p>
                               {loomId?(
                                 <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>

@@ -27,16 +27,14 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const DAILY_DOMAIN = 'edencommunications'
 
 const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus', role:'coach',       orgId:'b0000000-0000-0000-0000-000000000001' },
+  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach', role:'coach',       orgId:'b0000000-0000-0000-0000-000000000001' },
   'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',   role:'super_admin', orgId:'b0000000-0000-0000-0000-000000000001' },
 }
 
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
-const DEMO_COACHES = [
-  { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus', role:'coach',       isHeadCoach:true  },
-  { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',   role:'super_admin', isHeadCoach:false },
-]
+// Demo roster removed — the team list loads live from the database.
+const DEMO_COACHES = []
 
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
@@ -164,16 +162,9 @@ export default function Week7({ currentUser }) {
   const [section, setSection] = useState('chat') // chat | calendar | huddle
 
   // ── Team Chat state ────────────────────────────────────────
-  const [messages, setMessages] = useState([
-    {id:'m1', senderId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', senderName:'Coach Marcus', senderRole:'coach', content:'Good morning team! New client Jordan just submitted her first check-in. Results looking great.', replyCount:2, createdAt:new Date(Date.now()-7200000).toISOString(), isDm:false},
-    {id:'m2', senderId:'00000000-0000-0000-0000-000000000001', senderName:'Eden Admin', senderRole:'super_admin', content:'Reminder: Team call Thursday at 10 AM CST. Link in the calendar.', replyCount:0, createdAt:new Date(Date.now()-3600000).toISOString(), isDm:false},
-  ])
-  const [threadReplies, setThreadReplies] = useState({
-    'm1':[
-      {id:'r1', senderId:'00000000-0000-0000-0000-000000000001', senderName:'Eden Admin', senderRole:'super_admin', content:'That is great to hear! What protocol did you put her on?', threadId:'m1', createdAt:new Date(Date.now()-3000000).toISOString()},
-      {id:'r2', senderId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', senderName:'Coach Marcus', senderRole:'coach', content:'Base Diet Protocol Male, starting with 5R gut protocol for supplements.', threadId:'m1', createdAt:new Date(Date.now()-1800000).toISOString()},
-    ]
-  })
+  // Demo seed messages removed — team chat loads live from the database.
+  const [messages, setMessages] = useState([])
+  const [threadReplies, setThreadReplies] = useState({})
   const [newMessage,   setNewMessage]   = useState('')
 
   // ── Live team chat: load real messages from the DB (demo rows stay as fallback) ──

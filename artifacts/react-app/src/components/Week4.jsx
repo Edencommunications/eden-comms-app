@@ -23,8 +23,8 @@ const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
 const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus',    role:'coach' },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', role:'client' },
+  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach' },
+  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client' },
   'admin@edencomms.io': { uuid:null,                                    name:'Eden Admin',      role:'super_admin' },
 }
 
@@ -1293,7 +1293,7 @@ Training Principles:
             )}
             {isCoach&&(
               <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
-                Read-only view of Jordan's submitted log. Use the week selector in the sidebar to browse other weeks.
+                Read-only view of the client's submitted log. Use the week selector in the sidebar to browse other weeks.
               </div>
             )}
             {orderedDays(cardioWeekStart).map(day=>{

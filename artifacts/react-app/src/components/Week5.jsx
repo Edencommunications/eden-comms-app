@@ -16,18 +16,15 @@ const RECIPE_BUY    = 'https://funnel.lifestyleofeden.com/loe-recipes-5482'
 
 // ── Known users (expand in Week 6 with real auth) ─────────────
 const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus',    role:'coach' },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051' },
+  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach' },
+  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051' },
   'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',      role:'super_admin' },
 }
 
 // ── Demo roster (Week 6 pulls this from Supabase dynamically) ─
-const DEMO_COACHES = [
-  { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach Marcus', role:'coach' },
-]
-const DEMO_CLIENTS = [
-  { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Jordan Williams', role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', coachName:'Coach Marcus' },
-]
+// Demo roster removed — rosters load live from the database.
+const DEMO_COACHES = []
+const DEMO_CLIENTS = []
 
 const CEO_COURSE_ID = 'a0000000-0000-0000-0000-000000000001'
 

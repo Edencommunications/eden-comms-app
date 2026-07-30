@@ -3669,7 +3669,7 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [modalIdx, checkins])
 
-  // Determine UUID — works for demo (Jordan) and live Supabase users
+  // Determine UUID — works for demo and live Supabase users
   // KNOWN_USERS is defined in Messaging.jsx scope; in App.tsx we use the email to query user_profiles
   const myEmail = currentUser?.email
 

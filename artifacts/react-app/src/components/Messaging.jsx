@@ -18,11 +18,10 @@ function useIsMobile(bp = 640) {
 // ── Supabase credentials ──────────────────────────────────────
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
-const JORDAN_CONVO_ID = 'e8499d22-acde-4528-8403-39ffece7b9c5'
 
 const KNOWN_USERS = {
-  'coach@eden.io':       { uuid: '414b1fb3-f38c-4480-bdb2-fe7b1d844051', name: 'Coach Marcus', role: 'coach' },
-  'client@eden.io':      { uuid: 'ece58b33-3f2a-4ce7-bed9-a157c914056c', name: 'Jordan Williams', role: 'client' },
+  'coach@eden.io':       { uuid: '414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach', role: 'coach' },
+  'client@eden.io':      { uuid: 'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role: 'client' },
   'admin@edencomms.io':  { uuid: null, name: 'Eden Admin', role: 'super_admin' },
 }
 
@@ -33,134 +32,7 @@ const C = {
   muted: '#888888', success: '#4FD89A', danger: '#ff4444',
 }
 
-// ── Admin conversation (client → admin thread) ─────────────────
-const ADMIN_CONVO = {
-  id: 'admin',
-  name: 'Eden Admin',
-  initials: 'EA',
-  supabaseConvoId: null,
-  lastMessage: 'Feel free to message us for anything account-related.',
-  lastTime: '3d ago',
-  unread: 1,
-  online: true,
-  thread: [
-    { id:1, from:'coach', text:"Welcome to Eden Communications, Jordan! I'm the Eden admin. For anything outside your coaching sessions — account questions, billing, technical issues — I'm your contact here.", time:'Mon 8:00 AM' },
-    { id:2, from:'client', text:"Thank you! Great to be here.", time:'Mon 8:05 AM' },
-    { id:3, from:'coach', text:"Glad to have you 🙏 Coach Marcus handles everything health and protocol. I'm here for the rest. Don't hesitate to reach out anytime.", time:'Mon 8:07 AM' },
-  ],
-}
-
-// ── Coach conversation as seen by the CLIENT (labels flipped) ──
-// Clients see "Coach Marcus" in the thread, not their own name.
-const CLIENT_COACH_CONVO = {
-  id: 'jordan',
-  name: 'Coach Marcus',
-  initials: 'CM',
-  supabaseConvoId: JORDAN_CONVO_ID,
-  lastMessage: "Thank you! I'll start the new protocol tomorrow 🙏",
-  lastTime: '2h ago',
-  unread: 2,
-  online: true,
-  thread: [
-    { id:1, from:'coach', text:"Hey Jordan! Just reviewed your check-in. Great numbers this week — weight is trending in the right direction.", time:'Mon 9:14 AM' },
-    { id:2, from:'client', text:"Thank you so much! I've been really consistent with the supplements.", time:'Mon 9:22 AM' },
-    { id:3, from:'coach', text:"It shows. Your energy score jumped from a 5 to a 7. Sleep is improving too. Keep that same sleep window this week.", time:'Mon 9:31 AM' },
-    { id:4, from:'client', text:"Will do. One question — should I take the Cort Eaze every day or just on high-stress days?", time:'Mon 11:05 AM' },
-    { id:5, from:'coach', text:"High-stress days only. If you're waking up and already feel calm and your HRV is solid, skip it.", time:'Mon 11:18 AM' },
-    { id:6, from:'client', text:"Got it! That makes sense.", time:'Mon 11:19 AM' },
-    { id:7, from:'coach', text:"Also — I'm updating your protocol with a new magnesium dose. You'll see it in the Diet & Supps tab. Take it 30 min before bed.", time:'Tue 8:02 AM' },
-    { id:8, from:'client', text:"Okay I saw it! Do I take both the glycinate and the threonate or just one?", time:'Tue 8:45 AM' },
-    { id:9, from:'coach', text:"Just the glycinate for now. We'll add threonate in 4 weeks once your sleep baseline stabilizes.", time:'Tue 9:00 AM' },
-    { id:10, from:'client', text:"Thank you! I'll start the new protocol tomorrow 🙏", time:'Tue 9:03 AM' },
-  ],
-}
-
-// ── Demo conversations for all 4 clients (coach view) ─────────
-const DEMO_CLIENTS = [
-  {
-    id: 'jordan',
-    name: 'Jordan Williams',
-    initials: 'JW',
-    supabaseConvoId: JORDAN_CONVO_ID,
-    lastMessage: "Thank you! I'll start the new protocol tomorrow 🙏",
-    lastTime: '2h ago',
-    unread: 2,
-    online: true,
-    thread: [
-      { id:1, from:'coach', text:"Hey Jordan! Just reviewed your check-in. Great numbers this week — weight is trending in the right direction.", time:'Mon 9:14 AM' },
-      { id:2, from:'client', text:"Thank you so much! I've been really consistent with the supplements.", time:'Mon 9:22 AM' },
-      { id:3, from:'coach', text:"It shows. Your energy score jumped from a 5 to a 7. Sleep is improving too. Keep that same sleep window this week.", time:'Mon 9:31 AM' },
-      { id:4, from:'client', text:"Will do. One question — should I take the Cort Eaze every day or just on high-stress days?", time:'Mon 11:05 AM' },
-      { id:5, from:'coach', text:"High-stress days only. If you're waking up and already feel calm and your HRV is solid, skip it.", time:'Mon 11:18 AM' },
-      { id:6, from:'client', text:"Got it! That makes sense.", time:'Mon 11:19 AM' },
-      { id:7, from:'coach', text:"Also — I'm updating your protocol with a new magnesium dose. You'll see it in the Diet & Supps tab. Take it 30 min before bed.", time:'Tue 8:02 AM' },
-      { id:8, from:'client', text:"Okay I saw it! Do I take both the glycinate and the threonate or just one?", time:'Tue 8:45 AM' },
-      { id:9, from:'coach', text:"Just the glycinate for now. We'll add threonate in 4 weeks once your sleep baseline stabilizes.", time:'Tue 9:00 AM' },
-      { id:10, from:'client', text:"Thank you! I'll start the new protocol tomorrow 🙏", time:'Tue 9:03 AM' },
-    ],
-  },
-  {
-    id: 'alex',
-    name: 'Alex Martinez',
-    initials: 'AM',
-    supabaseConvoId: null,
-    lastMessage: "My weight was 184.2 this morning",
-    lastTime: 'Yesterday',
-    unread: 0,
-    online: false,
-    thread: [
-      { id:1, from:'coach', text:"Alex, big week ahead. I want you hitting 9,000 steps minimum every day. Non-negotiable.", time:'Sun 7:30 AM' },
-      { id:2, from:'client', text:"Understood coach. Sunday long walk done — 11,400 steps ✅", time:'Sun 8:14 PM' },
-      { id:3, from:'coach', text:"That's what I'm talking about. How's the hunger been on the new macros?", time:'Mon 8:00 AM' },
-      { id:4, from:'client', text:"Honestly not bad. I was worried about the calorie drop but I feel full most of the time.", time:'Mon 12:30 PM' },
-      { id:5, from:'coach', text:"Good. That's the protein doing its job. Hit 200g protein today.", time:'Mon 12:35 PM' },
-      { id:6, from:'client', text:"On it. I meal prepped last night so I'm set.", time:'Mon 12:36 PM' },
-      { id:7, from:'coach', text:"Check-in is Wednesday. Make sure you're fasted when you weigh in. Same conditions every week.", time:'Tue 7:45 AM' },
-      { id:8, from:'client', text:"My weight was 184.2 this morning", time:'Tue 6:58 AM' },
-    ],
-  },
-  {
-    id: 'taylor',
-    name: 'Taylor Reyes',
-    initials: 'TR',
-    supabaseConvoId: null,
-    lastMessage: "Feeling way better this week! Energy is up 💪",
-    lastTime: '2 days ago',
-    unread: 1,
-    online: false,
-    thread: [
-      { id:1, from:'client', text:"Coach Marcus, I wanted to let you know I finally got my blood work done. Sending the PDF now.", time:'Sat 10:02 AM' },
-      { id:2, from:'coach', text:"Perfect. I'll review it this weekend and update your protocol. Anything stand out to you?", time:'Sat 10:30 AM' },
-      { id:3, from:'client', text:"My ferritin came back low again. 14. Same as last year.", time:'Sat 10:44 AM' },
-      { id:4, from:'coach', text:"Okay. We're going to address this directly. I'm adding iron bisglycinate to your protocol. Take it with vitamin C, away from your thyroid meds.", time:'Sat 11:00 AM' },
-      { id:5, from:'client', text:"Got it. Will that help with the fatigue?", time:'Sat 11:15 AM' },
-      { id:6, from:'coach', text:"Significantly. Low ferritin is one of the top reasons women plateau even when doing everything right. This is a big piece.", time:'Sat 11:22 AM' },
-      { id:7, from:'client', text:"That's actually really validating to hear. I've felt like something was off for months.", time:'Sat 11:30 AM' },
-      { id:8, from:'coach', text:"Your body was telling you something. Now we listen to it. Give it 6–8 weeks with consistent dosing.", time:'Sat 11:45 AM' },
-      { id:9, from:'client', text:"Feeling way better this week! Energy is up 💪", time:'Mon 7:11 PM' },
-    ],
-  },
-  {
-    id: 'sam',
-    name: 'Sam Thompson',
-    initials: 'ST',
-    supabaseConvoId: null,
-    lastMessage: "Quick question about the Cort Eaze timing...",
-    lastTime: '3 days ago',
-    unread: 1,
-    online: false,
-    thread: [
-      { id:1, from:'coach', text:"Sam — I reviewed your check-in. Stress scores are elevated three weeks in a row. What's going on outside the protocol?", time:'Fri 9:00 AM' },
-      { id:2, from:'client', text:"Work has been brutal. Project deadline, late nights, the whole thing.", time:'Fri 9:42 AM' },
-      { id:3, from:'coach', text:"Got it. That explains the sleep disruption and the hunger spike too. Your body is in fight-or-flight. We need to work with that, not against it.", time:'Fri 10:00 AM' },
-      { id:4, from:'client', text:"What does that look like?", time:'Fri 10:05 AM' },
-      { id:5, from:'coach', text:"Three things: 1) No caffeine after 12 PM. 2) 10-minute walk after dinner — non-negotiable. 3) I'm bumping your Ashwagandha dose for the next 2 weeks.", time:'Fri 10:15 AM' },
-      { id:6, from:'client', text:"I can do all of that. The walk especially sounds good honestly.", time:'Fri 10:30 AM' },
-      { id:7, from:'coach', text:"Good. The goal isn't perfection right now — it's maintenance. Protect your sleep, keep protein up, and let the body recover.", time:'Fri 10:38 AM' },
-      { id:8, from:'client', text:"Quick question about the Cort Eaze timing...", time:'Fri 11:00 AM' },
-    ],
-  },
-]
+// Demo conversation seed data removed — conversations load live from the database.
 
 // ── Supabase helpers ──────────────────────────────────────────
 const H = {
@@ -767,9 +639,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
   // Clients see their coach + admin; ALL staff (coach, admin, VA, head coach) see client threads only —
   // teammate conversations live in the Team Hub, never here.
-  const demoConversations = myRole === 'client' ? [CLIENT_COACH_CONVO, ADMIN_CONVO] : DEMO_CLIENTS
+  const demoConversations = []
   // Only switch to Supabase-loaded convos when they are strictly richer than the demo set.
-  // A partial load (e.g. only Jordan in DB, or only coach found for a client) must not wipe
+  // A partial load (e.g. only some participants found in the DB) must not wipe
   // demo conversations that have pre-seeded threads — otherwise the chat shows blank.
   // Real DB-auth users (not in the demo KNOWN_USERS list) always use live data;
   // demo accounts only switch when the live set is at least as rich as the demo set,
@@ -843,7 +715,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     return convo.unread || 0
   }
 
-  // ── Live Supabase messages (Jordan only when connected) ────
+  // ── Live Supabase messages ────────────────────────────────
   const [liveMessages, setLiveMessages] = useState([])
   const [liveFiles,    setLiveFiles]    = useState([])
   const [newMsg,       setNewMsg]       = useState('')
@@ -1219,8 +1091,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   }
 
   // ── Which messages to show ─────────────────────────────────
-  // Live for Jordan when messages exist in Supabase; otherwise fall back to demo thread so
-  // the conversation is never blank (Supabase messages table may not be seeded yet).
+  // Live messages when connected to Supabase; otherwise the conversation thread from state.
   // Group thread replies under their parent; the main chat only shows root messages
   const repliesByParent = {}
   for (const m of liveMessages) if (m.parent_id) (repliesByParent[m.parent_id] ||= []).push(m)
@@ -1296,7 +1167,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           <div>
             <div style={{ fontSize:15, fontWeight:700, color:C.white }}>Messages</div>
             <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>
-              {myRole === 'coach' ? `${conversations.length} clients` : isAdmin ? 'All staff & clients' : 'Coach Marcus · Eden Admin'}
+              {myRole === 'coach' ? `${conversations.length} clients` : isAdmin ? 'All staff & clients' : 'Your coach & support team'}
             </div>
           </div>
           {/* Threads inbox button — everyone */}
@@ -1640,13 +1511,6 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               </div>
             </div>
           </div>
-          {/* Demo badge for non-Jordan threads */}
-          {!isLive && myRole === 'coach' && (
-            <span style={{ fontSize:10, background:`${C.gold}22`, color:C.gold,
-              border:`1px solid ${C.gold}44`, borderRadius:20, padding:'3px 8px', fontWeight:700, flexShrink:0 }}>
-              Demo preview
-            </span>
-          )}
           {/* Mark as unread button — tap to flag this conversation to come back to later */}
           <button onClick={markCurrentUnread}
             title="Mark as unread — flag to come back to later"
