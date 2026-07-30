@@ -1608,10 +1608,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer',colorScheme:'dark'}}/>
                   </div>
                 )}
-                {/* Coach / Admin: per-client deadline override ('' = inherit coach's) */}
-                {(isAdmin||isCoach)&&(
+                {/* Admin only: per-client deadline override ('' = inherit coach's default) */}
+                {isAdmin&&(
                   <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                    <span style={{fontSize:9,color:C.muted}}>Deadline {(clientDl.tz||clientDl.time)?'(custom)':"(coach's)"}</span>
+                    <span style={{fontSize:9,color:C.muted}}>Check-in deadline{(clientDl.tz||clientDl.time)?' (custom)':''}</span>
                     <div style={{display:'flex',gap:4,alignItems:'center'}}>
                       <input type="time" value={clientDl.time}
                         onChange={e=>saveClientDeadline({deadline_time:e.target.value||null},{time:e.target.value})}
@@ -1619,12 +1619,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       <select value={clientDl.tz}
                         onChange={e=>saveClientDeadline({timezone:e.target.value||null},{tz:e.target.value})}
                         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:clientDl.tz?C.gold:C.muted,fontSize:11,outline:'none',cursor:'pointer'}}>
-                        <option value="">Coach's</option>
+                        <option value="">Default</option>
                         {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.short}</option>)}
                       </select>
                       {(clientDl.tz||clientDl.time)&&(
                         <button onClick={()=>saveClientDeadline({deadline_time:null,timezone:null},{tz:'',time:''})}
-                          title="Reset to coach's deadline"
+                          title="Remove the custom deadline for this client"
                           style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 7px',color:C.muted,fontSize:10,cursor:'pointer'}}>
                           Reset
                         </button>
