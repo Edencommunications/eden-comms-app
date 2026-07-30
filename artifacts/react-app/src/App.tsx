@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext, useCallback, useMemo } from "react";
 import { sbBearer } from './lib/sbAuth'
-import { TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, useDeadline, clearTzCache } from './lib/tz'
+import { TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, useDeadline, clearTzCache, zonedTimeToIso, tzShort, timeLabel } from './lib/tz'
 import {
   ResponsiveContainer, LineChart, AreaChart, BarChart,
   Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -1947,13 +1947,39 @@ function daysUntilStart(c: any): number {
   const today = new Date(); today.setHours(0,0,0,0);
   return Math.round((start.getTime() - today.getTime()) / 86400000);
 }
-function isMissingCheckin(c: any): boolean {
+// Most recent instant the deadline occurred: the latest <checkInDay> at <time> in <tz>
+// that is already in the past. Returns null if the day name is unknown.
+function lastDeadlineInstant(checkInDay: string, time: string, tz: string): Date | null {
+  if (!checkInDay) return null;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit', weekday:'long' });
+  for (let back = 0; back < 9; back++) {
+    const parts = fmt.formatToParts(new Date(Date.now() - back * 86400000));
+    const p: any = Object.fromEntries(parts.map(x => [x.type, x.value]));
+    if (p.weekday === checkInDay) {
+      const inst = new Date(zonedTimeToIso(`${p.year}-${p.month}-${p.day}`, time, tz));
+      if (inst.getTime() <= Date.now()) return inst;
+      // deadline for today hasn't hit yet — keep walking back to last week's occurrence
+    }
+  }
+  return null;
+}
+function isMissingCheckin(c: any, dl?: { time: string; tz: string }): boolean {
   if (hasNotStarted(c)) return false;
   if (c.nextCheckin === 'Overdue') return true;
   const last = c.lastCheckinAt ? new Date(c.lastCheckinAt) : parseLastCheckin(c.lastCheckin);
+  // Deadline-aware rule: missing if no submission since the last time
+  // their update day + deadline time (in the coach's timezone) passed.
+  if (dl && c.checkInDay) {
+    const inst = lastDeadlineInstant(c.checkInDay, dl.time, dl.tz);
+    if (inst) {
+      // Contract started after that deadline passed → not counted yet
+      if (c.startDate && new Date(`${c.startDate}T00:00:00`).getTime() > inst.getTime()) return false;
+      return !last || isNaN(last.getTime()) || last.getTime() < inst.getTime();
+    }
+  }
+  // Fallback (no update day assigned): more than 7 days since last check-in
   if (!last || isNaN(last.getTime())) return true;
-  const today = new Date();
-  return (today.getTime() - last.getTime()) / 86400000 > 7;
+  return (Date.now() - last.getTime()) / 86400000 > 7;
 }
 
 // ── Upcoming contract starts (shared by coach + admin views) ────────────────
@@ -2007,7 +2033,6 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
   const [alertClient,    setAlertClient]    = useState<any>(null);
   // Track resolved alert reasons per client email
   const [resolved, setResolved]             = useState<Record<string,Set<string>>>({});
-  const [checkinDeadline, setCheckinDeadline] = useState("09:00");
   // Real roster: this coach's active clients from the database
   const [clients, setClients] = useState<any[]>([]);
   useEffect(() => { (async () => {
@@ -2081,7 +2106,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
   const displayProtocol = (c: any)            => (loomMode && !isFeatured(c)) ? "Protocol hidden" : c.protocol;
   const displayCheckin  = (c: any)            => (loomMode && !isFeatured(c)) ? "—" : c.lastCheckin;
 
-  const missingClients = clients.filter(c => isMissingCheckin(c));
+  const missingClients = clients.filter(c => isMissingCheckin(c, { time: myTime, tz: myTz }));
 
   return (
     <Screen>
@@ -2192,19 +2217,17 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
 
         {missOpen && (
           <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:12, padding:16, marginBottom:16 }}>
-            {/* Deadline setting */}
+            {/* Deadline setting (saved at the top of the dashboard) */}
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
               <span style={{ fontSize:11, color:B.muted, fontWeight:600 }}>Check-in deadline:</span>
-              <input type="time" value={checkinDeadline} onChange={e=>setCheckinDeadline(e.target.value)}
-                style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"4px 8px",
-                  color:B.text, fontSize:12, outline:"none", colorScheme:"dark" }}/>
-              <span style={{ fontSize:10, color:B.muted }}>— clients past this time are flagged</span>
+              <span style={{ fontSize:12, color:B.gold, fontWeight:700 }}>{timeLabel(myTime)} {tzShort(myTz)}</span>
+              <span style={{ fontSize:10, color:B.muted }}>— clients whose update day passed this time without a submission are flagged (change it at the top of the dashboard)</span>
             </div>
 
             {/* Group by check-in day — only show clients who are missing */}
             {(() => {
               const anyShown = Object.values(byDay).some((dc: any[]) =>
-                dc.some(c => isMissingCheckin(c) && !followedUp.has(c.email))
+                dc.some(c => isMissingCheckin(c, { time: myTime, tz: myTz }) && !followedUp.has(c.email))
               );
               if (!anyShown && !loomMode) return (
                 <div style={{ textAlign:"center", padding:"20px 0", color:B.success }}>
@@ -2215,7 +2238,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
               return Object.entries(byDay).sort().map(([day, dayClients]) => {
                 const visibleMissing = loomMode
                   ? (dayClients as any[])
-                  : (dayClients as any[]).filter(c => isMissingCheckin(c) && !followedUp.has(c.email));
+                  : (dayClients as any[]).filter(c => isMissingCheckin(c, { time: myTime, tz: myTz }) && !followedUp.has(c.email));
                 if (!loomMode && visibleMissing.length === 0) return null;
                 return (
                   <div key={day} style={{ marginBottom:14 }}>
