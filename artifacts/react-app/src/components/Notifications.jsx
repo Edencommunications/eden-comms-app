@@ -83,9 +83,20 @@ export default function Notifications({ currentUser, onNavigate }) {
   const panelRef = useRef(null)
 
   const email  = currentUser?.email || ''
-  const info   = KNOWN_USERS[email] || { role:'client', name:'User', uuid:null }
-  const myUUID = info.uuid
+  const info   = KNOWN_USERS[email] || { role: currentUser?.role || 'client', name: currentUser?.name || 'User', uuid:null }
   const role   = info.role
+
+  // Resolve the real profile UUID from the database (KNOWN_USERS only covers
+  // legacy demo accounts — real coaches/admins must be looked up by email).
+  const [myUUID, setMyUUID] = useState(info.uuid)
+  useEffect(() => {
+    let live = true
+    if (info.uuid) { setMyUUID(info.uuid); return }
+    if (!email) { setMyUUID(null); return }
+    dbGet('user_profiles', `email=eq.${encodeURIComponent(email)}&select=id`)
+      .then(rows => { if (live) setMyUUID(Array.isArray(rows) ? rows[0]?.id || null : null) })
+    return () => { live = false }
+  }, [email])
 
   const unreadCount = notifs.filter(n => !n.is_read).length
 
