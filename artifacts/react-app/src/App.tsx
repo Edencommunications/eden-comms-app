@@ -2659,6 +2659,8 @@ const ACTION_LABELS:Record<string,{label:string,icon:string}> = {
   client_deactivated: { label:'Client deactivated', icon:'⏸' },
   client_reactivated: { label:'Client reactivated', icon:'▶️' },
   client_transferred: { label:'Client transferred', icon:'🔁' },
+  community_restored: { label:'Community restored', icon:'♻️' },
+  message_restored:   { label:'Message restored',   icon:'♻️' },
 };
 const actionMeta = (a:string) => ACTION_LABELS[a] || { label:(a||'action').replace(/_/g,' '), icon:'•' };
 const centralTime = (iso:string) => {
@@ -2668,17 +2670,68 @@ const centralTime = (iso:string) => {
   } catch { return iso; }
 };
 
-const AdminActivityLog = () => {
+// Which table holds a soft-deleted/archived item, per audit target_type
+const RESTORE_TABLE:Record<string,string> = {
+  community: 'communities', community_message: 'community_messages',
+  team_message: 'team_messages', message: 'messages',
+};
+
+const AdminActivityLog = ({ user }:any) => {
   const [rows, setRows]     = useState<any[]|null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [openId, setOpenId] = useState<string|null>(null);   // expanded entry
+  const [restoring, setRestoring] = useState<string|null>(null);
+  const [restoredIds, setRestoredIds] = useState<Set<string>>(new Set()); // audit row ids restored this visit
+
+  const [myId, setMyId] = useState<string|null>(null);
 
   useEffect(() => {
     let alive = true;
     sbGet('audit_logs', 'select=*&order=created_at.desc&limit=300')
       .then((r:any[]) => { if (alive) setRows(Array.isArray(r) ? r : []); });
+    if (user?.email) sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id`)
+      .then((r:any[]) => { if (alive && r?.[0]?.id) setMyId(r[0].id); }).catch(()=>{});
     return () => { alive = false; };
   }, []);
+
+  // Restorable = an archive/delete event pointing at a known table, not already undone by a later restore event
+  const undoneTargets = useMemo(() => {
+    const s = new Set<string>();
+    (rows||[]).forEach(r => { if (r.action==='community_restored'||r.action==='message_restored') s.add(`${r.target_type}:${r.target_id}`); });
+    return s;
+  }, [rows]);
+  const canRestore = (r:any) =>
+    (r.action==='community_archived' || r.action==='message_deleted') &&
+    r.target_id && RESTORE_TABLE[r.target_type] &&
+    !undoneTargets.has(`${r.target_type}:${r.target_id}`) && !restoredIds.has(r.id);
+
+  async function restore(r:any) {
+    const table = RESTORE_TABLE[r.target_type];
+    const label = r.target_type==='community' ? `community "${r.details?.name||''}"` : 'this message';
+    if (!window.confirm(`Restore ${label}? It will become visible again.`)) return;
+    setRestoring(r.id);
+    const patch = r.target_type==='community'
+      ? { is_active: true }
+      : { deleted_at: null, deleted_by: null, deleted_by_name: null };
+    const ok = await sbPatch(table, `id=eq.${r.target_id}`, patch);
+    setRestoring(null);
+    if (!ok) { alert("Couldn't restore — the item may no longer exist."); return; }
+    setRestoredIds(prev => new Set(prev).add(r.id));
+    // Log the restore itself
+    const entry = {
+      action: r.target_type==='community' ? 'community_restored' : 'message_restored',
+      actor_id: myId, actor_name: user?.name || 'Admin', actor_role: 'super_admin',
+      target_type: r.target_type, target_id: r.target_id,
+      details: { ...(r.details||{}), restored_from: r.id },
+    };
+    const inserted:any = await sbInsert('audit_logs', entry).catch(()=>null);
+    if (inserted?.[0]) {
+      setRows(prev => prev ? [inserted[0], ...prev] : prev);
+    } else {
+      alert("Restored successfully, but the restore couldn't be written to the activity log.");
+    }
+  }
 
   const actions = useMemo(() => Array.from(new Set((rows||[]).map(r=>r.action).filter(Boolean))), [rows]);
   const shown = useMemo(() => {
@@ -2727,6 +2780,8 @@ const AdminActivityLog = () => {
 
       {shown.map((r:any) => {
         const m = actionMeta(r.action);
+        const open = openId === r.id;
+        const d = r.details || {};
         return (
           <Card key={r.id} style={{ marginBottom:8, padding:'12px 14px' }}>
             <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
@@ -2737,7 +2792,36 @@ const AdminActivityLog = () => {
               <span style={{ fontSize:13, color:B.text }}>{m.label.toLowerCase()}</span>
               <span style={{ fontSize:12, color:B.muted }}>{detailText(r)}</span>
               <span style={{ fontSize:11, color:B.muted, marginLeft:'auto' }}>{centralTime(r.created_at)}</span>
+              <button onClick={()=>setOpenId(open ? null : r.id)}
+                style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:6, padding:'3px 9px',
+                  color:B.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                {open ? 'Hide' : 'View'}
+              </button>
+              {canRestore(r) && (
+                <button onClick={()=>restore(r)} disabled={restoring===r.id}
+                  style={{ background:`${B.gold}22`, border:`1px solid ${B.gold}55`, borderRadius:6, padding:'3px 9px',
+                    color:B.gold, fontSize:11, fontWeight:800, cursor:'pointer', opacity:restoring===r.id?0.5:1 }}>
+                  {restoring===r.id ? 'Restoring…' : '♻ Restore'}
+                </button>
+              )}
+              {(restoredIds.has(r.id) || ((r.action==='community_archived'||r.action==='message_deleted') && undoneTargets.has(`${r.target_type}:${r.target_id}`))) && (
+                <span style={{ fontSize:11, color:B.success, fontWeight:700 }}>✓ Restored</span>
+              )}
             </div>
+            {open && (
+              <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${B.border}`, fontSize:12, color:B.text, lineHeight:1.7 }}>
+                {d.name && <div><span style={{ color:B.muted }}>Name: </span>{d.name}</div>}
+                {d.content && <div><span style={{ color:B.muted }}>Content: </span>"{d.content}"</div>}
+                {d.sender_name && <div><span style={{ color:B.muted }}>Original sender: </span>{d.sender_name}</div>}
+                {d.community_name && <div><span style={{ color:B.muted }}>Community: </span>{d.community_name}</div>}
+                {d.file_name && <div><span style={{ color:B.muted }}>Attachment: </span>{d.file_name}</div>}
+                {d.context && <div><span style={{ color:B.muted }}>Where: </span>{String(d.context).replace(/_/g,' ')}</div>}
+                {r.target_type && <div><span style={{ color:B.muted }}>Type: </span>{String(r.target_type).replace(/_/g,' ')}</div>}
+                {!d.name && !d.content && !d.community_name && !d.file_name && !d.context && (
+                  <div style={{ color:B.muted }}>No extra details were recorded for this event.</div>
+                )}
+              </div>
+            )}
           </Card>
         );
       })}
@@ -3709,7 +3793,7 @@ const AdminDashboard = ({ user }:any) => {
       {adminTab==='convos' && <AdminConversationMonitor user={user}/>}
 
       {/* Activity — audit trail: who did what, and when */}
-      {adminTab==='activity' && <AdminActivityLog/>}
+      {adminTab==='activity' && <AdminActivityLog user={user}/>}
 
       {/* Eden HQ: edit an org's name, colors & logo */}
       {manageOrg && (

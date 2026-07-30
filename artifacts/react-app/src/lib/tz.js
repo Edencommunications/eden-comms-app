@@ -84,10 +84,11 @@ async function get(pathQuery) {
 
 const DEFAULTS = { tz: DEFAULT_TZ, time: DEFAULT_TIME }
 
-// Resolve deadline settings per person:
-//   1. their own user_profiles.timezone / deadline_time (set by them or an admin)
-//   2. if a client and unset → their coach's settings
-//   3. defaults (9 AM Central)
+// Resolve deadline settings per person (per-coach model):
+//   • Coaches/staff → their own user_profiles.timezone / deadline_time
+//   • Clients → ALWAYS their coach's settings (client-level values are
+//     ignored — there is no per-client override in the product)
+//   • Fallback → defaults (9 AM Central)
 export async function fetchDeadline(email) {
   if (!email) return DEFAULTS
   if (cache[email]) return cache[email]
@@ -95,12 +96,17 @@ export async function fetchDeadline(email) {
     const rows = await get(`user_profiles?email=eq.${encodeURIComponent(email)}&select=role,timezone,deadline_time,coach_id`)
     const me = Array.isArray(rows) ? rows[0] : null
     if (!me) return DEFAULTS
-    let tz = me.timezone, time = me.deadline_time
-    if ((!tz || !time) && me.role === 'client' && me.coach_id) {
-      const c = await get(`user_profiles?id=eq.${me.coach_id}&select=timezone,deadline_time`)
-      const coach = Array.isArray(c) ? c[0] : null
-      tz = tz || coach?.timezone
-      time = time || coach?.deadline_time
+    let tz, time
+    if (me.role === 'client') {
+      if (me.coach_id) {
+        const c = await get(`user_profiles?id=eq.${me.coach_id}&select=timezone,deadline_time`)
+        const coach = Array.isArray(c) ? c[0] : null
+        tz = coach?.timezone
+        time = coach?.deadline_time
+      }
+    } else {
+      tz = me.timezone
+      time = me.deadline_time
     }
     cache[email] = { tz: tz || DEFAULT_TZ, time: (time || DEFAULT_TIME).slice(0,5) }
     return cache[email]
@@ -112,20 +118,32 @@ export async function fetchDeadlineTz(email) { return (await fetchDeadline(email
 
 // Clear ALL cached entries — clients cache their coach's resolved timezone,
 // so a coach changing their setting must invalidate every key, not just their own.
-export function clearTzCache() { for (const k of Object.keys(cache)) delete cache[k]; }
+// Also bumps a version counter so mounted useDeadline() hooks refetch live.
+let cacheVersion = 0
+const listeners = new Set()
+export function clearTzCache() {
+  for (const k of Object.keys(cache)) delete cache[k]
+  cacheVersion++
+  listeners.forEach(fn => { try { fn(cacheVersion) } catch {} })
+}
 
 // React hook: returns { tzS: "CST", timeL: "9 AM", text: "9 AM CST" } for deadline text
 import { useState, useEffect } from 'react'
 export function useDeadline(email) {
   const initial = cache[email] || DEFAULTS
   const [d, setD] = useState({ tzS: tzShort(initial.tz), timeL: timeLabel(initial.time) })
+  const [v, setV] = useState(cacheVersion)
+  useEffect(() => {
+    listeners.add(setV)
+    return () => { listeners.delete(setV) }
+  }, [])
   useEffect(() => {
     let live = true
     fetchDeadline(email).then(({ tz, time }) => {
       if (live) setD({ tzS: tzShort(tz), timeL: timeLabel(time) })
     })
     return () => { live = false }
-  }, [email])
+  }, [email, v])
   return { ...d, text: `${d.timeL} ${d.tzS}` }
 }
 // Back-compat hook: just the tz short label
