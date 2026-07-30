@@ -2084,6 +2084,38 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
         {/* ── Upcoming contract starts ── */}
         <UpcomingStartsSection clients={clients} loomMode={loomMode}/>
 
+        {/* New-client setup prompt: anyone missing a contract start date or update day */}
+        {(() => {
+          const needsSetup = clients.filter((c:any) => !c.startDate || !c.checkInDay);
+          if (needsSetup.length === 0) return null;
+          return (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ background:B.card, border:"1px solid #ffa60066", borderRadius:10, padding:"12px 14px" }}>
+                <p style={{ fontSize:11, fontWeight:700, color:"#ffa600", letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>
+                  ⚙️ Needs Setup ({needsSetup.length})
+                </p>
+                {needsSetup.map((c:any, i:number) => {
+                  const missing = [!c.startDate && "contract start date", !c.checkInDay && "update day"].filter(Boolean).join(" and ");
+                  return (
+                    <div key={c.uuid || c.email}
+                      onClick={() => onNavigate && onNavigate('admin', c)}
+                      style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
+                        padding:"8px 10px", borderRadius:8, background:"#ffa60011", border:"1px solid #ffa60033", marginBottom:6 }}>
+                      <div>
+                        <p style={{ fontSize:13, fontWeight:600, color:B.text, margin:0 }}>
+                          {loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name}
+                        </p>
+                        <p style={{ fontSize:11, color:B.muted, margin:"2px 0 0" }}>Assign their {missing}</p>
+                      </div>
+                      <span style={{ fontSize:11, fontWeight:700, color:"#ffa600", whiteSpace:"nowrap" }}>Set up →</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Missing Check-In Tracker ── */}
         <button onClick={()=>setMissOpen(v=>!v)}
           style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
