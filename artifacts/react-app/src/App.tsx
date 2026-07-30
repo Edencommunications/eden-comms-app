@@ -2436,8 +2436,8 @@ const StaffAccessManager = ({ user }:any) => {
     if (!me?.company_id) return;
     setCompanyId(me.company_id); setAdminId(me.id); setUsingDemo(false);
     const [sf, cl, ass] = await Promise.all([
-      sbGet('user_profiles', `company_id=eq.${me.company_id}&role=neq.client&select=id,name,role,initials,email`),
-      sbGet('user_profiles', `company_id=eq.${me.company_id}&role=eq.client&select=id,name,initials`),
+      sbGet('user_profiles', `company_id=eq.${me.company_id}&role=neq.client&is_active=not.is.false&select=id,name,role,initials,email`),
+      sbGet('user_profiles', `company_id=eq.${me.company_id}&role=eq.client&is_active=not.is.false&select=id,name,initials`),
       sbGet('client_access', `company_id=eq.${me.company_id}&select=*`),
     ]);
     if (sf?.length)         setStaffList(sf);
@@ -3453,6 +3453,27 @@ const AdminDashboard = ({ user }:any) => {
     } catch {}
   })() }, []);
 
+  // Per-coach check-in deadline settings (admin can adjust each coach's from Overview)
+  const [coachDl, setCoachDl] = useState<Record<string,any>>({});
+  const [dlCoaches, setDlCoaches] = useState<any[]>([]);
+  useEffect(() => {
+    sbGet('user_profiles', `role=in.(coach,head_coach)&is_active=not.is.false&select=id,name,timezone,deadline_time&order=name`)
+      .then((rows:any[]) => {
+        if (!Array.isArray(rows)) return;
+        setDlCoaches(rows);
+        const map:Record<string,any> = {};
+        rows.forEach((r:any) => { map[r.id] = { tz: r.timezone || DEFAULT_TZ, time: r.deadline_time ? r.deadline_time.slice(0,5) : DEFAULT_TIME } });
+        setCoachDl(map);
+      }).catch(()=>{});
+  }, []);
+  async function saveCoachDl(id:string, patch:any, local:any) {
+    const prev = coachDl[id] || {};
+    setCoachDl(m => ({ ...m, [id]: { ...prev, ...local } }));
+    const ok = await sbPatch('user_profiles', `id=eq.${id}`, patch);
+    if (!ok) { setCoachDl(m => ({ ...m, [id]: prev })); alert("Couldn't save the deadline change — try again."); return; }
+    clearTzCache();
+  }
+
   // MRR = sum of package prices across white-label orgs (Eden HQ itself doesn't count)
   const whiteLabelOrgs = (dbOrgs || []).filter((o:any) => o.is_white_label && o.is_active !== false);
   const mrr = whiteLabelOrgs.reduce((sum:number, o:any) => sum + (planPrices[(o.plan||'').toLowerCase()] || 0), 0);
@@ -3509,6 +3530,29 @@ const AdminDashboard = ({ user }:any) => {
                 </Card>
               ))}
             </div>
+            {/* Per-coach check-in deadlines */}
+            {dlCoaches.length > 0 && (
+              <Card style={{ marginBottom:20 }}>
+                <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>⏰ Coach Check-In Deadlines</p>
+                <p style={{ fontSize:11, color:B.muted, margin:"0 0 10px", lineHeight:1.5 }}>Each coach's clients follow that coach's deadline. Change any coach's time or timezone here.</p>
+                {dlCoaches.map((c:any) => {
+                  const dl = coachDl[c.id] || { tz: DEFAULT_TZ, time: DEFAULT_TIME };
+                  return (
+                    <div key={c.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderTop:`1px solid ${B.border}`, flexWrap:"wrap" }}>
+                      <span style={{ flex:1, minWidth:120, fontSize:13, fontWeight:600, color:B.text }}>{c.name}</span>
+                      <input type="time" value={dl.time}
+                        onChange={e => { if (e.target.value) saveCoachDl(c.id, { deadline_time: e.target.value }, { time: e.target.value }); }}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 8px", color:B.gold, fontSize:12, outline:"none", colorScheme:"dark" }}/>
+                      <select value={dl.tz}
+                        onChange={e => saveCoachDl(c.id, { timezone: e.target.value }, { tz: e.target.value })}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 8px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
+                        {TZ_OPTIONS.map((o:any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+              </Card>
+            )}
             {/* Upcoming contract starts (org-wide) */}
             <UpcomingStartsSection clients={upcomingClients}/>
             {/* White-label admin: branded login link */}
