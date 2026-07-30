@@ -1241,6 +1241,8 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
   const [draftLoom,    setDraftLoom]    = useState('');
   const [updateDay,    setUpdateDay]    = useState<string>('');
   const [savingDay,    setSavingDay]    = useState(false);
+  const [dayError,     setDayError]     = useState(false);
+  const [startError,   setStartError]   = useState(false);
   const [startDate,    setStartDate]    = useState<string>('');
   const [savingStart,  setSavingStart]  = useState(false);
 
@@ -1385,9 +1387,10 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
                   // until Supabase user_profiles + permissive RLS are live
                   if (day) localStorage.setItem(`eden_update_day_${client.uuid}`, day);
                   else localStorage.removeItem(`eden_update_day_${client.uuid}`);
-                  setSavingDay(true);
-                  await sbPatch('user_profiles', `id=eq.${client.uuid}`, { update_day: day });
+                  setSavingDay(true); setDayError(false);
+                  const ok = await sbPatch('user_profiles', `id=eq.${client.uuid}`, { update_day: day });
                   setSavingDay(false);
+                  if (!ok) { setDayError(true); return; }
                   onSaved?.(client.uuid, { checkInDay: day });
                 }}
                 style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px",
@@ -1397,10 +1400,17 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
               </select>
               {savingDay
                 ? <span style={{ fontSize:11, color:B.muted, whiteSpace:"nowrap" }}>Saving…</span>
-                : updateDay
-                  ? <span style={{ fontSize:11, color:B.gold, fontWeight:700, whiteSpace:"nowrap" }}>✓ Saved</span>
-                  : null}
+                : dayError
+                  ? <span style={{ fontSize:11, color:B.danger, fontWeight:700, whiteSpace:"nowrap" }}>⚠ Not saved</span>
+                  : updateDay
+                    ? <span style={{ fontSize:11, color:B.gold, fontWeight:700, whiteSpace:"nowrap" }}>✓ Saved</span>
+                    : null}
             </div>
+            {dayError && (
+              <p style={{ fontSize:11, color:B.danger, margin:"8px 0 0", lineHeight:1.5 }}>
+                Couldn't save the update day — try again. If it keeps failing, contact the admin.
+              </p>
+            )}
             {updateDay && (
               <p style={{ fontSize:11, color:B.muted, margin:"8px 0 0", lineHeight:1.5 }}>
                 Client sees <strong style={{ color:B.text }}>every {updateDay}</strong> as their weekly deadline (before 9 AM CST).
@@ -1422,19 +1432,27 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
                   const val = e.target.value;
                   setStartDate(val);
                   if (!client.uuid) return;
-                  setSavingStart(true);
-                  await sbPatch('user_profiles', `id=eq.${client.uuid}`, { start_date: val || null });
+                  setSavingStart(true); setStartError(false);
+                  const ok = await sbPatch('user_profiles', `id=eq.${client.uuid}`, { start_date: val || null });
                   setSavingStart(false);
+                  if (!ok) { setStartError(true); return; }
                   onSaved?.(client.uuid, { startDate: val || null });
                 }}
                 style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px",
                   color: startDate ? B.gold : B.muted, fontSize:13, outline:"none", colorScheme:"dark" }}/>
               {savingStart
                 ? <span style={{ fontSize:11, color:B.muted, whiteSpace:"nowrap" }}>Saving…</span>
-                : startDate
-                  ? <span style={{ fontSize:11, color:B.gold, fontWeight:700, whiteSpace:"nowrap" }}>✓ Saved</span>
-                  : null}
+                : startError
+                  ? <span style={{ fontSize:11, color:B.danger, fontWeight:700, whiteSpace:"nowrap" }}>⚠ Not saved</span>
+                  : startDate
+                    ? <span style={{ fontSize:11, color:B.gold, fontWeight:700, whiteSpace:"nowrap" }}>✓ Saved</span>
+                    : null}
             </div>
+            {startError && (
+              <p style={{ fontSize:11, color:B.danger, margin:"8px 0 0", lineHeight:1.5 }}>
+                Couldn't save the start date — try again. If it keeps failing, contact the admin.
+              </p>
+            )}
             <p style={{ fontSize:11, color:B.muted, margin:"8px 0 0", lineHeight:1.5 }}>
               {startDate && new Date(`${startDate}T00:00:00`) > new Date()
                 ? <>Client won't be counted late on updates until <strong style={{ color:B.text }}>{new Date(`${startDate}T00:00:00`).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</strong>.</>
@@ -2287,8 +2305,18 @@ async function sbGet(table:string, params='') {
 async function sbInsert(table:string, body:any) {
   try { const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:SB_H,body:JSON.stringify(body)}); if(!r.ok) return null; const t=await r.text(); return t?JSON.parse(t):null; } catch { return null; }
 }
-async function sbPatch(table:string, params:string, body:any) {
-  try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'PATCH',headers:SB_H,body:JSON.stringify(body)}); } catch {}
+// Returns true only when the PATCH succeeded AND at least one row was actually
+// updated (SB_H sends Prefer: return=representation, so the response body holds
+// the updated rows — an empty array means RLS silently rejected the write).
+async function sbPatch(table:string, params:string, body:any):Promise<boolean> {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'PATCH',headers:SB_H,body:JSON.stringify(body)});
+    if (!r.ok) { console.error('PATCH', table, await r.text().catch(()=> '')); return false; }
+    const t = await r.text();
+    const rows = t ? JSON.parse(t) : [];
+    if (Array.isArray(rows) && rows.length === 0) { console.error('PATCH', table, '0 rows updated (blocked by RLS?)'); return false; }
+    return true;
+  } catch (e) { console.error('PATCH', table, e); return false; }
 }
 async function sbDelete(table:string, params:string) {
   try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:SB_H}); } catch {}
@@ -2365,7 +2393,10 @@ const StaffAccessManager = ({ user }:any) => {
     if (!fStaff && !editing) return;
     setSaving(true);
     if (editing) {
-      if (!usingDemo) await sbPatch('client_access', `id=eq.${editing.id}`, { permissions:fPerms });
+      if (!usingDemo) {
+        const ok = await sbPatch('client_access', `id=eq.${editing.id}`, { permissions:fPerms });
+        if (!ok) { setSaving(false); alert("Couldn't save these permissions — try again."); return; }
+      }
       setAssignments(p => p.map(a => a.id===editing.id ? {...a,permissions:fPerms} : a));
     } else {
       const isCoachPick = fClient.startsWith('coach:');
@@ -2377,7 +2408,10 @@ const StaffAccessManager = ({ user }:any) => {
       const dup = assignments.find((a:any) => a.staff_id===fStaff &&
         (a.client_id||null)===(payload.client_id||null) && (a.coach_id||null)===(payload.coach_id||null));
       if (dup) {
-        if (!usingDemo) await sbPatch('client_access', `id=eq.${dup.id}`, { permissions:fPerms });
+        if (!usingDemo) {
+          const ok = await sbPatch('client_access', `id=eq.${dup.id}`, { permissions:fPerms });
+          if (!ok) { setSaving(false); alert("Couldn't save these permissions — try again."); return; }
+        }
         setAssignments(p => p.map(a => a.id===dup.id ? {...a,permissions:fPerms} : a));
         setSaving(false); setShowModal(false); return;
       }

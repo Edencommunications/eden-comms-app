@@ -83,14 +83,20 @@ async function dbInsert(table, body) {
 async function dbDelete(table, params) {
   try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:H}) } catch {}
 }
+// Returns true only when the PATCH succeeded AND at least one row was actually
+// updated (H sends Prefer: return=representation, so the response body holds
+// the updated rows — an empty array means RLS silently rejected the write).
 async function dbUpdate(table, params, body) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
       method:'PATCH', headers:H, body:JSON.stringify(body)
     })
-    if (!r.ok) { console.error('UPDATE', await r.text()); return false }
+    if (!r.ok) { console.error('UPDATE', table, await r.text()); return false }
+    const t = await r.text()
+    const rows = t ? JSON.parse(t) : []
+    if (Array.isArray(rows) && rows.length === 0) { console.error('UPDATE', table, '0 rows updated (blocked by RLS?)'); return false }
     return true
-  } catch (e) { console.error('UPDATE', e); return false }
+  } catch (e) { console.error('UPDATE', table, e); return false }
 }
 
 // ── Demo data (Week 6 — replace with real DB calls once auth live) ──
@@ -490,25 +496,28 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (!editPkg) return
     const name = editPkg.name.trim(); const price = parseFloat(editPkg.price)
     if (!name || isNaN(price)) return
-    await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price, includes_recipes:!!editPkg.includes_recipes })
+    const ok = await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price, includes_recipes:!!editPkg.includes_recipes })
+    if (!ok) { alert("Couldn't save this tier — try again."); return }
     setPackages(p=>p.map(x=>x.id===editPkg.id?{...x,name,price,includes_recipes:!!editPkg.includes_recipes}:x).sort((a,b)=>a.price-b.price))
     setEditPkg(null)
   }
   async function saveManagedOrg() {
     if (!manageOrg?.id) return
-    await dbUpdate('organizations',`id=eq.${manageOrg.id}`,{
+    const ok = await dbUpdate('organizations',`id=eq.${manageOrg.id}`,{
       name: manageOrg.name.trim(), plan: manageOrg.plan,
       brand_color: manageOrg.brandColor, calendar_url: manageOrg.calendarUrl||null,
       billing_email: manageOrg.billingEmail||null, is_active: !!manageOrg.active,
       ...(colorsColSupported ? { brand_colors: manageOrg.brandColors||[] } : {}),
     })
+    if (!ok) { alert("Couldn't save the organization changes — try again."); return }
     setOrgs(prev=>prev.map(o=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
     setManageOrg(null)
   }
   const tierOf = planName => packages.find(p=>(p.name||'').toLowerCase()===(planName||'').toLowerCase())
   async function deletePackage(pkg) {
     if (!confirm(`Remove the "${pkg.name}" tier? Existing orgs on this tier will stop counting toward MRR until you move them to another tier.`)) return
-    await dbUpdate('packages',`id=eq.${pkg.id}`,{ active:false })
+    const ok = await dbUpdate('packages',`id=eq.${pkg.id}`,{ active:false })
+    if (!ok) { alert("Couldn't remove this tier — try again."); return }
     setPackages(p=>p.filter(x=>x.id!==pkg.id))
   }
 
@@ -699,14 +708,18 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const next = [...new Set([...headCoaches, coach.uuid])]
     setHeadCoaches(next)
     localStorage.setItem('eden_head_coaches', JSON.stringify(next))
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'head_coach'}).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'head_coach'})
+      .then(ok=>{ if(!ok) alert(`Couldn't save the Head Coach promotion for ${coach.name} — try again.`) })
+      .catch(()=>alert(`Couldn't save the Head Coach promotion for ${coach.name} — try again.`))
     addAudit(info.name,'Promoted to Head Coach',coach.name,'')
   }
   function demoteFromHeadCoach(coach) {
     const next = headCoaches.filter(id=>id!==coach.uuid)
     setHeadCoaches(next)
     localStorage.setItem('eden_head_coaches', JSON.stringify(next))
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'coach'}).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'coach'})
+      .then(ok=>{ if(!ok) alert(`Couldn't remove the Head Coach designation for ${coach.name} — try again.`) })
+      .catch(()=>alert(`Couldn't remove the Head Coach designation for ${coach.name} — try again.`))
     addAudit(info.name,'Removed Head Coach designation',coach.name,'')
   }
   // Sync deactivations + coach transfers + coach removals FROM the database so
@@ -841,7 +854,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setDeactivatedMap(next)
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
     // Enforce in the database — blocks login from ANY device
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:false}).then(refreshOrgCounts).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:false})
+      .then(ok=>{ if(!ok) alert(`Couldn't deactivate ${client.name} in the database — they may still be able to log in. Try again.`); return refreshOrgCounts() })
+      .catch(()=>alert(`Couldn't deactivate ${client.name} in the database — they may still be able to log in. Try again.`))
     dbInsert('audit_logs',{ action:'client_deactivated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:client.uuid||null, details:{ name:client.name } }).catch(()=>{})
     addAudit(info.name,'Deactivated client',client.name,'Account deactivated — data preserved, coach still has full access')
@@ -854,7 +869,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setDeactivatedMap(next)
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
     // Restore login access in the database
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:true}).then(refreshOrgCounts).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(client.email)}`,{is_active:true})
+      .then(ok=>{ if(!ok) alert(`Couldn't reactivate ${client.name} in the database — try again.`); return refreshOrgCounts() })
+      .catch(()=>alert(`Couldn't reactivate ${client.name} in the database — try again.`))
     dbInsert('audit_logs',{ action:'client_reactivated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:client.uuid||null, details:{ name:client.name } }).catch(()=>{})
     addAudit(info.name,'Reactivated client',client.name,'Account restored — client can now log in again')
@@ -866,7 +883,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setClientCoachMap(next)
     localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
     // Persist new coach assignment in the database
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(clientEmail)}`,{coach_id:newCoachUuid}).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(clientEmail)}`,{coach_id:newCoachUuid})
+      .then(ok=>{ if(!ok) alert(`Couldn't save the coach transfer for ${clientEmail} — try again.`) })
+      .catch(()=>alert(`Couldn't save the coach transfer for ${clientEmail} — try again.`))
     dbInsert('audit_logs',{ action:'client_transferred', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', details:{ name:clientEmail } }).catch(()=>{})
   }
@@ -897,7 +916,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setRemovedCoaches(next)
     localStorage.setItem('eden_removed_coaches', JSON.stringify(next))
     // Persist the removal so DB-driven org counts (and every other device) reflect it
-    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(pendingRemoval.email)}`,{is_active:false}).then(refreshOrgCounts).catch(()=>{})
+    dbUpdate('user_profiles',`email=eq.${encodeURIComponent(pendingRemoval.email)}`,{is_active:false})
+      .then(ok=>{ if(!ok) alert(`Couldn't deactivate ${pendingRemoval.name} in the database — they may still be able to log in. Try again.`); return refreshOrgCounts() })
+      .catch(()=>{})
     addAudit(info.name,'Removed coach',pendingRemoval.name,
       transferred>0?`${transferred} client${transferred!==1?'s':''} transferred to ${targetCoach?.name||'new coach'}`:'No active clients to transfer')
     setShowTransferModal(false)
@@ -1498,9 +1519,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     value={selectedClient.checkInDay||'Wednesday'}
                     onChange={async e=>{
                       const day = e.target.value
+                      const prevDay = selectedClient.checkInDay
                       setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,checkInDay:day}:c))
                       setSelectedClient(prev=>({...prev,checkInDay:day}))
-                      await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{update_day:day})
+                      const ok = await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{update_day:day})
+                      if (!ok) {
+                        setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,checkInDay:prevDay}:c))
+                        setSelectedClient(prev=>({...prev,checkInDay:prevDay}))
+                        alert("Couldn't save the update day — try again.")
+                      }
                     }}
                     style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
                     {CHECK_IN_DAYS.map(d=><option key={d}>{d}</option>)}
@@ -1514,9 +1541,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       value={selectedClient.startDate||''}
                       onChange={async e=>{
                         const sd = e.target.value
+                        const prevSd = selectedClient.startDate
                         setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,startDate:sd}:c))
                         setSelectedClient(prev=>({...prev,startDate:sd}))
-                        await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{start_date:sd||null})
+                        const ok = await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{start_date:sd||null})
+                        if (!ok) {
+                          setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,startDate:prevSd}:c))
+                          setSelectedClient(prev=>({...prev,startDate:prevSd}))
+                          alert("Couldn't save the start date — try again.")
+                        }
                       }}
                       style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer',colorScheme:'dark'}}/>
                   </div>
