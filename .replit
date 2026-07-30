@@ -26,3 +26,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 APP_URL = "https://edencommunications.io"
+SMTP_FROM_EMAIL = "team@edencommunications.io"

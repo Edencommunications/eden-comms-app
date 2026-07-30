@@ -12,9 +12,13 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 
-const SENDER = process.env.SMTP_SENDER_EMAIL || "";
-const PASSWORD = process.env.SMTP_APP_PASSWORD || "";
-const HOST = process.env.SMTP_HOST || "smtp.gmail.com";
+// Resend takes priority when configured; falls back to legacy Gmail SMTP.
+const RESEND_KEY = process.env.RESEND_API_KEY || "";
+const FROM = process.env.SMTP_FROM_EMAIL || process.env.SMTP_SENDER_EMAIL || "";
+const SENDER = FROM;
+const PASSWORD = RESEND_KEY || process.env.SMTP_APP_PASSWORD || "";
+const USERNAME = RESEND_KEY ? "resend" : (process.env.SMTP_SENDER_EMAIL || "");
+const HOST = process.env.SMTP_HOST || (RESEND_KEY ? "smtp.resend.com" : "smtp.gmail.com");
 const PORT = Number(process.env.SMTP_PORT || 465);
 
 export function mailerConfigured(): boolean {
@@ -35,7 +39,7 @@ function getTransporter(): nodemailer.Transporter {
       host: HOST,
       port: PORT,
       secure: PORT === 465,
-      auth: { user: SENDER, pass: PASSWORD },
+      auth: { user: USERNAME, pass: PASSWORD },
     });
   }
   return transporter;
