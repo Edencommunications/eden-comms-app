@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
-import { useDeadlineTzShort } from '../lib/tz'
+import { useDeadline } from '../lib/tz'
 import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 import { supabase as authClient } from '../supabaseClient'
@@ -265,7 +265,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // ── Client list state ─────────────────────────────────────
   const [clients,        setClients]        = useState(DEMO_CLIENTS)
   const [selectedClient, setSelectedClient] = useState(initialClient||null)
-  const deadlineTzS = useDeadlineTzShort(selectedClient?.email || email)
+  const deadline = useDeadline(selectedClient?.email || email)
   const [clientSearch,   setClientSearch]   = useState('')
   const [filterCoach,    setFilterCoach]    = useState('All Coaches')
 
@@ -1568,7 +1568,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <div style={{background:C.surface,borderRadius:8,padding:'10px 14px',flex:1,minWidth:100}}>
                     <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Update Day</div>
                     <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{selectedClient.checkInDay||'Not set'}</div>
-                    <div style={{fontSize:9,color:C.muted,marginTop:2}}>Due before 9 AM {deadlineTzS}</div>
+                    <div style={{fontSize:9,color:C.muted,marginTop:2}}>Due before {deadline.text}</div>
                   </div>
                   <div style={{background:C.surface,borderRadius:8,padding:'10px 14px',flex:1,minWidth:100}}>
                     <div style={{fontSize:10,color:C.muted,marginBottom:2}}>Status</div>

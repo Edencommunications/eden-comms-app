@@ -57,9 +57,21 @@ export function zonedTimeToIso(dateStr, timeStr, tz) {
   return new Date(guess).toISOString()
 }
 
-// ── Deadline timezone resolution (cached per email) ──────────
-// Coaches/staff → their own saved timezone.
-// Clients → their coach's saved timezone.
+// ── Deadline settings resolution (cached per email) ──────────
+// Coaches/staff → their own saved timezone + deadline time.
+// Clients → their coach's saved timezone + deadline time.
+export const DEFAULT_TIME = '09:00'
+
+// "09:00" → "9 AM", "07:30" → "7:30 AM", "14:00" → "2 PM"
+export function timeLabel(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || DEFAULT_TIME)
+  if (!m) return '9 AM'
+  let h = +m[1]; const min = m[2]
+  const ap = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  return min === '00' ? `${h} ${ap}` : `${h}:${min} ${ap}`
+}
+
 const cache = {}
 
 async function get(pathQuery) {
@@ -70,35 +82,47 @@ async function get(pathQuery) {
   return r.json()
 }
 
-export async function fetchDeadlineTz(email) {
-  if (!email) return DEFAULT_TZ
+const DEFAULTS = { tz: DEFAULT_TZ, time: DEFAULT_TIME }
+
+export async function fetchDeadline(email) {
+  if (!email) return DEFAULTS
   if (cache[email]) return cache[email]
   try {
-    const rows = await get(`user_profiles?email=eq.${encodeURIComponent(email)}&select=role,timezone,coach_id`)
+    const rows = await get(`user_profiles?email=eq.${encodeURIComponent(email)}&select=role,timezone,deadline_time,coach_id`)
     const me = Array.isArray(rows) ? rows[0] : null
-    if (!me) return DEFAULT_TZ
-    let tz = me.timezone
-    if (!tz && me.role === 'client' && me.coach_id) {
-      const c = await get(`user_profiles?id=eq.${me.coach_id}&select=timezone`)
-      tz = Array.isArray(c) ? c[0]?.timezone : null
+    if (!me) return DEFAULTS
+    let tz = me.timezone, time = me.deadline_time
+    if ((!tz || !time) && me.role === 'client' && me.coach_id) {
+      const c = await get(`user_profiles?id=eq.${me.coach_id}&select=timezone,deadline_time`)
+      const coach = Array.isArray(c) ? c[0] : null
+      tz = tz || coach?.timezone
+      time = time || coach?.deadline_time
     }
-    cache[email] = tz || DEFAULT_TZ
+    cache[email] = { tz: tz || DEFAULT_TZ, time: time || DEFAULT_TIME }
     return cache[email]
-  } catch { return DEFAULT_TZ }
+  } catch { return DEFAULTS }
 }
+
+// Back-compat: resolve just the timezone
+export async function fetchDeadlineTz(email) { return (await fetchDeadline(email)).tz }
 
 // Clear ALL cached entries — clients cache their coach's resolved timezone,
 // so a coach changing their setting must invalidate every key, not just their own.
 export function clearTzCache() { for (const k of Object.keys(cache)) delete cache[k]; }
 
-// React hook: returns the short label (e.g. "CST", "EST") for deadline text
+// React hook: returns { tzS: "CST", timeL: "9 AM", text: "9 AM CST" } for deadline text
 import { useState, useEffect } from 'react'
-export function useDeadlineTzShort(email) {
-  const [short, setShort] = useState(tzShort(cache[email] || DEFAULT_TZ))
+export function useDeadline(email) {
+  const initial = cache[email] || DEFAULTS
+  const [d, setD] = useState({ tzS: tzShort(initial.tz), timeL: timeLabel(initial.time) })
   useEffect(() => {
     let live = true
-    fetchDeadlineTz(email).then(tz => { if (live) setShort(tzShort(tz)) })
+    fetchDeadline(email).then(({ tz, time }) => {
+      if (live) setD({ tzS: tzShort(tz), timeL: timeLabel(time) })
+    })
     return () => { live = false }
   }, [email])
-  return short
+  return { ...d, text: `${d.timeL} ${d.tzS}` }
 }
+// Back-compat hook: just the tz short label
+export function useDeadlineTzShort(email) { return useDeadline(email).tzS }
