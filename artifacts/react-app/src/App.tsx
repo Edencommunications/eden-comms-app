@@ -2648,6 +2648,223 @@ const StaffAccessManager = ({ user }:any) => {
   );
 };
 
+// ── Roster Import / Export (CSV) — move a whole business in one upload ──────
+// Header names are matched loosely so exports from other systems "just work".
+const CSV_HEADER_MAP:Record<string,string> = {
+  name:'name', 'full name':'name', 'client name':'name', 'full_name':'name',
+  email:'email', 'email address':'email', 'e-mail':'email',
+  role:'role', type:'role', 'user type':'role',
+  coach:'coach_email', 'coach email':'coach_email', coach_email:'coach_email',
+  'assigned coach':'coach_email', 'coach e-mail':'coach_email',
+  phone:'phone', 'phone number':'phone', mobile:'phone',
+  'start date':'start_date', start_date:'start_date', 'contract start':'start_date', start:'start_date',
+};
+// Minimal RFC-4180-ish CSV parser (quotes, escaped quotes, CRLF)
+function parseCsv(text:string):string[][] {
+  const rows:string[][] = []; let row:string[] = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ',') { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i+1] === '\n') i++;
+      row.push(cur); cur = '';
+      if (row.some(c => c.trim() !== '')) rows.push(row);
+      row = [];
+    } else cur += ch;
+  }
+  row.push(cur);
+  if (row.some(c => c.trim() !== '')) rows.push(row);
+  return rows;
+}
+const csvCell = (v:any) => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
+const downloadFile = (filename:string, content:string) => {
+  const blob = new Blob([content], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+};
+
+const RosterImportExport = () => {
+  const fileRef = useRef<HTMLInputElement|null>(null);
+  const [preview, setPreview]   = useState<any|null>(null);  // { rows, coaches, clients, issues }
+  const [sendEmails, setSendEmails] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult]     = useState<any|null>(null);  // server report
+  const [exporting, setExporting] = useState(false);
+
+  async function exportRoster() {
+    setExporting(true);
+    try {
+      const people:any[] = await sbGet('user_profiles',
+        'role=in.(coach,head_coach,client)&is_active=not.is.false&select=name,email,role,phone,start_date,coach_id&order=role.desc,name.asc');
+      // coach_id → coach email lookup
+      const idToEmail:Record<string,string> = {};
+      const all:any[] = await sbGet('user_profiles','role=in.(coach,head_coach)&select=id,email');
+      all.forEach(c => { idToEmail[c.id] = c.email || ''; });
+      const header = ['name','email','role','coach_email','phone','start_date'];
+      const lines = [header.join(',')];
+      people.forEach(p => lines.push([
+        csvCell(p.name), csvCell(p.email), csvCell(p.role),
+        csvCell(p.role === 'client' ? (idToEmail[p.coach_id] || '') : ''),
+        csvCell(p.phone || ''), csvCell(p.start_date || ''),
+      ].join(',')));
+      downloadFile(`roster-${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'));
+    } finally { setExporting(false); }
+  }
+
+  function onFile(f:File|null) {
+    setResult(null); setPreview(null);
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const grid = parseCsv(String(reader.result || ''));
+      if (grid.length < 2) { setPreview({ rows:[], coaches:0, clients:0, issues:['The file looks empty — it needs a header row plus at least one person.'] }); return; }
+      const header = grid[0].map(h => CSV_HEADER_MAP[h.trim().toLowerCase()] || '');
+      if (!header.includes('email') || !header.includes('name')) {
+        setPreview({ rows:[], coaches:0, clients:0, issues:['Couldn\'t find "name" and "email" columns. The header row should include at least: name, email (optionally role, coach email, phone, start date).'] });
+        return;
+      }
+      const rows:any[] = []; const issues:string[] = []; const seen = new Set<string>();
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      grid.slice(1).forEach((cells, i) => {
+        const r:any = {};
+        header.forEach((key, j) => { if (key) r[key] = (cells[j] || '').trim(); });
+        r.email = (r.email || '').toLowerCase();
+        r.role = (r.role || 'client').toLowerCase().replace(/\s+/g,'_');
+        if (!['coach','head_coach','client'].includes(r.role)) r.role = 'client';
+        r.coach_email = (r.coach_email || '').toLowerCase();
+        if (!r.name || !r.email) { issues.push(`Row ${i+2}: missing name or email — will be skipped`); return; }
+        if (!emailRe.test(r.email)) { issues.push(`Row ${i+2}: "${r.email}" doesn't look like an email — will be skipped`); return; }
+        if (seen.has(r.email)) { issues.push(`Row ${i+2}: ${r.email} appears twice in the file — only the first is used`); return; }
+        seen.add(r.email);
+        rows.push(r);
+      });
+      // Clients pointing at a coach that's neither in the file nor (checked server-side) on the team
+      const fileCoaches = new Set(rows.filter(r => r.role !== 'client').map(r => r.email));
+      rows.forEach(r => {
+        if (r.role === 'client' && r.coach_email && !fileCoaches.has(r.coach_email))
+          issues.push(`${r.name}: coach ${r.coach_email} isn't in this file — must already be on your team, or this row will fail`);
+      });
+      setPreview({
+        rows,
+        coaches: rows.filter(r => r.role !== 'client').length,
+        clients: rows.filter(r => r.role === 'client').length,
+        issues,
+      });
+    };
+    reader.readAsText(f);
+  }
+
+  async function runImport() {
+    if (!preview?.rows?.length || importing) return;
+    setImporting(true);
+    try {
+      const r = await fetch('/api/admin/bulk-import', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ rows: preview.rows, send_emails: sendEmails }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !body?.ok) {
+        setResult({ error: body?.error || `Import failed (${r.status}) — nothing may have been created. Try again.` });
+      } else {
+        setResult(body);
+        setPreview(null);
+        if (fileRef.current) fileRef.current.value = '';
+      }
+    } catch {
+      setResult({ error:'Could not reach the server — check your connection and try again.' });
+    } finally { setImporting(false); }
+  }
+
+  const withTempPw = (result?.report || []).filter((x:any) => x.temp_password);
+
+  return (
+    <Card style={{ marginBottom:20 }}>
+      <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:'uppercase', margin:'0 0 4px' }}>📋 Bulk Import / Export</p>
+      <p style={{ fontSize:11, color:B.muted, margin:'0 0 12px', lineHeight:1.5 }}>
+        Moving from another system? Upload one CSV with your whole roster — coaches are created first, then each client
+        is placed under their coach automatically. Columns: <b>name, email</b>, and optionally role (coach/client),
+        coach email, phone, start date. You can also download your current roster anytime.
+      </p>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: preview || result ? 12 : 0 }}>
+        <button onClick={() => fileRef.current?.click()}
+          style={{ background:B.gold, border:'none', borderRadius:8, padding:'9px 14px', color:B.black, fontSize:12, fontWeight:800, cursor:'pointer' }}>
+          ⬆ Upload CSV…
+        </button>
+        <button onClick={exportRoster} disabled={exporting}
+          style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8, padding:'9px 14px', color:B.text, fontSize:12, fontWeight:700, cursor:'pointer', opacity:exporting?0.5:1 }}>
+          {exporting ? 'Preparing…' : '⬇ Download current roster'}
+        </button>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display:'none' }}
+          onChange={e => onFile(e.target.files?.[0] || null)} />
+      </div>
+
+      {preview && (
+        <div style={{ borderTop:`1px solid ${B.border}`, paddingTop:12 }}>
+          <p style={{ fontSize:13, color:B.text, margin:'0 0 6px', fontWeight:700 }}>
+            Found {preview.coaches} coach{preview.coaches === 1 ? '' : 'es'} and {preview.clients} client{preview.clients === 1 ? '' : 's'} to import.
+          </p>
+          {preview.issues.length > 0 && (
+            <div style={{ background:`${B.gold}11`, border:`1px solid ${B.gold}33`, borderRadius:8, padding:'8px 10px', margin:'0 0 10px' }}>
+              {preview.issues.slice(0,8).map((s:string, i:number) => (
+                <p key={i} style={{ fontSize:11, color:B.gold, margin:'2px 0' }}>⚠ {s}</p>
+              ))}
+              {preview.issues.length > 8 && <p style={{ fontSize:11, color:B.muted, margin:'2px 0' }}>…and {preview.issues.length - 8} more</p>}
+            </div>
+          )}
+          {preview.rows.length > 0 && (
+            <>
+              <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:B.text, margin:'0 0 10px', cursor:'pointer' }}>
+                <input type="checkbox" checked={sendEmails} onChange={e => setSendEmails(e.target.checked)} />
+                Email everyone their login details (they set their own password on first sign-in)
+              </label>
+              <button onClick={runImport} disabled={importing}
+                style={{ background:B.success, border:'none', borderRadius:8, padding:'10px 16px', color:'#000', fontSize:13, fontWeight:800, cursor:'pointer', opacity:importing?0.6:1 }}>
+                {importing ? 'Importing… this can take a minute' : `Import ${preview.rows.length} ${preview.rows.length === 1 ? 'person' : 'people'}`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {result && (
+        <div style={{ borderTop:`1px solid ${B.border}`, paddingTop:12 }}>
+          {result.error ? (
+            <p style={{ fontSize:12, color:'#f87171', margin:0 }}>✕ {result.error}</p>
+          ) : (
+            <>
+              <p style={{ fontSize:13, color:B.text, margin:'0 0 8px', fontWeight:700 }}>
+                ✓ Done — {result.created} created{result.skipped ? `, ${result.skipped} skipped (already existed)` : ''}{result.errors ? `, ${result.errors} failed` : ''}.
+              </p>
+              {(result.report || []).filter((x:any) => x.status === 'error').slice(0,8).map((x:any, i:number) => (
+                <p key={i} style={{ fontSize:11, color:'#f87171', margin:'2px 0' }}>✕ {x.name} ({x.email}): {x.detail}</p>
+              ))}
+              {withTempPw.length > 0 && (
+                <div style={{ background:`${B.gold}11`, border:`1px solid ${B.gold}33`, borderRadius:8, padding:'8px 10px', marginTop:8 }}>
+                  <p style={{ fontSize:11, color:B.gold, margin:'0 0 6px', fontWeight:700 }}>
+                    ⚠ These logins were created but not emailed — download and share them manually (shown only once):
+                  </p>
+                  <button onClick={() => downloadFile('login-details.csv',
+                      ['name,email,temp_password', ...withTempPw.map((x:any) => [csvCell(x.name), csvCell(x.email), csvCell(x.temp_password)].join(','))].join('\n'))}
+                    style={{ background:B.gold, border:'none', borderRadius:6, padding:'6px 12px', color:B.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>
+                    ⬇ Download login details
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+};
+
 // ─── ADMIN CONVERSATION MONITOR ──────────────────────────────────────────────
 // ── Admin Activity Log — who did what, and when ──────────────────
 const ACTION_LABELS:Record<string,{label:string,icon:string}> = {
@@ -3637,6 +3854,8 @@ const AdminDashboard = ({ user }:any) => {
                 })}
               </Card>
             )}
+            {/* Bulk roster import / export */}
+            <RosterImportExport/>
             {/* Upcoming contract starts (org-wide) */}
             <UpcomingStartsSection clients={upcomingClients}/>
             {/* White-label admin: branded login link */}

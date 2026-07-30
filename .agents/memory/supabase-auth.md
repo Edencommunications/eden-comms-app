@@ -13,3 +13,5 @@ Rule: Passwords live only in Supabase Auth (hashed). `user_profiles` remains the
 - Change/set password = client-side `supabase.auth.updateUser` (needs the auth session; demo logins have none, so the UI hides it).
 - Dashboard constraints (user-owned, not fixable from workspace): Site URL was `http://localhost:3000` — reset-email links break until user sets Site URL / redirect allow-list; built-in mailer is rate-limited (~2 emails/hour) until custom SMTP is configured.
 - The auth admin API can also delete test users; always clean up test auth users AND their `user_profiles` rows.
+
+**Bulk roster import:** POST /api/admin/bulk-import (admin JWT) creates coaches before clients from CSV rows; skips existing profiles. Orphan auth users (auth account, no profile — from past partial failures) get their password explicitly reset via GoTrue admin PUT before temp credentials are issued — never trust `existed:true` from provisioning to mean the generated password is valid.

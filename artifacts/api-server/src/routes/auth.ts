@@ -89,7 +89,7 @@ export async function provisionAuthUser(
 // The caller must send their Supabase Auth access token. We verify it against
 // Supabase (server-side, cannot be forged), then map the token's email to a
 // user_profiles row and require role=super_admin + active.
-async function requireAdminJwt(req: Request): Promise<{ id: string } | null> {
+export async function requireAdminJwt(req: Request): Promise<{ id: string; company_id: string | null; name: string | null } | null> {
   const auth = String(req.get("authorization") || "");
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || token === SUPABASE_ANON) return null;
@@ -102,9 +102,9 @@ async function requireAdminJwt(req: Request): Promise<{ id: string } | null> {
   if (!email) return null;
   const rows = await dbGet(
     "user_profiles",
-    `email=eq.${encodeURIComponent(email)}&role=eq.super_admin&is_active=not.is.false&select=id`,
+    `email=eq.${encodeURIComponent(email)}&role=eq.super_admin&is_active=not.is.false&select=id,company_id,name`,
   );
-  return rows[0] ? { id: rows[0].id } : null;
+  return rows[0] ? { id: rows[0].id, company_id: rows[0].company_id || null, name: rows[0].name || null } : null;
 }
 
 // ── Simple in-memory rate limiter (per key) ──────────────────────
@@ -247,6 +247,7 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
       logger.warn({ error: String(e) }, "[Auth] reset-request background task failed");
     }
   })();
+  return;
 });
 
 // /auth/demo-session removed — demo accounts retired (task #71). Everyone
