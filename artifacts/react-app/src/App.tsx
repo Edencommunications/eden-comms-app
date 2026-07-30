@@ -1232,7 +1232,7 @@ const HabitTrackerScreen = () => {
 
 const UPDATE_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-const ClientDetailModal = ({ client, onClose, onNavigate }) => {
+const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
   const isMobile = useIsMobile();
   const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
   const [localHistory, setLocalHistory] = useState<any[]>(client?.checkinHistory || []);
@@ -1388,6 +1388,7 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                   setSavingDay(true);
                   await sbPatch('user_profiles', `id=eq.${client.uuid}`, { update_day: day });
                   setSavingDay(false);
+                  onSaved?.(client.uuid, { checkInDay: day });
                 }}
                 style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px",
                   color: updateDay ? B.gold : B.muted, fontSize:13, outline:"none", cursor:"pointer" }}>
@@ -1424,6 +1425,7 @@ const ClientDetailModal = ({ client, onClose, onNavigate }) => {
                   setSavingStart(true);
                   await sbPatch('user_profiles', `id=eq.${client.uuid}`, { start_date: val || null });
                   setSavingStart(false);
+                  onSaved?.(client.uuid, { startDate: val || null });
                 }}
                 style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px",
                   color: startDate ? B.gold : B.muted, fontSize:13, outline:"none", colorScheme:"dark" }}/>
@@ -2259,7 +2261,8 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
       </div>
 
       {selectedClient && (
-        <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}/>
+        <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}
+          onSaved={(uuid:string, patch:any)=>setClients((prev:any[])=>prev.map((c:any)=>c.uuid===uuid?{...c,...patch}:c))}/>
       )}
       {alertClient && (
         <AlertDetailModal
