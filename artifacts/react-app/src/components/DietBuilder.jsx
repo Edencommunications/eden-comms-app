@@ -1443,7 +1443,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         {/* ── top row: title + controls ─────────────────────── */}
         <div style={{display:'flex',alignItems:'center',gap:0,padding:'8px 16px 4px'}}>
           <div style={{flex:1,paddingRight:8}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.white}}>{isCoach?`Diet Builder — Jordan Williams`:'My Diet Plan'}</div>
+            <div style={{fontSize:13,fontWeight:700,color:C.white}}>{isCoach?`Diet Builder — ${currentUser?.name||'Client'}`:'My Diet Plan'}</div>
             <div style={{fontSize:10,color:C.muted,marginTop:1}}>{protocol}</div>
             {onBack&&(
               <button onClick={onBack} style={{background:'none',border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',gap:3,marginTop:3}}>

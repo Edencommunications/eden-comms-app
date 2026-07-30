@@ -608,7 +608,7 @@ Training Principles:
         {/* ── top row: title ────────────────────────────────── */}
         <div style={{padding:'8px 16px 4px'}}>
           <div style={{fontSize:13,fontWeight:700,color:C.white}}>
-            {isCoach?'Client Tools — Jordan Williams':'My Tools'}
+            {isCoach?`Client Tools — ${currentUser?.name||'Client'}`:'My Tools'}
           </div>
           {onBack&&(
             <button onClick={onBack} style={{background:'none',border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',gap:3,marginTop:2}}>
