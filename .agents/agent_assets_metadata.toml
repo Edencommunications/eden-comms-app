@@ -12,3 +12,15 @@ id = "tDrdPhX8B7TW2VFKIKKWv"
 uri = "file://exports/eden-comms-codebase.zip"
 type = "unspecified"
 title = "Eden Communications — complete codebase"
+
+[[outputs]]
+id = "_PPxwFwcjOfBJDtymfLsF"
+uri = "file://attached_assets/Eden_Comms_SOPs_CheckIn_Forms_and_Start_Dates.docx"
+type = "word_document"
+title = "Eden Comms SOPs — Check-In Forms & Client Start Dates"
+
+[[outputs]]
+id = "zFzr-Ujr1Lexj73GtkIOU"
+uri = "file://attached_assets/Eden_Comms_SOP_Video_Huddles.docx"
+type = "word_document"
+title = "Eden Comms SOP — Video Huddles (White-Label)"
