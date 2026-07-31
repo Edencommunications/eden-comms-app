@@ -955,8 +955,9 @@ export default function Week7({ currentUser }) {
                   <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Video Call Room</div>
                   <div style={{background:C.surface,borderRadius:10,overflow:'hidden',position:'relative',paddingTop:'56.25%'}}>
                     <iframe src={huddleRoomUrl}
+                      allowFullScreen
                       style={{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}}
-                      allow="camera; microphone; autoplay; fullscreen"
+                      allow="camera; microphone; autoplay; fullscreen; display-capture; clipboard-write"
                       title="Huddle Room"/>
                   </div>
                   <div style={{marginTop:10,fontSize:10,color:C.muted,textAlign:'center'}}>
