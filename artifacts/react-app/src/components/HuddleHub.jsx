@@ -376,20 +376,82 @@ export function HuddleProvider({ currentUser, children }) {
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
   const bigW = Math.min(760, (typeof window !== 'undefined' ? window.innerWidth : 800) - 24)
 
+  // ── Draggable floating window ────────────────────────────────
+  // pos = null → default bottom-right pin. Once dragged, we switch to
+  // left/top coordinates and keep them (survives navigation because
+  // this provider is mounted once in AppShell).
+  const [winPos, setWinPos] = useState(null) // { x, y } or null
+  const winRef  = useRef(null)
+  const dragRef = useRef(null) // { startX, startY, origX, origY, moved }
+
+  const clampPos = useCallback((x, y) => {
+    const el = winRef.current
+    const w = el ? el.offsetWidth  : 320
+    const h = el ? el.offsetHeight : 220
+    const maxX = Math.max(0, window.innerWidth  - w)
+    const maxY = Math.max(0, window.innerHeight - h)
+    return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) }
+  }, [])
+
+  const onHeaderPointerDown = useCallback((e) => {
+    // Don't hijack the Shrink/End buttons
+    if (e.target.closest('button')) return
+    const el = winRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: rect.left, origY: rect.top, moved: false }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    e.preventDefault()
+  }, [])
+
+  const onHeaderPointerMove = useCallback((e) => {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.startX, dy = e.clientY - d.startY
+    if (!d.moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return
+    d.moved = true
+    setWinPos(clampPos(d.origX + dx, d.origY + dy))
+  }, [clampPos])
+
+  const onHeaderPointerUp = useCallback(() => { dragRef.current = null }, [])
+
+  // Keep the window on-screen when the viewport shrinks / rotates
+  useEffect(() => {
+    if (!winPos) return
+    const onResize = () => setWinPos(p => (p ? clampPos(p.x, p.y) : p))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [winPos !== null, clampPos]) // eslint-disable-line
+
+  // Re-clamp after Shrink/Expand changes the window size
+  useEffect(() => {
+    if (!winPos) return
+    const id = requestAnimationFrame(() => setWinPos(p => (p ? clampPos(p.x, p.y) : p)))
+    return () => cancelAnimationFrame(id)
+  }, [expanded]) // eslint-disable-line
+
   return (
     <HuddleContext.Provider value={value}>
       {children}
 
       {/* ══ Floating call window — persists across ALL screens ══ */}
       {isStaff && huddleActive && huddleRoomUrl && (
-        <div style={{
-          position:'fixed', right:12, bottom:12, zIndex:6000,
+        <div ref={winRef} style={{
+          position:'fixed', zIndex:6000,
+          ...(winPos ? { left:winPos.x, top:winPos.y } : { right:12, bottom:12 }),
           width: expanded ? bigW : (isMobile ? 240 : 320),
           background:C.card, border:`1px solid ${C.gold}66`, borderRadius:14,
           boxShadow:'0 12px 48px rgba(0,0,0,.75)', overflow:'hidden',
           display:'flex', flexDirection:'column',
         }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+          <div
+            onPointerDown={onHeaderPointerDown}
+            onPointerMove={onHeaderPointerMove}
+            onPointerUp={onHeaderPointerUp}
+            onPointerCancel={onHeaderPointerUp}
+            title="Drag to move the call window"
+            style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:C.surface,
+              borderBottom:`1px solid ${C.border}`, cursor:'grab', touchAction:'none', userSelect:'none' }}>
             <div style={{ width:9, height:9, borderRadius:5, background:C.success, animation:'pulse 1.5s infinite', flexShrink:0 }}/>
             <div style={{ flex:1, fontSize:12, fontWeight:800, color:C.success, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
               Live Huddle
