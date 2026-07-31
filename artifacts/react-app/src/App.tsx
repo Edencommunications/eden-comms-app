@@ -19,6 +19,7 @@ function useIsMobile(breakpoint = 768) {
 import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
 import Notifications from "./components/Notifications";
+import { HuddleProvider, DndButton } from "./components/HuddleHub";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
@@ -5146,6 +5147,7 @@ const AppShell = ({ user, onLogout }) => {
   };
 
   return (
+    <HuddleProvider currentUser={{ email: user.email, name: user.name, role: user.role }}>
     <div style={{ display:"flex", flexDirection:"column", height:"100vh", width:"100%", background:B.black, overflow:"hidden" }}>
       {/* Top bar */}
       <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding:"8px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
@@ -5197,6 +5199,7 @@ const AppShell = ({ user, onLogout }) => {
               )}
             </button>
           )}
+          <DndButton isMobile={isMobile}/>
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={setTab}/>
           {hasAuthSession && (
             <button onClick={() => setShowChangePw(true)} title="Change password"
@@ -5355,6 +5358,7 @@ const AppShell = ({ user, onLogout }) => {
       )}
       {showChangePw && <ChangePasswordModal onClose={()=>setShowChangePw(false)}/>}
     </div>
+    </HuddleProvider>
   );
 };
 

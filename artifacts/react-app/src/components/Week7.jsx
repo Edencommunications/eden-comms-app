@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import Communities from './Communities'
 import MentionInput from './MentionInput'
+import { useHuddle } from './HuddleHub'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -261,64 +262,15 @@ export default function Week7({ currentUser }) {
   const [tempCalUrl,  setTempCalUrl]  = useState('')
   const [calSaved,    setCalSaved]    = useState(false)
 
-  // ── Huddle state ───────────────────────────────────────────
-  const [huddleActive,  setHuddleActive]  = useState(false)
-  const [huddleRoomUrl, setHuddleRoomUrl] = useState('')
-  const [huddlePinging, setHuddlePinging] = useState(null)
-  const [liveHuddle,    setLiveHuddle]    = useState(null) // active huddle row in the org (from DB)
-  const [huddleRowId,   setHuddleRowId]   = useState(null) // huddle_rooms row I created
-  const startedByMeRef = useRef(false)
-
-  // Watch for a live huddle in the org so teammates see it and can join.
-  // Realtime pushes changes instantly; polling stays as a fallback while the
-  // websocket channel is not connected (same pattern as admin lifecycle sync).
-  useEffect(() => {
-    if (!orgId) return
-    let stop = false
-    async function checkLiveHuddle() {
-      try {
-        const rows = await dbGet('huddle_rooms',
-          `org_id=eq.${orgId}&is_active=eq.true&select=id,room_url,created_by,creator_name,created_at&order=created_at.desc&limit=1`)
-        if (stop) return
-        let row = Array.isArray(rows) && rows.length ? rows[0] : null
-        // Ignore stale rooms — Daily rooms self-expire after 4 hours
-        if (row && (Date.now() - new Date(row.created_at).getTime()) >= 4*3600*1000) row = null
-        setLiveHuddle(row)
-        // If the huddle was ended by whoever started it, close it for joiners too.
-        if (!row && !startedByMeRef.current) {
-          setHuddleActive(a => { if (a) { setHuddleRoomUrl('') } return false })
-        }
-      } catch {}
-    }
-    checkLiveHuddle()
-    // Realtime channel on huddle_rooms — INSERT/UPDATE re-checks the live row.
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
-    // With RLS on, realtime only delivers rows the subscriber may see — authenticate the channel.
-    try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
-    let realtimeUp = false
-    // Only trust realtime once a row event has ACTUALLY arrived — a channel can
-    // report SUBSCRIBED even when the table isn't in the supabase_realtime
-    // publication, in which case no events are ever delivered.
-    let lastEventAt = 0
-    let debounce = null
-    const scheduleCheck = () => { lastEventAt = Date.now(); clearTimeout(debounce); debounce = setTimeout(checkLiveHuddle, 250) }
-    const channel = sb
-      .channel('huddle-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'huddle_rooms' }, scheduleCheck)
-      .subscribe(status => {
-        const wasUp = realtimeUp
-        realtimeUp = status === 'SUBSCRIBED'
-        // Catch up on anything missed while the channel was down
-        if (realtimeUp && !wasUp) checkLiveHuddle()
-      })
-    // Fallback poll: keeps running until realtime has proven itself with a real
-    // event recently; skipped only when the channel is up AND events flow.
-    const iv = setInterval(() => {
-      const proven = realtimeUp && (Date.now() - lastEventAt) < 60_000
-      if (!proven) checkLiveHuddle()
-    }, 5000)
-    return () => { stop = true; clearTimeout(debounce); clearInterval(iv); sb.removeChannel(channel) }
-  }, [orgId])
+  // ── Huddle state — GLOBAL (HuddleHub) so the call and the
+  //    incoming-call ringer survive navigation anywhere in the app ──
+  const huddle = useHuddle() || {}
+  const {
+    huddleActive = false, huddleRoomUrl = '', liveHuddle = null,
+    isStarter = false, huddlePinging = null,
+    startHuddle: hubStartHuddle, joinLiveHuddle: hubJoinLiveHuddle,
+    endHuddle, pingCoach,
+  } = huddle
 
   // Load saved URLs from Supabase on mount
   useEffect(() => {
@@ -386,72 +338,12 @@ export default function Week7({ currentUser }) {
       .then(() => loadTeamChat())
   }
 
-  // ── Huddle helpers ──────────────────────────────────────────
-  // Creates a REAL Daily.co room via the API server (rooms self-expire).
-  async function startHuddle() {
-    try {
-      const r = await fetch('/api/huddle/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
-      })
-      const data = await r.json().catch(() => null)
-      if (!r.ok || !data?.url) {
-        alert(data?.error || 'Could not start the huddle — please try again.')
-        return
-      }
-      setHuddleRoomUrl(data.url)
-      setHuddleActive(true)
-      startedByMeRef.current = true
-      // Clear any stale active rooms of mine, then record the new live room.
-      await dbUpdate('huddle_rooms', `org_id=eq.${orgId}&created_by=eq.${myUUID}&is_active=eq.true`, { is_active:false })
-      const rows = await dbInsert('huddle_rooms', { org_id:orgId, room_url:data.url, created_by:myUUID, creator_name:myName, is_active:true })
-      const row = Array.isArray(rows) ? rows[0] : null
-      if (row) { setHuddleRowId(row.id); setLiveHuddle(row) }
-    } catch {
-      alert('Could not start the huddle — please try again.')
-    }
-  }
-
-  // Teammate joins the huddle someone else started.
+  // ── Huddle helpers — thin wrappers over the global HuddleHub ─
+  async function startHuddle() { return hubStartHuddle ? await hubStartHuddle() : false }
   function joinLiveHuddle() {
-    if (!liveHuddle) return
-    // Ownership comes from the DB row, so the starter can still End after a page reload
-    startedByMeRef.current = liveHuddle.created_by === myUUID
-    setHuddleRoomUrl(liveHuddle.room_url)
-    setHuddleActive(true)
+    if (!hubJoinLiveHuddle) return
+    hubJoinLiveHuddle()
     setSection('huddle')
-  }
-
-  async function endHuddle() {
-    setHuddleActive(false)
-    setHuddleRoomUrl('')
-    setHuddlePinging(null)
-    // Only the starter ends it for everyone; joiners just leave locally.
-    if (startedByMeRef.current) {
-      startedByMeRef.current = false
-      if (huddleRowId) await dbUpdate('huddle_rooms', `id=eq.${huddleRowId}`, { is_active:false })
-      else await dbUpdate('huddle_rooms', `org_id=eq.${orgId}&created_by=eq.${myUUID}&is_active=eq.true`, { is_active:false })
-      setHuddleRowId(null)
-      setLiveHuddle(null)
-    }
-  }
-
-  // Real invite: in-app notification the teammate sees in their bell.
-  function pingCoach(coach) {
-    setHuddlePinging(coach.name)
-    dbInsert('notifications', {
-      recipient_id: coach.uuid, sender_id: myUUID, sender_name: myName,
-      type: 'huddle_invite',
-      body: `🎙 ${myName} invited you to a live huddle — open Team Hub → Huddle and hit Join.`,
-      is_read: false,
-    })
-    setTimeout(() => setHuddlePinging(null), 3000)
-    // Real in-app notification (bell) for that coach
-    dbInsert('notifications', {
-      recipient_id: coach.uuid, sender_id: myUUID, type: 'huddle_ping',
-      body: `🎙 ${myName} is inviting you to a live huddle — open Team Hub → Huddle to join`,
-      is_read: false, created_at: new Date().toISOString(),
-    })
   }
 
   const dmKey    = dmTarget ? [myUUID, dmTarget.uuid].sort().join('_') : null
@@ -913,7 +805,7 @@ export default function Week7({ currentUser }) {
                           {coach.role}{coach.isHeadCoach?' · Head Coach':''}
                         </div>
                       </div>
-                      <button onClick={async () => { if (liveHuddle) { pingCoach(coach) } else { await startHuddle(); pingCoach(coach) } }}
+                      <button onClick={async () => { if (liveHuddle) { pingCoach(coach) } else { const ok = await startHuddle(); if (ok) pingCoach(coach) } }}
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                         {huddlePinging===coach.name?'Invited ✓':'Invite'}
                       </button>
@@ -929,15 +821,9 @@ export default function Week7({ currentUser }) {
                     <div style={{fontSize:13,fontWeight:700,color:C.success}}>Huddle Active</div>
                     <div style={{fontSize:10,color:C.muted,marginTop:1}}>You are in a live huddle room</div>
                   </div>
-                  <button
-                    onClick={() => window.open(huddleRoomUrl, 'eden-huddle', 'width=980,height=680,noopener')}
-                    title="Open the call in its own window so you can move around the app while staying on the call"
-                    style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer',marginRight:8}}>
-                    ↗ Pop Out Call
-                  </button>
                   <button onClick={endHuddle}
                     style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'6px 14px',color:C.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                    {startedByMeRef.current ? 'End Huddle' : 'Leave Huddle'}
+                    {isStarter ? 'End Huddle' : 'Leave Huddle'}
                   </button>
                 </div>
 
@@ -958,17 +844,14 @@ export default function Week7({ currentUser }) {
                 </Card>
 
                 <Card sx={{marginBottom:12}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Video Call Room</div>
-                  <div style={{background:C.surface,borderRadius:10,overflow:'hidden',position:'relative',paddingTop:'56.25%'}}>
-                    <iframe src={huddleRoomUrl}
-                      allowFullScreen
-                      style={{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}}
-                      allow="camera; microphone; autoplay; fullscreen; display-capture; clipboard-write"
-                      title="Huddle Room"/>
+                  <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Your call is in the floating window</div>
+                  <div style={{fontSize:12,color:C.muted,lineHeight:1.7}}>
+                    🎥 The video call lives in the <span style={{color:C.gold,fontWeight:700}}>floating window in the corner</span> of your screen — just like Slack.
+                    <br/>Go anywhere in the app (check-ins, labs, client updates) and the call follows you, even while screen sharing.
+                    <br/>Use <span style={{color:C.gold}}>⇲ Shrink</span> on the window to tuck it out of the way, or <span style={{color:C.gold}}>⇱ Expand</span> to make it big.
                   </div>
-                  <div style={{marginTop:10,fontSize:10,color:C.muted,textAlign:'center'}}>
+                  <div style={{marginTop:10,fontSize:10,color:C.muted}}>
                     Room link: <span style={{color:C.gold}}>{huddleRoomUrl}</span>
-                    <br/>Tip: use <span style={{color:C.gold}}>↗ Pop Out Call</span> above to keep the call going while you move around the app (e.g. to show labs while screen sharing).
                   </div>
                 </Card>
               </>

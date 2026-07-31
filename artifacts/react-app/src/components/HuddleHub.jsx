@@ -1,0 +1,440 @@
+// ═══════════════════════════════════════════════════════════════
+// HuddleHub.jsx — Global huddle system (Slack-style)
+//
+// Mounted ONCE in AppShell so the call survives navigation:
+//  • Floating call window — the Daily iframe lives HERE (not in Week7),
+//    so you can go anywhere in the app while staying on the call.
+//  • Loud incoming-call ringer — full-screen overlay + ring sound on
+//    ANY screen when a teammate invites you to a huddle.
+//  • Do Not Disturb — per-device toggle that silences the ringer.
+//
+// Week7 consumes this via useHuddle() instead of holding its own state.
+// ═══════════════════════════════════════════════════════════════
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
+import { createClient } from '@supabase/supabase-js'
+import { sbBearer, sbAccessToken } from '../lib/sbAuth'
+
+const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
+
+const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
+const KNOWN_USERS = {
+  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach', role:'coach', orgId:EDEN_ORG_ID },
+  'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin', role:'super_admin', orgId:EDEN_ORG_ID },
+}
+
+const C = {
+  gold:'#ffa600', black:'#000', white:'#fff',
+  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
+  muted:'#888', success:'#4FD89A', danger:'#ff4444',
+}
+
+const H = {
+  'apikey': SUPABASE_ANON,
+  get Authorization(){ return sbBearer() },
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation',
+}
+async function dbGet(table, params='') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
+  if (!r.ok) return []
+  return r.json()
+}
+async function dbInsert(table, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method:'POST', headers:H, body:JSON.stringify(body) })
+  if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
+  const t = await r.text(); return t ? JSON.parse(t) : null
+}
+async function dbUpdate(table, params, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method:'PATCH', headers:H, body:JSON.stringify(body) })
+  if (!r.ok) console.error('UPDATE', table, await r.text())
+  return r.ok
+}
+
+// ── Ring sound (Web Audio — no asset files needed) ──────────────
+// Classic two-burst phone ring, repeated every 2.4s while ringing.
+function createRinger() {
+  let ctx = null, timer = null
+  function burst(at) {
+    for (const [freq, off] of [[880, 0], [660, 0], [880, 0.45], [660, 0.45]]) {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, at + off)
+      gain.gain.exponentialRampToValueAtTime(0.4, at + off + 0.03)
+      gain.gain.setValueAtTime(0.4, at + off + 0.3)
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + off + 0.4)
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.start(at + off); osc.stop(at + off + 0.45)
+    }
+  }
+  return {
+    start() {
+      if (timer) return // already ringing — never stack intervals
+      try {
+        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)()
+        if (ctx.state === 'suspended') ctx.resume().catch(()=>{})
+        const ring = () => { try { burst(ctx.currentTime + 0.05) } catch {} }
+        ring()
+        timer = setInterval(ring, 2400)
+      } catch {}
+    },
+    stop() { clearInterval(timer); timer = null },
+  }
+}
+
+const HuddleContext = createContext(null)
+export function useHuddle() { return useContext(HuddleContext) }
+
+// ════════════════════════════════════════════════════════════════
+// PROVIDER
+// ════════════════════════════════════════════════════════════════
+export function HuddleProvider({ currentUser, children }) {
+  const email = currentUser?.email || ''
+  const info  = KNOWN_USERS[email] || { role:currentUser?.role||'client', name:currentUser?.name||'User', uuid:null, orgId:EDEN_ORG_ID }
+  const [self, setSelf] = useState(info)
+  const myUUID = self.uuid
+  const myName = self.name
+  const orgId  = self.orgId || EDEN_ORG_ID
+  const isStaff = self.role && self.role !== 'client'
+
+  // Resolve real profile for non-demo users
+  useEffect(() => {
+    let live = true
+    if (info.uuid || !email) return
+    dbGet('user_profiles', `email=eq.${encodeURIComponent(email)}&select=id,name,full_name,role,company_id`)
+      .then(rows => {
+        const me = rows?.[0]
+        if (live && me) setSelf({ uuid:me.id, name:me.name||me.full_name||currentUser?.name||'User', role:me.role, orgId:me.company_id||EDEN_ORG_ID })
+      }).catch(()=>{})
+    return () => { live = false }
+  }, [email]) // eslint-disable-line
+
+  // ── Call state ───────────────────────────────────────────────
+  const [huddleActive,  setHuddleActive]  = useState(false)
+  const [huddleRoomUrl, setHuddleRoomUrl] = useState('')
+  const [liveHuddle,    setLiveHuddle]    = useState(null)
+  const [huddleRowId,   setHuddleRowId]   = useState(null)
+  const [isStarter,     setIsStarter]     = useState(false)
+  const [huddlePinging, setHuddlePinging] = useState(null)
+  const [expanded,      setExpanded]      = useState(true) // floating window size
+  const startedByMeRef = useRef(false)
+
+  // ── Do Not Disturb (per device, like a phone) ────────────────
+  const [dnd, setDndState] = useState(() => { try { return localStorage.getItem('eden_dnd') === '1' } catch { return false } })
+  const setDnd = useCallback(v => {
+    setDndState(v)
+    try { localStorage.setItem('eden_dnd', v ? '1' : '0') } catch {}
+  }, [])
+  const dndRef = useRef(dnd); dndRef.current = dnd
+  const activeRef = useRef(false); activeRef.current = huddleActive
+
+  // ── Incoming call (ring) state ───────────────────────────────
+  const [incoming, setIncoming] = useState(null) // { name, notifIds }
+  const ringerRef  = useRef(null)
+  const seenIdsRef = useRef(new Set())
+  const ringTimeoutRef = useRef(null)
+
+  const stopRinging = useCallback(() => {
+    ringerRef.current?.stop()
+    clearTimeout(ringTimeoutRef.current)
+    setIncoming(null)
+  }, [])
+
+  const startRinging = useCallback((name, notifIds) => {
+    if (dndRef.current || activeRef.current) return
+    // Merge invite ids while ringing so Answer/Decline marks ALL of them read
+    setIncoming(prev => prev
+      ? { ...prev, notifIds: [...new Set([...(prev.notifIds||[]), ...notifIds])] }
+      : { name, notifIds })
+    if (!ringerRef.current) ringerRef.current = createRinger()
+    ringerRef.current.start()
+    clearTimeout(ringTimeoutRef.current)
+    // Ring for 45 seconds max, then go quiet (invite stays in the bell)
+    ringTimeoutRef.current = setTimeout(() => { ringerRef.current?.stop(); setIncoming(null) }, 45000)
+  }, [])
+
+  // ── Watch live huddles in the org (realtime + poll fallback) ─
+  useEffect(() => {
+    if (!orgId || !isStaff || !myUUID) return
+    let stop = false
+    async function checkLiveHuddle() {
+      try {
+        const rows = await dbGet('huddle_rooms',
+          `org_id=eq.${orgId}&is_active=eq.true&select=id,room_url,created_by,creator_name,created_at&order=created_at.desc&limit=1`)
+        if (stop) return
+        let row = Array.isArray(rows) && rows.length ? rows[0] : null
+        if (row && (Date.now() - new Date(row.created_at).getTime()) >= 4*3600*1000) row = null
+        setLiveHuddle(row)
+        // Huddle ended by the starter → close it for joiners too
+        if (!row && !startedByMeRef.current) {
+          setHuddleActive(a => { if (a) setHuddleRoomUrl('') ; return false })
+          if (!row) stopRinging()
+        }
+      } catch {}
+    }
+    checkLiveHuddle()
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
+    try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
+    let realtimeUp = false, lastEventAt = 0, debounce = null
+    const scheduleCheck = () => { lastEventAt = Date.now(); clearTimeout(debounce); debounce = setTimeout(checkLiveHuddle, 250) }
+    const channel = sb
+      .channel('huddle-hub-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'huddle_rooms' }, scheduleCheck)
+      .subscribe(status => {
+        const wasUp = realtimeUp
+        realtimeUp = status === 'SUBSCRIBED'
+        if (realtimeUp && !wasUp) checkLiveHuddle()
+      })
+    const iv = setInterval(() => {
+      const proven = realtimeUp && (Date.now() - lastEventAt) < 60_000
+      if (!proven) checkLiveHuddle()
+    }, 5000)
+    return () => { stop = true; clearTimeout(debounce); clearInterval(iv); sb.removeChannel(channel) }
+  }, [orgId, myUUID, isStaff, stopRinging])
+
+  // ── Global incoming-call ringer (realtime + poll fallback) ───
+  useEffect(() => {
+    if (!myUUID || !isStaff) return
+    let stop = false
+    const isInvite = n => n && (n.type === 'huddle_invite' || n.type === 'huddle_ping')
+    function handleNotif(n) {
+      if (stop || !isInvite(n) || n.is_read) return
+      if (seenIdsRef.current.has(n.id)) return
+      // Only ring for FRESH invites (ignore old unread ones from hours ago)
+      if (Date.now() - new Date(n.created_at).getTime() > 90_000) { seenIdsRef.current.add(n.id); return }
+      seenIdsRef.current.add(n.id)
+      const name = n.sender_name || (String(n.body||'').match(/🎙\s*(.+?)\s+(is inviting|invited)/)?.[1]) || 'A teammate'
+      startRinging(name, [n.id])
+    }
+    async function pollInvites() {
+      try {
+        const since = new Date(Date.now() - 90_000).toISOString()
+        const rows = await dbGet('notifications',
+          `recipient_id=eq.${myUUID}&is_read=eq.false&type=in.(huddle_invite,huddle_ping)&created_at=gte.${since}&select=id,type,sender_name,body,created_at,is_read&order=created_at.desc&limit=5`)
+        if (!stop && Array.isArray(rows)) rows.forEach(handleNotif)
+      } catch {}
+    }
+    pollInvites()
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
+    try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
+    let realtimeUp = false, lastEventAt = 0
+    const channel = sb
+      .channel('huddle-hub-ring-' + myUUID)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${myUUID}` },
+        payload => { lastEventAt = Date.now(); handleNotif(payload?.new) })
+      .subscribe(status => { realtimeUp = status === 'SUBSCRIBED' })
+    const iv = setInterval(() => {
+      const proven = realtimeUp && (Date.now() - lastEventAt) < 120_000
+      if (!proven) pollInvites()
+    }, 8000)
+    return () => { stop = true; clearInterval(iv); sb.removeChannel(channel) }
+  }, [myUUID, isStaff, startRinging])
+
+  // Stop ringing the moment DND turns on
+  useEffect(() => { if (dnd) stopRinging() }, [dnd, stopRinging])
+  // Cleanup on unmount (logout)
+  useEffect(() => () => { ringerRef.current?.stop(); clearTimeout(ringTimeoutRef.current) }, [])
+
+  // ── Actions ──────────────────────────────────────────────────
+  const startHuddle = useCallback(async () => {
+    try {
+      const r = await fetch('/api/huddle/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      })
+      const data = await r.json().catch(() => null)
+      if (!r.ok || !data?.url) {
+        alert(data?.error || 'Could not start the huddle — please try again.')
+        return false
+      }
+      setHuddleRoomUrl(data.url)
+      setHuddleActive(true)
+      setExpanded(true)
+      startedByMeRef.current = true
+      setIsStarter(true)
+      await dbUpdate('huddle_rooms', `org_id=eq.${orgId}&created_by=eq.${myUUID}&is_active=eq.true`, { is_active:false })
+      const rows = await dbInsert('huddle_rooms', { org_id:orgId, room_url:data.url, created_by:myUUID, creator_name:myName, is_active:true })
+      const row = Array.isArray(rows) ? rows[0] : null
+      if (row) { setHuddleRowId(row.id); setLiveHuddle(row) }
+      return true
+    } catch {
+      alert('Could not start the huddle — please try again.')
+      return false
+    }
+  }, [orgId, myUUID, myName])
+
+  const joinLiveHuddle = useCallback((row) => {
+    const h = row || liveHuddle
+    if (!h) return
+    startedByMeRef.current = h.created_by === myUUID
+    setIsStarter(startedByMeRef.current)
+    setHuddleRoomUrl(h.room_url)
+    setHuddleActive(true)
+    setExpanded(true)
+    stopRinging()
+  }, [liveHuddle, myUUID, stopRinging])
+
+  const endHuddle = useCallback(async () => {
+    setHuddleActive(false)
+    setHuddleRoomUrl('')
+    setHuddlePinging(null)
+    if (startedByMeRef.current) {
+      startedByMeRef.current = false
+      setIsStarter(false)
+      if (huddleRowId) await dbUpdate('huddle_rooms', `id=eq.${huddleRowId}`, { is_active:false })
+      else await dbUpdate('huddle_rooms', `org_id=eq.${orgId}&created_by=eq.${myUUID}&is_active=eq.true`, { is_active:false })
+      setHuddleRowId(null)
+      setLiveHuddle(null)
+    }
+  }, [huddleRowId, orgId, myUUID])
+
+  const pingCoach = useCallback((coach) => {
+    setHuddlePinging(coach.name)
+    dbInsert('notifications', {
+      recipient_id: coach.uuid, sender_id: myUUID, sender_name: myName,
+      type: 'huddle_invite',
+      body: `🎙 ${myName} is inviting you to a live huddle — hit Join to jump in.`,
+      is_read: false,
+    })
+    setTimeout(() => setHuddlePinging(null), 3000)
+  }, [myUUID, myName])
+
+  // Answer the incoming call: mark invite read + join whatever huddle is live
+  const answerIncoming = useCallback(async () => {
+    const ids = incoming?.notifIds || []
+    stopRinging()
+    for (const id of ids) dbUpdate('notifications', `id=eq.${id}`, { is_read:true, read_at:new Date().toISOString() })
+    let h = liveHuddle
+    if (!h) {
+      try {
+        const rows = await dbGet('huddle_rooms',
+          `org_id=eq.${orgId}&is_active=eq.true&select=id,room_url,created_by,creator_name,created_at&order=created_at.desc&limit=1`)
+        h = Array.isArray(rows) && rows.length ? rows[0] : null
+      } catch {}
+    }
+    if (h) joinLiveHuddle(h)
+    else alert('That huddle has already ended.')
+  }, [incoming, liveHuddle, orgId, joinLiveHuddle, stopRinging])
+
+  const declineIncoming = useCallback(() => {
+    const ids = incoming?.notifIds || []
+    stopRinging()
+    for (const id of ids) dbUpdate('notifications', `id=eq.${id}`, { is_read:true, read_at:new Date().toISOString() })
+  }, [incoming, stopRinging])
+
+  const value = {
+    enabled: isStaff, dnd, setDnd,
+    huddleActive, huddleRoomUrl, liveHuddle, isStarter, huddlePinging,
+    startHuddle, joinLiveHuddle, endHuddle, pingCoach,
+    expanded, setExpanded,
+  }
+
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const bigW = Math.min(760, (typeof window !== 'undefined' ? window.innerWidth : 800) - 24)
+
+  return (
+    <HuddleContext.Provider value={value}>
+      {children}
+
+      {/* ══ Floating call window — persists across ALL screens ══ */}
+      {isStaff && huddleActive && huddleRoomUrl && (
+        <div style={{
+          position:'fixed', right:12, bottom:12, zIndex:6000,
+          width: expanded ? bigW : (isMobile ? 240 : 320),
+          background:C.card, border:`1px solid ${C.gold}66`, borderRadius:14,
+          boxShadow:'0 12px 48px rgba(0,0,0,.75)', overflow:'hidden',
+          display:'flex', flexDirection:'column',
+        }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ width:9, height:9, borderRadius:5, background:C.success, animation:'pulse 1.5s infinite', flexShrink:0 }}/>
+            <div style={{ flex:1, fontSize:12, fontWeight:800, color:C.success, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+              Live Huddle
+            </div>
+            <button onClick={() => setExpanded(e => !e)}
+              title={expanded ? 'Shrink to a mini window' : 'Expand the call'}
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, padding:'4px 10px', color:C.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+              {expanded ? '⇲ Shrink' : '⇱ Expand'}
+            </button>
+            <button onClick={endHuddle}
+              style={{ background:`${C.danger}22`, border:`1px solid ${C.danger}44`, borderRadius:7, padding:'4px 10px', color:C.danger, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+              {isStarter ? 'End' : 'Leave'}
+            </button>
+          </div>
+          {/* The iframe stays mounted while you navigate — the call never drops */}
+          <div style={{ position:'relative', width:'100%', paddingTop: expanded ? '56.25%' : '62%', background:C.black }}>
+            <iframe src={huddleRoomUrl}
+              allowFullScreen
+              style={{ position:'absolute', inset:0, width:'100%', height:'100%', border:'none' }}
+              allow="camera; microphone; autoplay; fullscreen; display-capture; clipboard-write"
+              title="Huddle Room"/>
+          </div>
+          {expanded && (
+            <div style={{ padding:'6px 10px', fontSize:10, color:C.muted, textAlign:'center' }}>
+              You can go anywhere in the app — the call stays with you. Use ⇲ Shrink to tuck it in the corner.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ Incoming call — loud, full-screen, on ANY screen ══ */}
+      {isStaff && incoming && !huddleActive && (
+        <div style={{ position:'fixed', inset:0, zIndex:7000, background:'rgba(0,0,0,.88)',
+          display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ background:C.card, border:`2px solid ${C.gold}`, borderRadius:20, padding:'36px 30px',
+            width:'100%', maxWidth:380, textAlign:'center', boxShadow:`0 0 60px ${C.gold}44`,
+            animation:'pulse 1.5s infinite' }}>
+            <div style={{ fontSize:56, marginBottom:14 }}>🎙</div>
+            <div style={{ fontSize:20, fontWeight:800, color:C.white, marginBottom:6 }}>
+              {incoming.name} is calling you
+            </div>
+            <div style={{ fontSize:13, color:C.muted, marginBottom:26 }}>
+              Live huddle invite — jump in face-to-face
+            </div>
+            <div style={{ display:'flex', gap:12, justifyContent:'center' }}>
+              <button onClick={declineIncoming}
+                style={{ flex:1, background:`${C.danger}22`, border:`1px solid ${C.danger}55`, borderRadius:12,
+                  padding:'14px 0', color:C.danger, fontSize:15, fontWeight:800, cursor:'pointer' }}>
+                Decline
+              </button>
+              <button onClick={answerIncoming}
+                style={{ flex:1, background:C.success, border:'none', borderRadius:12,
+                  padding:'14px 0', color:C.black, fontSize:15, fontWeight:800, cursor:'pointer' }}>
+                ✓ Join
+              </button>
+            </div>
+            <div style={{ fontSize:10, color:C.muted, marginTop:16 }}>
+              Tip: turn on 🌙 Do Not Disturb in the top bar to silence calls while you work.
+            </div>
+          </div>
+        </div>
+      )}
+    </HuddleContext.Provider>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════
+// DND BUTTON — drop into the top bar next to the notification bell
+// ════════════════════════════════════════════════════════════════
+export function DndButton({ isMobile }) {
+  const huddle = useHuddle()
+  if (!huddle || !huddle.enabled) return null
+  const { dnd, setDnd } = huddle
+  return (
+    <button onClick={() => setDnd(!dnd)}
+      title={dnd ? 'Do Not Disturb is ON — huddle calls won\u2019t ring or pop up on this device' : 'Turn on Do Not Disturb — silence huddle calls while you work'}
+      style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2,
+        background: dnd ? '#a86bff22' : 'transparent',
+        border:`1.5px solid ${dnd ? '#a86bff' : C.border}`,
+        borderRadius:8, padding:'4px 8px', cursor:'pointer' }}>
+      <span style={{ fontSize:15 }}>{dnd ? '🌙' : '🔔'}</span>
+      {!isMobile && (
+        <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:'uppercase', color: dnd ? '#a86bff' : C.muted }}>
+          {dnd ? 'DND ON' : 'DND'}
+        </span>
+      )}
+    </button>
+  )
+}
