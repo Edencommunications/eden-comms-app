@@ -423,6 +423,18 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setModules(sorted)
     return sorted
   }
+  // Close the builder, but never silently discard unsaved Edit Details typing
+  const courseEditDirty = () =>
+    !!courseEdit && !!activeCourse &&
+    ((courseEdit.title||'') !== (activeCourse.title||'') ||
+     (courseEdit.description||'') !== (activeCourse.description||''))
+  function closeBuilder() {
+    if (courseEditDirty()) {
+      if (!window.confirm('You have unsaved course details. Discard your changes?')) return
+      setCourseEdit(null)
+    }
+    setShowBuilder(false)
+  }
   function openBuilder() {
     setDraftSecs(sections.map(s=>({id:s.id,title:s.title,color:s.color})))
     setSecEdit(null); setModEdit(null); setNewModFor(null); setNewModTitle(''); setNewModDur(''); setNewSecTitle('')
@@ -1362,7 +1374,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       {/* ── COURSE CONTENT BUILDER MODAL (Admin only) ─────── */}
       {showBuilder&&activeCourse&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
-          onClick={e=>{if(e.target===e.currentTarget)setShowBuilder(false)}}>
+          onClick={e=>{if(e.target===e.currentTarget)closeBuilder()}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'86vh',display:'flex',flexDirection:'column'}}>
             <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
               {courseEdit?(
@@ -1521,7 +1533,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
               </div>
             </div>
             <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-              <button onClick={()=>setShowBuilder(false)}
+              <button onClick={closeBuilder}
                 style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,color:C.black,fontSize:13,fontWeight:800,cursor:'pointer'}}>
                 Done
               </button>
