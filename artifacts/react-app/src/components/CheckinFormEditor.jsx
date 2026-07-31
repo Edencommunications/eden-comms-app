@@ -63,9 +63,11 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
   }
 
   async function resetToInherited() {
-    if (!window.confirm(coachId
-      ? `Remove ${coachName || 'this coach'}'s custom form? Their clients will see the organization's form again.`
-      : 'Reset the organization form back to the standard Eden form?')) return
+    if (!window.confirm(!coachId
+      ? 'Reset the organization form back to the standard Eden form?'
+      : coachName === 'You'
+        ? "Remove your custom form? Your clients will see the organization's form again."
+        : `Remove ${coachName || 'this coach'}'s custom form? Their clients will see the organization's form again.`)) return
     setSaving(true)
     const ok = await deleteCheckinForm(companyId, coachId)
     setSaving(false)
@@ -79,9 +81,13 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
     <div>
       {coachId && (
         <p style={{ fontSize: 11, color: inherited ? T.muted : T.gold, margin: '0 0 10px' }}>
-          {inherited
-            ? `${coachName || 'This coach'} is currently using the organization's form — saving creates their own version.`
-            : `${coachName || 'This coach'} has a custom form. Their clients see it automatically.`}
+          {coachName === 'You'
+            ? (inherited
+                ? "You are currently using the organization's form — saving creates your own version."
+                : 'You have a custom form. Your clients see it automatically.')
+            : (inherited
+                ? `${coachName || 'This coach'} is currently using the organization's form — saving creates their own version.`
+                : `${coachName || 'This coach'} has a custom form. Their clients see it automatically.`)}
         </p>
       )}
       {CHECKIN_SECTIONS.map(sec => (
