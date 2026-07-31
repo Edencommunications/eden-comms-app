@@ -3828,6 +3828,38 @@ const AdminDashboard = ({ user }:any) => {
   const [coachDl, setCoachDl] = useState<Record<string,any>>({});
   const [dlCoaches, setDlCoaches] = useState<any[]>([]);
   const [formScope, setFormScope] = useState('');   // '' closed · 'org' · coach id
+  // Video huddles (Daily.co) — per-org connection status
+  const [huddleStatus, setHuddleStatus] = useState<any>(null); // { connected, source }
+  const [dailyKeyInput, setDailyKeyInput] = useState('');
+  const [dailySaving, setDailySaving] = useState(false);
+  const [dailyMsg, setDailyMsg] = useState('');
+  const loadHuddleStatus = async () => {
+    try {
+      const r = await fetch('/api/huddle/status', { headers: { Authorization: sbBearer() } });
+      setHuddleStatus(r.ok ? await r.json() : { connected:false, source:'none' });
+    } catch { setHuddleStatus({ connected:false, source:'none' }); }
+  };
+  useEffect(() => { loadHuddleStatus(); }, []);
+  const saveDailyKey = async () => {
+    setDailySaving(true); setDailyMsg('');
+    try {
+      const r = await fetch('/api/huddle/daily-key', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ key: dailyKeyInput }),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) { setDailyMsg('✅ Connected! Coaches can now start video huddles.'); setDailyKeyInput(''); loadHuddleStatus(); }
+      else setDailyMsg(`⚠️ ${d?.error || 'Could not save the key'}`);
+    } catch { setDailyMsg('⚠️ Could not save the key'); }
+    setDailySaving(false);
+  };
+  const removeDailyKey = async () => {
+    if (!window.confirm('Disconnect Daily.co? Coaches will no longer be able to start video huddles.')) return;
+    try {
+      await fetch('/api/huddle/daily-key/remove', { method:'POST', headers:{ Authorization: sbBearer() } });
+      setDailyMsg(''); loadHuddleStatus();
+    } catch {}
+  };
   useEffect(() => {
     sbGet('user_profiles', `role=in.(coach,head_coach)&is_active=not.is.false&select=id,name,timezone,deadline_time&order=name`)
       .then((rows:any[]) => {
@@ -3944,6 +3976,39 @@ const AdminDashboard = ({ user }:any) => {
                   coachName={formScope === 'org' ? '' : (dlCoaches.find((c:any) => c.id === formScope)?.name || '')}
                   onClose={() => setFormScope('')}/>
               )}
+            </Card>
+            {/* Video huddles — per-org Daily.co connection */}
+            <Card style={{ marginBottom:20 }}>
+              <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>🎥 Video Huddles</p>
+              {huddleStatus === null ? (
+                <p style={{ fontSize:12, color:B.muted, margin:0 }}>Checking connection…</p>
+              ) : huddleStatus.connected ? (
+                <>
+                  <p style={{ fontSize:12, color:B.success || "#4FD89A", margin:"0 0 10px", lineHeight:1.5 }}>
+                    ✅ Connected — your coaches can start live video huddles in Team Hub.
+                    {huddleStatus.source === 'builtin' ? ' (Using the built-in Eden account.)' : ' (Using your own Daily.co account.)'}
+                  </p>
+                  {huddleStatus.source === 'own' && (
+                    <Btn variant="secondary" onClick={removeDailyKey}>Disconnect Daily.co</Btn>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize:12, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
+                    Give your coaches live video huddles by connecting your own free Daily.co account:
+                    <br/>1. Sign up at <a href="https://dashboard.daily.co/signup" target="_blank" rel="noopener noreferrer" style={{ color:B.gold }}>dashboard.daily.co</a> (free — 1,000 call minutes/month)
+                    <br/>2. Open <strong>Developers</strong> in their left menu
+                    <br/>3. Copy the API key and paste it here:
+                  </p>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    <input type="password" value={dailyKeyInput} onChange={e => setDailyKeyInput(e.target.value)}
+                      placeholder="Paste your Daily.co API key"
+                      style={{ flex:1, minWidth:200, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px", color:B.text, fontSize:12, outline:"none" }}/>
+                    <Btn onClick={saveDailyKey} disabled={dailySaving || !dailyKeyInput.trim()}>{dailySaving ? "Checking…" : "Connect"}</Btn>
+                  </div>
+                </>
+              )}
+              {dailyMsg && <p style={{ fontSize:12, color:dailyMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{dailyMsg}</p>}
             </Card>
             {/* Bulk roster import / export */}
             <RosterImportExport/>

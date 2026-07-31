@@ -27,7 +27,8 @@ async function svcGet(table: string, query: string): Promise<any[]> {
 }
 
 // Verify the caller's Supabase JWT and load their staff profile.
-async function requireStaff(req: Request): Promise<{ id: string; role: string; company_id: string } | null> {
+// Exported for reuse by other staff-only routes (e.g. huddles).
+export async function requireStaff(req: Request): Promise<{ id: string; role: string; company_id: string } | null> {
   const auth = String(req.get("authorization") || "");
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || token === SUPABASE_ANON) return null;

@@ -5,6 +5,7 @@ import ghlIntakeRouter from "./ghlIntake";
 import authRouter from "./auth";
 import bulkImportRouter from "./bulkImport";
 import checkinFormRouter from "./checkinForm";
+import huddleRouter from "./huddle";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(ghlIntakeRouter);
 router.use(authRouter);
 router.use(bulkImportRouter);
 router.use(checkinFormRouter);
+router.use(huddleRouter);
 
 export default router;

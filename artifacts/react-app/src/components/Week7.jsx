@@ -264,6 +264,24 @@ export default function Week7({ currentUser }) {
   const [huddleActive,  setHuddleActive]  = useState(false)
   const [huddleRoomUrl, setHuddleRoomUrl] = useState('')
   const [huddlePinging, setHuddlePinging] = useState(null)
+  const [liveHuddle,    setLiveHuddle]    = useState(null)  // active room started by anyone in the org
+  const [amHuddleStarter, setAmHuddleStarter] = useState(false)
+
+  // Watch for a live huddle in the org (poll every 20s) so teammates can join
+  async function checkLiveHuddle() {
+    if (!orgId) return
+    const rows = await dbGet('huddle_rooms', `org_id=eq.${orgId}&is_active=eq.true&order=created_at.desc&limit=1`)
+    const row = rows?.[0]
+    // Ignore stale rooms — Daily rooms self-expire after 4 hours
+    const fresh = row && (Date.now() - new Date(row.created_at).getTime()) < 4*3600*1000
+    setLiveHuddle(fresh ? row : null)
+  }
+  useEffect(() => {
+    if (!orgId) return
+    checkLiveHuddle()
+    const t = setInterval(checkLiveHuddle, 20000)
+    return () => clearInterval(t)
+  }, [orgId]) // eslint-disable-line
 
   // Load saved URLs from Supabase on mount
   useEffect(() => {
@@ -332,23 +350,58 @@ export default function Week7({ currentUser }) {
   }
 
   // ── Huddle helpers ──────────────────────────────────────────
+  // Creates a REAL Daily.co room via the API server (rooms self-expire).
   async function startHuddle() {
-    const roomName = `eden-${orgId.slice(0,8)}-${Date.now()}`
-    const roomUrl  = `https://${DAILY_DOMAIN}.daily.co/${roomName}`
-    setHuddleRoomUrl(roomUrl)
-    setHuddleActive(true)
-    await dbInsert('huddle_rooms', { org_id:orgId, room_url:roomUrl, created_by:myUUID, creator_name:myName, is_active:true })
+    try {
+      const r = await fetch('/api/huddle/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      })
+      const data = await r.json().catch(() => null)
+      if (!r.ok || !data?.url) {
+        alert(data?.error || 'Could not start the huddle — please try again.')
+        return
+      }
+      setHuddleRoomUrl(data.url)
+      setHuddleActive(true)
+      setAmHuddleStarter(true)
+      await dbInsert('huddle_rooms', { org_id:orgId, room_url:data.url, created_by:myUUID, creator_name:myName, is_active:true })
+      checkLiveHuddle()
+    } catch {
+      alert('Could not start the huddle — please try again.')
+    }
   }
 
-  function endHuddle() {
+  function joinHuddle(row) {
+    setHuddleRoomUrl(row.room_url)
+    setHuddleActive(true)
+    // Ownership comes from the DB row, so the starter can still End after a page reload
+    setAmHuddleStarter(row.created_by === myUUID)
+  }
+
+  async function endHuddle() {
+    // Starter ends it for everyone; a joiner just leaves
+    if (amHuddleStarter && huddleRoomUrl) {
+      const ok = await dbUpdate('huddle_rooms', `room_url=eq.${encodeURIComponent(huddleRoomUrl)}`, { is_active:false })
+      if (!ok) { alert('Could not end the huddle for everyone — please try again.'); return }
+      setLiveHuddle(null)
+      checkLiveHuddle()
+    }
     setHuddleActive(false)
     setHuddleRoomUrl('')
     setHuddlePinging(null)
+    setAmHuddleStarter(false)
   }
 
   function pingCoach(coach) {
     setHuddlePinging(coach.name)
     setTimeout(() => setHuddlePinging(null), 3000)
+    // Real in-app notification (bell) for that coach
+    dbInsert('notifications', {
+      recipient_id: coach.uuid, sender_id: myUUID, type: 'huddle_ping',
+      body: `🎙 ${myName} is inviting you to a live huddle — open Team Hub → Huddle to join`,
+      is_read: false, created_at: new Date().toISOString(),
+    })
   }
 
   const dmKey    = dmTarget ? [myUUID, dmTarget.uuid].sort().join('_') : null
@@ -360,7 +413,7 @@ export default function Week7({ currentUser }) {
     { key:'chat',     icon:'💬', label:'Team Chat'   },
     { key:'communities', icon:'👥', label:'Communities' },
     { key:'calendar', icon:'🗓',  label:'My Calendar' },
-    { key:'huddle',   icon:'🎙',  label:'Huddle',     badge: huddleActive },
+    { key:'huddle',   icon:'🎙',  label:'Huddle',     badge: huddleActive || !!liveHuddle },
   ]
 
   // ════════════════════════════════════════════════════════════
@@ -737,6 +790,20 @@ export default function Week7({ currentUser }) {
           <div style={{flex:1,overflowY:'auto',padding:16}}>
             {!huddleActive ? (
               <>
+                {/* A teammate's huddle is live — join it */}
+                {liveHuddle && (
+                  <div style={{background:`${C.success}15`,border:`1px solid ${C.success}44`,borderRadius:12,padding:'14px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                    <div style={{width:12,height:12,borderRadius:6,background:C.success,animation:'pulse 1.5s infinite',flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:160}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.success}}>Huddle live now</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>Started by {liveHuddle.creator_name || 'a teammate'} · {timeAgo(liveHuddle.created_at)}</div>
+                    </div>
+                    <button onClick={() => joinHuddle(liveHuddle)}
+                      style={{background:C.success,border:'none',borderRadius:8,padding:'8px 18px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer'}}>
+                      Join Huddle
+                    </button>
+                  </div>
+                )}
                 <div style={{textAlign:'center',padding:'40px 20px'}}>
                   <div style={{fontSize:48,marginBottom:16}}>🎙</div>
                   <div style={{fontSize:18,fontWeight:700,color:C.white,marginBottom:8}}>Start a Huddle</div>
@@ -780,7 +847,7 @@ export default function Week7({ currentUser }) {
                   </div>
                   <button onClick={endHuddle}
                     style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'6px 14px',color:C.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                    End Huddle
+                    {amHuddleStarter ? 'End Huddle' : 'Leave Huddle'}
                   </button>
                 </div>
 
