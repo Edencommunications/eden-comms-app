@@ -15,3 +15,6 @@ Rule: Passwords live only in Supabase Auth (hashed). `user_profiles` remains the
 - The auth admin API can also delete test users; always clean up test auth users AND their `user_profiles` rows.
 
 **Bulk roster import:** POST /api/admin/bulk-import (admin JWT) creates coaches before clients from CSV rows; skips existing profiles. Orphan auth users (auth account, no profile — from past partial failures) get their password explicitly reset via GoTrue admin PUT before temp credentials are issued — never trust `existed:true` from provisioning to mean the generated password is valid.
+
+## Every staff login needs a user_profiles row
+RLS write policies resolve the org via the JWT email → user_profiles join. An auth user with no user_profiles row (e.g. admin@edencomms.io before Jul 31 2026) can READ but all writes silently match 0 rows. Fix: insert a profile row (id must be supplied — no default). Symptom: "edits not saving" for exactly one login while others work.
