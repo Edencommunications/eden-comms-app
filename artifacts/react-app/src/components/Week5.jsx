@@ -498,6 +498,76 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     await refreshModules(activeCourse.id)
   }
 
+  // ── ADMIN: Reorder sections & lessons ─────────────────────
+  // Progress rows are keyed by module_id text (e.g. "2.3"), so whenever we
+  // renumber a module we must move its course_progress rows along with it.
+  // A two-pass rename (via a "tmp." prefix) makes swaps safe.
+  async function remapProgress(pairs) {
+    const changed = pairs.filter(p=>p.from!==p.to)
+    for (const p of changed)
+      await dbUpdate('course_progress',`course_id=eq.${activeCourse.id}&module_id=eq.${encodeURIComponent(p.from)}`,{module_id:`tmp.${p.to}`})
+    for (const p of changed)
+      await dbUpdate('course_progress',`course_id=eq.${activeCourse.id}&module_id=eq.${encodeURIComponent(`tmp.${p.to}`)}`,{module_id:p.to})
+  }
+  async function reloadCompleted() {
+    if (!myUUID||!activeCourse) return
+    const prog = await dbGet('course_progress',`user_id=eq.${myUUID}&course_id=eq.${activeCourse.id}`)
+    setCompleted(new Set((prog||[]).filter(p=>p.completed).map(p=>p.module_id)))
+  }
+  // Move a lesson up/down within its section (dir = -1 or +1)
+  async function moveModule(m, dir) {
+    if (builderBusy) return
+    const inSection = modules.filter(x=>x.section_id===m.section_id).sort((a,b)=>a.sort_order-b.sort_order)
+    const i = inSection.findIndex(x=>x.id===m.id)
+    const j = i+dir
+    if (i<0||j<0||j>=inSection.length) return
+    const other = inSection[j]
+    setBuilderBusy(true)
+    try {
+      const mNewId = `${m.section_id}.${other.sort_order}`
+      const oNewId = `${m.section_id}.${m.sort_order}`
+      // temp id first so the two rows never share a module_id mid-swap
+      const ok1 = await dbUpdate('course_modules',`id=eq.${m.id}`,{sort_order:other.sort_order,module_id:`tmp.${mNewId}`,updated_at:new Date().toISOString()})
+      const ok2 = ok1 && await dbUpdate('course_modules',`id=eq.${other.id}`,{sort_order:m.sort_order,module_id:oNewId,updated_at:new Date().toISOString()})
+      const ok3 = ok2 && await dbUpdate('course_modules',`id=eq.${m.id}`,{module_id:mNewId})
+      if (!ok3) { alert('Could not reorder the lessons — please check your connection and try again.'); await refreshModules(activeCourse.id); return }
+      await remapProgress([{from:m.module_id,to:mNewId},{from:other.module_id,to:oNewId}])
+      await refreshModules(activeCourse.id)
+      await reloadCompleted()
+    } finally { setBuilderBusy(false) }
+  }
+  // Move a whole section up/down: the two sections trade numeric ids so the
+  // section_id ordering (which drives display everywhere) follows the move.
+  async function moveSection(sec, dir) {
+    if (builderBusy) return
+    const i = draftSecs.findIndex(s=>s.id===sec.id)
+    const j = i+dir
+    if (i<0||j<0||j>=draftSecs.length) return
+    const other = draftSecs[j]
+    setBuilderBusy(true)
+    try {
+      const aMods = modules.filter(m=>m.section_id===sec.id)
+      const bMods = modules.filter(m=>m.section_id===other.id)
+      let ok = true
+      for (const m of aMods)
+        ok = ok && await dbUpdate('course_modules',`id=eq.${m.id}`,{section_id:other.id,module_id:`${other.id}.${m.sort_order}`,updated_at:new Date().toISOString()})
+      for (const m of bMods)
+        ok = ok && await dbUpdate('course_modules',`id=eq.${m.id}`,{section_id:sec.id,module_id:`${sec.id}.${m.sort_order}`,updated_at:new Date().toISOString()})
+      if (!ok) { alert('Could not reorder the sections — please check your connection and try again.'); await refreshModules(activeCourse.id); return }
+      await remapProgress([
+        ...aMods.map(m=>({from:m.module_id,to:`${other.id}.${m.sort_order}`})),
+        ...bMods.map(m=>({from:m.module_id,to:`${sec.id}.${m.sort_order}`})),
+      ])
+      setDraftSecs(prev=>{
+        const next=[...prev]
+        next[i]={...other, id:sec.id}
+        next[j]={...sec,   id:other.id}
+        return next
+      })
+      if (aMods.length||bMods.length) { await refreshModules(activeCourse.id); await reloadCompleted() }
+    } finally { setBuilderBusy(false) }
+  }
+
   // ── ADMIN: Delete course ──────────────────────────────────
   async function deleteCourse(course) {
     if (!window.confirm(`Delete the course "${course.title}" for everyone?\n\nThis removes all its sections, lessons, access grants, and progress. This cannot be undone.`)) return
@@ -1334,8 +1404,15 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   No sections yet. Add your first section below to start building.
                 </div>
               )}
-              {draftSecs.map(sec=>{
+              {draftSecs.map((sec,secIdx)=>{
                 const secMods = modules.filter(m=>m.section_id===sec.id)
+                const secModsSorted = [...secMods].sort((a,b)=>a.sort_order-b.sort_order)
+                const arrowBtn = (disabled,onClick,label,title) => (
+                  <button onClick={onClick} disabled={disabled} title={title} aria-label={title}
+                    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 7px',color:disabled?C.dim:C.muted,fontSize:10,cursor:disabled?'default':'pointer',flexShrink:0}}>
+                    {label}
+                  </button>
+                )
                 return (
                   <div key={sec.id} style={{border:`1px solid ${C.border}`,borderRadius:12,marginBottom:12,overflow:'hidden'}}>
                     {/* Section header */}
@@ -1357,6 +1434,8 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                             <div style={{fontSize:12,fontWeight:700,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sec.title}</div>
                             <div style={{fontSize:9,color:C.muted}}>{secMods.length} lesson{secMods.length===1?'':'s'}{secMods.length===0?' — add one to keep this section':''}</div>
                           </div>
+                          {arrowBtn(builderBusy||secIdx===0, ()=>moveSection(sec,-1), '↑', 'Move section up')}
+                          {arrowBtn(builderBusy||secIdx===draftSecs.length-1, ()=>moveSection(sec,1), '↓', 'Move section down')}
                           <button onClick={()=>setSecEdit({id:sec.id,title:sec.title})}
                             style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 9px',color:C.muted,fontSize:10,cursor:'pointer'}}>Rename</button>
                           <button onClick={()=>deleteSection(sec)}
@@ -1366,7 +1445,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                     </div>
                     {/* Lessons */}
                     <div style={{padding:'6px 10px'}}>
-                      {secMods.map(m=>(
+                      {secModsSorted.map((m,mIdx)=>(
                         modEdit?.id===m.id?(
                           <div key={m.id} style={{padding:'6px 0'}}>
                             <div style={{display:'flex',gap:6,alignItems:'center'}}>
@@ -1396,6 +1475,8 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                                 <span style={{color:m.video_url?C.success:C.danger}}>{m.video_url?'▶ video added':'no video yet'}</span>
                               </div>
                             </div>
+                            {arrowBtn(builderBusy||mIdx===0, ()=>moveModule(m,-1), '↑', 'Move lesson up')}
+                            {arrowBtn(builderBusy||mIdx===secModsSorted.length-1, ()=>moveModule(m,1), '↓', 'Move lesson down')}
                             <button onClick={()=>setModEdit({id:m.id,title:m.title,duration:m.duration||'',admin_notes:m.admin_notes||'',video_url:m.video_url||''})}
                               style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',color:C.muted,fontSize:9,cursor:'pointer',flexShrink:0}}>Edit</button>
                             <button onClick={()=>deleteModule(m)}
