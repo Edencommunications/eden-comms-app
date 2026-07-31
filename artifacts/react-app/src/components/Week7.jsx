@@ -264,24 +264,33 @@ export default function Week7({ currentUser }) {
   const [huddleActive,  setHuddleActive]  = useState(false)
   const [huddleRoomUrl, setHuddleRoomUrl] = useState('')
   const [huddlePinging, setHuddlePinging] = useState(null)
-  const [liveHuddle,    setLiveHuddle]    = useState(null)  // active room started by anyone in the org
-  const [amHuddleStarter, setAmHuddleStarter] = useState(false)
+  const [liveHuddle,    setLiveHuddle]    = useState(null) // active huddle row in the org (from DB)
+  const [huddleRowId,   setHuddleRowId]   = useState(null) // huddle_rooms row I created
+  const startedByMeRef = useRef(false)
 
-  // Watch for a live huddle in the org (poll every 20s) so teammates can join
-  async function checkLiveHuddle() {
-    if (!orgId) return
-    const rows = await dbGet('huddle_rooms', `org_id=eq.${orgId}&is_active=eq.true&order=created_at.desc&limit=1`)
-    const row = rows?.[0]
-    // Ignore stale rooms — Daily rooms self-expire after 4 hours
-    const fresh = row && (Date.now() - new Date(row.created_at).getTime()) < 4*3600*1000
-    setLiveHuddle(fresh ? row : null)
-  }
+  // Poll for a live huddle in the org so teammates see it and can join.
   useEffect(() => {
     if (!orgId) return
+    let stop = false
+    async function checkLiveHuddle() {
+      try {
+        const rows = await dbGet('huddle_rooms',
+          `org_id=eq.${orgId}&is_active=eq.true&select=id,room_url,created_by,creator_name,created_at&order=created_at.desc&limit=1`)
+        if (stop) return
+        let row = Array.isArray(rows) && rows.length ? rows[0] : null
+        // Ignore stale rooms — Daily rooms self-expire after 4 hours
+        if (row && (Date.now() - new Date(row.created_at).getTime()) >= 4*3600*1000) row = null
+        setLiveHuddle(row)
+        // If the huddle was ended by whoever started it, close it for joiners too.
+        if (!row && !startedByMeRef.current) {
+          setHuddleActive(a => { if (a) { setHuddleRoomUrl('') } return false })
+        }
+      } catch {}
+    }
     checkLiveHuddle()
-    const t = setInterval(checkLiveHuddle, 20000)
-    return () => clearInterval(t)
-  }, [orgId]) // eslint-disable-line
+    const iv = setInterval(checkLiveHuddle, 5000)
+    return () => { stop = true; clearInterval(iv) }
+  }, [orgId])
 
   // Load saved URLs from Supabase on mount
   useEffect(() => {
@@ -364,37 +373,50 @@ export default function Week7({ currentUser }) {
       }
       setHuddleRoomUrl(data.url)
       setHuddleActive(true)
-      setAmHuddleStarter(true)
-      await dbInsert('huddle_rooms', { org_id:orgId, room_url:data.url, created_by:myUUID, creator_name:myName, is_active:true })
-      checkLiveHuddle()
+      startedByMeRef.current = true
+      // Clear any stale active rooms of mine, then record the new live room.
+      await dbUpdate('huddle_rooms', `org_id=eq.${orgId}&created_by=eq.${myUUID}&is_active=eq.true`, { is_active:false })
+      const rows = await dbInsert('huddle_rooms', { org_id:orgId, room_url:data.url, created_by:myUUID, creator_name:myName, is_active:true })
+      const row = Array.isArray(rows) ? rows[0] : null
+      if (row) { setHuddleRowId(row.id); setLiveHuddle(row) }
     } catch {
       alert('Could not start the huddle — please try again.')
     }
   }
 
-  function joinHuddle(row) {
-    setHuddleRoomUrl(row.room_url)
-    setHuddleActive(true)
+  // Teammate joins the huddle someone else started.
+  function joinLiveHuddle() {
+    if (!liveHuddle) return
     // Ownership comes from the DB row, so the starter can still End after a page reload
-    setAmHuddleStarter(row.created_by === myUUID)
+    startedByMeRef.current = liveHuddle.created_by === myUUID
+    setHuddleRoomUrl(liveHuddle.room_url)
+    setHuddleActive(true)
+    setSection('huddle')
   }
 
   async function endHuddle() {
-    // Starter ends it for everyone; a joiner just leaves
-    if (amHuddleStarter && huddleRoomUrl) {
-      const ok = await dbUpdate('huddle_rooms', `room_url=eq.${encodeURIComponent(huddleRoomUrl)}`, { is_active:false })
-      if (!ok) { alert('Could not end the huddle for everyone — please try again.'); return }
-      setLiveHuddle(null)
-      checkLiveHuddle()
-    }
     setHuddleActive(false)
     setHuddleRoomUrl('')
     setHuddlePinging(null)
-    setAmHuddleStarter(false)
+    // Only the starter ends it for everyone; joiners just leave locally.
+    if (startedByMeRef.current) {
+      startedByMeRef.current = false
+      if (huddleRowId) await dbUpdate('huddle_rooms', `id=eq.${huddleRowId}`, { is_active:false })
+      else await dbUpdate('huddle_rooms', `org_id=eq.${orgId}&created_by=eq.${myUUID}&is_active=eq.true`, { is_active:false })
+      setHuddleRowId(null)
+      setLiveHuddle(null)
+    }
   }
 
+  // Real invite: in-app notification the teammate sees in their bell.
   function pingCoach(coach) {
     setHuddlePinging(coach.name)
+    dbInsert('notifications', {
+      recipient_id: coach.uuid, sender_id: myUUID, sender_name: myName,
+      type: 'huddle_invite',
+      body: `🎙 ${myName} invited you to a live huddle — open Team Hub → Huddle and hit Join.`,
+      is_read: false,
+    })
     setTimeout(() => setHuddlePinging(null), 3000)
     // Real in-app notification (bell) for that coach
     dbInsert('notifications', {
@@ -446,7 +468,7 @@ export default function Week7({ currentUser }) {
         </div>
 
         {/* Huddle quick indicator */}
-        {huddleActive && (
+        {(huddleActive || liveHuddle) && (
           <div style={{padding:'8px 6px',borderTop:`1px solid ${C.border}`,textAlign:'center'}}>
             <div style={{width:8,height:8,borderRadius:4,background:C.success,margin:'0 auto 3px',animation:'pulse 1.5s infinite'}}/>
             <div style={{fontSize:8,color:C.success,fontWeight:700}}>LIVE</div>
@@ -455,7 +477,24 @@ export default function Week7({ currentUser }) {
       </div>
 
       {/* ── MAIN CONTENT ───────────────────────────────────── */}
-      <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow: isMobile ? 'auto' : 'hidden'}}>
+
+        {/* Live huddle banner — visible to teammates who haven't joined yet */}
+        {liveHuddle && !huddleActive && (
+          <div style={{background:`${C.success}18`,borderBottom:`1px solid ${C.success}44`,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+            <div style={{width:10,height:10,borderRadius:5,background:C.success,animation:'pulse 1.5s infinite'}}/>
+            <div style={{flex:1,fontSize:12,color:C.white,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              <b style={{color:C.success}}>Huddle live</b>
+              {liveHuddle.creator_name ? ` — started by ${liveHuddle.creator_name}` : ''}
+            </div>
+            <button onClick={joinLiveHuddle}
+              style={{background:C.success,border:'none',borderRadius:8,padding:'6px 16px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer',flexShrink:0}}>
+              Join
+            </button>
+          </div>
+        )}
+
+        <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
 
         {/* ══════════════════════════════════════════════════
             TEAM CHAT
@@ -496,9 +535,11 @@ export default function Week7({ currentUser }) {
 
               {/* Huddle quick start */}
               <div style={{marginTop:'auto',padding:'12px 14px',borderTop:`1px solid ${C.border}`}}>
-                <button onClick={() => setSection('huddle')}
-                  style={{width:'100%',background:huddleActive?`${C.success}22`:`${C.gold}22`,border:`1px solid ${huddleActive?C.success:C.gold}44`,borderRadius:8,padding:'8px 10px',color:huddleActive?C.success:C.gold,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,justifyContent:'center'}}>
-                  {huddleActive ? <><span style={{width:8,height:8,borderRadius:4,background:C.success,display:'inline-block'}}/> In Huddle</> : '🎙 Start Huddle'}
+                <button onClick={() => { if (!huddleActive && liveHuddle) joinLiveHuddle(); else setSection('huddle') }}
+                  style={{width:'100%',background:(huddleActive||liveHuddle)?`${C.success}22`:`${C.gold}22`,border:`1px solid ${(huddleActive||liveHuddle)?C.success:C.gold}44`,borderRadius:8,padding:'8px 10px',color:(huddleActive||liveHuddle)?C.success:C.gold,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,justifyContent:'center'}}>
+                  {huddleActive ? <><span style={{width:8,height:8,borderRadius:4,background:C.success,display:'inline-block'}}/> In Huddle</>
+                    : liveHuddle ? <><span style={{width:8,height:8,borderRadius:4,background:C.success,display:'inline-block'}}/> Join Huddle</>
+                    : '🎙 Start Huddle'}
                 </button>
               </div>
             </div>
@@ -798,7 +839,7 @@ export default function Week7({ currentUser }) {
                       <div style={{fontSize:13,fontWeight:700,color:C.success}}>Huddle live now</div>
                       <div style={{fontSize:10,color:C.muted,marginTop:1}}>Started by {liveHuddle.creator_name || 'a teammate'} · {timeAgo(liveHuddle.created_at)}</div>
                     </div>
-                    <button onClick={() => joinHuddle(liveHuddle)}
+                    <button onClick={joinLiveHuddle}
                       style={{background:C.success,border:'none',borderRadius:8,padding:'8px 18px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer'}}>
                       Join Huddle
                     </button>
@@ -806,14 +847,29 @@ export default function Week7({ currentUser }) {
                 )}
                 <div style={{textAlign:'center',padding:'40px 20px'}}>
                   <div style={{fontSize:48,marginBottom:16}}>🎙</div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.white,marginBottom:8}}>Start a Huddle</div>
-                  <div style={{fontSize:13,color:C.muted,maxWidth:320,margin:'0 auto 24px',lineHeight:1.6}}>
-                    Instant face-to-face call with your team. One click to start, one click to join.
-                  </div>
-                  <button onClick={startHuddle}
-                    style={{background:C.gold,border:'none',borderRadius:12,padding:'14px 32px',fontWeight:800,color:C.black,fontSize:16,cursor:'pointer'}}>
-                    🎙 Start Huddle Now
-                  </button>
+                  {liveHuddle ? (
+                    <>
+                      <div style={{fontSize:18,fontWeight:700,color:C.success,marginBottom:8}}>Huddle in progress</div>
+                      <div style={{fontSize:13,color:C.muted,maxWidth:320,margin:'0 auto 24px',lineHeight:1.6}}>
+                        {liveHuddle.creator_name || 'A teammate'} started a live huddle. Jump in!
+                      </div>
+                      <button onClick={joinLiveHuddle}
+                        style={{background:C.success,border:'none',borderRadius:12,padding:'14px 32px',fontWeight:800,color:C.black,fontSize:16,cursor:'pointer'}}>
+                        Join Huddle
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{fontSize:18,fontWeight:700,color:C.white,marginBottom:8}}>Start a Huddle</div>
+                      <div style={{fontSize:13,color:C.muted,maxWidth:320,margin:'0 auto 24px',lineHeight:1.6}}>
+                        Instant face-to-face call with your team. One click to start, one click to join.
+                      </div>
+                      <button onClick={startHuddle}
+                        style={{background:C.gold,border:'none',borderRadius:12,padding:'14px 32px',fontWeight:800,color:C.black,fontSize:16,cursor:'pointer'}}>
+                        🎙 Start Huddle Now
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <Card sx={{marginBottom:12}}>
@@ -829,9 +885,9 @@ export default function Week7({ currentUser }) {
                           {coach.role}{coach.isHeadCoach?' · Head Coach':''}
                         </div>
                       </div>
-                      <button onClick={() => { startHuddle(); setHuddlePinging(coach.name) }}
+                      <button onClick={async () => { if (liveHuddle) { pingCoach(coach) } else { await startHuddle(); pingCoach(coach) } }}
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                        Invite
+                        {huddlePinging===coach.name?'Invited ✓':'Invite'}
                       </button>
                     </div>
                   ))}
@@ -847,7 +903,7 @@ export default function Week7({ currentUser }) {
                   </div>
                   <button onClick={endHuddle}
                     style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'6px 14px',color:C.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                    {amHuddleStarter ? 'End Huddle' : 'Leave Huddle'}
+                    {startedByMeRef.current ? 'End Huddle' : 'Leave Huddle'}
                   </button>
                 </div>
 
@@ -861,7 +917,7 @@ export default function Week7({ currentUser }) {
                       <div style={{flex:1,fontSize:12,color:C.white}}>{coach.name}</div>
                       <button onClick={() => pingCoach(coach)}
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:7,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                        {huddlePinging===coach.name?'Pinging…':'Ping to Join'}
+                        {huddlePinging===coach.name?'Invited ✓':'Ping to Join'}
                       </button>
                     </div>
                   ))}
@@ -884,7 +940,7 @@ export default function Week7({ currentUser }) {
           </div>
         )}
 
-
+        </div>
       </div>
 
       {/* ── DM Picker Modal ──────────────────────────────────── */}
