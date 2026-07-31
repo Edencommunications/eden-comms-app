@@ -56,10 +56,51 @@ async function dbInsert(table, body) {
 }
 async function dbUpdate(table, params, body) {
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
       method:'PATCH', headers:H, body:JSON.stringify(body)
     })
-  } catch {}
+    if (!r.ok) { console.error('UPDATE', table, await r.text()); return false }
+    // With return=representation an empty array means RLS matched no rows — nothing saved
+    const t = await r.text()
+    if (t) { try { if (Array.isArray(JSON.parse(t)) && JSON.parse(t).length === 0) return false } catch {} }
+    return true
+  } catch { return false }
+}
+
+// Accept a REGULAR link (YouTube watch/short, Vimeo page, Loom share, Google Drive)
+// or an embed link — always returns something an <iframe> can play.
+export function toEmbedUrl(raw) {
+  const url = (raw || '').trim()
+  if (!url) return ''
+  try {
+    const u = new URL(url.match(/^https?:\/\//i) ? url : `https://${url}`)
+    const host = u.hostname.replace(/^www\./, '')
+    // YouTube
+    if (host === 'youtu.be')                       return `https://www.youtube.com/embed/${u.pathname.slice(1).split('/')[0]}`
+    if (host.endsWith('youtube.com')) {
+      if (u.pathname.startsWith('/embed/'))        return u.href
+      if (u.pathname.startsWith('/shorts/'))       return `https://www.youtube.com/embed/${u.pathname.split('/')[2]}`
+      if (u.pathname.startsWith('/live/'))         return `https://www.youtube.com/embed/${u.pathname.split('/')[2]}`
+      const v = u.searchParams.get('v');  if (v)   return `https://www.youtube.com/embed/${v}`
+    }
+    // Vimeo
+    if (host === 'vimeo.com') {
+      const m = u.pathname.match(/^\/(\d+)(?:\/(\w+))?/)
+      if (m) return `https://player.vimeo.com/video/${m[1]}${m[2] ? `?h=${m[2]}` : ''}`
+    }
+    if (host === 'player.vimeo.com')               return u.href
+    // Loom
+    if (host.endsWith('loom.com')) {
+      const m = u.pathname.match(/\/(?:share|embed)\/([a-f0-9]+)/i)
+      if (m) return `https://www.loom.com/embed/${m[1]}`
+    }
+    // Google Drive
+    if (host === 'drive.google.com') {
+      const m = u.pathname.match(/\/file\/d\/([^/]+)/)
+      if (m) return `https://drive.google.com/file/d/${m[1]}/preview`
+    }
+    return u.href
+  } catch { return url }
 }
 async function dbDelete(table, params) {
   try {
@@ -315,13 +356,16 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   async function saveVideoUrl() {
     if (!activeModule||!tempUrl.trim()) return
     setSavingUrl(true)
-    await dbUpdate('course_modules',`id=eq.${activeModule.id}`,{
-      video_url:tempUrl.trim(), updated_at:new Date().toISOString(),
+    const url = toEmbedUrl(tempUrl)   // regular links get converted to playable embed links
+    const ok = await dbUpdate('course_modules',`id=eq.${activeModule.id}`,{
+      video_url:url, updated_at:new Date().toISOString(),
     })
-    setModules(prev=>prev.map(m=>m.id===activeModule.id?{...m,video_url:tempUrl.trim()}:m))
-    setActiveModule(prev=>({...prev,video_url:tempUrl.trim()}))
-    setShowUrlInput(false); setTempUrl(''); setSavingUrl(false)
-    alert('Video URL saved and live for everyone with course access.')
+    setSavingUrl(false)
+    if (!ok) { alert('Could not save the video link — please check your connection and try again.'); return }
+    setModules(prev=>prev.map(m=>m.id===activeModule.id?{...m,video_url:url}:m))
+    setActiveModule(prev=>({...prev,video_url:url}))
+    setShowUrlInput(false); setTempUrl('')
+    alert('Video link saved and live for everyone with course access.')
   }
 
   // ── ADMIN: Create course ──────────────────────────────────
@@ -414,8 +458,19 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
   async function saveModuleEdit() {
     if (!modEdit?.title?.trim()) return
-    await dbUpdate('course_modules',`id=eq.${modEdit.id}`,{title:modEdit.title.trim(),duration:modEdit.duration?.trim()||null,admin_notes:modEdit.admin_notes?.trim()||null,updated_at:new Date().toISOString()})
+    const ok = await dbUpdate('course_modules',`id=eq.${modEdit.id}`,{
+      title:modEdit.title.trim(),
+      duration:modEdit.duration?.trim()||null,
+      admin_notes:modEdit.admin_notes?.trim()||null,
+      video_url: modEdit.video_url?.trim() ? toEmbedUrl(modEdit.video_url) : null,
+      updated_at:new Date().toISOString(),
+    })
+    if (!ok) { alert('Could not save the lesson changes — please check your connection and try again.'); return }
     await refreshModules(activeCourse.id)
+    if (activeModule?.id===modEdit.id) {
+      const url = modEdit.video_url?.trim() ? toEmbedUrl(modEdit.video_url) : null
+      setActiveModule(prev=>prev?{...prev,title:modEdit.title.trim(),duration:modEdit.duration?.trim()||null,admin_notes:modEdit.admin_notes?.trim()||null,video_url:url}:prev)
+    }
     setModEdit(null)
   }
   async function deleteModule(m) {
@@ -837,10 +892,14 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                 <div style={{flexShrink:0}}>
                   {activeModule.video_url?(
                     <div style={{position:'relative',paddingTop:'56.25%'}}>
-                      <iframe src={activeModule.video_url}
+                      <iframe src={toEmbedUrl(activeModule.video_url)}
                         style={{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}}
                         allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
                         title={activeModule.title}/>
+                      <a href={toEmbedUrl(activeModule.video_url)} target="_blank" rel="noreferrer"
+                        style={{position:'absolute',right:8,bottom:8,background:'rgba(0,0,0,.65)',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px',color:C.muted,fontSize:10,fontWeight:700,textDecoration:'none'}}>
+                        Open in new tab ↗
+                      </a>
                     </div>
                   ):(
                     <div style={{background:'#050505',padding:'36px 16px',textAlign:'center'}}>
@@ -1268,6 +1327,9 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                               <button onClick={()=>setModEdit(null)}
                                 style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
                             </div>
+                            <input value={modEdit.video_url||''} onChange={e=>setModEdit({...modEdit,video_url:e.target.value})}
+                              placeholder="Video link — paste a regular OR embed link (YouTube, Vimeo, Loom, Google Drive)…"
+                              style={{width:'100%',marginTop:6,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
                             <textarea value={modEdit.admin_notes||''} onChange={e=>setModEdit({...modEdit,admin_notes:e.target.value})}
                               placeholder="Module notes (visible to anyone viewing this module)…" rows={2}
                               style={{width:'100%',marginTop:6,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
@@ -1282,7 +1344,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                                 <span style={{color:m.video_url?C.success:C.danger}}>{m.video_url?'▶ video added':'no video yet'}</span>
                               </div>
                             </div>
-                            <button onClick={()=>setModEdit({id:m.id,title:m.title,duration:m.duration||'',admin_notes:m.admin_notes||''})}
+                            <button onClick={()=>setModEdit({id:m.id,title:m.title,duration:m.duration||'',admin_notes:m.admin_notes||'',video_url:m.video_url||''})}
                               style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',color:C.muted,fontSize:9,cursor:'pointer',flexShrink:0}}>Edit</button>
                             <button onClick={()=>deleteModule(m)}
                               style={{background:'none',border:`1px solid ${C.danger}44`,borderRadius:6,padding:'3px 8px',color:C.danger,fontSize:9,fontWeight:700,cursor:'pointer',flexShrink:0}}>✕</button>
