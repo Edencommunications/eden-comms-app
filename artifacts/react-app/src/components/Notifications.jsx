@@ -70,6 +70,9 @@ const NOTIF_CONFIG = {
   lab_uploaded: { icon:'🧪', label:'Lab Uploaded',         color:'#6FB8E8' },
   update_note:  { icon:'📝', label:'Coach Update',         color: C.gold },
   loom_posted:  { icon:'🎥', label:'Video Update Posted',  color: C.gold },
+  start_reminder_7: { icon:'🚀', label:'Program Starts Soon', color: C.gold },
+  start_reminder_1: { icon:'⏰', label:'Starts Tomorrow',     color:'#ffa600' },
+  start_reminder_0: { icon:'🎉', label:'Starts Today',        color: C.success },
 }
 
 // ════════════════════════════════════════════════════════════════
