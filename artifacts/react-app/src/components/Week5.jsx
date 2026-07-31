@@ -256,6 +256,10 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [newDesc,      setNewDesc]      = useState('')
   const [savingCourse, setSavingCourse] = useState(false)
 
+  // Admin: edit course title/description
+  const [courseEdit,   setCourseEdit]   = useState(null) // {title,description}
+  const [savingCourseEdit, setSavingCourseEdit] = useState(false)
+
   // Admin: course content builder (sections & lessons)
   const [showBuilder,  setShowBuilder]  = useState(false)
   const [draftSecs,    setDraftSecs]    = useState([])   // [{id,title,color}] incl. not-yet-saved empty sections
@@ -388,6 +392,20 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setSavingCourse(false)
   }
 
+  // ── ADMIN: Edit course title/description ──────────────────
+  async function saveCourseEdit() {
+    if (!activeCourse || !courseEdit?.title?.trim() || savingCourseEdit) return
+    setSavingCourseEdit(true)
+    const title = courseEdit.title.trim()
+    const description = courseEdit.description?.trim() || ''
+    const ok = await dbUpdate('courses',`id=eq.${activeCourse.id}`,{ title, description })
+    setSavingCourseEdit(false)
+    if (!ok) { alert('Could not save the course details — please check your connection and try again.'); return }
+    setCourses(prev=>prev.map(c=>c.id===activeCourse.id?{...c,title,description}:c))
+    setActiveCourse(prev=>prev?{...prev,title,description}:prev)
+    setCourseEdit(null)
+  }
+
   // ── ADMIN: Toggle course published ────────────────────────
   async function togglePublish(course) {
     await dbUpdate('courses',`id=eq.${course.id}`,{ is_active:!course.is_active })
@@ -408,6 +426,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   function openBuilder() {
     setDraftSecs(sections.map(s=>({id:s.id,title:s.title,color:s.color})))
     setSecEdit(null); setModEdit(null); setNewModFor(null); setNewModTitle(''); setNewModDur(''); setNewSecTitle('')
+    setCourseEdit(null)
     setShowBuilder(true)
   }
   function addSectionDraft() {
@@ -1271,10 +1290,38 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
           onClick={e=>{if(e.target===e.currentTarget)setShowBuilder(false)}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'86vh',display:'flex',flexDirection:'column'}}>
             <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-              <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:3}}>Course Content — {activeCourse.title}</div>
-              <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
-                Build the course like the CEO course: sections, each with its own lessons. Changes save instantly. Add videos by opening a lesson from the course view.
-              </div>
+              {courseEdit?(
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:7}}>Edit Course Details</div>
+                  <input autoFocus value={courseEdit.title} onChange={e=>setCourseEdit({...courseEdit,title:e.target.value})}
+                    placeholder="Course title…"
+                    style={{width:'100%',background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'8px 11px',color:C.white,fontSize:13,fontWeight:700,outline:'none',boxSizing:'border-box'}}/>
+                  <textarea value={courseEdit.description||''} onChange={e=>setCourseEdit({...courseEdit,description:e.target.value})}
+                    placeholder="Course description…" rows={2}
+                    style={{width:'100%',marginTop:7,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 11px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                  <div style={{display:'flex',gap:8,marginTop:8}}>
+                    <button onClick={saveCourseEdit} disabled={savingCourseEdit||!courseEdit.title.trim()}
+                      style={{background:C.gold,border:'none',borderRadius:7,padding:'7px 14px',color:C.black,fontSize:11,fontWeight:800,cursor:'pointer',opacity:savingCourseEdit||!courseEdit.title.trim()?.5:1}}>
+                      {savingCourseEdit?'Saving…':'Save Details'}
+                    </button>
+                    <button onClick={()=>setCourseEdit(null)}
+                      style={{background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 12px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
+                  </div>
+                </div>
+              ):(
+                <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:3}}>Course Content — {activeCourse.title}</div>
+                    <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
+                      Build the course like the CEO course: sections, each with its own lessons. Changes save instantly. Add videos by opening a lesson from the course view.
+                    </div>
+                  </div>
+                  <button onClick={()=>setCourseEdit({title:activeCourse.title||'',description:activeCourse.description||''})}
+                    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 10px',color:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                    Edit Details
+                  </button>
+                </div>
+              )}
             </div>
             <div style={{flex:1,overflowY:'auto',padding:16}}>
               {draftSecs.length===0&&(
