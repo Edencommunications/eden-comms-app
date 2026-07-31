@@ -266,7 +266,7 @@ export default function Week7({ currentUser }) {
   //    incoming-call ringer survive navigation anywhere in the app ──
   const huddle = useHuddle() || {}
   const {
-    huddleActive = false, huddleRoomUrl = '', liveHuddle = null,
+    huddleActive = false, huddleRoomUrl = '', liveHuddle = null, liveHuddles = [],
     isStarter = false, huddlePinging = null,
     startHuddle: hubStartHuddle, joinLiveHuddle: hubJoinLiveHuddle,
     endHuddle, pingCoach,
@@ -340,9 +340,9 @@ export default function Week7({ currentUser }) {
 
   // ── Huddle helpers — thin wrappers over the global HuddleHub ─
   async function startHuddle() { return hubStartHuddle ? await hubStartHuddle() : false }
-  function joinLiveHuddle() {
+  function joinLiveHuddle(row) {
     if (!hubJoinLiveHuddle) return
-    hubJoinLiveHuddle()
+    hubJoinLiveHuddle(row && row.room_url ? row : undefined)
     setSection('huddle')
   }
 
@@ -400,19 +400,19 @@ export default function Week7({ currentUser }) {
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow: isMobile ? 'auto' : 'hidden'}}>
 
         {/* Live huddle banner — visible to teammates who haven't joined yet */}
-        {liveHuddle && !huddleActive && (
-          <div style={{background:`${C.success}18`,borderBottom:`1px solid ${C.success}44`,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+        {liveHuddles.length > 0 && !huddleActive && liveHuddles.map(h => (
+          <div key={h.id} style={{background:`${C.success}18`,borderBottom:`1px solid ${C.success}44`,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
             <div style={{width:10,height:10,borderRadius:5,background:C.success,animation:'pulse 1.5s infinite'}}/>
             <div style={{flex:1,fontSize:12,color:C.white,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
               <b style={{color:C.success}}>Huddle live</b>
-              {liveHuddle.creator_name ? ` — started by ${liveHuddle.creator_name}` : ''}
+              {h.creator_name ? ` — started by ${h.creator_name}` : ''}
             </div>
-            <button onClick={joinLiveHuddle}
+            <button onClick={() => joinLiveHuddle(h)}
               style={{background:C.success,border:'none',borderRadius:8,padding:'6px 16px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer',flexShrink:0}}>
               Join
             </button>
           </div>
-        )}
+        ))}
 
         <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
 
@@ -752,19 +752,19 @@ export default function Week7({ currentUser }) {
             {!huddleActive ? (
               <>
                 {/* A teammate's huddle is live — join it */}
-                {liveHuddle && (
-                  <div style={{background:`${C.success}15`,border:`1px solid ${C.success}44`,borderRadius:12,padding:'14px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                {liveHuddles.map(h => (
+                  <div key={h.id} style={{background:`${C.success}15`,border:`1px solid ${C.success}44`,borderRadius:12,padding:'14px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
                     <div style={{width:12,height:12,borderRadius:6,background:C.success,animation:'pulse 1.5s infinite',flexShrink:0}}/>
                     <div style={{flex:1,minWidth:160}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.success}}>Huddle live now</div>
-                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>Started by {liveHuddle.creator_name || 'a teammate'} · {timeAgo(liveHuddle.created_at)}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>Started by {h.creator_name || 'a teammate'} · {timeAgo(h.created_at)}</div>
                     </div>
-                    <button onClick={joinLiveHuddle}
+                    <button onClick={() => joinLiveHuddle(h)}
                       style={{background:C.success,border:'none',borderRadius:8,padding:'8px 18px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer'}}>
                       Join Huddle
                     </button>
                   </div>
-                )}
+                ))}
                 <div style={{textAlign:'center',padding:'40px 20px'}}>
                   <div style={{fontSize:48,marginBottom:16}}>🎙</div>
                   {liveHuddle ? (

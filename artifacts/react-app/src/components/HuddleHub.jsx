@@ -115,12 +115,15 @@ export function HuddleProvider({ currentUser, children }) {
   const [huddleActive,  setHuddleActive]  = useState(false)
   const [huddleRoomUrl, setHuddleRoomUrl] = useState('')
   const [liveHuddle,    setLiveHuddle]    = useState(null)
+  const [liveHuddles,   setLiveHuddles]   = useState([]) // ALL active huddles in the org (newest first)
   const [huddleRowId,   setHuddleRowId]   = useState(null)
   const [isStarter,     setIsStarter]     = useState(false)
   const [huddlePinging, setHuddlePinging] = useState(null)
   const [expanded,      setExpanded]      = useState(true) // floating window size
   const [fullscreen,    setFullscreen]    = useState(false) // call fills the whole screen
   const startedByMeRef = useRef(false)
+  const roomUrlRef = useRef('')
+  useEffect(() => { roomUrlRef.current = huddleRoomUrl }, [huddleRoomUrl])
 
   // ── Do Not Disturb — synced across ALL your devices ──────────
   // Server keeps the truth (admin_settings via api-server); localStorage
@@ -204,15 +207,20 @@ export function HuddleProvider({ currentUser, children }) {
     async function checkLiveHuddle() {
       try {
         const rows = await dbGet('huddle_rooms',
-          `org_id=eq.${orgId}&is_active=eq.true&select=id,room_url,created_by,creator_name,created_at&order=created_at.desc&limit=1`)
+          `org_id=eq.${orgId}&is_active=eq.true&select=id,room_url,created_by,creator_name,created_at&order=created_at.desc&limit=20`)
         if (stop) return
-        let row = Array.isArray(rows) && rows.length ? rows[0] : null
-        if (row && (Date.now() - new Date(row.created_at).getTime()) >= 4*3600*1000) row = null
-        setLiveHuddle(row)
-        // Huddle ended by the starter → close it for joiners too
-        if (!row && !startedByMeRef.current) {
-          setHuddleActive(a => { if (a) setHuddleRoomUrl('') ; return false })
-          if (!row) stopRinging()
+        const list = (Array.isArray(rows) ? rows : [])
+          .filter(r => (Date.now() - new Date(r.created_at).getTime()) < 4*3600*1000)
+        setLiveHuddles(list)
+        setLiveHuddle(list[0] || null)
+        // The huddle I joined was ended by its starter → close it for me too
+        if (!startedByMeRef.current) {
+          const myRoom = roomUrlRef.current
+          const myRoomStillLive = myRoom && list.some(r => r.room_url === myRoom)
+          if (!myRoomStillLive) {
+            setHuddleActive(a => { if (a) setHuddleRoomUrl('') ; return false })
+          }
+          if (!list.length) stopRinging()
         }
       } catch {}
     }
@@ -369,7 +377,7 @@ export function HuddleProvider({ currentUser, children }) {
 
   const value = {
     enabled: isStaff, dnd, setDnd, dndUntil, setDndFor,
-    huddleActive, huddleRoomUrl, liveHuddle, isStarter, huddlePinging,
+    huddleActive, huddleRoomUrl, liveHuddle, liveHuddles, isStarter, huddlePinging,
     startHuddle, joinLiveHuddle, endHuddle, pingCoach,
     expanded, setExpanded,
   }
