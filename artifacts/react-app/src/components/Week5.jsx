@@ -618,20 +618,24 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   async function loadClientProgress(course) {
     // Get all clients under this coach who have access
     const access = await dbGet('course_access',`course_id=eq.${course.id}&coach_id=eq.${myUUID}&revoked=eq.false`)
-    const totalMods = modules.length || 34
+    // Always count against THIS course's real lesson list (the open course may be a different one)
+    const courseMods = await dbGet('course_modules',`course_id=eq.${course.id}&select=module_id`)
+    const validIds   = new Set((courseMods||[]).map(m=>m.module_id))
+    const totalMods  = validIds.size
     const progressData = []
     for (const a of (access||[])) {
       const prog = await dbGet('course_progress',
         `user_id=eq.${a.user_id}&course_id=eq.${course.id}&completed=eq.true`
       )
-      const done = prog?.length||0
-      const lastDone = prog?.sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))[0]
+      // Only count lessons that still exist, once each — deleted lessons or stray duplicate rows can't inflate the %
+      const done = new Set((prog||[]).map(p=>p.module_id).filter(id=>validIds.has(id))).size
+      const lastDone = (prog||[]).slice().sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))[0]
       progressData.push({
         name:     a.user_name||'Client',
         userId:   a.user_id,
         done,
         total:    totalMods,
-        pct:      Math.round(done/totalMods*100),
+        pct:      totalMods ? Math.min(100, Math.round(done/totalMods*100)) : 0,
         lastActive: lastDone?.completed_at ? new Date(lastDone.completed_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'Not started',
       })
     }
@@ -680,8 +684,9 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   },[])
 
   const total      = modules.length
-  const doneCount  = completed.size
-  const overallPct = total?Math.round(doneCount/total*100):0
+  // Only lessons that still exist count — progress on deleted lessons can't push the % past reality
+  const doneCount  = modules.filter(m=>completed.has(m.module_id)).length
+  const overallPct = total?Math.min(100,Math.round(doneCount/total*100)):0
   const nextMod    = modules.find(m=>!completed.has(m.module_id))
 
   const filteredRecipes = recipes.filter(r=>{
