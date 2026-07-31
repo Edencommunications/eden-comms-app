@@ -929,6 +929,12 @@ export default function Week7({ currentUser }) {
                     <div style={{fontSize:13,fontWeight:700,color:C.success}}>Huddle Active</div>
                     <div style={{fontSize:10,color:C.muted,marginTop:1}}>You are in a live huddle room</div>
                   </div>
+                  <button
+                    onClick={() => window.open(huddleRoomUrl, 'eden-huddle', 'width=980,height=680,noopener')}
+                    title="Open the call in its own window so you can move around the app while staying on the call"
+                    style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer',marginRight:8}}>
+                    ↗ Pop Out Call
+                  </button>
                   <button onClick={endHuddle}
                     style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'6px 14px',color:C.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                     {startedByMeRef.current ? 'End Huddle' : 'Leave Huddle'}
@@ -962,6 +968,7 @@ export default function Week7({ currentUser }) {
                   </div>
                   <div style={{marginTop:10,fontSize:10,color:C.muted,textAlign:'center'}}>
                     Room link: <span style={{color:C.gold}}>{huddleRoomUrl}</span>
+                    <br/>Tip: use <span style={{color:C.gold}}>↗ Pop Out Call</span> above to keep the call going while you move around the app (e.g. to show labs while screen sharing).
                   </div>
                 </Card>
               </>
