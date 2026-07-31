@@ -7,7 +7,8 @@
 //   {tab === 'team' && <Week7 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
-import { sbBearer } from '../lib/sbAuth'
+import { createClient } from '@supabase/supabase-js'
+import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import Communities from './Communities'
 import MentionInput from './MentionInput'
 
@@ -268,7 +269,9 @@ export default function Week7({ currentUser }) {
   const [huddleRowId,   setHuddleRowId]   = useState(null) // huddle_rooms row I created
   const startedByMeRef = useRef(false)
 
-  // Poll for a live huddle in the org so teammates see it and can join.
+  // Watch for a live huddle in the org so teammates see it and can join.
+  // Realtime pushes changes instantly; polling stays as a fallback while the
+  // websocket channel is not connected (same pattern as admin lifecycle sync).
   useEffect(() => {
     if (!orgId) return
     let stop = false
@@ -288,8 +291,33 @@ export default function Week7({ currentUser }) {
       } catch {}
     }
     checkLiveHuddle()
-    const iv = setInterval(checkLiveHuddle, 5000)
-    return () => { stop = true; clearInterval(iv) }
+    // Realtime channel on huddle_rooms — INSERT/UPDATE re-checks the live row.
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
+    // With RLS on, realtime only delivers rows the subscriber may see — authenticate the channel.
+    try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
+    let realtimeUp = false
+    // Only trust realtime once a row event has ACTUALLY arrived — a channel can
+    // report SUBSCRIBED even when the table isn't in the supabase_realtime
+    // publication, in which case no events are ever delivered.
+    let lastEventAt = 0
+    let debounce = null
+    const scheduleCheck = () => { lastEventAt = Date.now(); clearTimeout(debounce); debounce = setTimeout(checkLiveHuddle, 250) }
+    const channel = sb
+      .channel('huddle-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'huddle_rooms' }, scheduleCheck)
+      .subscribe(status => {
+        const wasUp = realtimeUp
+        realtimeUp = status === 'SUBSCRIBED'
+        // Catch up on anything missed while the channel was down
+        if (realtimeUp && !wasUp) checkLiveHuddle()
+      })
+    // Fallback poll: keeps running until realtime has proven itself with a real
+    // event recently; skipped only when the channel is up AND events flow.
+    const iv = setInterval(() => {
+      const proven = realtimeUp && (Date.now() - lastEventAt) < 60_000
+      if (!proven) checkLiveHuddle()
+    }, 5000)
+    return () => { stop = true; clearTimeout(debounce); clearInterval(iv); sb.removeChannel(channel) }
   }, [orgId])
 
   // Load saved URLs from Supabase on mount

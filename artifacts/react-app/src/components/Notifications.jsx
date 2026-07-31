@@ -8,7 +8,8 @@
 //    in your top bar / header area
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
-import { sbBearer } from '../lib/sbAuth'
+import { createClient } from '@supabase/supabase-js'
+import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -103,12 +104,38 @@ export default function Notifications({ currentUser, onNavigate }) {
 
   const unreadCount = notifs.filter(n => !n.is_read).length
 
-  // ── Load notifications on mount + poll every 15s ──────────
+  // ── Load notifications on mount; realtime pushes new ones instantly,
+  //    the 15s poll only fires while the websocket channel is down ─────
   useEffect(() => {
     if (!myUUID) return
     loadNotifs()
-    const interval = setInterval(loadNotifs, 15000)
-    return () => clearInterval(interval)
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
+    // With RLS on, realtime only delivers rows the subscriber may see — authenticate the channel.
+    try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
+    let realtimeUp = false
+    // Only trust realtime once an event has ACTUALLY arrived — a channel can
+    // report SUBSCRIBED even when the table isn't in the supabase_realtime
+    // publication, in which case no events are ever delivered.
+    let lastEventAt = 0
+    let debounce = null
+    const scheduleLoad = () => { lastEventAt = Date.now(); clearTimeout(debounce); debounce = setTimeout(loadNotifs, 250) }
+    const channel = sb
+      .channel('notifs-' + myUUID)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${myUUID}` },
+        scheduleLoad)
+      .subscribe(status => {
+        const wasUp = realtimeUp
+        realtimeUp = status === 'SUBSCRIBED'
+        if (realtimeUp && !wasUp) loadNotifs() // catch up on anything missed
+      })
+    // Fallback poll: keeps running until realtime has proven itself with a real
+    // event recently; skipped only when the channel is up AND events flow.
+    const interval = setInterval(() => {
+      const proven = realtimeUp && (Date.now() - lastEventAt) < 120_000
+      if (!proven) loadNotifs()
+    }, 15000)
+    return () => { clearTimeout(debounce); clearInterval(interval); sb.removeChannel(channel) }
   }, [myUUID])
 
   // ── Close panel when clicking outside ─────────────────────
