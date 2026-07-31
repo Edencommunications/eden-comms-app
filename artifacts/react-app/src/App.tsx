@@ -24,6 +24,7 @@ import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
 import Wearables from "./components/Wearables";
+import CheckinFormEditor from "./components/CheckinFormEditor";
 import InstallBanner from "./components/InstallBanner";
 import { supabase } from "./supabaseClient";
 
@@ -515,6 +516,25 @@ const ChangePasswordModal = ({ onClose }) => {
 
 const HomeScreen = ({ user, wlOrg = null }) => {
   const homeDeadline = useDeadline(user?.email);
+  // Upcoming start date — countdown card for clients who haven't started yet
+  const [startInfo, setStartInfo] = useState<any>(null); // { startDate, coachName }
+  useEffect(() => { (async () => {
+    try {
+      if (!user?.email || user.role !== 'client') { setStartInfo(null); return; }
+      const rows = await csGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=start_date,coach_id`);
+      const sd = rows?.[0]?.start_date ? String(rows[0].start_date).slice(0, 10) : null;
+      if (!sd) { setStartInfo(null); return; }
+      // Business timezone (matches the server reminder job), not browser tz
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+      if (sd < today) { setStartInfo(null); return; }   // already started
+      let coachName = '';
+      if (rows[0].coach_id) {
+        const co = await csGet('user_profiles', `id=eq.${rows[0].coach_id}&select=name`);
+        coachName = co?.[0]?.name || '';
+      }
+      setStartInfo({ startDate: sd, coachName });
+    } catch { setStartInfo(null); }
+  })(); }, [user?.email, user?.role]);
   // White-label palette — falls back to Eden gold when no wl org
   const hp = wlPalette(wlOrg);
   const primary   = wlOrg ? hp.primary   : B.gold;
@@ -536,6 +556,34 @@ const HomeScreen = ({ user, wlOrg = null }) => {
           </div>
         </div>
       </div>
+
+      {/* Start-date countdown — shown until the client's program begins */}
+      {startInfo && (() => {
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+        const days = Math.round((Date.parse(startInfo.startDate + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000);
+        if (days < 0) return null;   // program already started — hide mid-session too
+        const nice = new Date(startInfo.startDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', timeZone:'UTC' });
+        const isToday = days === 0;
+        return (
+          <div style={{ margin:"16px 20px 0", background:`linear-gradient(135deg, ${primary}1e, ${B.card})`, border:`1px solid ${primary}55`, borderRadius:12, padding:"16px 18px", textAlign:"center" }}>
+            <p style={{ fontSize:11, fontWeight:700, color:primary, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>
+              {isToday ? "🎉 Today's the Day!" : "🚀 Your Program Starts Soon"}
+            </p>
+            {isToday ? (
+              <p style={{ fontSize:14, color:B.text, margin:0, lineHeight:1.6 }}>
+                Your program officially starts <strong style={{ color:primary }}>today</strong>{startInfo.coachName ? <> with coach <strong>{startInfo.coachName}</strong></> : null} — let's go!
+              </p>
+            ) : (
+              <>
+                <p style={{ fontSize:26, fontWeight:800, color:primary, margin:"0 0 2px" }}>{days} {days === 1 ? "day" : "days"} to go</p>
+                <p style={{ fontSize:13, color:B.text, margin:0, lineHeight:1.6 }}>
+                  You start <strong>{nice}</strong>{startInfo.coachName ? <> with coach <strong>{startInfo.coachName}</strong></> : null}. We'll remind you as it gets close.
+                </p>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Announcement banner */}
       <div style={{ margin:"16px 20px 0", background:B.card, border:`1px solid ${primary}33`, borderLeft:`3px solid ${primary}`, borderRadius:10, padding:"12px 14px" }}>
@@ -2066,15 +2114,18 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
   const featuredSet: Set<string> = (loomFeatured instanceof Set) ? loomFeatured : new Set();
 
   // Coach's own check-in deadline (each coach sets their own; clients inherit it)
+  const [myIds,     setMyIds]     = useState<any>(null);   // { id, companyId } — for my check-in form
+  const [formOpen,  setFormOpen]  = useState(false);
   const [myTz,      setMyTz]      = useState(DEFAULT_TZ);
   const [myTime,    setMyTime]    = useState(DEFAULT_TIME);
   const [myTzError, setMyTzError] = useState(false);
   useEffect(() => { (async () => {
     if (!user?.email) return;
     try {
-      const rows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=timezone,deadline_time`);
+      const rows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id,company_id,timezone,deadline_time`);
       if (Array.isArray(rows) && rows[0]?.timezone)      setMyTz(rows[0].timezone);
       if (Array.isArray(rows) && rows[0]?.deadline_time) setMyTime(rows[0].deadline_time.slice(0,5));
+      if (Array.isArray(rows) && rows[0]?.id)            setMyIds({ id: rows[0].id, companyId: rows[0].company_id || EDEN_ORG_ID });
     } catch {}
   })(); }, [user?.email]);
 
@@ -2165,6 +2216,25 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
             {TZ_OPTIONS.map((o:any) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+
+        {/* ── My check-in form (coach's own customization) ── */}
+        {myIds && (
+          <div style={{ background:B.card, border:`1px solid ${formOpen?B.gold+'55':B.border}`, borderRadius:12, marginBottom:16, overflow:'hidden' }}>
+            <button onClick={()=>setFormOpen(v=>!v)}
+              style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", cursor:"pointer", padding:"12px 14px" }}>
+              <span style={{ fontSize:11, fontWeight:700, color:formOpen?B.gold:B.text, letterSpacing:1, textTransform:"uppercase" }}>📝 My Check-In Form</span>
+              <span style={{ fontSize:18, color:B.gold, fontWeight:700, display:"inline-block", transition:"transform .2s", transform: formOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+            </button>
+            {formOpen && (
+              <div style={{ padding:"0 14px 14px" }}>
+                <p style={{ fontSize:11, color:B.muted, margin:"0 0 12px", lineHeight:1.5 }}>
+                  Choose which metrics your clients fill in each week. Changes apply to all your clients immediately.
+                </p>
+                <CheckinFormEditor companyId={myIds.companyId} coachId={myIds.id} coachName="You"/>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Upcoming contract starts ── */}
         <UpcomingStartsSection clients={clients} loomMode={loomMode}/>
@@ -3757,6 +3827,7 @@ const AdminDashboard = ({ user }:any) => {
   // Per-coach check-in deadline settings (admin can adjust each coach's from Overview)
   const [coachDl, setCoachDl] = useState<Record<string,any>>({});
   const [dlCoaches, setDlCoaches] = useState<any[]>([]);
+  const [formScope, setFormScope] = useState('');   // '' closed · 'org' · coach id
   useEffect(() => {
     sbGet('user_profiles', `role=in.(coach,head_coach)&is_active=not.is.false&select=id,name,timezone,deadline_time&order=name`)
       .then((rows:any[]) => {
@@ -3854,6 +3925,26 @@ const AdminDashboard = ({ user }:any) => {
                 })}
               </Card>
             )}
+            {/* Check-in form customization (org-wide or per coach) */}
+            <Card style={{ marginBottom:20 }}>
+              <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>📝 Check-In Forms</p>
+              <p style={{ fontSize:11, color:B.muted, margin:"0 0 10px", lineHeight:1.5 }}>
+                Customize the weekly check-in form for the whole organization, or for one coach. Coaches without their own version use the organization's; everyone starts from the standard form.
+              </p>
+              <select value={formScope} onChange={e => setFormScope(e.target.value)}
+                style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer", marginBottom: formScope ? 14 : 0, maxWidth:"100%" }}>
+                <option value="">Choose what to edit…</option>
+                <option value="org">🏢 Whole organization</option>
+                {dlCoaches.map((c:any) => <option key={c.id} value={c.id}>👤 {c.name}</option>)}
+              </select>
+              {formScope && (
+                <CheckinFormEditor key={formScope}
+                  companyId={isOwnerHQ ? EDEN_COMPANY_ID : (myOrg?.id || EDEN_COMPANY_ID)}
+                  coachId={formScope === 'org' ? null : formScope}
+                  coachName={formScope === 'org' ? '' : (dlCoaches.find((c:any) => c.id === formScope)?.name || '')}
+                  onClose={() => setFormScope('')}/>
+              )}
+            </Card>
             {/* Bulk roster import / export */}
             <RosterImportExport/>
             {/* Upcoming contract starts (org-wide) */}

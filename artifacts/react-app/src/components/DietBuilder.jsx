@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 import { useDeadline } from '../lib/tz'
+import { useCheckinForm } from '../lib/checkinForm'
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -476,9 +477,15 @@ function ReadOnlyFoodRow({item}) {
 function CheckInCharts({ checkins }) {
   if (!checkins || checkins.length < 2) return null
 
+  // Empty/disabled metrics stay null → charts show a gap instead of a fake 0
+  const num = (v, parse=parseFloat) => {
+    if (v == null || String(v).trim() === '') return null
+    const n = parse(String(v).replace(/,/g, ''))
+    return Number.isFinite(n) ? n : null
+  }
   const chartData = [...checkins].reverse().map(e => ({
     date:      e.date.replace(' 2026',''),
-    weight:    parseFloat(e.weight) || 0,
+    weight:    num(e.weight),
     compliance:e.compliance,
     habitPct:  typeof e.habitPct === 'number' ? e.habitPct : null,
     energy:    e.energy,
@@ -488,10 +495,10 @@ function CheckInCharts({ checkins }) {
     sexDrive:  e.sexDrive,
     hunger:    e.hunger,
     stress:    e.stress,
-    steps:     parseInt(String(e.steps||'0').replace(/,/g,'')) || 0,
-    heartRate: parseInt(e.heartRate) || 0,
-    hrv:       parseInt(e.hrv) || 0,
-    temp:      parseFloat(e.temp) || 0,
+    steps:     num(e.steps, parseInt),
+    heartRate: num(e.heartRate, parseInt),
+    hrv:       num(e.hrv, parseInt),
+    temp:      num(e.temp),
   }))
 
   const CT = {
@@ -778,6 +785,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     cycleNotes:'',cyclePain:'5',notes:'',
   })
   const setC = k=>v=>setCi(p=>({...p,[k]:v}))
+  // Customizable check-in form: the client's coach's form → org form → standard.
+  const ciForm = useCheckinForm(myCompanyId, myCoachId)
+  const on = k => !ciForm.off.includes(k)              // is a standard metric enabled?
+  const [customAnswers, setCustomAnswers] = useState({})  // { customMetricLabel: value }
   const [protocolDurations, setProtocolDurations] = useState({})  // { protocolName: duration string }
   const setProtDur = (name,val) => setProtocolDurations(p=>({...p,[name]:val}))
   const [otherProtocols, setOtherProtocols] = useState([])        // [{id,protocol,duration}] — user-added list
@@ -890,6 +901,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           coachLoom:        '',
           habits:           r.habits || null,   habitPct:         r.habit_pct,
           mealNotes:        r.meal_notes || null,
+          custom:           r.protocol_durations?.__custom || null,
           _dbId:            r.id,
         }))
         setLocalCheckins(prev => {
@@ -2105,6 +2117,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           </div>
                         )}
 
+                        {/* Custom form metrics (coach's customized check-in form) */}
+                        {ci.custom&&Object.keys(ci.custom).length>0&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                            <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>📋 Custom Metrics</div>
+                            {Object.entries(ci.custom).map(([label,val])=>(
+                              <div key={label} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0'}}>
+                                <span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,flexShrink:0}}>{label}</span>
+                                <span style={{fontSize:12,color:C.white,whiteSpace:'pre-wrap'}}>{val}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {/* Meal adjustment notes from client */}
                         {ci.mealNotes&&Object.keys(ci.mealNotes).some(k=>ci.mealNotes[k])&&(
                           <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
@@ -2731,17 +2756,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     ? <> every <strong>{updateDay}</strong>{nextUpdateDate(updateDay) ? ` (next: ${nextUpdateDate(updateDay)})` : ''}</>
                     : ' on your assigned update day'}. Wake up on empty stomach. Include fasted weight + photos.
                 </div>
+                {['weight','temp','steps','bp','heartRate','hrv'].some(on)&&(
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="Vitals"/>
                   <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-                    <Inp label="Body Weight (lbs)" value={ci.weight} onChange={setC('weight')} placeholder="e.g. 172.4" type="number"/>
-                    <Inp label="Body Temperature (°F)" value={ci.temp} onChange={setC('temp')} placeholder="e.g. 97.8" type="number"/>
-                    <Inp label="Avg Daily Steps" value={ci.steps} onChange={setC('steps')} placeholder="e.g. 9500" type="number"/>
-                    <Inp label="Blood Pressure" value={ci.bp} onChange={setC('bp')} placeholder="e.g. 120/80"/>
-                    <Inp label="Morning Heart Rate (BPM)" value={ci.heartRate} onChange={setC('heartRate')} placeholder="e.g. 58" type="number"/>
-                    <Inp label="HRV" value={ci.hrv} onChange={setC('hrv')} placeholder="e.g. 72" type="number"/>
+                    {on('weight')&&<Inp label="Body Weight (lbs)" value={ci.weight} onChange={setC('weight')} placeholder="e.g. 172.4" type="number"/>}
+                    {on('temp')&&<Inp label="Body Temperature (°F)" value={ci.temp} onChange={setC('temp')} placeholder="e.g. 97.8" type="number"/>}
+                    {on('steps')&&<Inp label="Avg Daily Steps" value={ci.steps} onChange={setC('steps')} placeholder="e.g. 9500" type="number"/>}
+                    {on('bp')&&<Inp label="Blood Pressure" value={ci.bp} onChange={setC('bp')} placeholder="e.g. 120/80"/>}
+                    {on('heartRate')&&<Inp label="Morning Heart Rate (BPM)" value={ci.heartRate} onChange={setC('heartRate')} placeholder="e.g. 58" type="number"/>}
+                    {on('hrv')&&<Inp label="HRV" value={ci.hrv} onChange={setC('hrv')} placeholder="e.g. 72" type="number"/>}
                   </div>
-                </Card>
+                </Card>)}
+                {['sleep','bloating','brainFog','sexDrive','energy','hunger'].some(on)&&(
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="Wellbeing Scales (1–10)"/>
                   {[
@@ -2751,7 +2778,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     ['sexDrive','Sex Drive',      '1=low · 10=high'],
                     ['energy',  'Energy',         '1=awful · 10=perfect'],
                     ['hunger',  'Hunger',         '1=not hungry · 10=starving'],
-                  ].map(([k,l,d])=>(
+                  ].filter(([k])=>on(k)).map(([k,l,d])=>(
                     <div key={k} style={{marginBottom:13}}>
                       <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
                         <div>
@@ -2763,20 +2790,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <input type="range" min="1" max="10" value={ci[k]} onChange={e=>setC(k)(e.target.value)} style={{width:'100%',accentColor:C.gold}}/>
                     </div>
                   ))}
-                </Card>
+                </Card>)}
+                {['wakeTime','sleepNotes','bowelCount','bowelType'].some(on)&&(
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="Sleep & Digestion"/>
-                  <Inp label="Sleep window (falling asleep / waking)" value={ci.wakeTime} onChange={setC('wakeTime')} placeholder="e.g. Asleep 10pm, wake 5am"/>
-                  <div style={{marginBottom:10}}>
+                  {on('wakeTime')&&<Inp label="Sleep window (falling asleep / waking)" value={ci.wakeTime} onChange={setC('wakeTime')} placeholder="e.g. Asleep 10pm, wake 5am"/>}
+                  {on('sleepNotes')&&<div style={{marginBottom:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Sleep Disruption Notes</div>
                     <textarea value={ci.sleepNotes} onChange={e=>setC('sleepNotes')(e.target.value)} placeholder="Describe disruptions, times, duration…"
                       style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-                    <Inp label="Avg Daily Bowel Movements" value={ci.bowelCount} onChange={setC('bowelCount')} placeholder="e.g. 2" type="number"/>
-                    <Sel label="Stool Consistency" value={ci.bowelType||''} onChange={setC('bowelType')} options={['','Well formed','Loose','Diarrhea','Constipated','Mixed']}/>
-                  </div>
-                </Card>
+                  </div>}
+                  {(on('bowelCount')||on('bowelType'))&&<div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
+                    {on('bowelCount')&&<Inp label="Avg Daily Bowel Movements" value={ci.bowelCount} onChange={setC('bowelCount')} placeholder="e.g. 2" type="number"/>}
+                    {on('bowelType')&&<Sel label="Stool Consistency" value={ci.bowelType||''} onChange={setC('bowelType')} options={['','Well formed','Loose','Diarrhea','Constipated','Mixed']}/>}
+                  </div>}
+                </Card>)}
+                {on('cycle')&&(
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="For Women Only"/>
                   <div style={{marginBottom:10}}>
@@ -2790,7 +2819,32 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <span style={{fontSize:13,fontWeight:700,color:C.gold}}>{ci.cyclePain}/10</span>
                   </div>
                   <input type="range" min="1" max="10" value={ci.cyclePain} onChange={e=>setC('cyclePain')(e.target.value)} style={{width:'100%',accentColor:C.gold}}/>
-                </Card>
+                </Card>)}
+
+                {/* Custom metrics from the coach's check-in form */}
+                {ciForm.custom.length>0&&(
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="More From Your Coach"/>
+                  {ciForm.custom.map(cm=>(
+                    <div key={cm.id} style={{marginBottom:13}}>
+                      {cm.type==='scale'?(<>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.8}}>{cm.label}</span>
+                          <span style={{fontSize:13,fontWeight:700,color:C.gold}}>{customAnswers[cm.label]||'5'}/10</span>
+                        </div>
+                        <input type="range" min="1" max="10" value={customAnswers[cm.label]||'5'}
+                          onChange={e=>setCustomAnswers(p=>({...p,[cm.label]:e.target.value}))} style={{width:'100%',accentColor:C.gold}}/>
+                      </>):cm.type==='number'?(
+                        <Inp label={cm.label} value={customAnswers[cm.label]||''} type="number"
+                          onChange={v=>setCustomAnswers(p=>({...p,[cm.label]:v}))} placeholder="Enter a number"/>
+                      ):(<>
+                        <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{cm.label}</div>
+                        <textarea value={customAnswers[cm.label]||''} onChange={e=>setCustomAnswers(p=>({...p,[cm.label]:e.target.value}))}
+                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
+                      </>)}
+                    </div>
+                  ))}
+                </Card>)}
 
                 {/* Protocol Duration */}
                 <Card sx={{marginBottom:12}}>
@@ -2956,24 +3010,39 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                 <button onClick={async()=>{
                   if(!myUUID){alert('Still loading your profile — try again in a second.');return}
+                  // Only submit metrics that are ON the coach's form (disabled ones save as null)
+                  const V=(k,v)=>on(k)?v:null
+                  // Custom metric answers (+ cycle data, which has no dedicated columns)
+                  const custom={}
+                  ciForm.custom.forEach(cm=>{
+                    const val=customAnswers[cm.label] ?? (cm.type==='scale'?'5':'')
+                    if(String(val).trim()!=='') custom[cm.label]=String(val)
+                  })
+                  if(on('cycle')&&ci.cycleNotes.trim()){
+                    custom['Cycle Notes']=ci.cycleNotes.trim()
+                    custom['Period Pain (1–10)']=String(ci.cyclePain)
+                  }
+                  const hasCustom=Object.keys(custom).length>0
                   await dbInsert('weekly_checkins',{
                     client_id:        myUUID,
                     coach_id:         myCoachId,
-                    weight:           ci.weight,           temp:             ci.temp,
-                    steps:            ci.steps,            heart_rate:       ci.heartRate,
-                    hrv:              ci.hrv,              blood_pressure:   ci.bloodPressure,
-                    energy:           ci.energy,           sleep:            ci.sleep,
-                    bloating:         ci.bloating,         brain_fog:        ci.brainFog,
-                    sex_drive:        ci.sexDrive,         hunger:           ci.hunger,
-                    stress:           ci.stress,           compliance:       ci.compliance,
-                    mood:             ci.mood,             sleep_window:     ci.sleepWindow,
-                    sleep_cycles:     ci.sleepCycles,      sleep_disruption: ci.sleepDisruption,
-                    bowel_count:      ci.bowelCount,       bowel_type:       ci.bowelType,
-                    notes:            ci.notes,            habits:           habitCounts,
-                    habit_pct:        habitScore,          submitted_at:     new Date().toISOString(),
+                    weight:           V('weight',ci.weight), temp:           V('temp',ci.temp),
+                    steps:            V('steps',ci.steps),   heart_rate:     V('heartRate',ci.heartRate),
+                    hrv:              V('hrv',ci.hrv),       blood_pressure: V('bp',ci.bp),
+                    energy:           V('energy',ci.energy), sleep:          V('sleep',ci.sleep),
+                    bloating:         V('bloating',ci.bloating), brain_fog:  V('brainFog',ci.brainFog),
+                    sex_drive:        V('sexDrive',ci.sexDrive), hunger:     V('hunger',ci.hunger),
+                    stress:           ci.stress,             compliance:     ci.compliance,
+                    mood:             ci.mood,               sleep_window:   V('wakeTime',ci.wakeTime),
+                    sleep_cycles:     ci.sleepCycles,        sleep_disruption: V('sleepNotes',ci.sleepNotes),
+                    bowel_count:      V('bowelCount',ci.bowelCount), bowel_type: V('bowelType',ci.bowelType),
+                    notes:            ci.notes,              habits:         habitCounts,
+                    habit_pct:        habitScore,            submitted_at:   new Date().toISOString(),
                     meal_notes:       Object.keys(mealNotes).some(k=>mealNotes[k]) ? mealNotes : null,
-                    protocol_durations: (Object.keys(protocolDurations).some(k=>protocolDurations[k])||otherProtocols.length>0)
-                      ? {...protocolDurations, __others: otherProtocols.length>0 ? otherProtocols : undefined}
+                    protocol_durations: (Object.keys(protocolDurations).some(k=>protocolDurations[k])||otherProtocols.length>0||hasCustom)
+                      ? {...protocolDurations,
+                         __others: otherProtocols.length>0 ? otherProtocols : undefined,
+                         __custom: hasCustom ? custom : undefined}
                       : null,
                   })
                   const _cId = myCoachId

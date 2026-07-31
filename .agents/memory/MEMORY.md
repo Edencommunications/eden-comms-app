@@ -9,5 +9,7 @@
 - [Communities & messaging moderation](communities-messaging.md) — communities/community_messages tables, per-user pins, soft delete + audit_logs, community_only login for offboarded clients.
 - [RLS lockdown](rls-lockdown.md) — RLS on all tables (org-scoped via JWT-email helper); frontend sends live JWT via sbAuth.js getters; legacy allow-all policies had to be wiped.
 - [Start dates & demo sweep](start-date-and-demo-sweep.md) — start_date gates lateness; rosters are DB-loaded; always filter `is_active=not.is.false` (NULL-safe), demo constants removed.
+- [Customizable check-in forms](checkin-forms.md) — forms in admin_settings keys, answers in protocol_durations.__custom; writes MUST go through api-server (RLS can't enforce coach-level scope).
+- [API route prefix](api-route-prefix.md) — the platform proxy strips `/api` before it reaches the api-server; register Express routes WITHOUT the /api prefix, frontend calls WITH it.
 - [Check-in deadline model](checkin-deadlines.md) — deadlines are per-coach only; clients always inherit coach's; no org/client-level settings; two parallel admin UIs (App.tsx panel is the one the user uses).
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.

@@ -4,6 +4,7 @@ import recipeDetailsRouter from "./recipeDetails";
 import ghlIntakeRouter from "./ghlIntake";
 import authRouter from "./auth";
 import bulkImportRouter from "./bulkImport";
+import checkinFormRouter from "./checkinForm";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(recipeDetailsRouter);
 router.use(ghlIntakeRouter);
 router.use(authRouter);
 router.use(bulkImportRouter);
+router.use(checkinFormRouter);
 
 export default router;
