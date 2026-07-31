@@ -121,12 +121,53 @@ export function HuddleProvider({ currentUser, children }) {
   const [expanded,      setExpanded]      = useState(true) // floating window size
   const startedByMeRef = useRef(false)
 
-  // ── Do Not Disturb (per device, like a phone) ────────────────
-  const [dnd, setDndState] = useState(() => { try { return localStorage.getItem('eden_dnd') === '1' } catch { return false } })
-  const setDnd = useCallback(v => {
-    setDndState(v)
-    try { localStorage.setItem('eden_dnd', v ? '1' : '0') } catch {}
+  // ── Do Not Disturb — synced across ALL your devices ──────────
+  // Server keeps the truth (admin_settings via api-server); localStorage
+  // is only a boot cache so the button doesn't flicker on load.
+  const [dndUntil, setDndUntil] = useState(() => { try { return localStorage.getItem('eden_dnd_until') || null } catch { return null } })
+  const dndIsOn = u => u === 'forever' || (u && Date.parse(u) > Date.now())
+  const dnd = dndIsOn(dndUntil)
+  const cacheDnd = u => { try { u ? localStorage.setItem('eden_dnd_until', u) : localStorage.removeItem('eden_dnd_until') } catch {} }
+
+  // Load + keep in sync (60s poll so DND set on another device applies here)
+  useEffect(() => {
+    if (!myUUID || !isStaff) return
+    let stop = false
+    async function syncDnd() {
+      try {
+        const r = await fetch('/api/dnd', { headers: { Authorization: sbBearer() } })
+        const data = await r.json().catch(() => null)
+        if (!stop && r.ok && data) { setDndUntil(data.on ? data.until : null); cacheDnd(data.on ? data.until : null) }
+      } catch {}
+    }
+    syncDnd()
+    const iv = setInterval(syncDnd, 60_000)
+    return () => { stop = true; clearInterval(iv) }
+  }, [myUUID, isStaff])
+
+  // Timed DND flips itself off the moment it expires
+  useEffect(() => {
+    if (!dndUntil || dndUntil === 'forever') return
+    const ms = Date.parse(dndUntil) - Date.now()
+    if (ms <= 0) { setDndUntil(null); cacheDnd(null); return }
+    const t = setTimeout(() => { setDndUntil(null); cacheDnd(null) }, ms + 500)
+    return () => clearTimeout(t)
+  }, [dndUntil])
+
+  // until: null = off, 'forever', or an ISO timestamp
+  const setDndFor = useCallback(async (until) => {
+    setDndUntil(until); cacheDnd(until) // instant feedback
+    try {
+      const r = await fetch('/api/dnd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ until }),
+      })
+      const data = await r.json().catch(() => null)
+      if (r.ok && data) { setDndUntil(data.on ? data.until : null); cacheDnd(data.on ? data.until : null) }
+    } catch {} // offline → device-local DND still applies until sync
   }, [])
+  const setDnd = useCallback(v => setDndFor(v ? 'forever' : null), [setDndFor])
   const dndRef = useRef(dnd); dndRef.current = dnd
   const activeRef = useRef(false); activeRef.current = huddleActive
 
@@ -326,7 +367,7 @@ export function HuddleProvider({ currentUser, children }) {
   }, [incoming, stopRinging])
 
   const value = {
-    enabled: isStaff, dnd, setDnd,
+    enabled: isStaff, dnd, setDnd, dndUntil, setDndFor,
     huddleActive, huddleRoomUrl, liveHuddle, isStarter, huddlePinging,
     startHuddle, joinLiveHuddle, endHuddle, pingCoach,
     expanded, setExpanded,
@@ -420,21 +461,83 @@ export function HuddleProvider({ currentUser, children }) {
 // ════════════════════════════════════════════════════════════════
 export function DndButton({ isMobile }) {
   const huddle = useHuddle()
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onClick = e => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [open])
   if (!huddle || !huddle.enabled) return null
-  const { dnd, setDnd } = huddle
+  const { dnd, dndUntil, setDndFor } = huddle
+
+  const untilLabel = () => {
+    if (dndUntil === 'forever') return 'until you turn it off'
+    if (!dndUntil) return ''
+    const d = new Date(dndUntil)
+    const today = new Date().toDateString() === d.toDateString()
+    return 'until ' + (today ? '' : d.toLocaleDateString('en-US',{weekday:'short'}) + ' ') +
+      d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+  }
+  const pick = until => { setDndFor(until); setOpen(false) }
+  const tomorrow8 = () => { const d = new Date(); d.setDate(d.getDate()+1); d.setHours(8,0,0,0); return d.toISOString() }
+  const inMins = m => new Date(Date.now() + m*60000).toISOString()
+
+  const OPTIONS = [
+    { label:'For 30 minutes',        until: inMins(30) },
+    { label:'For 1 hour',            until: inMins(60) },
+    { label:'Until tomorrow (8 AM)', until: tomorrow8() },
+    { label:'Until I turn it off',   until: 'forever' },
+  ]
+
   return (
-    <button onClick={() => setDnd(!dnd)}
-      title={dnd ? 'Do Not Disturb is ON — huddle calls won\u2019t ring or pop up on this device' : 'Turn on Do Not Disturb — silence huddle calls while you work'}
-      style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2,
-        background: dnd ? '#a86bff22' : 'transparent',
-        border:`1.5px solid ${dnd ? '#a86bff' : C.border}`,
-        borderRadius:8, padding:'4px 8px', cursor:'pointer' }}>
-      <span style={{ fontSize:15 }}>{dnd ? '🌙' : '🔔'}</span>
-      {!isMobile && (
-        <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:'uppercase', color: dnd ? '#a86bff' : C.muted }}>
-          {dnd ? 'DND ON' : 'DND'}
-        </span>
+    <div ref={boxRef} style={{ position:'relative', display:'inline-flex' }}>
+      <button onClick={() => setOpen(o => !o)}
+        title={dnd ? `Do Not Disturb is ON ${untilLabel()} — calls won\u2019t ring on any of your devices` : 'Do Not Disturb — silence huddle calls on all your devices while you work'}
+        style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2,
+          background: dnd ? '#a86bff22' : 'transparent',
+          border:`1.5px solid ${dnd ? '#a86bff' : C.border}`,
+          borderRadius:8, padding:'4px 8px', cursor:'pointer' }}>
+        <span style={{ fontSize:15 }}>{dnd ? '🌙' : '🔔'}</span>
+        {!isMobile && (
+          <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:'uppercase', color: dnd ? '#a86bff' : C.muted }}>
+            {dnd ? 'DND ON' : 'DND'}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0, width:230,
+          background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+          boxShadow:'0 8px 32px rgba(0,0,0,.6)', zIndex:6500, overflow:'hidden', padding:6 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', padding:'8px 10px 6px' }}>
+            🌙 Do Not Disturb
+          </div>
+          {dnd && (
+            <div style={{ fontSize:11, color:'#a86bff', padding:'0 10px 8px', fontWeight:700 }}>
+              On {untilLabel()} — syncs to all your devices
+            </div>
+          )}
+          {dnd ? (
+            <button onClick={() => pick(null)}
+              style={{ width:'100%', textAlign:'left', background:`${C.success}15`, border:`1px solid ${C.success}44`,
+                borderRadius:8, padding:'10px 12px', color:C.success, fontSize:12, fontWeight:800, cursor:'pointer' }}>
+              🔔 Turn off — start ringing again
+            </button>
+          ) : OPTIONS.map(o => (
+            <button key={o.label} onClick={() => pick(o.until)}
+              style={{ width:'100%', textAlign:'left', background:'none', border:'none', borderRadius:8,
+                padding:'9px 12px', color:C.white, fontSize:12, fontWeight:600, cursor:'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background = `${C.gold}15`}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              {o.label}
+            </button>
+          ))}
+          <div style={{ fontSize:9, color:C.muted, padding:'8px 10px 6px', lineHeight:1.5 }}>
+            While on, huddle calls won't ring or pop up on any device you're signed into. Invites still land quietly in the 🔔 bell.
+          </div>
+        </div>
       )}
-    </button>
+    </div>
   )
 }

@@ -143,4 +143,75 @@ router.post("/huddle/daily-key/remove", async (req: Request, res: Response) => {
   }
 });
 
+// ── Do Not Disturb — synced across ALL of a user's devices ──────
+// Stored zero-DDL in admin_settings as key `dnd_<userId>` with a JSON
+// value {"until":"forever"|"<ISO timestamp>"}. Expired timestamps count
+// as OFF, so timed DND self-expires with no cleanup job.
+
+function parseDnd(value: unknown): { on: boolean; until: string | null } {
+  try {
+    const v = typeof value === "string" ? JSON.parse(value) : value as any;
+    const until = String(v?.until || "");
+    if (until === "forever") return { on: true, until: "forever" };
+    const t = Date.parse(until);
+    if (Number.isFinite(t) && t > Date.now()) return { on: true, until: new Date(t).toISOString() };
+  } catch { /* treat as off */ }
+  return { on: false, until: null };
+}
+
+router.get("/dnd", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireStaff(req);
+    if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${caller.company_id}&key=eq.dnd_${caller.id}&select=value`,
+      { headers: SH },
+    );
+    const rows = (r.ok ? await r.json().catch(() => []) : []) as any[];
+    res.json(parseDnd(rows?.[0]?.value));
+  } catch {
+    res.status(500).json({ error: "Could not load Do Not Disturb" });
+  }
+});
+
+router.post("/dnd", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireStaff(req);
+    if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+    const raw = req.body?.until;
+    // until: null/"" = turn OFF, "forever", or a future ISO timestamp
+    let until: string | null = null;
+    if (raw === "forever") until = "forever";
+    else if (raw) {
+      const t = Date.parse(String(raw));
+      if (!Number.isFinite(t) || t <= Date.now()) { res.status(400).json({ error: "Invalid Do Not Disturb time" }); return; }
+      if (t > Date.now() + 7 * 24 * 3600 * 1000) { res.status(400).json({ error: "Do Not Disturb can be set for up to 7 days" }); return; }
+      until = new Date(t).toISOString();
+    }
+    if (!until) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${caller.company_id}&key=eq.dnd_${caller.id}`,
+        { method: "DELETE", headers: SH },
+      );
+      if (!r.ok) { res.status(502).json({ error: "Could not turn off Do Not Disturb" }); return; }
+      res.json({ on: false, until: null });
+      return;
+    }
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+      method: "POST",
+      headers: { ...SH, Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        company_id: caller.company_id,
+        key: `dnd_${caller.id}`,
+        value: JSON.stringify({ until }),
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    if (!r.ok) { res.status(502).json({ error: "Could not save Do Not Disturb" }); return; }
+    res.json(parseDnd(JSON.stringify({ until })));
+  } catch {
+    res.status(500).json({ error: "Could not save Do Not Disturb" });
+  }
+});
+
 export default router;

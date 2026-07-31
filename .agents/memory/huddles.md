@@ -20,3 +20,4 @@ description: How team huddle video calls work (Daily.co, per-org keys, live-room
 - Incoming huddle_invite/huddle_ping notifications trigger a full-screen ringing overlay + WebAudio ring loop app-wide (realtime + poll fallback); only rings for invites <90s old; auto-quiets after 45s.
 - Do Not Disturb is per-device (localStorage `eden_dnd`), toggled via 🌙 DndButton in the top bar; it silences ring + overlay only (bell still collects invites).
 - Week7 consumes useHuddle(); it no longer renders the call iframe. Ownership (End vs Leave) exposed as `isStarter` from the provider.
+- DND is now server-synced: api-server GET/POST /dnd stores `dnd_<userId>` JSON {until} in admin_settings (expired timestamps = off, no cleanup job); frontend polls every 60s, localStorage is only a boot cache. Timed options in DndButton dropdown.
