@@ -119,6 +119,7 @@ export function HuddleProvider({ currentUser, children }) {
   const [isStarter,     setIsStarter]     = useState(false)
   const [huddlePinging, setHuddlePinging] = useState(null)
   const [expanded,      setExpanded]      = useState(true) // floating window size
+  const [fullscreen,    setFullscreen]    = useState(false) // call fills the whole screen
   const startedByMeRef = useRef(false)
 
   // ── Do Not Disturb — synced across ALL your devices ──────────
@@ -436,7 +437,10 @@ export function HuddleProvider({ currentUser, children }) {
 
       {/* ══ Floating call window — persists across ALL screens ══ */}
       {isStaff && huddleActive && huddleRoomUrl && (
-        <div ref={winRef} style={{
+        <div ref={winRef} style={ fullscreen ? {
+          position:'fixed', inset:0, zIndex:6000, background:C.black,
+          display:'flex', flexDirection:'column',
+        } : {
           position:'fixed', zIndex:6000,
           ...(winPos ? { left:winPos.x, top:winPos.y } : { right:12, bottom:12 }),
           width: expanded ? bigW : (isMobile ? 240 : 320),
@@ -445,36 +449,45 @@ export function HuddleProvider({ currentUser, children }) {
           display:'flex', flexDirection:'column',
         }}>
           <div
-            onPointerDown={onHeaderPointerDown}
-            onPointerMove={onHeaderPointerMove}
-            onPointerUp={onHeaderPointerUp}
-            onPointerCancel={onHeaderPointerUp}
-            title="Drag to move the call window"
+            onPointerDown={fullscreen ? undefined : onHeaderPointerDown}
+            onPointerMove={fullscreen ? undefined : onHeaderPointerMove}
+            onPointerUp={fullscreen ? undefined : onHeaderPointerUp}
+            onPointerCancel={fullscreen ? undefined : onHeaderPointerUp}
+            title={fullscreen ? undefined : 'Drag to move the call window'}
             style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:C.surface,
-              borderBottom:`1px solid ${C.border}`, cursor:'grab', touchAction:'none', userSelect:'none' }}>
+              borderBottom:`1px solid ${C.border}`, cursor: fullscreen ? 'default' : 'grab', touchAction:'none', userSelect:'none' }}>
             <div style={{ width:9, height:9, borderRadius:5, background:C.success, animation:'pulse 1.5s infinite', flexShrink:0 }}/>
             <div style={{ flex:1, fontSize:12, fontWeight:800, color:C.success, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
               Live Huddle
             </div>
-            <button onClick={() => setExpanded(e => !e)}
-              title={expanded ? 'Shrink to a mini window' : 'Expand the call'}
-              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, padding:'4px 10px', color:C.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
-              {expanded ? '⇲ Shrink' : '⇱ Expand'}
+            <button onClick={() => setFullscreen(f => !f)}
+              title={fullscreen ? 'Back to the floating window' : 'Make the call fill the whole screen'}
+              style={{ background: fullscreen ? `${C.gold}22` : 'none', border:`1px solid ${fullscreen ? C.gold : C.border}`, borderRadius:7, padding:'4px 10px', color: fullscreen ? C.gold : C.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+              {fullscreen ? '🗗 Exit Full Screen' : '⛶ Full Screen'}
             </button>
+            {!fullscreen && (
+              <button onClick={() => setExpanded(e => !e)}
+                title={expanded ? 'Shrink to a mini window' : 'Expand the call'}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, padding:'4px 10px', color:C.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                {expanded ? '⇲ Shrink' : '⇱ Expand'}
+              </button>
+            )}
             <button onClick={endHuddle}
               style={{ background:`${C.danger}22`, border:`1px solid ${C.danger}44`, borderRadius:7, padding:'4px 10px', color:C.danger, fontSize:11, fontWeight:700, cursor:'pointer' }}>
               {isStarter ? 'End' : 'Leave'}
             </button>
           </div>
           {/* The iframe stays mounted while you navigate — the call never drops */}
-          <div style={{ position:'relative', width:'100%', paddingTop: expanded ? '56.25%' : '62%', background:C.black }}>
+          <div style={ fullscreen
+            ? { position:'relative', flex:1, background:C.black }
+            : { position:'relative', width:'100%', paddingTop: expanded ? '56.25%' : '62%', background:C.black }}>
             <iframe src={huddleRoomUrl}
               allowFullScreen
               style={{ position:'absolute', inset:0, width:'100%', height:'100%', border:'none' }}
               allow="camera; microphone; autoplay; fullscreen; display-capture; clipboard-write"
               title="Huddle Room"/>
           </div>
-          {expanded && (
+          {expanded && !fullscreen && (
             <div style={{ padding:'6px 10px', fontSize:10, color:C.muted, textAlign:'center' }}>
               You can go anywhere in the app — the call stays with you. Use ⇲ Shrink to tuck it in the corner.
             </div>
@@ -542,16 +555,39 @@ export function DndButton({ isMobile }) {
     return 'until ' + (today ? '' : d.toLocaleDateString('en-US',{weekday:'short'}) + ' ') +
       d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
   }
-  const pick = until => { setDndFor(until); setOpen(false) }
-  const tomorrow8 = () => { const d = new Date(); d.setDate(d.getDate()+1); d.setHours(8,0,0,0); return d.toISOString() }
+  const pick = until => { setDndFor(until); setOpen(false); setCustomOpen(false) }
+  const at8 = daysAhead => { const d = new Date(); d.setDate(d.getDate()+daysAhead); d.setHours(8,0,0,0); return d.toISOString() }
+  const tomorrow8 = () => at8(1)
+  const nextMonday8 = () => { const d = new Date(); const ahead = ((8 - d.getDay()) % 7) || 7; return at8(ahead) }
   const inMins = m => new Date(Date.now() + m*60000).toISOString()
 
   const OPTIONS = [
-    { label:'For 30 minutes',        until: inMins(30) },
-    { label:'For 1 hour',            until: inMins(60) },
-    { label:'Until tomorrow (8 AM)', until: tomorrow8() },
-    { label:'Until I turn it off',   until: 'forever' },
+    { label:'For 30 minutes',          until: inMins(30) },
+    { label:'For 1 hour',              until: inMins(60) },
+    { label:'For 2 hours',             until: inMins(120) },
+    { label:'Until tomorrow (8 AM)',   until: tomorrow8() },
+    { label:'Until Monday (8 AM)',     until: nextMonday8() },
+    { label:'Until I turn it off',     until: 'forever' },
   ]
+
+  // Custom picker — pick any date & time up to 7 days out
+  const [customOpen, setCustomOpen] = useState(false)
+  const [customVal,  setCustomVal]  = useState('')
+  const toLocalInput = d => {
+    const p = n => String(n).padStart(2,'0')
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+  const customLimits = {
+    min: toLocalInput(new Date(Date.now() + 5*60000)),
+    max: toLocalInput(new Date(Date.now() + 7*24*3600*1000)),
+  }
+  function saveCustom() {
+    const t = Date.parse(customVal)
+    if (!Number.isFinite(t) || t <= Date.now()) { alert('Pick a time in the future.') ; return }
+    if (t > Date.now() + 7*24*3600*1000) { alert('Do Not Disturb can be set for up to 7 days.'); return }
+    pick(new Date(t).toISOString())
+    setCustomVal('')
+  }
 
   return (
     <div ref={boxRef} style={{ position:'relative', display:'inline-flex' }}>
@@ -580,13 +616,19 @@ export function DndButton({ isMobile }) {
               On {untilLabel()} — syncs to all your devices
             </div>
           )}
-          {dnd ? (
+          {dnd && (
             <button onClick={() => pick(null)}
               style={{ width:'100%', textAlign:'left', background:`${C.success}15`, border:`1px solid ${C.success}44`,
-                borderRadius:8, padding:'10px 12px', color:C.success, fontSize:12, fontWeight:800, cursor:'pointer' }}>
+                borderRadius:8, padding:'10px 12px', color:C.success, fontSize:12, fontWeight:800, cursor:'pointer', marginBottom:6 }}>
               🔔 Turn off — start ringing again
             </button>
-          ) : OPTIONS.map(o => (
+          )}
+          {dnd && (
+            <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:'uppercase', padding:'2px 10px 4px' }}>
+              Or change to…
+            </div>
+          )}
+          {OPTIONS.map(o => (
             <button key={o.label} onClick={() => pick(o.until)}
               style={{ width:'100%', textAlign:'left', background:'none', border:'none', borderRadius:8,
                 padding:'9px 12px', color:C.white, fontSize:12, fontWeight:600, cursor:'pointer' }}
@@ -595,6 +637,24 @@ export function DndButton({ isMobile }) {
               {o.label}
             </button>
           ))}
+          <button onClick={() => setCustomOpen(v => !v)}
+            style={{ width:'100%', textAlign:'left', background: customOpen ? `${C.gold}15` : 'none', border:'none', borderRadius:8,
+              padding:'9px 12px', color:C.gold, fontSize:12, fontWeight:700, cursor:'pointer' }}>
+            🗓 Pick a date &amp; time…
+          </button>
+          {customOpen && (
+            <div style={{ padding:'4px 10px 8px', display:'flex', gap:6, alignItems:'center' }}>
+              <input type="datetime-local" value={customVal} min={customLimits.min} max={customLimits.max}
+                onChange={e => setCustomVal(e.target.value)}
+                style={{ flex:1, minWidth:0, background:C.surface, border:`1px solid ${C.border}`, borderRadius:7,
+                  padding:'7px 8px', color:C.white, fontSize:11, colorScheme:'dark' }}/>
+              <button onClick={saveCustom} disabled={!customVal}
+                style={{ background: customVal ? C.gold : C.border, border:'none', borderRadius:7, padding:'7px 12px',
+                  color:C.black, fontSize:11, fontWeight:800, cursor: customVal ? 'pointer' : 'default' }}>
+                Set
+              </button>
+            </div>
+          )}
           <div style={{ fontSize:9, color:C.muted, padding:'8px 10px 6px', lineHeight:1.5 }}>
             While on, huddle calls won't ring or pop up on any device you're signed into. Invites still land quietly in the 🔔 bell.
           </div>
