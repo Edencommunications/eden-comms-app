@@ -18,3 +18,6 @@ Rule: Passwords live only in Supabase Auth (hashed). `user_profiles` remains the
 
 ## Every staff login needs a user_profiles row
 RLS write policies resolve the org via the JWT email → user_profiles join. An auth user with no user_profiles row (e.g. admin@edencomms.io before Jul 31 2026) can READ but all writes silently match 0 rows. Fix: insert a profile row (id must be supplied — no default). Symptom: "edits not saving" for exactly one login while others work.
+
+## Login attribution stamp
+App-created auth users carry `user_metadata.company_id` + `intended_role` (set in provision/bulk-import/GHL-intake). The Login Health audit (api-server /profile-audit) uses it to scope orphaned logins per org; unstamped orphans are Eden-admin-only.
