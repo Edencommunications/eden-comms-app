@@ -123,6 +123,68 @@ const docTypeLabel = t=>DOC_TYPES.find(d=>d.v===t)?.l||t
 function Card({children,sx={}}) {
   return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,...sx}}>{children}</div>
 }
+// ── Login Health — safety net: every login must have a profile record,
+//    or the security rules silently reject all of their saves. ─────────
+function LoginHealthCard() {
+  const [missing, setMissing] = useState(null) // null = loading, [] = all good
+  const [fixing,  setFixing]  = useState('')
+  const [fixRole, setFixRole] = useState({})
+  const load = () => {
+    fetch('/api/profile-audit', { headers: { Authorization: sbBearer() } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setMissing(d && Array.isArray(d.missing) ? d.missing : null))
+      .catch(() => setMissing(null))
+  }
+  useEffect(load, [])
+  const fix = async (email) => {
+    const role = fixRole[email] || 'client'
+    setFixing(email)
+    try {
+      const r = await fetch('/api/profile-audit/fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ email, role }),
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) alert(d?.error || 'Could not create the profile — please try again.')
+      load()
+    } catch { alert('Could not create the profile — please try again.') }
+    setFixing('')
+  }
+  return (
+    <Card sx={{marginBottom:14}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <Lbl t="Login Health"/>
+        <span style={{fontSize:11,color: missing===null ? C.muted : missing.length ? C.danger : C.success, fontWeight:700}}>
+          {missing===null ? 'Checking…' : missing.length ? `⚠️ ${missing.length} need attention` : '✅ All logins healthy'}
+        </span>
+      </div>
+      <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
+        Every login needs a matching profile record — without one, that person can sign in but none of their changes save.
+      </div>
+      {Array.isArray(missing) && missing.map(m => (
+        <div key={m.email} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 0',borderTop:`1px solid ${C.border}`,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:160}}>
+            <div style={{fontSize:12,color:C.white,fontWeight:600}}>{m.email}</div>
+            <div style={{fontSize:10,color:C.danger,marginTop:1}}>Login exists but has no profile — their saves are being blocked</div>
+          </div>
+          <select value={fixRole[m.email]||'client'} onChange={e=>setFixRole(p=>({...p,[m.email]:e.target.value}))}
+            style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
+            <option value="client">Client</option>
+            <option value="coach">Coach</option>
+            <option value="head_coach">Head Coach</option>
+            <option value="super_admin">Admin</option>
+          </select>
+          <button onClick={()=>fix(m.email)} disabled={fixing===m.email}
+            style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+            {fixing===m.email ? 'Fixing…' : 'Create profile'}
+          </button>
+        </div>
+      ))}
+    </Card>
+  )
+}
+
 function Lbl({t}) {
   return <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'13px 0 7px'}}>{t}</div>
 }
@@ -1371,6 +1433,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               )
             })}
           </Card>
+
+          {/* Login health — logins missing their profile record */}
+          <LoginHealthCard/>
 
           {/* Recent audit activity */}
           <Card sx={{marginBottom:14}}>

@@ -6,6 +6,7 @@ import authRouter from "./auth";
 import bulkImportRouter from "./bulkImport";
 import checkinFormRouter from "./checkinForm";
 import huddleRouter from "./huddle";
+import profileAuditRouter from "./profileAudit";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(authRouter);
 router.use(bulkImportRouter);
 router.use(checkinFormRouter);
 router.use(huddleRouter);
+router.use(profileAuditRouter);
 
 export default router;
