@@ -17,7 +17,7 @@ import { supabase as authClient } from '../supabaseClient'
 // Create a real (Supabase Auth) login for a new user via the API server.
 // Requires the signed-in admin's own auth session (JWT) — the server verifies
 // the token and the super_admin role before provisioning.
-async function provisionLogin(email, password, name) {
+async function provisionLogin(email, password, name, role) {
   try {
     const { data } = await authClient.auth.getSession()
     const token = data?.session?.access_token
@@ -25,7 +25,7 @@ async function provisionLogin(email, password, name) {
     const res = await fetch('/api/auth/provision', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, role }),
     })
     const body = await res.json().catch(()=>({}))
     if (!res.ok) return { ok:false, error: body.error || 'auth service unavailable' }
@@ -125,7 +125,7 @@ function Card({children,sx={}}) {
 }
 // ── Login Health — safety net: every login must have a profile record,
 //    or the security rules silently reject all of their saves. ─────────
-function LoginHealthCard({orgs=[]}) {
+function LoginHealthCard({orgs=[], isEden=false}) {
   const [missing, setMissing] = useState(null) // null = loading, [] = all good
   const [fixing,  setFixing]  = useState('')
   const [fixRole, setFixRole] = useState({})
@@ -137,9 +137,9 @@ function LoginHealthCard({orgs=[]}) {
       .catch(() => setMissing(null))
   }
   useEffect(load, [])
-  const fix = async (email) => {
-    const role = fixRole[email] || 'client'
-    const company_id = fixOrg[email] || EDEN_ORG_ID
+  const fix = async (email, orphan) => {
+    const role = fixRole[email] || orphan?.intended_role || 'client'
+    const company_id = orphan?.company_id || fixOrg[email] || EDEN_ORG_ID
     setFixing(email)
     try {
       const r = await fetch('/api/profile-audit/fix', {
@@ -164,19 +164,25 @@ function LoginHealthCard({orgs=[]}) {
       <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
         Every login needs a matching profile record — without one, that person can sign in but none of their changes save.
       </div>
-      {Array.isArray(missing) && missing.map(m => (
+      {Array.isArray(missing) && missing.map(m => {
+        const knownOrg = m.company_id ? (orgs.find(o=>o.id===m.company_id)?.name || 'your organization') : null
+        return (
         <div key={m.email} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 0',borderTop:`1px solid ${C.border}`,flexWrap:'wrap'}}>
           <div style={{flex:1,minWidth:160}}>
-            <div style={{fontSize:12,color:C.white,fontWeight:600}}>{m.email}</div>
+            <div style={{fontSize:12,color:C.white,fontWeight:600}}>{m.name ? `${m.name} — ${m.email}` : m.email}</div>
             <div style={{fontSize:10,color:C.danger,marginTop:1}}>Login exists but has no profile — their saves are being blocked</div>
           </div>
-          <select value={fixOrg[m.email]||EDEN_ORG_ID} onChange={e=>setFixOrg(p=>({...p,[m.email]:e.target.value}))}
-            title="Which company does this person belong to?"
-            style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:'#D4A8F0',fontSize:11,outline:'none',cursor:'pointer',maxWidth:150}}>
-            {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden'}]).map(o=>
-              <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-          <select value={fixRole[m.email]||'client'} onChange={e=>setFixRole(p=>({...p,[m.email]:e.target.value}))}
+          {knownOrg
+            ? <span style={{fontSize:11,color:'#D4A8F0',fontWeight:600}}>{knownOrg}</span>
+            : isEden && (
+              <select value={fixOrg[m.email]||EDEN_ORG_ID} onChange={e=>setFixOrg(p=>({...p,[m.email]:e.target.value}))}
+                title="Which company does this person belong to?"
+                style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:'#D4A8F0',fontSize:11,outline:'none',cursor:'pointer',maxWidth:150}}>
+                {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden'}]).map(o=>
+                  <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            )}
+          <select value={fixRole[m.email]||m.intended_role||'client'} onChange={e=>setFixRole(p=>({...p,[m.email]:e.target.value}))}
             title="What role should this person have?"
             style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
             <option value="client">Client</option>
@@ -184,12 +190,12 @@ function LoginHealthCard({orgs=[]}) {
             <option value="head_coach">Head Coach</option>
             <option value="super_admin">Admin</option>
           </select>
-          <button onClick={()=>fix(m.email)} disabled={fixing===m.email}
+          <button onClick={()=>fix(m.email, m)} disabled={fixing===m.email}
             style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
             {fixing===m.email ? 'Fixing…' : 'Create profile'}
           </button>
         </div>
-      ))}
+      )})}
     </Card>
   )
 }
@@ -425,7 +431,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       const initials = r.name.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
       const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
       // Real login first (Supabase Auth — hashed, must set own password on first sign-in)
-      const authRes = await provisionLogin(r.email, tempPass, r.name)
+      const authRes = await provisionLogin(r.email, tempPass, r.name, 'client')
       if (!authRes.ok) { failed.push({email:r.email, reason:authRes.error||'Could not create their login'}); continue }
       const payload = {
         id:            crypto.randomUUID(),
@@ -1147,7 +1153,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Create their real login first (Supabase Auth — hashed password, forced
     // "set your own password" on first sign-in). No plain-text storage.
     try {
-      const authRes = await provisionLogin(emailNorm, tempPass, newUser.name.trim())
+      const authRes = await provisionLogin(emailNorm, tempPass, newUser.name.trim(), newUser.role)
       if (!authRes.ok) {
         alert(`Could not create this user's login: ${authRes.error || 'auth service unavailable'}. No account was created.`)
         return
@@ -1443,10 +1449,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             })}
           </Card>
 
-          {/* Login health — logins missing their profile record.
-              Eden-only: orphaned logins can't be attributed to an org, so
-              the list is platform-wide and only Eden's admin may see it. */}
-          {adminCompanyId===EDEN_ORG_ID && <LoginHealthCard orgs={orgs}/>}
+          {/* Login health — logins missing their profile record. Each org's
+              admin sees only their own orphans (attributed via the stamp put
+              on every app-created login); unstamped legacy orphans go to
+              Eden's admin only. */}
+          <LoginHealthCard orgs={orgs} isEden={adminCompanyId===EDEN_ORG_ID}/>
 
           {/* Recent audit activity */}
           <Card sx={{marginBottom:14}}>

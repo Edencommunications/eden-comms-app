@@ -64,6 +64,10 @@ export async function provisionAuthUser(
   password: string,
   name?: string,
   mustChangePassword: boolean = true,
+  // Stamped onto the login itself so an orphaned login (auth user without a
+  // user_profiles row) can still be attributed to its company + intended role
+  // by the Login Health audit.
+  extraMeta: Record<string, string> = {},
 ): Promise<ProvisionResult> {
   if (!SERVICE_KEY) return { ok: false, error: "Auth service is not configured (missing service role key)" };
   const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -73,7 +77,7 @@ export async function provisionAuthUser(
       email: email.trim().toLowerCase(),
       password,
       email_confirm: true,
-      user_metadata: { must_change_password: mustChangePassword, ...(name ? { name } : {}) },
+      user_metadata: { must_change_password: mustChangePassword, ...(name ? { name } : {}), ...extraMeta },
     }),
   });
   const body: any = await r.json().catch(() => ({}));
@@ -136,10 +140,15 @@ const router: IRouter = Router();
 router.post("/auth/provision", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
   if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const { email, password, name } = (req.body || {}) as Record<string, string>;
+  const { email, password, name, role } = (req.body || {}) as Record<string, string>;
   if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: "Valid email required" });
   if (!password || password.length < 8) return res.status(400).json({ ok: false, error: "Password must be at least 8 characters" });
-  const result = await provisionAuthUser(email, password, name);
+  // Attribution stamp: the creating admin's company (admins only create logins
+  // inside their own org) plus the intended role, if the caller sent one.
+  const meta: Record<string, string> = {};
+  if (admin.company_id) meta.company_id = admin.company_id;
+  if (role && ["client", "coach", "head_coach", "super_admin"].includes(role)) meta.intended_role = role;
+  const result = await provisionAuthUser(email, password, name, true, meta);
   if (!result.ok) return res.status(502).json(result);
   logger.info({ adminId: admin.id, email: email.toLowerCase() }, "[Auth] admin provisioned auth user");
   return res.json(result);

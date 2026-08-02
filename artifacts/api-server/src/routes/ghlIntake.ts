@@ -234,7 +234,8 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
   // Create the real (Supabase Auth) login first — hashed password, forced
   // "set your own password" on first sign-in. No plain-text storage.
   const tempPass = `Eden${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.floor(10 + Math.random() * 90)}!`;
-  const auth = await provisionAuthUser(email, tempPass, name);
+  const auth = await provisionAuthUser(email, tempPass, name, true,
+    { company_id: companyId, intended_role: "client" });
   if (!auth.ok) return fail(500, "error", `Could not create login for client: ${auth.error}`);
 
   const initials = name.split(" ").filter(Boolean).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);

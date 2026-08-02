@@ -154,7 +154,8 @@ router.post("/admin/bulk-import", async (req: Request, res: Response) => {
     }
 
     const pass = tempPass();
-    const auth = await provisionAuthUser(r.email, pass, r.name);
+    const auth = await provisionAuthUser(r.email, pass, r.name, true,
+      { company_id: companyId, intended_role: r.role });
     if (!auth.ok) {
       report.push({ email: r.email, name: r.name, role: r.role, status: "error", detail: `Could not create login: ${auth.error}` });
       continue;
