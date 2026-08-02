@@ -125,10 +125,11 @@ function Card({children,sx={}}) {
 }
 // ── Login Health — safety net: every login must have a profile record,
 //    or the security rules silently reject all of their saves. ─────────
-function LoginHealthCard() {
+function LoginHealthCard({orgs=[]}) {
   const [missing, setMissing] = useState(null) // null = loading, [] = all good
   const [fixing,  setFixing]  = useState('')
   const [fixRole, setFixRole] = useState({})
+  const [fixOrg,  setFixOrg]  = useState({})
   const load = () => {
     fetch('/api/profile-audit', { headers: { Authorization: sbBearer() } })
       .then(r => r.ok ? r.json() : null)
@@ -138,12 +139,13 @@ function LoginHealthCard() {
   useEffect(load, [])
   const fix = async (email) => {
     const role = fixRole[email] || 'client'
+    const company_id = fixOrg[email] || EDEN_ORG_ID
     setFixing(email)
     try {
       const r = await fetch('/api/profile-audit/fix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({ email, role, company_id }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) alert(d?.error || 'Could not create the profile — please try again.')
@@ -168,7 +170,14 @@ function LoginHealthCard() {
             <div style={{fontSize:12,color:C.white,fontWeight:600}}>{m.email}</div>
             <div style={{fontSize:10,color:C.danger,marginTop:1}}>Login exists but has no profile — their saves are being blocked</div>
           </div>
+          <select value={fixOrg[m.email]||EDEN_ORG_ID} onChange={e=>setFixOrg(p=>({...p,[m.email]:e.target.value}))}
+            title="Which company does this person belong to?"
+            style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:'#D4A8F0',fontSize:11,outline:'none',cursor:'pointer',maxWidth:150}}>
+            {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden'}]).map(o=>
+              <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
           <select value={fixRole[m.email]||'client'} onChange={e=>setFixRole(p=>({...p,[m.email]:e.target.value}))}
+            title="What role should this person have?"
             style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
             <option value="client">Client</option>
             <option value="coach">Coach</option>
@@ -1437,7 +1446,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           {/* Login health — logins missing their profile record.
               Eden-only: orphaned logins can't be attributed to an org, so
               the list is platform-wide and only Eden's admin may see it. */}
-          {adminCompanyId===EDEN_ORG_ID && <LoginHealthCard/>}
+          {adminCompanyId===EDEN_ORG_ID && <LoginHealthCard orgs={orgs}/>}
 
           {/* Recent audit activity */}
           <Card sx={{marginBottom:14}}>
