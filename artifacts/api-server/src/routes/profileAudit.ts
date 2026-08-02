@@ -46,7 +46,9 @@ const router: IRouter = Router();
 router.get("/profile-audit", async (req: Request, res: Response) => {
   try {
     const caller = await requireStaff(req);
-    if (!caller || caller.role !== "super_admin") { res.status(401).json({ error: "Not authorized" }); return; }
+    // Eden-only: orphaned logins have no org, so the list can't be scoped
+    // per company — showing it to white-label admins would leak emails.
+    if (!caller || caller.role !== "super_admin" || caller.company_id !== EDEN_ORG_ID) { res.status(401).json({ error: "Not authorized" }); return; }
     const missing = await listMissing();
     res.json({ missing });
   } catch {
@@ -57,7 +59,7 @@ router.get("/profile-audit", async (req: Request, res: Response) => {
 router.post("/profile-audit/fix", async (req: Request, res: Response) => {
   try {
     const caller = await requireStaff(req);
-    if (!caller || caller.role !== "super_admin") { res.status(401).json({ error: "Not authorized" }); return; }
+    if (!caller || caller.role !== "super_admin" || caller.company_id !== EDEN_ORG_ID) { res.status(401).json({ error: "Not authorized" }); return; }
 
     const email = String(req.body?.email || "").trim().toLowerCase();
     const role = String(req.body?.role || "").trim();

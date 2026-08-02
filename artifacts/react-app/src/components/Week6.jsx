@@ -1434,8 +1434,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             })}
           </Card>
 
-          {/* Login health — logins missing their profile record */}
-          <LoginHealthCard/>
+          {/* Login health — logins missing their profile record.
+              Eden-only: orphaned logins can't be attributed to an org, so
+              the list is platform-wide and only Eden's admin may see it. */}
+          {adminCompanyId===EDEN_ORG_ID && <LoginHealthCard/>}
 
           {/* Recent audit activity */}
           <Card sx={{marginBottom:14}}>
