@@ -18,7 +18,9 @@
 //   POST /welcome/check      (any signed-in client) → sends the welcome once
 //
 // The message is inserted as the COACH (sender_id = coach profile) into the
-// client↔coach conversation, so it reads like a personal greeting.
+// client↔coach conversation, so it reads like a personal greeting. If the
+// client has no coach yet, it is sent from an org super_admin into an
+// admin↔client conversation instead, so no new client lands in silence.
 // Placeholders: {client_name} {coach_name}
 import { Router, type IRouter, type Request, type Response } from "express";
 import { requireStaff } from "./checkinForm";
@@ -155,40 +157,42 @@ router.post("/welcome/check", async (req: Request, res: Response) => {
     const existing = await svcGet("admin_settings", `company_id=eq.${me.company_id}&key=eq.${encodeURIComponent(claimKey)}&select=key`);
     if (existing.length) { res.json({ sent: false }); return; }
 
-    // Sender: the client's coach (same org, real coach role). If the client
-    // has no coach yet, fall back to an org admin so nobody lands in silence.
+    // Sender: the client's coach if they have one in the SAME org — otherwise
+    // fall back to an org super_admin so no new client lands in silence.
     let sender: { id: string; name: string } | null = null;
+    let override: { text?: string; paused?: boolean } = {};
     if (me.coach_id) {
       sender = (await svcGet(
         "user_profiles",
         `id=eq.${me.coach_id}&company_id=eq.${me.company_id}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name`,
       ))[0] || null;
+      if (sender) override = settings.perCoach[me.coach_id] || {};
     }
     if (!sender) {
+      // No coach yet (or the assigned coach is inactive/missing) → send from
+      // an org super_admin into an admin↔client conversation instead.
       sender = (await svcGet(
         "user_profiles",
         `company_id=eq.${me.company_id}&role=eq.super_admin&is_active=not.is.false&select=id,name&order=name&limit=1`,
       ))[0] || null;
     }
     if (!sender) { res.json({ sent: false }); return; }
-    const coach = sender;
 
-    const override = settings.perCoach[sender.id] || {};
     if (override.paused) { res.json({ sent: false }); return; }
     const template = (override.text || settings.defaultText || "").trim();
     if (!template) { res.json({ sent: false }); return; }
 
     const content = template
       .replaceAll("{client_name}", firstName(me.name))
-      .replaceAll("{coach_name}", firstName(coach.name));
+      .replaceAll("{coach_name}", firstName(sender.name));
 
     // Atomic claim FIRST so a double-fire can't send twice (unique constraint
     // rejects the second insert). Rolled back below if the send fails.
     const claimed = await claimOnce(me.company_id, claimKey);
     if (!claimed) { res.json({ sent: false }); return; }
 
-    // Find or create the coach↔client conversation (ids sorted, same as app)
-    const [pA, pB] = [me.id, coach.id].sort();
+    // Find or create the sender↔client conversation (ids sorted, same as app)
+    const [pA, pB] = [me.id, sender.id].sort();
     let convoId: string | null =
       (await svcGet("conversations", `participant_a_id=eq.${pA}&participant_b_id=eq.${pB}&select=id&limit=1`))[0]?.id || null;
     if (!convoId) {
@@ -205,7 +209,7 @@ router.post("/welcome/check", async (req: Request, res: Response) => {
     const ins = await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
       method: "POST",
       headers: { ...SH, Prefer: "return=representation" },
-      body: JSON.stringify({ conversation_id: convoId, sender_id: coach.id, content, message_type: "text" }),
+      body: JSON.stringify({ conversation_id: convoId, sender_id: sender.id, content, message_type: "text" }),
     });
     // Send failed → roll the claim back so the next sign-in retries
     if (!ins.ok) { await releaseClaim(me.company_id, claimKey); res.json({ sent: false }); return; }

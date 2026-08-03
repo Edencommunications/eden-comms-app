@@ -4049,7 +4049,8 @@ const AdminDashboard = ({ user }:any) => {
                 <>
                   <p style={{ fontSize:12, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
                     Sent automatically into a new client's chat with their coach the first time they open the app.
-                    You can use <code style={{ color:B.gold }}>{'{client_name}'}</code> and <code style={{ color:B.gold }}>{'{coach_name}'}</code> — they're filled in per client.
+                    If a client doesn't have a coach yet, the welcome is sent from an admin account instead — so no one is left in silence.
+                    You can use <code style={{ color:B.gold }}>{'{client_name}'}</code> and <code style={{ color:B.gold }}>{'{coach_name}'}</code> — they're filled in per client (for coachless clients, {'{coach_name}'} becomes the admin's name).
                   </p>
                   <label style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, cursor:"pointer" }}>
                     <input type="checkbox" checked={!!welcomeCfg.enabled}
