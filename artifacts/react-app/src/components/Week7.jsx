@@ -564,6 +564,28 @@ export default function Week7({ currentUser }) {
                 </button>
               </div>
 
+              {/* Threads — every #general message that has replies, like the DM list */}
+              {messages.some(m=>(m.replyCount||0)>0) && (
+                <div style={{padding:'10px 14px 6px'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Threads</div>
+                  {messages.filter(m=>(m.replyCount||0)>0)
+                    .slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
+                    .slice(0,12)
+                    .map(m=>{
+                      const isActive = chatView==='thread' && activeThread?.id===m.id
+                      const preview = (splitAtts(m.content).text||'📎 attachment').replace(/\s+/g,' ').slice(0,26)
+                      return (
+                        <button key={m.id} onClick={()=>{ setActiveThread(m); setChatView('thread') }}
+                          style={{width:'100%',textAlign:'left',background:isActive?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'5px 8px',color:isActive?C.gold:C.white,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                          <span style={{color:C.muted,flexShrink:0}}>🧵</span>
+                          <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{preview}</span>
+                          <span style={{flexShrink:0,fontSize:9,fontWeight:800,color:C.gold,background:`${C.gold}20`,borderRadius:8,padding:'1px 6px'}}>{m.replyCount}</span>
+                        </button>
+                      )
+                    })}
+                </div>
+              )}
+
               <div style={{padding:'10px 14px 6px'}}>
                 <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   Direct Messages
