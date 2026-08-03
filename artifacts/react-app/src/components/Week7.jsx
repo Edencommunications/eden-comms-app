@@ -123,7 +123,7 @@ function NavItem({ icon, label, active, onClick, badge }) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week7({ currentUser }) {
+export default function Week7({ currentUser, initialDm }) {
   const isMobile = useIsMobile()
   const email  = currentUser?.email || ''
   const info   = KNOWN_USERS[email] || { role:currentUser?.role||'coach', name:currentUser?.name||'User', uuid:null, orgId:EDEN_ORG_ID }
@@ -444,6 +444,34 @@ export default function Week7({ currentUser }) {
     loadTeamChat()
   }
   const [activeThread, setActiveThread] = useState(null)
+  // Per-user read state for threads — a thread stays under Threads until its
+  // latest reply has been seen; "Mark unread" puts it back.
+  const [threadReads, setThreadReads] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`eden_team_thread_reads_${email}`) || '{}') } catch { return {} }
+  })
+  function setThreadRead(rootId, ts) {
+    setThreadReads(prev => {
+      const next = { ...prev, [rootId]: ts }
+      try { localStorage.setItem(`eden_team_thread_reads_${email}`, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+  const lastReplyAt = (m) => {
+    const rs = threadReplies[m.id] || []
+    return rs.length ? rs[rs.length - 1].createdAt : m.createdAt
+  }
+  const isThreadUnread = (m) => (m.replyCount||0) > 0 && new Date(lastReplyAt(m)).getTime() > (threadReads[m.id] || 0)
+  const openThreadRead = (m) => { setThreadRead(m.id, Date.now()); setActiveThread(m); setChatView('thread') }
+
+  // Deep link from admin: "💬 Message" on a coach/staff card opens their DM here
+  useEffect(() => {
+    if (!initialDm?.email || !team.length) return
+    dbGet('user_profiles', `email=eq.${encodeURIComponent(initialDm.email)}&select=id`).then(rows => {
+      const id = rows?.[0]?.id
+      const t = team.find(x => x.uuid === id)
+      if (t) { setSection('chat'); setDmTarget(t); setChatView('dm') }
+    }).catch(()=>{})
+  }, [initialDm, team]) // eslint-disable-line
   const [newReply,     setNewReply]     = useState('')
   const [dmTarget,     setDmTarget]     = useState(null)
   const [dmMessages,   setDmMessages]   = useState({})
@@ -664,8 +692,8 @@ export default function Week7({ currentUser }) {
                 <button onClick={() => setChatView('threads')}
                   style={{width:'100%',textAlign:'left',background:chatView==='threads'?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'6px 8px',color:chatView==='threads'?C.gold:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
                   <span>🧵</span> Threads
-                  {messages.filter(m=>(m.replyCount||0)>0).length>0 && (
-                    <span style={{marginLeft:'auto',fontSize:9,fontWeight:800,color:C.gold,background:`${C.gold}20`,borderRadius:8,padding:'1px 6px'}}>{messages.filter(m=>(m.replyCount||0)>0).length}</span>
+                  {messages.filter(m=>!m.isDm&&isThreadUnread(m)).length>0 && (
+                    <span style={{marginLeft:'auto',fontSize:9,fontWeight:800,color:C.black,background:C.gold,borderRadius:8,padding:'1px 6px'}}>{messages.filter(m=>!m.isDm&&isThreadUnread(m)).length}</span>
                   )}
                 </button>
               </div>
@@ -713,21 +741,21 @@ export default function Week7({ currentUser }) {
               <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
                 <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
                   <div style={{fontSize:14,fontWeight:700,color:C.white}}>🧵 Threads</div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>Every #general conversation with replies</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>Threads with replies you haven't read yet — they clear once opened</div>
                 </div>
                 <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
-                  {messages.filter(m=>!m.isDm&&(m.replyCount||0)>0).length===0 && (
+                  {messages.filter(m=>!m.isDm&&isThreadUnread(m)).length===0 && (
                     <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'40px 20px',lineHeight:1.7}}>
-                      No threads yet.<br/>Hover any message in #general and click 💬 Reply in thread to start one.
+                      ✅ You're all caught up — no unread thread replies.<br/>New replies in any #general thread will show up here.
                     </div>
                   )}
-                  {messages.filter(m=>!m.isDm&&(m.replyCount||0)>0)
+                  {messages.filter(m=>!m.isDm&&isThreadUnread(m))
                     .slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
                     .map(m=>{
                       const replies = threadReplies[m.id]||[]
                       const last = replies[replies.length-1]
                       return (
-                        <button key={m.id} onClick={()=>{ setActiveThread(m); setChatView('thread') }}
+                        <button key={m.id} onClick={()=>openThreadRead(m)}
                           style={{width:'100%',textAlign:'left',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:10,cursor:'pointer',display:'block'}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                             <div style={{width:24,height:24,borderRadius:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.gold,flexShrink:0}}>{m.senderName[0]}</div>
@@ -784,7 +812,7 @@ export default function Week7({ currentUser }) {
                                 <button onClick={() => deleteTeamMsg(msg)} title="Delete (kept in admin audit log)"
                                   style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>🗑</button>
                               )}
-                              <button onClick={() => { setActiveThread(msg); setChatView('thread') }}
+                              <button onClick={() => openThreadRead(msg)}
                                 style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0,display:'flex',alignItems:'center',gap:4,fontWeight:msg.replyCount>0?600:400}}>
                                 {msg.replyCount > 0 ? (
                                   <>
@@ -836,6 +864,11 @@ export default function Week7({ currentUser }) {
                         <div style={{fontSize:13,fontWeight:700,color:C.white}}>Thread</div>
                         <div style={{fontSize:10,color:C.muted,marginTop:1}}>{(threadReplies[activeThread.id]||[]).length} replies</div>
                       </div>
+                      <button onClick={() => { setThreadRead(activeThread.id, 0); setChatView('threads') }}
+                        title="Put this thread back under Threads as unread"
+                        style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',color:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                        Mark unread
+                      </button>
                     </div>
 
                     <div style={{padding:'12px 14px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>

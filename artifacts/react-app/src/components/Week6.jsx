@@ -1999,6 +1999,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     </span>
                     {!isRemoved&&(
                       <div style={{display:'flex',gap:5,flexWrap:'wrap',justifyContent:isMobile?'flex-end':'flex-end'}}>
+                        <button onClick={()=>onNavigate&&onNavigate('team',{email:coach.email,name:coach.name,role:coach.role||'coach'})}
+                          style={{fontSize:10,background:`${C.gold}15`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'3px 8px',color:C.gold,cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>
+                          💬 Message
+                        </button>
                         {isHC?(
                           <button onClick={()=>demoteFromHeadCoach(coach)}
                             style={{fontSize:10,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',color:C.muted,cursor:'pointer',fontWeight:600,whiteSpace:'nowrap'}}>
@@ -2070,6 +2074,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <span style={{fontSize:10,background:`${C.gold}18`,color:C.gold,padding:'3px 9px',borderRadius:10,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5}}>
                   {(s.role||'').replace(/_/g,' ')}
                 </span>
+                <button onClick={()=>onNavigate&&onNavigate('team',{email:s.email,name:s.name||s.full_name,role:s.role})}
+                  style={{background:`${C.gold}15`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'5px 12px',color:C.gold,fontSize:11,cursor:'pointer',fontWeight:700}}>
+                  💬 Message
+                </button>
                 {isAdmin&&(
                   <button onClick={()=>openEditStaff(s)}
                     style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 12px',color:C.muted,fontSize:11,cursor:'pointer'}}>

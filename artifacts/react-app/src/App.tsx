@@ -5309,7 +5309,7 @@ const AppShell = ({ user, onLogout }) => {
                                           setLoomFeatured={setLoomFeatured}
                                           onClientFocus={(c:any) => setSplitClient(c)}/>;
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
-    if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
+    if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }} initialDm={coachClient}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "community") return <CommunityScreen user={user}/>;
     return <HomeScreen user={user} wlOrg={wlOrg}/>;
