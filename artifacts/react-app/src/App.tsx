@@ -5020,6 +5020,16 @@ const AppShell = ({ user, onLogout }) => {
   const splitContainerRef = useRef<HTMLDivElement>(null);
 
   // Helper: navigate into a client tool, remembering where we came from
+  // Sidebar/menu navigation that stays useful in Split View: panel-type tabs load
+  // into the left panel; anything else exits Split View and navigates normally.
+  const navTab = (key: string) => {
+    if (key === 'admin') setCoachClient(null);
+    if (splitView) {
+      if (SPLIT_PANELS.some(p => p.key === key)) { setLeftPanel(key); return; }
+      setSplitView(false);
+    }
+    setTab(key);
+  };
   const openClientTool = (dest: string, client: any, source = 'admin') => {
     setCoachClient(client);
     setTab(dest);
@@ -5343,7 +5353,7 @@ const AppShell = ({ user, onLogout }) => {
             </div>
             {tabs.map(t => (
               <button key={t.key}
-                onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); setMenuOpen(false); }}
+                onClick={() => { navTab(t.key); setMenuOpen(false); }}
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 16px",
                   background:tab===t.key?`${shellPrimary}15`:"none", border:"none",
                   borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`,
@@ -5369,7 +5379,7 @@ const AppShell = ({ user, onLogout }) => {
               <p style={{ fontSize:12, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {tabs.map(t => (
-              <button key={t.key} onClick={() => { if(t.key==='admin') setCoachClient(null); setTab(t.key); }}
+              <button key={t.key} onClick={() => navTab(t.key)}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${shellPrimary}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
                 <Ic n={t.icon} size={17} c={tab===t.key?shellPrimary:B.muted}/>
                 <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?shellPrimary:B.muted }}>{t.label}</span>
