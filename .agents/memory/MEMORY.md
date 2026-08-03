@@ -13,4 +13,5 @@
 - [API route prefix](api-route-prefix.md) — the platform proxy strips `/api` before it reaches the api-server; register Express routes WITHOUT the /api prefix, frontend calls WITH it.
 - [Check-in deadline model](checkin-deadlines.md) — deadlines are per-coach only; clients always inherit coach's; no org/client-level settings; two parallel admin UIs (App.tsx panel is the one the user uses).
 - [Video huddles](huddles.md) — real Daily.co rooms created server-side; per-org keys in admin_settings (Eden falls back to DAILY_API_KEY secret); huddle_rooms.is_active drives the org-wide join banner.
+- [Staff titles/access & chat uploads](staff-meta-and-chat-uploads.md) — staff_meta:<id> in admin_settings gates staff tabs & holds custom titles; chat files ride as [[file|…]] markers in team_messages.content.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.
