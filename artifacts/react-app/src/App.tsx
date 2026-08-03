@@ -5024,6 +5024,8 @@ const AppShell = ({ user, onLogout }) => {
     setCoachClient(client);
     setTab(dest);
     setClientNavSource(source);
+    // In Loom Mode, the client you clicked stays visible by name on every screen
+    if (loomMode && client?.name) setLoomFeatured(prev => { const next = new Set(prev); next.add(client.name); return next; });
   };
   const isMobile = useIsMobile();
 
