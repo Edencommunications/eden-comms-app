@@ -1000,7 +1000,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                     // Cap the player height on tall/wide screens so the notes
                     // and buttons below are never pushed off the bottom
                     <div style={{background:'#000',display:'flex',justifyContent:'center'}}>
-                    <div style={{position:'relative',aspectRatio:'16 / 9',width:'100%',maxWidth:'calc(58vh * 16 / 9)',maxHeight:'58vh'}}>
+                    <div style={{position:'relative',aspectRatio:'16 / 9',width:'100%',maxWidth:'calc(max(min(58vh, 100vh - 330px), 200px) * 16 / 9)',maxHeight:'max(min(58vh, 100vh - 330px), 200px)'}}>
                       <iframe src={toEmbedUrl(activeModule.video_url)}
                         style={{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}}
                         allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
