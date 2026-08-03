@@ -320,7 +320,7 @@ function Stat({label,value,color=C.gold,sub}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}}) {
+export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}, onClientFocus = () => {}}) {
   const isMobile = useIsMobile()
   const email    = currentUser?.email||''
   // Real logins carry their role from App.tsx; KNOWN_USERS only covers legacy demo emails.
@@ -1045,6 +1045,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // The last-clicked client is the Loom spotlight: only they show by name when
     // Loom Mode is (or gets turned) on — everyone else stays hidden
     if (client?.name) setLoomFeatured(new Set([client.name]))
+    // Report the click up to the app shell so Split View follows the last-clicked client
+    if (client?.email) onClientFocus({ email: client.email, name: client.name, role: client.role || 'client' })
     if (client.hasUpdate) markViewed(client.uuid)
     // Load this client's saved consultation data so admin/coach always see what's in the DB.
     // Track which client is open so late responses from a previous client never overwrite the current one.

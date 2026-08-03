@@ -5012,6 +5012,11 @@ const AppShell = ({ user, onLogout }) => {
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
   const [followedUp, setFollowedUp]   = useState<Set<string>>(new Set());
   const [splitView,        setSplitView]        = useState(false);
+  // Split View follows the last-clicked client (from Clients list or client tools)
+  const [splitClient,      setSplitClient]      = useState<{email:string,name:string,role:string}|null>(null);
+  const [splitPickerOpen,  setSplitPickerOpen]  = useState(false);
+  const [splitRoster,      setSplitRoster]      = useState<any[]>([]);
+  const [splitRosterLoading, setSplitRosterLoading] = useState(false);
   const [leftPanel,        setLeftPanel]        = useState('checkin');
   const [rightPanel,       setRightPanel]       = useState('msgs');
   const [splitRatio,       setSplitRatio]       = useState(50);
@@ -5032,6 +5037,7 @@ const AppShell = ({ user, onLogout }) => {
   };
   const openClientTool = (dest: string, client: any, source = 'admin') => {
     setCoachClient(client);
+    if (client?.email) setSplitClient({ email: client.email, name: client.name, role: client.role || 'client' });
     setTab(dest);
     setClientNavSource(source);
     // The last-clicked client is the Loom spotlight: only they show by name when
@@ -5039,6 +5045,26 @@ const AppShell = ({ user, onLogout }) => {
     if (client?.name) setLoomFeatured(new Set([client.name]));
   };
   const isMobile = useIsMobile();
+
+  // Load the coach/admin roster when the Split View client picker opens
+  useEffect(() => {
+    if (!splitPickerOpen || (user.role !== 'coach' && user.role !== 'super_admin')) return;
+    (async () => {
+      setSplitRosterLoading(true);
+      try {
+        const meRows: any[] = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id,company_id`);
+        const me = meRows?.[0];
+        if (!me) { setSplitRoster([]); return; }
+        const filter = user.role === 'coach'
+          ? `coach_id=eq.${me.id}`
+          : `company_id=eq.${me.company_id}`;
+        const rows: any[] = await sbGet('user_profiles',
+          `${filter}&role=eq.client&is_active=not.is.false&select=id,name,email&order=name.asc`);
+        setSplitRoster(Array.isArray(rows) ? rows : []);
+      } catch { setSplitRoster([]); }
+      finally { setSplitRosterLoading(false); }
+    })();
+  }, [splitPickerOpen, user.email, user.role]);
 
   // ── Inactivity auto-logout ────────────────────────────────────────
   const [idleWarning, setIdleWarning] = useState(false);
@@ -5170,11 +5196,12 @@ const AppShell = ({ user, onLogout }) => {
   ];
 
   const renderPanel = (panelTab: string) => {
-    const toolUser = (user.role === 'coach' || user.role === 'super_admin') && coachClient
-      ? { ...coachClient, role: user.role }
+    // Split View always follows the last-clicked client (splitClient), not the stale tool client
+    const toolUser = (user.role === 'coach' || user.role === 'super_admin') && splitClient
+      ? { ...splitClient, role: user.role }
       : { email: user.email, name: user.name, role: user.role };
-    const ciEmail = ((user.role === 'coach' || user.role === 'super_admin') && coachClient)
-      ? coachClient.email : user.email;
+    const ciEmail = ((user.role === 'coach' || user.role === 'super_admin') && splitClient)
+      ? splitClient.email : user.email;
     const ciDemoCheckins: any[] = [];
     if (panelTab === 'msgs')    return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
     if (panelTab === 'diet')    return <DietBuilder key="diet"    currentUser={toolUser} demoCheckins={ciDemoCheckins}/>;
@@ -5251,7 +5278,8 @@ const AppShell = ({ user, onLogout }) => {
                                           initialClient={coachClient}
                                           loomMode={loomMode}
                                           loomFeatured={loomFeatured}
-                                          setLoomFeatured={setLoomFeatured}/>;
+                                          setLoomFeatured={setLoomFeatured}
+                                          onClientFocus={(c:any) => setSplitClient(c)}/>;
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
     if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
     if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
@@ -5282,7 +5310,13 @@ const AppShell = ({ user, onLogout }) => {
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
           {/* Split View toggle — coach/admin */}
           {(user.role === "coach" || user.role === "super_admin") && (
-            <button onClick={() => setSplitView(v => !v)}
+            <button onClick={() => setSplitView(v => {
+                const next = !v;
+                // Entering Split View with no client picked yet → ask which client
+                if (next && !splitClient) setSplitPickerOpen(true);
+                if (!next) setSplitPickerOpen(false);
+                return next;
+              })}
               title={splitView ? "Exit Split View" : "Split View — see two panels side by side"}
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
                 background: splitView ? `${B.gold}22` : "transparent",
@@ -5405,7 +5439,49 @@ const AppShell = ({ user, onLogout }) => {
         {/* Main content area */}
         <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", background:B.black }}>
           {splitView ? (
-            isMobile ? (
+            <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden', height:'100%' }}>
+            {/* Split View client bar — shows whose data both panels display */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 14px', background:B.surface,
+              borderBottom:`1px solid ${B.border}`, flexShrink:0 }}>
+              <span style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:.5, textTransform:'uppercase' }}>Client:</span>
+              <span style={{ fontSize:13, fontWeight:800, color:B.gold }}>{splitClient?.name || 'None selected'}</span>
+              <button onClick={() => setSplitPickerOpen(true)}
+                style={{ marginLeft:4, fontSize:11, fontWeight:700, color:B.text, background:'transparent',
+                  border:`1px solid ${B.border}`, borderRadius:6, padding:'3px 10px', cursor:'pointer' }}>
+                Change client
+              </button>
+            </div>
+            {/* Client picker overlay */}
+            {splitPickerOpen && (
+              <div style={{ position:'fixed', inset:0, zIndex:9000, background:'rgba(0,0,0,0.75)',
+                display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+                <div style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:16,
+                  padding:'22px 20px', maxWidth:380, width:'100%', maxHeight:'70vh', display:'flex', flexDirection:'column' }}>
+                  <h3 style={{ fontSize:15, fontWeight:800, color:B.text, margin:'0 0 4px' }}>Choose a client for Split View</h3>
+                  <p style={{ fontSize:12, color:B.muted, margin:'0 0 14px' }}>Both panels will show this client's info.</p>
+                  <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:6 }}>
+                    {splitRosterLoading && <p style={{ fontSize:12, color:B.muted }}>Loading clients…</p>}
+                    {!splitRosterLoading && splitRoster.length === 0 && <p style={{ fontSize:12, color:B.muted }}>No active clients found.</p>}
+                    {!splitRosterLoading && splitRoster.map((c:any) => (
+                      <button key={c.id}
+                        onClick={() => { setSplitClient({ email:c.email, name:c.name, role:'client' }); setSplitPickerOpen(false); }}
+                        style={{ textAlign:'left', padding:'10px 12px', borderRadius:8, cursor:'pointer',
+                          background: splitClient?.email === c.email ? `${B.gold}22` : B.black,
+                          border:`1px solid ${splitClient?.email === c.email ? B.gold : B.border}`,
+                          fontSize:13, fontWeight:600, color:B.text }}>
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => { setSplitPickerOpen(false); if (!splitClient) setSplitView(false); }}
+                    style={{ marginTop:14, padding:'8px 0', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700,
+                      background:'transparent', border:`1px solid ${B.border}`, color:B.muted }}>
+                    {splitClient ? 'Cancel' : 'Cancel & exit Split View'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {isMobile ? (
               /* Mobile split view — two panels stacked vertically */
               <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden', height:'100%' }}>
                 <div style={{ height:'50%', display:'flex', flexDirection:'column', overflow:'hidden', borderBottom:`2px solid ${B.gold}55` }}>
@@ -5435,7 +5511,8 @@ const AppShell = ({ user, onLogout }) => {
                 <div style={{ flex:1, overflow:'hidden' }}>{renderPanel(rightPanel)}</div>
               </div>
             </div>
-            )
+            )}
+            </div>
           ) : renderScreen()}
         </div>
       </div>
