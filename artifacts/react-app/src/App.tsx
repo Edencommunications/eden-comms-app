@@ -3854,6 +3854,32 @@ const AdminDashboard = ({ user }:any) => {
     } catch { setDailyMsg('⚠️ Could not save the key'); }
     setDailySaving(false);
   };
+  // Automated welcome messages (admin-configurable, per org + per coach)
+  const [welcomeCfg, setWelcomeCfg] = useState<any>(null); // null = loading
+  const [welcomeSaving, setWelcomeSaving] = useState(false);
+  const [welcomeMsgStatus, setWelcomeMsgStatus] = useState('');
+  const [welcomeCoachOpen, setWelcomeCoachOpen] = useState('');
+  useEffect(() => { (async () => {
+    try {
+      const r = await fetch('/api/welcome/settings', { headers: { Authorization: sbBearer() } });
+      const d = await r.json().catch(() => null);
+      setWelcomeCfg(d?.settings || { enabled:false, defaultText:'', perCoach:{} });
+    } catch { setWelcomeCfg({ enabled:false, defaultText:'', perCoach:{} }); }
+  })(); }, []);
+  const saveWelcomeCfg = async (cfg:any) => {
+    setWelcomeSaving(true); setWelcomeMsgStatus('');
+    try {
+      const r = await fetch('/api/welcome/settings', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify(cfg),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) { setWelcomeCfg(d?.settings || cfg); setWelcomeMsgStatus('✅ Saved'); }
+      else setWelcomeMsgStatus(`⚠️ ${d?.error || 'Could not save'}`);
+    } catch { setWelcomeMsgStatus('⚠️ Could not save'); }
+    setWelcomeSaving(false);
+    setTimeout(() => setWelcomeMsgStatus(''), 3000);
+  };
   const removeDailyKey = async () => {
     if (!window.confirm('Disconnect Daily.co? Coaches will no longer be able to start video huddles.')) return;
     try {
@@ -4010,6 +4036,75 @@ const AdminDashboard = ({ user }:any) => {
                 </>
               )}
               {dailyMsg && <p style={{ fontSize:12, color:dailyMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{dailyMsg}</p>}
+            </Card>
+            {/* Automated welcome messages */}
+            <Card style={{ marginBottom:20 }}>
+              <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>👋 Automated Welcome Message</p>
+              {welcomeCfg === null ? (
+                <p style={{ fontSize:12, color:B.muted, margin:0 }}>Loading…</p>
+              ) : (
+                <>
+                  <p style={{ fontSize:12, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
+                    Sent automatically into a new client's chat with their coach the first time they open the app.
+                    You can use <code style={{ color:B.gold }}>{'{client_name}'}</code> and <code style={{ color:B.gold }}>{'{coach_name}'}</code> — they're filled in per client.
+                  </p>
+                  <label style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, cursor:"pointer" }}>
+                    <input type="checkbox" checked={!!welcomeCfg.enabled}
+                      onChange={e => saveWelcomeCfg({ ...welcomeCfg, enabled: e.target.checked })}/>
+                    <span style={{ fontSize:12, color:welcomeCfg.enabled ? (B.success || "#4FD89A") : B.muted, fontWeight:700 }}>
+                      {welcomeCfg.enabled ? 'On — new clients get a welcome message' : 'Paused — no welcome messages are sent'}
+                    </span>
+                  </label>
+                  <textarea value={welcomeCfg.defaultText || ''} rows={3}
+                    onChange={e => setWelcomeCfg({ ...welcomeCfg, defaultText: e.target.value })}
+                    placeholder={"Hey {client_name}! Welcome — I'm {coach_name}, your coach. Message me here anytime…"}
+                    style={{ width:"100%", boxSizing:"border-box", background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px", color:B.text, fontSize:12, outline:"none", resize:"vertical", fontFamily:"inherit" }}/>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", margin:"8px 0 12px" }}>
+                    <Btn onClick={() => saveWelcomeCfg(welcomeCfg)} disabled={welcomeSaving}>{welcomeSaving ? 'Saving…' : 'Save message'}</Btn>
+                    {welcomeMsgStatus && <span style={{ fontSize:12, color: welcomeMsgStatus.startsWith('✅') ? "#4FD89A" : "#ffa600" }}>{welcomeMsgStatus}</span>}
+                  </div>
+                  {/* Per-coach customization */}
+                  {dlCoaches.length > 0 && (
+                    <div style={{ borderTop:`1px solid ${B.border}`, paddingTop:10 }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:.6, textTransform:"uppercase", margin:"0 0 6px" }}>Customize per coach (optional)</p>
+                      {dlCoaches.map((c:any) => {
+                        const ov = welcomeCfg.perCoach?.[c.id] || {};
+                        const open = welcomeCoachOpen === c.id;
+                        return (
+                          <div key={c.id} style={{ borderBottom:`1px solid ${B.border}` }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 0" }}>
+                              <span style={{ flex:1, fontSize:12, color:B.text, fontWeight:600 }}>{c.name}</span>
+                              {ov.paused && <span style={{ fontSize:10, color:"#ffa600", fontWeight:700 }}>PAUSED</span>}
+                              {!ov.paused && ov.text && <span style={{ fontSize:10, color:B.gold, fontWeight:700 }}>CUSTOM</span>}
+                              {!ov.paused && !ov.text && <span style={{ fontSize:10, color:B.muted }}>uses default</span>}
+                              <button onClick={() => setWelcomeCoachOpen(open ? '' : c.id)}
+                                style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:6, padding:"3px 10px", color:B.muted, fontSize:10, cursor:"pointer" }}>
+                                {open ? 'Close' : 'Customize'}
+                              </button>
+                            </div>
+                            {open && (
+                              <div style={{ padding:"0 0 10px" }}>
+                                <textarea value={ov.text || ''} rows={2}
+                                  onChange={e => setWelcomeCfg({ ...welcomeCfg, perCoach: { ...welcomeCfg.perCoach, [c.id]: { ...ov, text: e.target.value } } })}
+                                  placeholder="Custom welcome for this coach's clients (leave empty to use the default)…"
+                                  style={{ width:"100%", boxSizing:"border-box", background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.text, fontSize:12, outline:"none", resize:"vertical", fontFamily:"inherit" }}/>
+                                <div style={{ display:"flex", gap:10, alignItems:"center", marginTop:6 }}>
+                                  <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:11, color:B.muted }}>
+                                    <input type="checkbox" checked={!!ov.paused}
+                                      onChange={e => setWelcomeCfg({ ...welcomeCfg, perCoach: { ...welcomeCfg.perCoach, [c.id]: { ...ov, paused: e.target.checked } } })}/>
+                                    Pause welcomes for this coach's clients
+                                  </label>
+                                  <Btn onClick={() => saveWelcomeCfg(welcomeCfg)} disabled={welcomeSaving}>{welcomeSaving ? 'Saving…' : 'Save'}</Btn>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </Card>
             {/* Bulk roster import / export */}
             <RosterImportExport/>
@@ -5382,6 +5477,16 @@ export default function App() {
     setUser(null);
     supabase.auth.signOut().catch(()=>{});
   };
+
+  // Automated welcome message: after a client signs in, ask the server once
+  // whether their one-time welcome should be dropped into their coach chat.
+  // The server keeps its own "already sent" ledger — this is just the nudge.
+  useEffect(() => {
+    if (user?.role !== 'client') return;
+    if (sessionStorage.getItem('welcomeChecked')) return;
+    sessionStorage.setItem('welcomeChecked', '1');
+    fetch('/api/welcome/check', { method:'POST', headers:{ Authorization: sbBearer() } }).catch(()=>{});
+  }, [user?.role]);
 
   // Branded login link: ?org=<slug> loads that org's name + palette before auth.
   // Plain visits keep brandOrg = null → Eden gold login.
