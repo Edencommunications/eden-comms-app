@@ -3828,6 +3828,7 @@ const AdminDashboard = ({ user }:any) => {
   // Per-coach check-in deadline settings (admin can adjust each coach's from Overview)
   const [coachDl, setCoachDl] = useState<Record<string,any>>({});
   const [dlCoaches, setDlCoaches] = useState<any[]>([]);
+  const [welcomeAdmins, setWelcomeAdmins] = useState<any[]>([]);
   const [formScope, setFormScope] = useState('');   // '' closed · 'org' · coach id
   // Video huddles (Daily.co) — per-org connection status
   const [huddleStatus, setHuddleStatus] = useState<any>(null); // { connected, source }
@@ -3896,6 +3897,8 @@ const AdminDashboard = ({ user }:any) => {
         rows.forEach((r:any) => { map[r.id] = { tz: r.timezone || DEFAULT_TZ, time: r.deadline_time ? r.deadline_time.slice(0,5) : DEFAULT_TIME } });
         setCoachDl(map);
       }).catch(()=>{});
+    sbGet('user_profiles', `role=eq.super_admin&is_active=not.is.false&select=id,name&order=name`)
+      .then((rows:any[]) => { if (Array.isArray(rows)) setWelcomeAdmins(rows); }).catch(()=>{});
   }, []);
   async function saveCoachDl(id:string, patch:any, local:any) {
     const prev = coachDl[id] || {};
@@ -4064,16 +4067,17 @@ const AdminDashboard = ({ user }:any) => {
                     {welcomeMsgStatus && <span style={{ fontSize:12, color: welcomeMsgStatus.startsWith('✅') ? "#4FD89A" : "#ffa600" }}>{welcomeMsgStatus}</span>}
                   </div>
                   {/* Per-coach customization */}
-                  {dlCoaches.length > 0 && (
+                  {(dlCoaches.length > 0 || welcomeAdmins.length > 0) && (
                     <div style={{ borderTop:`1px solid ${B.border}`, paddingTop:10 }}>
-                      <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:.6, textTransform:"uppercase", margin:"0 0 6px" }}>Customize per coach (optional)</p>
-                      {dlCoaches.map((c:any) => {
+                      <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:.6, textTransform:"uppercase", margin:"0 0 6px" }}>Customize per sender (optional)</p>
+                      <p style={{ fontSize:11, color:B.muted, margin:"0 0 6px" }}>Coaches welcome their own clients. Clients without a coach yet get their welcome from an admin.</p>
+                      {[...dlCoaches, ...welcomeAdmins.filter((a:any) => !dlCoaches.some((c:any) => c.id === a.id)).map((a:any) => ({ ...a, isAdmin: true }))].map((c:any) => {
                         const ov = welcomeCfg.perCoach?.[c.id] || {};
                         const open = welcomeCoachOpen === c.id;
                         return (
                           <div key={c.id} style={{ borderBottom:`1px solid ${B.border}` }}>
                             <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 0" }}>
-                              <span style={{ flex:1, fontSize:12, color:B.text, fontWeight:600 }}>{c.name}</span>
+                              <span style={{ flex:1, fontSize:12, color:B.text, fontWeight:600 }}>{c.name}{c.isAdmin && <span style={{ fontSize:10, color:B.muted, fontWeight:600 }}> · admin</span>}</span>
                               {ov.paused && <span style={{ fontSize:10, color:"#ffa600", fontWeight:700 }}>PAUSED</span>}
                               {!ov.paused && ov.text && <span style={{ fontSize:10, color:B.gold, fontWeight:700 }}>CUSTOM</span>}
                               {!ov.paused && !ov.text && <span style={{ fontSize:10, color:B.muted }}>uses default</span>}

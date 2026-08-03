@@ -155,15 +155,25 @@ router.post("/welcome/check", async (req: Request, res: Response) => {
     const existing = await svcGet("admin_settings", `company_id=eq.${me.company_id}&key=eq.${encodeURIComponent(claimKey)}&select=key`);
     if (existing.length) { res.json({ sent: false }); return; }
 
-    // Needs a real coach in the SAME org to send from
-    if (!me.coach_id) { res.json({ sent: false }); return; }
-    const coach = (await svcGet(
-      "user_profiles",
-      `id=eq.${me.coach_id}&company_id=eq.${me.company_id}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name`,
-    ))[0];
-    if (!coach) { res.json({ sent: false }); return; }
+    // Sender: the client's coach (same org, real coach role). If the client
+    // has no coach yet, fall back to an org admin so nobody lands in silence.
+    let sender: { id: string; name: string } | null = null;
+    if (me.coach_id) {
+      sender = (await svcGet(
+        "user_profiles",
+        `id=eq.${me.coach_id}&company_id=eq.${me.company_id}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name`,
+      ))[0] || null;
+    }
+    if (!sender) {
+      sender = (await svcGet(
+        "user_profiles",
+        `company_id=eq.${me.company_id}&role=eq.super_admin&is_active=not.is.false&select=id,name&order=name&limit=1`,
+      ))[0] || null;
+    }
+    if (!sender) { res.json({ sent: false }); return; }
+    const coach = sender;
 
-    const override = settings.perCoach[me.coach_id] || {};
+    const override = settings.perCoach[sender.id] || {};
     if (override.paused) { res.json({ sent: false }); return; }
     const template = (override.text || settings.defaultText || "").trim();
     if (!template) { res.json({ sent: false }); return; }
