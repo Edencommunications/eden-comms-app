@@ -659,30 +659,16 @@ export default function Week7({ currentUser }) {
                 </button>
               </div>
 
-              {/* Threads — every #general message that has replies, like the DM list */}
-              {(
-                <div style={{padding:'10px 14px 6px'}}>
-                  <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Threads</div>
-                  {!messages.some(m=>(m.replyCount||0)>0) && (
-                    <div style={{fontSize:10,color:C.muted,lineHeight:1.5,padding:'0 2px 4px'}}>No threads yet — hover a #general message and click 💬 Reply in thread.</div>
+              {/* Threads tab — like the Threads button in coach Messages */}
+              <div style={{padding:'2px 14px 0'}}>
+                <button onClick={() => setChatView('threads')}
+                  style={{width:'100%',textAlign:'left',background:chatView==='threads'?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'6px 8px',color:chatView==='threads'?C.gold:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+                  <span>🧵</span> Threads
+                  {messages.filter(m=>(m.replyCount||0)>0).length>0 && (
+                    <span style={{marginLeft:'auto',fontSize:9,fontWeight:800,color:C.gold,background:`${C.gold}20`,borderRadius:8,padding:'1px 6px'}}>{messages.filter(m=>(m.replyCount||0)>0).length}</span>
                   )}
-                  {messages.filter(m=>(m.replyCount||0)>0)
-                    .slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
-                    .slice(0,12)
-                    .map(m=>{
-                      const isActive = chatView==='thread' && activeThread?.id===m.id
-                      const preview = (splitAtts(m.content).text||'📎 attachment').replace(/\s+/g,' ').slice(0,26)
-                      return (
-                        <button key={m.id} onClick={()=>{ setActiveThread(m); setChatView('thread') }}
-                          style={{width:'100%',textAlign:'left',background:isActive?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'5px 8px',color:isActive?C.gold:C.white,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
-                          <span style={{color:C.muted,flexShrink:0}}>🧵</span>
-                          <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{preview}</span>
-                          <span style={{flexShrink:0,fontSize:9,fontWeight:800,color:C.gold,background:`${C.gold}20`,borderRadius:8,padding:'1px 6px'}}>{m.replyCount}</span>
-                        </button>
-                      )
-                    })}
-                </div>
-              )}
+                </button>
+              </div>
 
               <div style={{padding:'10px 14px 6px'}}>
                 <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -722,6 +708,46 @@ export default function Week7({ currentUser }) {
             </div>
 
             {/* Main channel */}
+            {/* THREADS INBOX — every #general thread, like the coach Messages Threads tab */}
+            {chatView==='threads' && (
+              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:C.white}}>🧵 Threads</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>Every #general conversation with replies</div>
+                </div>
+                <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
+                  {messages.filter(m=>!m.isDm&&(m.replyCount||0)>0).length===0 && (
+                    <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'40px 20px',lineHeight:1.7}}>
+                      No threads yet.<br/>Hover any message in #general and click 💬 Reply in thread to start one.
+                    </div>
+                  )}
+                  {messages.filter(m=>!m.isDm&&(m.replyCount||0)>0)
+                    .slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
+                    .map(m=>{
+                      const replies = threadReplies[m.id]||[]
+                      const last = replies[replies.length-1]
+                      return (
+                        <button key={m.id} onClick={()=>{ setActiveThread(m); setChatView('thread') }}
+                          style={{width:'100%',textAlign:'left',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:10,cursor:'pointer',display:'block'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                            <div style={{width:24,height:24,borderRadius:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.gold,flexShrink:0}}>{m.senderName[0]}</div>
+                            <span style={{fontSize:12,fontWeight:700,color:C.white}}>{m.senderName}</span>
+                            <span style={{fontSize:10,color:C.muted}}>{timeAgo(m.createdAt)}</span>
+                            <span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:C.gold,background:`${C.gold}20`,borderRadius:8,padding:'2px 8px',flexShrink:0}}>{m.replyCount} {m.replyCount===1?'reply':'replies'}</span>
+                          </div>
+                          <div style={{fontSize:12,color:C.white,lineHeight:1.5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(splitAtts(m.content).text||'📎 attachment')}</div>
+                          {last && (
+                            <div style={{fontSize:11,color:C.muted,marginTop:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              ↳ <b style={{color:C.gold}}>{last.senderName}:</b> {(splitAtts(last.content).text||'📎 attachment')}
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                </div>
+              </div>
+            )}
+
             {(chatView==='main' || chatView==='thread') && (
               <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
                 <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>

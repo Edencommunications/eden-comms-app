@@ -374,6 +374,34 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   })
   const setNU = k=>v=>setNewUser(p=>({...p,[k]:v}))
 
+  // ── Reusable staff role names (Closer, Sales Mentor…) — org-level list in admin_settings ──
+  const [staffRoles, setStaffRoles]       = useState([])
+  const [newRoleName, setNewRoleName]     = useState('')
+  const [addingRole, setAddingRole]       = useState(false)
+  useEffect(()=>{
+    dbGet('admin_settings','key=eq.staff_roles&select=value').then(rows=>{
+      try {
+        const v = rows?.[0]?.value
+        const list = typeof v==='string' ? JSON.parse(v) : v
+        if (Array.isArray(list)) setStaffRoles(list)
+      } catch {}
+    }).catch(()=>{})
+  },[])
+  async function saveNewStaffRole() {
+    const name = newRoleName.trim()
+    if (!name) return
+    const next = staffRoles.includes(name) ? staffRoles : [...staffRoles, name]
+    setStaffRoles(next)
+    setNU('title')(name)
+    setNewRoleName(''); setAddingRole(false)
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+        method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({ company_id:adminCompanyId, key:'staff_roles', value:JSON.stringify(next) }),
+      })
+    } catch(e) {}
+  }
+
   // ── Add Client (manual single under a chosen coach) ──
   const [showAddClients, setShowAddClients] = useState(false)
   const [acCoachId,      setAcCoachId]      = useState('')
@@ -2459,7 +2487,36 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','head_coach','va','staff','org_admin']}/>
             {['va','head_coach','staff'].includes(newUser.role)&&(
               <>
-                <Inp label="Custom Title (optional)" value={newUser.title} onChange={setNU('title')} placeholder="e.g. Closer, Sales Mentor, Module Mentor"/>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>Their Role Title</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    {staffRoles.map(r=>(
+                      <button key={r} onClick={()=>setNU('title')(newUser.title===r?'':r)}
+                        style={{background:newUser.title===r?C.gold:'none',border:`1px solid ${newUser.title===r?C.gold:C.border}`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,color:newUser.title===r?C.black:C.white,cursor:'pointer'}}>
+                        {r}
+                      </button>
+                    ))}
+                    {!addingRole&&(
+                      <button onClick={()=>setAddingRole(true)}
+                        style={{background:'none',border:`1px dashed ${C.gold}66`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,color:C.gold,cursor:'pointer'}}>
+                        + New role
+                      </button>
+                    )}
+                  </div>
+                  {addingRole&&(
+                    <div style={{display:'flex',gap:6,marginTop:8}}>
+                      <input value={newRoleName} onChange={e=>setNewRoleName(e.target.value)}
+                        onKeyDown={e=>{if(e.key==='Enter')saveNewStaffRole()}}
+                        placeholder="e.g. Closer, Sales Mentor, Module Mentor" autoFocus
+                        style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                      <button onClick={saveNewStaffRole} disabled={!newRoleName.trim()}
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer',opacity:newRoleName.trim()?1:.4}}>Save</button>
+                      <button onClick={()=>{setAddingRole(false);setNewRoleName('')}}
+                        style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
+                    </div>
+                  )}
+                  <div style={{fontSize:10,color:C.muted,marginTop:6}}>Saved roles are reusable — add one once (e.g. "Closer") and pick it for future team members.</div>
+                </div>
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>They can access</div>
                   <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
