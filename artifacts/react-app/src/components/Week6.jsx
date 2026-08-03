@@ -823,7 +823,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // Support staff (VAs, head coaches, etc.) loaded from the database
   const [supportStaff, setSupportStaff] = useState([])
   useEffect(()=>{
-    dbGet('user_profiles','role=in.(va,head_coach)&select=id,name,full_name,email,role&order=created_at.asc')
+    dbGet('user_profiles','role=in.(va,head_coach,staff)&select=id,name,full_name,email,role&order=created_at.asc')
       .then(rows=>{ if(Array.isArray(rows)) setSupportStaff(rows) }).catch(()=>{})
   },[])
   // Head coach designations — array of coach UUIDs promoted to head coach
@@ -1175,6 +1175,44 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     alert(linksDropped && payload.other_links
       ? 'Call note saved — but the "Other Links" could not be saved yet. The database needs the other_links column added (one-line SQL in the Supabase dashboard).'
       : 'Call note saved.')
+  }
+
+  // ── Edit an existing staff member's title + tab access (staff_meta:<id>) ──
+  const [editStaff, setEditStaff] = useState(null) // {id, name, label, tabs:{home,msgs,team}, saving}
+  async function openEditStaff(s) {
+    // Load their current staff_meta (may not exist yet — defaults to all tabs)
+    let label = '', tabs = { home:true, msgs:true, team:true }
+    try {
+      const rows = await dbGet('admin_settings', `key=eq.${encodeURIComponent('staff_meta:'+s.id)}&select=value`)
+      const v = rows?.[0]?.value
+      if (v) {
+        const meta = typeof v === 'string' ? JSON.parse(v) : v
+        label = meta?.label || ''
+        if (Array.isArray(meta?.tabs) && meta.tabs.length)
+          tabs = { home:meta.tabs.includes('home'), msgs:meta.tabs.includes('msgs'), team:meta.tabs.includes('team') }
+      }
+    } catch(e) {}
+    setEditStaff({ id:s.id, name:s.name||s.full_name||s.email, label, tabs, saving:false })
+  }
+  async function saveEditStaff() {
+    if (!editStaff) return
+    const tabList = ['home','msgs','team'].filter(k=>editStaff.tabs[k])
+    const meta = { label: editStaff.label.trim() || null, tabs: tabList.length ? tabList : ['team'] }
+    setEditStaff(p=>({ ...p, saving:true }))
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+        method:'POST',
+        headers:{ ...H, 'Prefer':'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ company_id: adminCompanyId, key:`staff_meta:${editStaff.id}`, value: JSON.stringify(meta) }),
+      })
+      if (!res.ok) throw new Error('save failed')
+      addAudit(info.name,'Updated staff title/access',editStaff.name, meta.label ? `Title: ${meta.label} · Tabs: ${meta.tabs.join(', ')}` : `Tabs: ${meta.tabs.join(', ')}`)
+      setEditStaff(null)
+      alert('Saved. The change takes effect the next time they log in or refresh.')
+    } catch(e) {
+      setEditStaff(p=>({ ...p, saving:false }))
+      alert("Couldn't save these changes — please try again.")
+    }
   }
 
   async function addUser() {
@@ -2032,7 +2070,43 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <span style={{fontSize:10,background:`${C.gold}18`,color:C.gold,padding:'3px 9px',borderRadius:10,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5}}>
                   {(s.role||'').replace(/_/g,' ')}
                 </span>
+                {isAdmin&&(
+                  <button onClick={()=>openEditStaff(s)}
+                    style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 12px',color:C.muted,fontSize:11,cursor:'pointer'}}>
+                    ✏️ Edit
+                  </button>
+                )}
               </div>
+              {editStaff?.id===s.id&&(
+                <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Custom Title</div>
+                  <input value={editStaff.label} onChange={e=>setEditStaff(p=>({...p,label:e.target.value}))}
+                    placeholder="e.g. Closer, Sales Mentor (blank = default role)"
+                    style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',marginBottom:10}}/>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Access</div>
+                  <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:12}}>
+                    {[['home','Dashboard'],['msgs','Messages'],['team','Team Hub']].map(([k,lbl])=>(
+                      <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
+                        <input type="checkbox" checked={!!editStaff.tabs[k]}
+                          onChange={e=>setEditStaff(p=>({...p,tabs:{...p.tabs,[k]:e.target.checked}}))}/>
+                        {lbl}
+                      </label>
+                    ))}
+                  </div>
+                  {!editStaff.tabs.home&&!editStaff.tabs.msgs&&!editStaff.tabs.team&&(
+                    <div style={{fontSize:10,color:C.warning||'#e8b74f',marginBottom:8}}>With nothing checked they'll get Team Hub only.</div>
+                  )}
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={saveEditStaff} disabled={editStaff.saving}
+                      style={{background:C.gold,border:'none',borderRadius:6,padding:'7px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',opacity:editStaff.saving?0.6:1}}>
+                      {editStaff.saving?'Saving…':'Save'}
+                    </button>
+                    <button onClick={()=>setEditStaff(null)}
+                      style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 14px',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancel</button>
+                  </div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:8}}>Changes apply the next time they log in or refresh.</div>
+                </div>
+              )}
             </Card>
           ))}
         </div>
