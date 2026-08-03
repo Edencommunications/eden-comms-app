@@ -124,7 +124,7 @@ const EXERCISE_LIBRARY = {
   ],
 }
 
-import { CARDIO_TYPES } from './libraryDefaults'
+import { CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 
 const LAB_TYPES = [
   'Blood Work','DUTCH Test','GI-MAP','Hormone Panel',
@@ -282,6 +282,13 @@ Training Principles:
       setMyCompanyId(rows?.[0]?.company_id || EDEN_ORG_ID)
     } catch { setMyCompanyId(EDEN_ORG_ID) }
   })() },[email])
+
+  // Per-org "Helpful Resources & Lab Links" (company_resource_links); Eden defaults until the org has its own rows
+  const [resourceLinks, setResourceLinks] = useState(null)
+  useEffect(()=>{ if (!myCompanyId) return
+    dbGet('company_resource_links',`company_id=eq.${myCompanyId}&order=sort_order.asc,created_at.asc`)
+      .then(rows=>setResourceLinks(Array.isArray(rows)?rows:[])).catch(()=>setResourceLinks([]))
+  },[myCompanyId])
 
   // ── Company cardio types (each org's admin manages their own library) ──
   async function loadCompanyCardioTypes(cid) {
@@ -710,6 +717,26 @@ Training Principles:
                   {lab.notes&&<div style={{fontSize:11,color:C.muted,marginTop:4,fontStyle:'italic'}}>{lab.notes}</div>}
                 </button>
               ))}
+
+              {/* Helpful Resources & Lab Links — per-org, managed by admin in Library → Resources */}
+              <div style={{padding:14}}>
+                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Helpful Resources &amp; Lab Links</div>
+                  {(resourceLinks&&resourceLinks.length
+                    ? resourceLinks.map(r=>[r.label,r.url,r.note||''])
+                    : DEFAULT_RESOURCE_LINKS
+                  ).map(([l,u,note])=>(
+                    <a key={l} href={u} target="_blank" rel="noreferrer"
+                      style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 0',borderBottom:`1px solid ${C.border}`,textDecoration:'none'}}>
+                      <div>
+                        <span style={{fontSize:13,color:C.white}}>{l}</span>
+                        {note&&<div style={{fontSize:10,color:C.gold,marginTop:1}}>{note}</div>}
+                      </div>
+                      <span style={{fontSize:12,color:C.gold,flexShrink:0,marginLeft:8}}>→</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

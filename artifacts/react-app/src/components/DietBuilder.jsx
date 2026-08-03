@@ -3571,24 +3571,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             </>
           )}
 
-          {/* Resource links — both roles */}
-          <Card sx={{marginBottom:24}}>
-            <Lbl t="Helpful Resources & Lab Links"/>
-            {/* Per-org links from company_resource_links; Eden defaults until the org has its own rows */}
-            {(resourceLinks&&resourceLinks.length
-              ? resourceLinks.map(r=>[r.label,r.url,r.note||''])
-              : DEFAULT_RESOURCE_LINKS
-            ).map(([l,u,note])=>(
-              <a key={l} href={u} target="_blank" rel="noreferrer"
-                style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 0',borderBottom:`1px solid ${C.border}`,textDecoration:'none'}}>
-                <div>
-                  <span style={{fontSize:13,color:C.white}}>{l}</span>
-                  {note&&<div style={{fontSize:10,color:C.gold,marginTop:1}}>{note}</div>}
-                </div>
-                <span style={{fontSize:12,color:C.gold,flexShrink:0,marginLeft:8}}>→</span>
-              </a>
-            ))}
-          </Card>
+          {/* Resource links moved to the Labs section (Week4.jsx) */}
         </div>
       )}
 
