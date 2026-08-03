@@ -1884,6 +1884,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:700,color:C.white}}>All Coaches</div>
             <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'staff'}))}}
+                style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer'}}>
+                + Add Team Member
+              </button>
               <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'va'}))}}
                 style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer'}}>
                 + Add VA

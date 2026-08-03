@@ -565,9 +565,12 @@ export default function Week7({ currentUser }) {
               </div>
 
               {/* Threads — every #general message that has replies, like the DM list */}
-              {messages.some(m=>(m.replyCount||0)>0) && (
+              {(
                 <div style={{padding:'10px 14px 6px'}}>
                   <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Threads</div>
+                  {!messages.some(m=>(m.replyCount||0)>0) && (
+                    <div style={{fontSize:10,color:C.muted,lineHeight:1.5,padding:'0 2px 4px'}}>No threads yet — hover a #general message and click 💬 Reply in thread.</div>
+                  )}
                   {messages.filter(m=>(m.replyCount||0)>0)
                     .slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
                     .slice(0,12)
