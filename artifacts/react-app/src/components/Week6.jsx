@@ -1042,8 +1042,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const openClientRef = useRef(null) // which client's consultation data is currently loading
   function openClient(client) {
     setSelectedClient(client)
-    // In Loom Mode, clicking a client makes their name visible on every screen
-    if (loomMode && client?.name) setLoomFeatured(prev => { const next = new Set(prev); next.add(client.name); return next })
+    // In Loom Mode, ONLY the clicked client is visible by name — everyone else stays hidden
+    if (loomMode && client?.name) setLoomFeatured(new Set([client.name]))
     if (client.hasUpdate) markViewed(client.uuid)
     // Load this client's saved consultation data so admin/coach always see what's in the DB.
     // Track which client is open so late responses from a previous client never overwrite the current one.

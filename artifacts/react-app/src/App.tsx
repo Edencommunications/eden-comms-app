@@ -5024,8 +5024,8 @@ const AppShell = ({ user, onLogout }) => {
     setCoachClient(client);
     setTab(dest);
     setClientNavSource(source);
-    // In Loom Mode, the client you clicked stays visible by name on every screen
-    if (loomMode && client?.name) setLoomFeatured(prev => { const next = new Set(prev); next.add(client.name); return next; });
+    // In Loom Mode, ONLY the client you clicked is visible by name — everyone else stays hidden
+    if (loomMode && client?.name) setLoomFeatured(new Set([client.name]));
   };
   const isMobile = useIsMobile();
 
@@ -5286,7 +5286,12 @@ const AppShell = ({ user, onLogout }) => {
           )}
           {/* Loom Mode toggle — coach only, persists across all tabs */}
           {user.role === "coach" && (
-            <button onClick={() => setLoomMode(v => !v)}
+            <button onClick={() => setLoomMode(v => {
+                const on = !v;
+                // Fresh start each recording: only the client currently open (if any) is visible
+                if (on) setLoomFeatured(new Set(coachClient?.name ? [coachClient.name] : []));
+                return on;
+              })}
               title={loomMode ? "Exit Loom Mode" : "Enable Loom Mode — hides other client names"}
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
                 background: loomMode ? "#ff525222" : "transparent",
