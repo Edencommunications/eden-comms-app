@@ -1038,6 +1038,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setSelectedClient(prev=>prev?.uuid===clientId?{...prev,hasUpdate:false}:prev)
   }
 
+  const [consultBack, setConsultBack] = useState(null) // client to return to when Consultation was opened from Client Tools
   const openClientRef = useRef(null) // which client's consultation data is currently loading
   function openClient(client) {
     setSelectedClient(client)
@@ -1782,6 +1783,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         onClick={()=>{
                           if (dest==='consultation') {
                             // Stay in Week6, just switch to the consultation sub-tab
+                            setConsultBack(selectedClient)
                             setTab('consultation')
                             setSelectedClient(null)
                           } else {
@@ -2201,6 +2203,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       ══════════════════════════════════════════════════════ */}
       {tab==='consultation'&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+          {/* Back to the client's tools page when opened from Client Tools */}
+          {consultBack&&(
+            <button onClick={()=>{ const c=consultBack; setConsultBack(null); openClient(c); setTab('clients') }}
+              style={{background:'none',border:'none',color:C.gold,fontSize:13,fontWeight:700,cursor:'pointer',padding:0,marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+              ← Back to {consultBack.name||'client'}
+            </button>
+          )}
 
           {/* Part 1: Intake */}
           <Card sx={{marginBottom:14}}>
