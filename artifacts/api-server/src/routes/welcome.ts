@@ -6,8 +6,11 @@
 // per coach so each coach's clients get their own welcome.
 //
 // Storage (admin_settings, org-scoped — no DDL available):
-//   key 'welcome_messages' → { enabled, defaultText, perCoach: { [coachId]: { text, paused } } }
-//   key 'welcome_sent'     → { [clientProfileId]: iso timestamp }  (dedupe ledger)
+//   key 'welcome_messages'          → { enabled, defaultText, perCoach: { [coachId]: { text, paused } } }
+//   key 'welcome_sent:<clientId>'   → iso timestamp (one row per client — the
+//     row INSERT is the atomic claim: a duplicate insert conflicts, so two
+//     concurrent checks can never both send; the claim is rolled back if the
+//     message insert fails, so a transient error can't permanently eat the welcome)
 //
 // Routes:
 //   GET  /welcome/settings   (super_admin)  → current settings for caller's org
@@ -51,6 +54,24 @@ async function putSetting(companyId: string, key: string, value: any): Promise<b
     body: JSON.stringify({ company_id: companyId, key, value: JSON.stringify(value) }),
   });
   return r.ok;
+}
+
+// Atomic claim: plain INSERT (no upsert). On the unique (company_id,key)
+// constraint a second concurrent claim gets a conflict error → returns false.
+async function claimOnce(companyId: string, key: string): Promise<boolean> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings`, {
+    method: "POST",
+    headers: SH,
+    body: JSON.stringify({ company_id: companyId, key, value: JSON.stringify(new Date().toISOString()) }),
+  });
+  return r.ok;
+}
+
+async function releaseClaim(companyId: string, key: string): Promise<void> {
+  await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(key)}`, {
+    method: "DELETE",
+    headers: SH,
+  }).catch(() => {});
 }
 
 type WelcomeSettings = {
@@ -129,13 +150,17 @@ router.post("/welcome/check", async (req: Request, res: Response) => {
     const settings: WelcomeSettings = { ...EMPTY, ...((await getSetting(me.company_id, "welcome_messages")) || {}) };
     if (!settings.enabled) { res.json({ sent: false }); return; }
 
-    // Already welcomed? (ledger keyed by client profile id)
-    const ledger: Record<string, string> = (await getSetting(me.company_id, "welcome_sent")) || {};
-    if (ledger[me.id]) { res.json({ sent: false }); return; }
+    // Already welcomed? (one claim row per client)
+    const claimKey = `welcome_sent:${me.id}`;
+    const existing = await svcGet("admin_settings", `company_id=eq.${me.company_id}&key=eq.${encodeURIComponent(claimKey)}&select=key`);
+    if (existing.length) { res.json({ sent: false }); return; }
 
-    // Needs a coach to send from
+    // Needs a real coach in the SAME org to send from
     if (!me.coach_id) { res.json({ sent: false }); return; }
-    const coach = (await svcGet("user_profiles", `id=eq.${me.coach_id}&select=id,name`))[0];
+    const coach = (await svcGet(
+      "user_profiles",
+      `id=eq.${me.coach_id}&company_id=eq.${me.company_id}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name`,
+    ))[0];
     if (!coach) { res.json({ sent: false }); return; }
 
     const override = settings.perCoach[me.coach_id] || {};
@@ -147,10 +172,10 @@ router.post("/welcome/check", async (req: Request, res: Response) => {
       .replaceAll("{client_name}", firstName(me.name))
       .replaceAll("{coach_name}", firstName(coach.name));
 
-    // Reserve the ledger slot FIRST so a double-fire can't send twice
-    ledger[me.id] = new Date().toISOString();
-    const reserved = await putSetting(me.company_id, "welcome_sent", ledger);
-    if (!reserved) { res.json({ sent: false }); return; }
+    // Atomic claim FIRST so a double-fire can't send twice (unique constraint
+    // rejects the second insert). Rolled back below if the send fails.
+    const claimed = await claimOnce(me.company_id, claimKey);
+    if (!claimed) { res.json({ sent: false }); return; }
 
     // Find or create the coach↔client conversation (ids sorted, same as app)
     const [pA, pB] = [me.id, coach.id].sort();
@@ -165,14 +190,15 @@ router.post("/welcome/check", async (req: Request, res: Response) => {
       const rows = (await r.json().catch(() => null)) as any;
       convoId = Array.isArray(rows) && rows[0]?.id ? rows[0].id : null;
     }
-    if (!convoId) { res.json({ sent: false }); return; }
+    if (!convoId) { await releaseClaim(me.company_id, claimKey); res.json({ sent: false }); return; }
 
     const ins = await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
       method: "POST",
       headers: { ...SH, Prefer: "return=representation" },
       body: JSON.stringify({ conversation_id: convoId, sender_id: coach.id, content, message_type: "text" }),
     });
-    if (!ins.ok) { res.json({ sent: false }); return; }
+    // Send failed → roll the claim back so the next sign-in retries
+    if (!ins.ok) { await releaseClaim(me.company_id, claimKey); res.json({ sent: false }); return; }
     await fetch(`${SUPABASE_URL}/rest/v1/conversations?id=eq.${convoId}`, {
       method: "PATCH",
       headers: SH,

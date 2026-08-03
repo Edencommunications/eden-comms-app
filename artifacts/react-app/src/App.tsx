@@ -5482,11 +5482,13 @@ export default function App() {
   // whether their one-time welcome should be dropped into their coach chat.
   // The server keeps its own "already sent" ledger — this is just the nudge.
   useEffect(() => {
-    if (user?.role !== 'client') return;
-    if (sessionStorage.getItem('welcomeChecked')) return;
-    sessionStorage.setItem('welcomeChecked', '1');
-    fetch('/api/welcome/check', { method:'POST', headers:{ Authorization: sbBearer() } }).catch(()=>{});
-  }, [user?.role]);
+    if (user?.role !== 'client' || !user?.email) return;
+    const key = `welcomeChecked:${user.email}`;   // per-user, so shared browsers can't suppress each other
+    if (sessionStorage.getItem(key)) return;
+    fetch('/api/welcome/check', { method:'POST', headers:{ Authorization: sbBearer() } })
+      .then(r => { if (r.ok) sessionStorage.setItem(key, '1'); }) // only mark done on success — transient failures retry next load
+      .catch(()=>{});
+  }, [user?.role, user?.email]);
 
   // Branded login link: ?org=<slug> loads that org's name + palette before auth.
   // Plain visits keep brandOrg = null → Eden gold login.
