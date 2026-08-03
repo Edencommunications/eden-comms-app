@@ -218,8 +218,107 @@ router.post("/welcome/check", async (req: Request, res: Response) => {
       headers: SH,
       body: JSON.stringify({ last_message: content.slice(0, 80), last_message_at: new Date().toISOString() }),
     });
+    // If the welcome came from the coach personally, mark the coach-intro as
+    // done too, so a later /welcome/coach-intro can't send a duplicate hello
+    // from the same coach.
+    if (me.coach_id && sender.id === me.coach_id) {
+      await claimOnce(me.company_id, `coach_intro:${me.id}:${sender.id}`);
+    }
     res.json({ sent: true });
   } catch { res.status(500).json({ error: "Welcome check failed" }); }
+});
+
+// Second personal hello: when a client who was welcomed by an org admin
+// (because they had no coach yet) later gets a coach assigned, drop a short
+// one-time intro from that coach into the new coach↔client conversation.
+// Called by the admin UI right after saving the assignment. Idempotent:
+// one claim row per client+coach ('coach_intro:<clientId>:<coachId>').
+router.post("/welcome/coach-intro", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireStaff(req);
+    if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+
+    const email = String(req.body?.clientEmail || "").trim().toLowerCase();
+    if (!email) { res.status(400).json({ error: "clientEmail required" }); return; }
+
+    // Client must be in the caller's org, active, and have a coach assigned NOW
+    const client = (await svcGet(
+      "user_profiles",
+      `email=eq.${encodeURIComponent(email)}&company_id=eq.${caller.company_id}&role=eq.client&is_active=not.is.false&select=id,name,coach_id`,
+    ))[0];
+    if (!client?.coach_id) { res.json({ sent: false }); return; }
+
+    // Access control: only an org super_admin (who manages assignments) may
+    // trigger the intro — or the assigned coach themselves. A coach can never
+    // cause a message to be sent as ANOTHER coach.
+    if (caller.role !== "super_admin" && caller.id !== client.coach_id) {
+      res.status(403).json({ error: "Not authorized" });
+      return;
+    }
+
+    const settings: WelcomeSettings = { ...EMPTY, ...((await getSetting(caller.company_id, "welcome_messages")) || {}) };
+    if (!settings.enabled) { res.json({ sent: false }); return; }
+
+    // Only a SECOND hello: the first welcome must already have gone out
+    // (from an admin). If it hasn't, /welcome/check will greet the client
+    // from this coach directly on their first sign-in — no intro needed.
+    const welcomed = await svcGet(
+      "admin_settings",
+      `company_id=eq.${caller.company_id}&key=eq.${encodeURIComponent(`welcome_sent:${client.id}`)}&select=key`,
+    );
+    if (!welcomed.length) { res.json({ sent: false }); return; }
+
+    const coach = (await svcGet(
+      "user_profiles",
+      `id=eq.${client.coach_id}&company_id=eq.${caller.company_id}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name`,
+    ))[0];
+    if (!coach) { res.json({ sent: false }); return; }
+
+    // Respect the per-coach pause; use the coach's custom text when set,
+    // otherwise a friendly default intro.
+    const override = settings.perCoach[coach.id] || {};
+    if (override.paused) { res.json({ sent: false }); return; }
+    const template = (override.text || "").trim()
+      || "Hi {client_name}, I'm {coach_name}, your new coach. Great to meet you — this is where we'll chat, so message me here any time.";
+
+    const content = template
+      .replaceAll("{client_name}", firstName(client.name))
+      .replaceAll("{coach_name}", firstName(coach.name));
+
+    // Atomic once-only claim per client+coach (same pattern as the welcome)
+    const claimKey = `coach_intro:${client.id}:${coach.id}`;
+    const claimed = await claimOnce(caller.company_id, claimKey);
+    if (!claimed) { res.json({ sent: false }); return; }
+
+    // Find or create the coach↔client conversation (ids sorted, same as app)
+    const [pA, pB] = [client.id, coach.id].sort();
+    let convoId: string | null =
+      (await svcGet("conversations", `participant_a_id=eq.${pA}&participant_b_id=eq.${pB}&select=id&limit=1`))[0]?.id || null;
+    if (!convoId) {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/conversations`, {
+        method: "POST",
+        headers: { ...SH, Prefer: "return=representation" },
+        body: JSON.stringify({ participant_a_id: pA, participant_b_id: pB, company_id: caller.company_id }),
+      });
+      const rows = (await r.json().catch(() => null)) as any;
+      convoId = Array.isArray(rows) && rows[0]?.id ? rows[0].id : null;
+    }
+    if (!convoId) { await releaseClaim(caller.company_id, claimKey); res.json({ sent: false }); return; }
+
+    const ins = await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
+      method: "POST",
+      headers: { ...SH, Prefer: "return=representation" },
+      body: JSON.stringify({ conversation_id: convoId, sender_id: coach.id, content, message_type: "text" }),
+    });
+    // Send failed → roll the claim back so a re-assignment can retry
+    if (!ins.ok) { await releaseClaim(caller.company_id, claimKey); res.json({ sent: false }); return; }
+    await fetch(`${SUPABASE_URL}/rest/v1/conversations?id=eq.${convoId}`, {
+      method: "PATCH",
+      headers: SH,
+      body: JSON.stringify({ last_message: content.slice(0, 80), last_message_at: new Date().toISOString() }),
+    });
+    res.json({ sent: true });
+  } catch { res.status(500).json({ error: "Coach intro failed" }); }
 });
 
 export default router;

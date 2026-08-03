@@ -975,13 +975,24 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setSelectedClient({ ...client, _deactivated: false })
   }
 
-  function transferClient(clientEmail, newCoachUuid) {
+  function transferClient(clientEmail, newCoachUuid, hadCoach = true) {
     const next = { ...clientCoachMap, [clientEmail]: newCoachUuid }
     setClientCoachMap(next)
     localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
     // Persist new coach assignment in the database
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(clientEmail)}`,{coach_id:newCoachUuid})
-      .then(ok=>{ if(!ok) alert(`Couldn't save the coach transfer for ${clientEmail} — try again.`) })
+      .then(ok=>{
+        if(!ok){ alert(`Couldn't save the coach transfer for ${clientEmail} — try again.`); return }
+        // First-ever coach for this client → have the new coach say hello in
+        // their (brand-new) chat. Server is idempotent, so this can't double-send.
+        if (!hadCoach) {
+          fetch('/api/welcome/coach-intro', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+            body: JSON.stringify({ clientEmail }),
+          }).catch(()=>{})
+        }
+      })
       .catch(()=>alert(`Couldn't save the coach transfer for ${clientEmail} — try again.`))
     dbInsert('audit_logs',{ action:'client_transferred', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', details:{ name:clientEmail } }).catch(()=>{})
@@ -1741,7 +1752,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         <div style={{display:'flex',gap:8}}>
                           <select
                             defaultValue=""
-                            onChange={e=>{ if(e.target.value){ transferClient(selectedClient.email,e.target.value); setSelectedClient(prev=>({...prev,coachName:allCoaches.find(c=>c.uuid===e.target.value)?.name||prev.coachName})) }}}
+                            onChange={e=>{ if(e.target.value){ transferClient(selectedClient.email,e.target.value,!!effectiveCoachId(selectedClient)); setSelectedClient(prev=>({...prev,coachName:allCoaches.find(c=>c.uuid===e.target.value)?.name||prev.coachName})) }}}
                             style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}>
                             <option value="">Current: {effectiveCoachName(selectedClient)}</option>
                             {allCoaches.filter(c=>!removedCoaches.includes(c.uuid)).map(c=>(
