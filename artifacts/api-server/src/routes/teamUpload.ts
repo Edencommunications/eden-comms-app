@@ -1,0 +1,97 @@
+// ─── Team Hub chat uploads ───────────────────────────────────────────
+// POST /team/upload — any active staff member (role ≠ client) uploads a file
+// for team chat. Files land in the Supabase Storage bucket `team-uploads`
+// (created on demand, public) under <companyId>/<timestamp>-<name>. The
+// service key does the storage write server-side so no storage policies are
+// needed and the client never sees privileged credentials.
+import { Router, type IRouter, type Request, type Response } from "express";
+import { logger } from "../lib/logger";
+
+const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
+const SUPABASE_ANON =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU";
+const SERVICE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"] || "";
+const BUCKET = "team-uploads";
+const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
+
+const SVC_H = {
+  apikey: SERVICE_KEY,
+  Authorization: `Bearer ${SERVICE_KEY}`,
+};
+
+// Verify the caller's Supabase JWT and require an active non-client profile.
+async function requireStaffJwt(req: Request): Promise<{ id: string; company_id: string | null; role: string } | null> {
+  const auth = String(req.get("authorization") || "");
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token || token === SUPABASE_ANON) return null;
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) return null;
+  const user: any = await r.json().catch(() => null);
+  const email = String(user?.email || "").toLowerCase();
+  if (!email) return null;
+  const pr = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&role=neq.client&is_active=not.is.false&select=id,company_id,role`,
+    { headers: SVC_H },
+  );
+  if (!pr.ok) return null;
+  const rows: any[] = await pr.json().catch(() => []);
+  return rows[0] ? { id: rows[0].id, company_id: rows[0].company_id || null, role: rows[0].role } : null;
+}
+
+let bucketReady = false;
+async function ensureBucket(): Promise<void> {
+  if (bucketReady) return;
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+    method: "POST",
+    headers: { ...SVC_H, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: BUCKET, name: BUCKET, public: true }),
+  });
+  // 200 = created; 400/409 = already exists — both fine
+  if (r.ok || r.status === 400 || r.status === 409) { bucketReady = true; return; }
+  const body = await r.text().catch(() => "");
+  logger.error({ status: r.status, body }, "[TeamUpload] bucket create failed");
+  throw new Error("bucket unavailable");
+}
+
+const router: IRouter = Router();
+
+router.post("/team/upload", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireStaffJwt(req);
+    if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+
+    const { filename, contentType, dataBase64 } = (req.body || {}) as {
+      filename?: string; contentType?: string; dataBase64?: string;
+    };
+    if (!filename || !dataBase64) { res.status(400).json({ error: "filename and dataBase64 required" }); return; }
+
+    let buf: Buffer;
+    try { buf = Buffer.from(dataBase64, "base64"); } catch { res.status(400).json({ error: "Bad file data" }); return; }
+    if (!buf.length) { res.status(400).json({ error: "Empty file" }); return; }
+    if (buf.length > MAX_BYTES) { res.status(413).json({ error: "File too large (15 MB max)" }); return; }
+
+    await ensureBucket();
+
+    const safe = String(filename).slice(-120).replace(/[^A-Za-z0-9._-]+/g, "_") || "file";
+    const path = `${caller.company_id || "eden"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+      method: "POST",
+      headers: { ...SVC_H, "Content-Type": contentType || "application/octet-stream" },
+      body: buf as any,
+    });
+    if (!up.ok) {
+      const body = await up.text().catch(() => "");
+      logger.error({ status: up.status, body }, "[TeamUpload] upload failed");
+      res.status(502).json({ error: "Upload failed — please try again" });
+      return;
+    }
+    res.json({ url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`, name: String(filename), type: contentType || "" });
+  } catch (e) {
+    logger.error({ err: e }, "[TeamUpload] error");
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+export default router;

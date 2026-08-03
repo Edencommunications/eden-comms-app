@@ -142,14 +142,29 @@ export default function Week7({ currentUser }) {
           if (me) setSelf({ uuid:me.id, name:me.name||me.full_name||currentUser?.name||'User', role:me.role, orgId:me.company_id||EDEN_ORG_ID })
         }).catch(()=>{})
     }
+    // Custom staff titles ("Closer", "Sales Mentor"…) live in admin_settings as staff_meta:<id>
+    const metaP = dbGet('admin_settings', `key=like.staff_meta:*&select=key,value`)
+      .then(rows => {
+        const map = {}
+        for (const r of (rows||[])) {
+          try {
+            const v = typeof r.value === 'string' ? JSON.parse(r.value) : r.value
+            if (v?.label) map[r.key.slice('staff_meta:'.length)] = v.label
+          } catch {}
+        }
+        setStaffLabels(map)
+        return map
+      }).catch(() => ({}))
     dbGet('user_profiles', `role=neq.client&is_active=not.is.false&select=id,name,full_name,role&order=name.asc.nullslast`)
-      .then(rows=>{
+      .then(async rows=>{
         if (!Array.isArray(rows)||!rows.length) return
+        const labels = await metaP
         const seen = new Set()
         setTeam(rows.filter(r=>{ if(seen.has(r.id)) return false; seen.add(r.id); return true })
-          .map(r=>({ uuid:r.id, name:r.name||r.full_name||'Team member', role:r.role, isHeadCoach:r.role==='head_coach' })))
+          .map(r=>({ uuid:r.id, name:r.name||r.full_name||'Team member', role:r.role, label:labels[r.id]||null, isHeadCoach:r.role==='head_coach' })))
       }).catch(()=>{})
   }, []) // eslint-disable-line
+  const [staffLabels, setStaffLabels] = useState({})
 
   // Safety block — clients must never reach this
   if (myRole === 'client') {
@@ -234,6 +249,115 @@ export default function Week7({ currentUser }) {
       : <span key={i} style={{color:baseColor}}>{p}</span>)
   }
 
+  // ── Attachments & smart links (Slack-style) ─────────────────────────
+  // Uploaded files travel inside message content as markers: [[file|name|url|type]]
+  const ATT_RE = /\[\[file\|([^|\]]*)\|([^|\]]*)\|([^\]]*)\]\]/g
+  function splitAtts(text) {
+    const atts = []
+    const rest = String(text||'').replace(ATT_RE, (_, name, url, type) => { atts.push({ name, url, type }); return '' })
+    return { text: rest.trim(), atts }
+  }
+  function linkLabel(url) {
+    try {
+      const h = new URL(url).hostname.replace(/^www\./,'')
+      if (h.includes('loom.com'))         return '▶️ Loom video'
+      if (h === 'docs.google.com')        return '📄 Google Doc'
+      if (h === 'sheets.google.com')      return '📊 Google Sheet'
+      if (h === 'drive.google.com')       return '📁 Google Drive'
+      if (h.includes('youtube.com') || h === 'youtu.be') return '▶️ YouTube'
+      return '🔗 ' + h
+    } catch { return '🔗 Link' }
+  }
+  function renderRich(text, baseColor) {
+    const parts = String(text||'').split(/(https?:\/\/[^\s]+)/g)
+    return parts.map((p, i) => /^https?:\/\//.test(p)
+      ? <a key={i} href={p} target="_blank" rel="noreferrer" style={{color:C.gold,fontWeight:600}}>{linkLabel(p)}</a>
+      : <span key={i}>{renderMentions(p, baseColor)}</span>)
+  }
+  function renderBody(content, baseColor, mine = false) {
+    const { text, atts } = splitAtts(content)
+    return (<>
+      {text ? renderRich(text, baseColor) : null}
+      {atts.length > 0 && (
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:text?6:0}}>
+          {atts.map((a,i) => /^image\//.test(a.type||'') ? (
+            <a key={i} href={a.url} target="_blank" rel="noreferrer">
+              <img src={a.url} alt={a.name} style={{maxWidth:220,maxHeight:180,borderRadius:8,border:`1px solid ${C.border}`,display:'block'}}/>
+            </a>
+          ) : (
+            <a key={i} href={a.url} target="_blank" rel="noreferrer"
+              style={{display:'flex',alignItems:'center',gap:8,background:mine?'#00000018':C.surface,border:`1px solid ${C.border}`,
+                borderRadius:8,padding:'7px 10px',textDecoration:'none',maxWidth:260}}>
+              <span style={{fontSize:15}}>📎</span>
+              <span style={{fontSize:12,fontWeight:600,color:mine?C.black:C.gold,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </>)
+  }
+
+  // ── File uploads (api-server → Supabase Storage) ─────────────────────
+  const [pendingFiles, setPendingFiles] = useState([])   // {name,url,type,target}
+  const [uploadingFor, setUploadingFor] = useState(null) // 'main' | 'thread' | 'dm' | null
+  const fileInputRef = useRef(null)
+  const uploadTargetRef = useRef('main')
+  function pickFile(target) { uploadTargetRef.current = target; fileInputRef.current?.click() }
+  async function onFilePicked(e) {
+    const files = Array.from(e.target.files||[]); e.target.value = ''
+    if (!files.length) return
+    const target = uploadTargetRef.current
+    setUploadingFor(target)
+    try {
+      for (const f of files) {
+        if (f.size > 15*1024*1024) { alert(`${f.name} is over the 15 MB limit.`); continue }
+        const b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader()
+          r.onload  = () => resolve(String(r.result).split(',')[1]||'')
+          r.onerror = reject
+          r.readAsDataURL(f)
+        })
+        const resp = await fetch('/api/team/upload', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sbAccessToken()}` },
+          body: JSON.stringify({ filename:f.name, contentType:f.type, dataBase64:b64 }),
+        })
+        const out = await resp.json().catch(() => null)
+        if (!resp.ok || !out?.url) { alert(`Could not upload ${f.name} — please try again.`); continue }
+        setPendingFiles(prev => [...prev, { name:f.name, url:out.url, type:f.type||'', target }])
+      }
+    } finally { setUploadingFor(null) }
+  }
+  // Pull this composer's staged files out and turn them into content markers
+  function takePending(target) {
+    const mine = pendingFiles.filter(p => p.target===target)
+    if (mine.length) setPendingFiles(prev => prev.filter(p => p.target!==target))
+    return mine.map(a => `[[file|${a.name.replace(/[|[\]]/g,'_')}|${a.url}|${a.type}]]`).join('\n')
+  }
+  const hasPending = (target) => pendingFiles.some(p => p.target===target)
+  const PendingChips = ({ target }) => {
+    const mine = pendingFiles.filter(p => p.target===target)
+    if (!mine.length && uploadingFor!==target) return null
+    return (
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:6}}>
+        {mine.map((p,i) => (
+          <span key={i} style={{display:'flex',alignItems:'center',gap:6,background:C.card,border:`1px solid ${C.gold}55`,borderRadius:14,padding:'3px 9px',fontSize:11,color:C.white}}>
+            📎 <span style={{maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+            <button onClick={() => setPendingFiles(prev => prev.filter(x => x!==p))}
+              style={{background:'none',border:'none',color:C.muted,cursor:'pointer',padding:0,fontSize:12}}>✕</button>
+          </span>
+        ))}
+        {uploadingFor===target && <span style={{fontSize:11,color:C.muted,alignSelf:'center'}}>Uploading…</span>}
+      </div>
+    )
+  }
+  const ClipBtn = ({ target }) => (
+    <button onClick={() => pickFile(target)} title="Attach a file (15 MB max)"
+      style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',color:C.muted,fontSize:15,cursor:'pointer',flexShrink:0}}>
+      📎
+    </button>
+  )
+
   // ── Delete rules: admin deletes anything; everyone else only their own ──
   const isAdminRole = myRole==='super_admin' || myRole==='company_admin'
   function canDeleteTeamMsg(m) { return typeof m.id==='string' && m.id.length===36 && (isAdminRole || m.senderId===myUUID) }
@@ -302,10 +426,12 @@ export default function Week7({ currentUser }) {
 
   // ── Chat helpers ───────────────────────────────────────────
   function sendMessage() {
-    if (!newMessage.trim()) return
+    if (!newMessage.trim() && !hasPending('main')) return
+    const markers = takePending('main')
+    const body = [newMessage.trim(), markers].filter(Boolean).join('\n')
     const msg = {
       id:'m'+Date.now(), senderId:myUUID, senderName:myName, senderRole:myRole,
-      content:newMessage.trim(), replyCount:0, createdAt:new Date().toISOString(), isDm:false,
+      content:body, replyCount:0, createdAt:new Date().toISOString(), isDm:false,
     }
     setMessages(prev => [...prev, msg])
     setNewMessage('')
@@ -315,10 +441,11 @@ export default function Week7({ currentUser }) {
   }
 
   function sendReply() {
-    if (!newReply.trim() || !activeThread) return
+    if ((!newReply.trim() && !hasPending('thread')) || !activeThread) return
+    const markers = takePending('thread')
     const reply = {
       id:'r'+Date.now(), senderId:myUUID, senderName:myName, senderRole:myRole,
-      content:newReply.trim(), threadId:activeThread.id, createdAt:new Date().toISOString(),
+      content:[newReply.trim(), markers].filter(Boolean).join('\n'), threadId:activeThread.id, createdAt:new Date().toISOString(),
     }
     setThreadReplies(prev => ({ ...prev, [activeThread.id]:[...(prev[activeThread.id]||[]), reply] }))
     setMessages(prev => prev.map(m => m.id===activeThread.id ? {...m, replyCount:(m.replyCount||0)+1} : m))
@@ -329,9 +456,10 @@ export default function Week7({ currentUser }) {
   }
 
   function sendDm() {
-    if (!newDm.trim() || !dmTarget) return
+    if ((!newDm.trim() && !hasPending('dm')) || !dmTarget) return
+    const markers = takePending('dm')
     const key = [myUUID, dmTarget.uuid].sort().join('_')
-    const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:newDm.trim(), createdAt:new Date().toISOString() }
+    const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDm.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString() }
     setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
     setNewDm('')
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name })
@@ -493,7 +621,7 @@ export default function Week7({ currentUser }) {
                               </div>
                             ) : (
                               <div style={{fontSize:13,lineHeight:1.5,background:C.card,borderRadius:8,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-                                {renderMentions(msg.content, C.white)}
+                                {renderBody(msg.content, C.white)}
                               </div>
                             )}
                             <div style={{display:'flex',gap:8,marginTop:5,alignItems:'center'}}>
@@ -527,14 +655,16 @@ export default function Week7({ currentUser }) {
                   </div>
 
                   <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                    <PendingChips target="main"/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <ClipBtn target="main"/>
                       <MentionInput value={newMessage} onChange={setNewMessage} onSubmit={sendMessage}
                         candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
                         colors={C}
                         placeholder="Message #general… tag with @Name (Enter to send)"
                         inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
-                      <button onClick={sendMessage} disabled={!newMessage.trim()}
-                        style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newMessage.trim()?1:.4}}>
+                      <button onClick={sendMessage} disabled={!newMessage.trim() && !hasPending('main')}
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:(newMessage.trim()||hasPending('main'))?1:.4}}>
                         Send
                       </button>
                     </div>
@@ -562,7 +692,7 @@ export default function Week7({ currentUser }) {
                             <span style={{fontSize:12,fontWeight:700,color:C.white}}>{activeThread.senderName}</span>
                             <span style={{fontSize:10,color:C.muted}}>{timeAgo(activeThread.createdAt)}</span>
                           </div>
-                          <div style={{fontSize:12,color:C.white,lineHeight:1.5}}>{activeThread.content}</div>
+                          <div style={{fontSize:12,color:C.white,lineHeight:1.5}}>{renderBody(activeThread.content, C.white)}</div>
                         </div>
                       </div>
                     </div>
@@ -585,7 +715,7 @@ export default function Week7({ currentUser }) {
                                   {isAdminRole ? `🗑 Deleted by ${r.deletedByName||'staff'}: ${r.content||''}` : `Message deleted${r.deletedByName?` by ${r.deletedByName}`:''}`}
                                 </div>
                               ) : (
-                                <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderMentions(r.content, C.white)}</div>
+                                <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderBody(r.content, C.white)}</div>
                               )}
                               {!r.deletedAt && canDeleteTeamMsg(r) && (
                                 <button onClick={() => deleteTeamMsg(r)} title="Delete (kept in admin audit log)"
@@ -598,14 +728,16 @@ export default function Week7({ currentUser }) {
                     </div>
 
                     <div style={{padding:'10px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                      <PendingChips target="thread"/>
                       <div style={{display:'flex',gap:8}}>
+                        <ClipBtn target="thread"/>
                         <MentionInput value={newReply} onChange={setNewReply} onSubmit={sendReply}
                           candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
                           colors={C}
                           placeholder="Reply in thread…"
                           inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
-                        <button onClick={sendReply} disabled={!newReply.trim()}
-                          style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:newReply.trim()?1:.4}}>
+                        <button onClick={sendReply} disabled={!newReply.trim() && !hasPending('thread')}
+                          style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:(newReply.trim()||hasPending('thread'))?1:.4}}>
                           Reply
                         </button>
                       </div>
@@ -625,8 +757,8 @@ export default function Week7({ currentUser }) {
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.white}}>{dmTarget.name}</div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:'capitalize'}}>
-                      {dmTarget.role}{dmTarget.isHeadCoach?' · Head Coach':''}
+                    <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:dmTarget.label?'none':'capitalize'}}>
+                      {dmTarget.label || dmTarget.role}{dmTarget.isHeadCoach?' · Head Coach':''}
                     </div>
                   </div>
                   <button onClick={() => { setSection('huddle'); startHuddle() }}
@@ -647,7 +779,7 @@ export default function Week7({ currentUser }) {
                       <div key={msg.id} style={{display:'flex',justifyContent:isMine?'flex-end':'flex-start',marginBottom:10}}>
                         <div style={{maxWidth:'72%'}}>
                           <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
-                            <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{msg.content}</div>
+                            <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
                           </div>
                           <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:isMine?'right':'left'}}>{timeAgo(msg.createdAt)}</div>
                         </div>
@@ -657,19 +789,25 @@ export default function Week7({ currentUser }) {
                   <div ref={dmBottomRef}/>
                 </div>
 
-                <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0,display:'flex',gap:8}}>
+                <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                  <PendingChips target="dm"/>
+                  <div style={{display:'flex',gap:8}}>
+                  <ClipBtn target="dm"/>
                   <MentionInput value={newDm} onChange={setNewDm} onSubmit={sendDm}
                     candidates={[dmTarget.name]}
                     colors={C}
                     placeholder={`Message ${dmTarget.name.split(' ')[0]}…`}
                     inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
-                  <button onClick={sendDm} disabled={!newDm.trim()}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newDm.trim()?1:.4}}>
+                  <button onClick={sendDm} disabled={!newDm.trim() && !hasPending('dm')}
+                    style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:(newDm.trim()||hasPending('dm'))?1:.4}}>
                     Send
                   </button>
+                  </div>
                 </div>
               </div>
             )}
+            {/* Hidden file input shared by all three composers */}
+            <input ref={fileInputRef} type="file" multiple style={{display:'none'}} onChange={onFilePicked}/>
           </div>
         )}
 

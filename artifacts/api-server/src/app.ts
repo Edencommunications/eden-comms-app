@@ -31,6 +31,8 @@ app.use(
 app.use(cors());
 app.use(
   express.json({
+    // Large enough for base64 team-chat uploads (15 MB binary ≈ 20 MB base64)
+    limit: "25mb",
     verify: (req, _res, buf) => {
       // Keep the raw body so webhook signatures can be verified.
       (req as unknown as { rawBody?: Buffer }).rawBody = buf;

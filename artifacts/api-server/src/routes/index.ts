@@ -8,6 +8,7 @@ import checkinFormRouter from "./checkinForm";
 import huddleRouter from "./huddle";
 import profileAuditRouter from "./profileAudit";
 import welcomeRouter from "./welcome";
+import teamUploadRouter from "./teamUpload";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(checkinFormRouter);
 router.use(huddleRouter);
 router.use(profileAuditRouter);
 router.use(welcomeRouter);
+router.use(teamUploadRouter);
 
 export default router;

@@ -5187,6 +5187,29 @@ const AppShell = ({ user, onLogout }) => {
              : clientTabs;
   useEffect(() => { if (communityOnly && tab !== "msgs") setTab("msgs"); }, [communityOnly, tab]);
 
+  // Manual per-staff access control — admin_settings key staff_meta:<profileId>
+  // holds {label, tabs:['home','msgs','team']}. When set, staff only see those tabs.
+  const [staffAllowedTabs, setStaffAllowedTabs] = useState<string[]|null>(null);
+  useEffect(() => {
+    if (!isStaff) { setStaffAllowedTabs(null); return; }
+    (async () => {
+      try {
+        const rows: any[] = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id`);
+        const id = rows?.[0]?.id;
+        if (!id) return;
+        const s: any[] = await sbGet('admin_settings', `key=eq.${encodeURIComponent('staff_meta:'+id)}&select=value`);
+        const v = s?.[0]?.value;
+        if (!v) return;
+        const meta = typeof v === 'string' ? JSON.parse(v) : v;
+        if (Array.isArray(meta?.tabs) && meta.tabs.length) setStaffAllowedTabs(meta.tabs);
+      } catch {}
+    })();
+  }, [isStaff, user.email]);
+  const visibleTabs = (isStaff && staffAllowedTabs) ? tabs.filter(t => staffAllowedTabs.includes(t.key)) : tabs;
+  useEffect(() => {
+    if (isStaff && staffAllowedTabs && !staffAllowedTabs.includes(tab) && visibleTabs.length) setTab(visibleTabs[0].key);
+  }, [isStaff, staffAllowedTabs, tab]); // eslint-disable-line
+
   const SPLIT_PANELS = [
     { key:'msgs',    label:'Messages',  icon:'chat' },
     { key:'checkin', label:'Check-in',  icon:'assignment' },
@@ -5385,7 +5408,7 @@ const AppShell = ({ user, onLogout }) => {
               </p>
               <p style={{ fontSize:13, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
-            {tabs.map(t => (
+            {visibleTabs.map(t => (
               <button key={t.key}
                 onClick={() => { navTab(t.key); setMenuOpen(false); }}
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 16px",
@@ -5412,7 +5435,7 @@ const AppShell = ({ user, onLogout }) => {
               </p>
               <p style={{ fontSize:12, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
-            {tabs.map(t => (
+            {visibleTabs.map(t => (
               <button key={t.key} onClick={() => navTab(t.key)}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${shellPrimary}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
                 <Ic n={t.icon} size={17} c={tab===t.key?shellPrimary:B.muted}/>

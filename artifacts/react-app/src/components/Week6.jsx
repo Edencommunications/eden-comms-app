@@ -370,6 +370,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [showNewUser,  setShowNewUser]  = useState(false)
   const [newUser, setNewUser] = useState({
     name:'', email:'', role:'client', coachId:'', checkInDay:'Wednesday',
+    title:'', accessHome:true, accessMsgs:true, accessTeam:true,
   })
   const setNU = k=>v=>setNewUser(p=>({...p,[k]:v}))
 
@@ -1203,6 +1204,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       return
     }
 
+    // Staff custom title + manual access control — stored zero-DDL in admin_settings
+    // as key staff_meta:<profileId> → {label, tabs:['home','msgs','team']}
+    if (['va','head_coach','staff'].includes(newUser.role)) {
+      const tabs = []
+      if (newUser.accessHome) tabs.push('home')
+      if (newUser.accessMsgs) tabs.push('msgs')
+      if (newUser.accessTeam) tabs.push('team')
+      const meta = { label: newUser.title.trim() || null, tabs: tabs.length ? tabs : ['team'] }
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+          method:'POST',
+          headers:{ ...H, 'Prefer':'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ company_id: adminCompanyId, key:`staff_meta:${profileId}`, value: JSON.stringify(meta) }),
+        })
+      } catch(e) {}
+    }
+
     // If client, create a client_access record linking to their coach
     if (newUser.role==='client' && newUser.coachId && profileId && adminCompanyId) {
       try {
@@ -1239,7 +1257,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Show setup instructions card
     setLastAdded({ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role, tempPass })
     setAuditLog(prev=>[{id:Date.now(),actor:info.name,action:`Added ${newUser.role}`,target:newUser.name,detail:newUser.email,time:new Date().toLocaleString()},...prev])
-    setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday'})
+    setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday',title:'',accessHome:true,accessMsgs:true,accessTeam:true})
     setShowNewUser(false)
   }
 
@@ -2434,7 +2452,24 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>They will receive login credentials manually until auto-auth is configured in production.</div>
             <Inp label="Full Name" value={newUser.name} onChange={setNU('name')} placeholder="e.g. Sarah Johnson"/>
             <Inp label="Email Address" value={newUser.email} onChange={setNU('email')} placeholder="e.g. sarah@email.com" type="email"/>
-            <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','head_coach','va','org_admin']}/>
+            <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','head_coach','va','staff','org_admin']}/>
+            {['va','head_coach','staff'].includes(newUser.role)&&(
+              <>
+                <Inp label="Custom Title (optional)" value={newUser.title} onChange={setNU('title')} placeholder="e.g. Closer, Sales Mentor, Module Mentor"/>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>They can access</div>
+                  <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+                    {[['accessTeam','Team Hub & Communities'],['accessMsgs','Messages'],['accessHome','My Clients']].map(([k,lbl])=>(
+                      <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
+                        <input type="checkbox" checked={!!newUser[k]} onChange={e=>setNU(k)(e.target.checked)} style={{accentColor:C.gold}}/>
+                        {lbl}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:5,lineHeight:1.5}}>Untick Messages and My Clients to make them Team-Hub-only. You can change this anytime by re-saving them here.</div>
+                </div>
+              </>
+            )}
             {newUser.role==='org_admin'&&(
               orgs.filter(o=>o.isWhiteLabel).length
                 ? <Sel label="Their Organization" value={newUser.orgName||''} onChange={setNU('orgName')}
