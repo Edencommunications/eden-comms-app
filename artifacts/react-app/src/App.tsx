@@ -5024,8 +5024,9 @@ const AppShell = ({ user, onLogout }) => {
     setCoachClient(client);
     setTab(dest);
     setClientNavSource(source);
-    // In Loom Mode, ONLY the client you clicked is visible by name — everyone else stays hidden
-    if (loomMode && client?.name) setLoomFeatured(new Set([client.name]));
+    // The last-clicked client is the Loom spotlight: only they show by name when
+    // Loom Mode is (or gets turned) on — everyone else stays hidden
+    if (client?.name) setLoomFeatured(new Set([client.name]));
   };
   const isMobile = useIsMobile();
 
@@ -5288,8 +5289,9 @@ const AppShell = ({ user, onLogout }) => {
           {user.role === "coach" && (
             <button onClick={() => setLoomMode(v => {
                 const on = !v;
-                // Fresh start each recording: only the client currently open (if any) is visible
-                if (on) setLoomFeatured(new Set(coachClient?.name ? [coachClient.name] : []));
+                // If a client tool screen is open, they're the spotlight; otherwise keep
+                // the last-clicked client (set by the Clients list / dashboard)
+                if (on && coachClient?.name) setLoomFeatured(new Set([coachClient.name]));
                 return on;
               })}
               title={loomMode ? "Exit Loom Mode" : "Enable Loom Mode — hides other client names"}
