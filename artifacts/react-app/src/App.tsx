@@ -24,6 +24,7 @@ import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
+import { useTeamHubUnread } from "./lib/teamUnread";
 import Wearables from "./components/Wearables";
 import CheckinFormEditor from "./components/CheckinFormEditor";
 import InstallBanner from "./components/InstallBanner";
@@ -5206,6 +5207,10 @@ const AppShell = ({ user, onLogout }) => {
     })();
   }, [isStaff, user.email]);
   const visibleTabs = (isStaff && staffAllowedTabs) ? tabs.filter(t => staffAllowedTabs.includes(t.key)) : tabs;
+
+  // Team Hub chat unread dot — lights up on the sidebar tab when #general or a DM
+  // has messages newer than last viewed (tracked in localStorage by Week7).
+  const teamHubUnread = useTeamHubUnread(user);
   useEffect(() => {
     if (isStaff && staffAllowedTabs && !staffAllowedTabs.includes(tab) && visibleTabs.length) setTab(visibleTabs[0].key);
   }, [isStaff, staffAllowedTabs, tab]); // eslint-disable-line
@@ -5417,6 +5422,9 @@ const AppShell = ({ user, onLogout }) => {
                   cursor:"pointer", textAlign:"left", width:"100%" }}>
                 <Ic n={t.icon} size={19} c={tab===t.key?shellPrimary:B.muted}/>
                 <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?shellPrimary:B.text }}>{t.label}</span>
+                {t.key==="team" && teamHubUnread && tab!=="team" && (
+                  <span style={{ width:8, height:8, borderRadius:4, background:shellPrimary, marginLeft:"auto", flexShrink:0 }}/>
+                )}
               </button>
             ))}
           </div>
@@ -5440,6 +5448,9 @@ const AppShell = ({ user, onLogout }) => {
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${shellPrimary}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
                 <Ic n={t.icon} size={17} c={tab===t.key?shellPrimary:B.muted}/>
                 <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?shellPrimary:B.muted }}>{t.label}</span>
+                {t.key==="team" && teamHubUnread && tab!=="team" && (
+                  <span style={{ width:8, height:8, borderRadius:4, background:shellPrimary, marginLeft:"auto", flexShrink:0 }}/>
+                )}
               </button>
             ))}
             <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.border}` }}>

@@ -9,6 +9,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
+import { supabase } from '../supabaseClient'
+import { loadSeen, saveSeen, seenAt } from '../lib/teamUnread'
 import Communities from './Communities'
 import MentionInput from './MentionInput'
 import { useHuddle } from './HuddleHub'
@@ -219,6 +221,73 @@ export default function Week7({ currentUser }) {
     const iv = setInterval(loadTeamChat, 8000)
     return () => clearInterval(iv)
   }, [orgId, myUUID])
+
+  // ── Realtime: typing hints + instant message delivery ────────
+  // Uses a Supabase broadcast channel (no table publication needed).
+  // The 8s poll above stays as the fallback per the realtime lesson.
+  const [typers, setTypers] = useState({})   // userId -> {name, ctx, until}
+  const rtChanRef = useRef(null)
+  const lastTypingSentRef = useRef(0)
+  useEffect(() => {
+    if (!orgId || !myUUID) return
+    const ch = supabase.channel(`teamhub-live-${orgId}`)
+      .on('broadcast', { event:'typing' }, ({ payload }) => {
+        if (!payload?.userId || payload.userId === myUUID) return
+        setTypers(prev => {
+          if (payload.stop) { if (!prev[payload.userId]) return prev; const n = {...prev}; delete n[payload.userId]; return n }
+          return { ...prev, [payload.userId]: { name: payload.name || 'Someone', ctx: payload.ctx, until: Date.now() + 4500 } }
+        })
+      })
+      .on('broadcast', { event:'new-message' }, ({ payload }) => {
+        if (payload?.userId !== myUUID) loadTeamChat()
+      })
+      .subscribe()
+    rtChanRef.current = ch
+    const prune = setInterval(() => {
+      setTypers(prev => {
+        const now = Date.now()
+        const keep = Object.entries(prev).filter(([,v]) => v.until > now)
+        return keep.length === Object.keys(prev).length ? prev : Object.fromEntries(keep)
+      })
+    }, 1200)
+    return () => { clearInterval(prune); rtChanRef.current = null; supabase.removeChannel(ch) }
+  }, [orgId, myUUID]) // eslint-disable-line
+
+  function sendTyping(ctx) {
+    const now = Date.now()
+    if (now - lastTypingSentRef.current < 1800) return
+    lastTypingSentRef.current = now
+    rtChanRef.current?.send({ type:'broadcast', event:'typing', payload:{ userId:myUUID, name:myName, ctx } })
+  }
+  function stopTyping() {
+    lastTypingSentRef.current = 0
+    rtChanRef.current?.send({ type:'broadcast', event:'typing', payload:{ userId:myUUID, stop:true } })
+  }
+  function broadcastNewMessage() {
+    rtChanRef.current?.send({ type:'broadcast', event:'new-message', payload:{ userId:myUUID } })
+  }
+  const typingNames = (ctx) => Object.values(typers).filter(t => t.ctx === ctx).map(t => (t.name || '').split(' ')[0] || 'Someone')
+  const TypingHint = ({ ctx }) => {
+    const names = typingNames(ctx)
+    if (!names.length) return null
+    return (
+      <div style={{fontSize:10,color:C.gold,fontStyle:'italic',padding:'0 2px 5px'}}>
+        {names.slice(0,3).join(', ')} {names.length > 1 ? 'are' : 'is'} typing…
+      </div>
+    )
+  }
+
+  // ── Unread tracking: last-viewed timestamps per conversation ──
+  const [seen, setSeen] = useState({})
+  useEffect(() => { if (myUUID) setSeen(loadSeen(myUUID)) }, [myUUID])
+  function markSeen(key) {
+    if (!myUUID) return
+    setSeen(prev => {
+      const next = { ...prev, [key]: Date.now() }
+      saveSeen(myUUID, next)
+      return next
+    })
+  }
 
   // ── @Mentions: parse against the team roster and notify tagged people ──
   function findMentions(text) {
@@ -439,8 +508,9 @@ export default function Week7({ currentUser }) {
     }
     setMessages(prev => [...prev, msg])
     setNewMessage('')
+    stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, sender_role:myRole, content:msg.content, is_dm:false })
-      .then(() => loadTeamChat())
+      .then(() => { loadTeamChat(); broadcastNewMessage() })
     notifyMentions(msg.content, 'Team Hub #general')
   }
 
@@ -454,8 +524,9 @@ export default function Week7({ currentUser }) {
     setThreadReplies(prev => ({ ...prev, [activeThread.id]:[...(prev[activeThread.id]||[]), reply] }))
     setMessages(prev => prev.map(m => m.id===activeThread.id ? {...m, replyCount:(m.replyCount||0)+1} : m))
     setNewReply('')
+    stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, sender_role:myRole, content:reply.content, thread_id:activeThread.id, is_dm:false })
-      .then(() => loadTeamChat())
+      .then(() => { loadTeamChat(); broadcastNewMessage() })
     notifyMentions(reply.content, 'a Team Hub thread')
   }
 
@@ -466,8 +537,9 @@ export default function Week7({ currentUser }) {
     const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDm.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString() }
     setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
     setNewDm('')
+    stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name })
-      .then(() => loadTeamChat())
+      .then(() => { loadTeamChat(); broadcastNewMessage() })
   }
 
   // ── Huddle helpers — thin wrappers over the global HuddleHub ─
@@ -482,9 +554,31 @@ export default function Week7({ currentUser }) {
   const dmConvo  = dmKey ? (dmMessages[dmKey] || []) : []
   const otherCoaches = team.filter(c => c.uuid !== myUUID)
 
+  // ── Mark conversations as seen while they're on screen ──────
+  useEffect(() => {
+    if (section === 'chat' && (chatView === 'main' || chatView === 'thread')) markSeen('general')
+  }, [section, chatView, messages, threadReplies]) // eslint-disable-line
+  useEffect(() => {
+    if (section === 'chat' && chatView === 'dm' && dmKey) markSeen(dmKey)
+  }, [section, chatView, dmKey, dmMessages]) // eslint-disable-line
+
+  // ── Unread counts (messages from others newer than last viewed) ──
+  const isUnread = (m, key) => !m.deletedAt && m.senderId !== myUUID && new Date(m.createdAt).getTime() > seenAt(seen, key)
+  const generalUnread =
+    messages.filter(m => !m.isDm && isUnread(m, 'general')).length +
+    Object.values(threadReplies).flat().filter(r => isUnread(r, 'general')).length
+  const dmUnreadCount = (key) => (dmMessages[key] || []).filter(m => isUnread(m, key)).length
+  const totalDmUnread = otherCoaches.reduce((n, c) => n + dmUnreadCount([myUUID, c.uuid].sort().join('_')), 0)
+  const chatUnread = generalUnread + totalDmUnread
+  const UnreadPill = ({ n }) => n > 0 ? (
+    <span style={{marginLeft:'auto',background:C.gold,color:C.black,borderRadius:9,fontSize:9,fontWeight:800,padding:'1px 6px',flexShrink:0,lineHeight:1.5}}>
+      {n > 9 ? '9+' : n}
+    </span>
+  ) : null
+
   // ─── Sidebar nav items ─────────────────────────────────────
   const NAV = [
-    { key:'chat',     icon:'💬', label:'Team Chat'   },
+    { key:'chat',     icon:'💬', label:'Team Chat',  badge: chatUnread > 0 },
     { key:'communities', icon:'👥', label:'Communities' },
     { key:'calendar', icon:'🗓',  label:'My Calendar' },
     { key:'huddle',   icon:'🎙',  label:'Huddle',     badge: huddleActive || !!liveHuddle },
@@ -560,7 +654,8 @@ export default function Week7({ currentUser }) {
                 <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Channels</div>
                 <button onClick={() => setChatView('main')}
                   style={{width:'100%',textAlign:'left',background:chatView==='main'?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'6px 8px',color:chatView==='main'?C.gold:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{color:C.muted}}>#</span> general
+                  <span style={{color:C.muted}}>#</span> <span style={{fontWeight:generalUnread>0?700:400}}>general</span>
+                  <UnreadPill n={generalUnread}/>
                 </button>
               </div>
 
@@ -597,14 +692,19 @@ export default function Week7({ currentUser }) {
                 {otherCoaches.map(coach => {
                   const key = [myUUID, coach.uuid].sort().join('_')
                   const isDmActive = chatView==='dm' && dmTarget?.uuid===coach.uuid
+                  const unread = dmUnreadCount(key)
+                  const isTyping = typingNames(`dm:${key}`).length > 0
                   return (
                     <button key={coach.uuid} onClick={() => { setDmTarget(coach); setChatView('dm') }}
                       style={{width:'100%',textAlign:'left',background:isDmActive?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'6px 8px',color:isDmActive?C.gold:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
                       <div style={{width:20,height:20,borderRadius:10,background:`${C.gold}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.gold,flexShrink:0}}>
                         {coach.name[0]}
                       </div>
-                      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{coach.name.split(' ')[0]}</span>
-                      {coach.isHeadCoach && <span style={{fontSize:8,color:C.gold,fontWeight:700,flexShrink:0}}>HC</span>}
+                      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,fontWeight:unread>0?700:400}}>
+                        {coach.name.split(' ')[0]}{isTyping && <span style={{color:C.gold,fontStyle:'italic',fontWeight:400}}> …typing</span>}
+                      </span>
+                      {coach.isHeadCoach && unread===0 && <span style={{fontSize:8,color:C.gold,fontWeight:700,flexShrink:0}}>HC</span>}
+                      <UnreadPill n={unread}/>
                     </button>
                   )
                 })}
@@ -684,10 +784,11 @@ export default function Week7({ currentUser }) {
                   </div>
 
                   <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                    <TypingHint ctx="general"/>
                     <PendingChips target="main"/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
                       <ClipBtn target="main"/>
-                      <MentionInput value={newMessage} onChange={setNewMessage} onSubmit={sendMessage}
+                      <MentionInput value={newMessage} onChange={v => { setNewMessage(v); if (v) sendTyping('general') }} onSubmit={sendMessage}
                         candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
                         colors={C}
                         placeholder="Message #general… tag with @Name (Enter to send)"
@@ -757,10 +858,11 @@ export default function Week7({ currentUser }) {
                     </div>
 
                     <div style={{padding:'10px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                      <TypingHint ctx={`thread:${activeThread.id}`}/>
                       <PendingChips target="thread"/>
                       <div style={{display:'flex',gap:8}}>
                         <ClipBtn target="thread"/>
-                        <MentionInput value={newReply} onChange={setNewReply} onSubmit={sendReply}
+                        <MentionInput value={newReply} onChange={v => { setNewReply(v); if (v) sendTyping(`thread:${activeThread.id}`) }} onSubmit={sendReply}
                           candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
                           colors={C}
                           placeholder="Reply in thread…"
@@ -819,10 +921,11 @@ export default function Week7({ currentUser }) {
                 </div>
 
                 <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                  <TypingHint ctx={`dm:${dmKey}`}/>
                   <PendingChips target="dm"/>
                   <div style={{display:'flex',gap:8}}>
                   <ClipBtn target="dm"/>
-                  <MentionInput value={newDm} onChange={setNewDm} onSubmit={sendDm}
+                  <MentionInput value={newDm} onChange={v => { setNewDm(v); if (v) sendTyping(`dm:${dmKey}`) }} onSubmit={sendDm}
                     candidates={[dmTarget.name]}
                     colors={C}
                     placeholder={`Message ${dmTarget.name.split(' ')[0]}…`}
