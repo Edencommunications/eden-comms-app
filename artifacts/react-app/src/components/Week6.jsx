@@ -387,6 +387,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       } catch {}
     }).catch(()=>{})
   },[])
+  const [editingRole, setEditingRole]     = useState(null)   // role name being renamed
+  const [editRoleName, setEditRoleName]   = useState('')
+  async function persistStaffRoles(next) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+        method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({ company_id:adminCompanyId, key:'staff_roles', value:JSON.stringify(next) }),
+      })
+    } catch(e) {}
+  }
   async function saveNewStaffRole() {
     const name = newRoleName.trim()
     if (!name) return
@@ -394,11 +404,42 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setStaffRoles(next)
     setNU('title')(name)
     setNewRoleName(''); setAddingRole(false)
+    await persistStaffRoles(next)
+  }
+  async function deleteStaffRole(name) {
+    if (!window.confirm(`Delete the saved role "${name}"? Existing team members keep their current title.`)) return
+    const next = staffRoles.filter(r=>r!==name)
+    setStaffRoles(next)
+    if (newUser.title===name) setNU('title')('')
+    if (editingRole===name) { setEditingRole(null); setEditRoleName('') }
+    await persistStaffRoles(next)
+  }
+  async function renameStaffRole(oldName) {
+    const name = editRoleName.trim()
+    if (!name || name===oldName) { setEditingRole(null); setEditRoleName(''); return }
+    const next = staffRoles.map(r=>r===oldName?name:r).filter((r,i,a)=>a.indexOf(r)===i)
+    setStaffRoles(next)
+    if (newUser.title===oldName) setNU('title')(name)
+    setEditingRole(null); setEditRoleName('')
+    await persistStaffRoles(next)
+    // Optionally cascade the rename to existing staff whose title matches the old name
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
-        method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify({ company_id:adminCompanyId, key:'staff_roles', value:JSON.stringify(next) }),
+      const rows = await dbGet('admin_settings', `key=like.${encodeURIComponent('staff_meta:*')}&select=key,value`)
+      const matches = (rows||[]).filter(r=>{
+        try {
+          const v = typeof r.value==='string' ? JSON.parse(r.value) : r.value
+          return v && v.label===oldName
+        } catch { return false }
       })
+      if (matches.length && window.confirm(`Also update ${matches.length} existing team member${matches.length>1?'s':''} titled "${oldName}" to "${name}"?`)) {
+        for (const r of matches) {
+          const v = typeof r.value==='string' ? JSON.parse(r.value) : r.value
+          await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+            method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+            body:JSON.stringify({ company_id:adminCompanyId, key:r.key, value:JSON.stringify({...v, label:name}) }),
+          })
+        }
+      }
     } catch(e) {}
   }
 
@@ -2573,10 +2614,28 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>Their Role Title</div>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                     {staffRoles.map(r=>(
-                      <button key={r} onClick={()=>setNU('title')(newUser.title===r?'':r)}
-                        style={{background:newUser.title===r?C.gold:'none',border:`1px solid ${newUser.title===r?C.gold:C.border}`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,color:newUser.title===r?C.black:C.white,cursor:'pointer'}}>
-                        {r}
-                      </button>
+                      editingRole===r ? (
+                        <div key={r} style={{display:'flex',gap:4,alignItems:'center'}}>
+                          <input value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} autoFocus
+                            onKeyDown={e=>{if(e.key==='Enter')renameStaffRole(r); if(e.key==='Escape'){setEditingRole(null);setEditRoleName('')}}}
+                            style={{width:120,background:C.surface,border:`1px solid ${C.gold}`,borderRadius:8,padding:'5px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+                          <button onClick={()=>renameStaffRole(r)} disabled={!editRoleName.trim()}
+                            style={{background:C.gold,border:'none',borderRadius:8,padding:'5px 8px',fontWeight:700,color:C.black,fontSize:10,cursor:'pointer',opacity:editRoleName.trim()?1:.4}}>Save</button>
+                          <button onClick={()=>{setEditingRole(null);setEditRoleName('')}}
+                            style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
+                        </div>
+                      ) : (
+                        <div key={r} style={{display:'flex',alignItems:'center',background:newUser.title===r?C.gold:'none',border:`1px solid ${newUser.title===r?C.gold:C.border}`,borderRadius:8,overflow:'hidden'}}>
+                          <button onClick={()=>setNU('title')(newUser.title===r?'':r)}
+                            style={{background:'none',border:'none',padding:'6px 4px 6px 12px',fontSize:11,fontWeight:700,color:newUser.title===r?C.black:C.white,cursor:'pointer'}}>
+                            {r}
+                          </button>
+                          <button onClick={()=>{setEditingRole(r);setEditRoleName(r)}} title="Rename role"
+                            style={{background:'none',border:'none',padding:'6px 3px',fontSize:10,color:newUser.title===r?C.black:C.muted,cursor:'pointer',opacity:.8}}>✎</button>
+                          <button onClick={()=>deleteStaffRole(r)} title="Delete role"
+                            style={{background:'none',border:'none',padding:'6px 8px 6px 3px',fontSize:10,color:newUser.title===r?C.black:C.muted,cursor:'pointer',opacity:.8}}>✕</button>
+                        </div>
+                      )
                     ))}
                     {!addingRole&&(
                       <button onClick={()=>setAddingRole(true)}
