@@ -997,7 +997,10 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                 {/* Video area */}
                 <div style={{flexShrink:0}}>
                   {activeModule.video_url?(
-                    <div style={{position:'relative',paddingTop:'56.25%'}}>
+                    // Cap the player height on tall/wide screens so the notes
+                    // and buttons below are never pushed off the bottom
+                    <div style={{background:'#000',display:'flex',justifyContent:'center'}}>
+                    <div style={{position:'relative',aspectRatio:'16 / 9',width:'100%',maxWidth:'calc(58vh * 16 / 9)',maxHeight:'58vh'}}>
                       <iframe src={toEmbedUrl(activeModule.video_url)}
                         style={{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}}
                         allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
@@ -1006,6 +1009,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                         style={{position:'absolute',right:8,bottom:8,background:'rgba(0,0,0,.65)',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px',color:C.muted,fontSize:10,fontWeight:700,textDecoration:'none'}}>
                         Open in new tab ↗
                       </a>
+                    </div>
                     </div>
                   ):(
                     <div style={{background:'#050505',padding:'36px 16px',textAlign:'center'}}>
