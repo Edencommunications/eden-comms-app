@@ -274,8 +274,12 @@ export default function Week7({ currentUser }) {
       ? <a key={i} href={p} target="_blank" rel="noreferrer" style={{color:C.gold,fontWeight:600}}>{linkLabel(p)}</a>
       : <span key={i}>{renderMentions(p, baseColor)}</span>)
   }
+  // Only ever render http(s) URLs as clickable/embedded — markers are stored in
+  // chat content, so a crafted message could otherwise smuggle javascript:/data: URLs
+  function safeUrl(u) { try { const p = new URL(u).protocol; return p === 'https:' || p === 'http:' } catch { return false } }
   function renderBody(content, baseColor, mine = false) {
-    const { text, atts } = splitAtts(content)
+    const { text, atts: rawAtts } = splitAtts(content)
+    const atts = rawAtts.filter(a => safeUrl(a.url))
     return (<>
       {text ? renderRich(text, baseColor) : null}
       {atts.length > 0 && (
