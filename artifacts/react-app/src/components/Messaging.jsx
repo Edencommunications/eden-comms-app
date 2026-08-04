@@ -810,6 +810,15 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       conversation_id: convoId, sender_id: myProfileId,
       content: text, message_type: 'text', parent_id: threadRootId,
     })
+    // Alert the other side of whichever conversation this thread lives in
+    const convo = conversations.find(c => c.supabaseConvoId === convoId)
+    if (convo?.id && convo.id !== myProfileId && !convo.monitor) {
+      dbInsert('notifications', {
+        recipient_id: convo.id, sender_id: myProfileId, sender_name: myName,
+        type: 'message', body: `💬 ${myName} replied in a thread: "${text.slice(0, 80)}"`,
+        is_read: false, link_to: 'msgs',
+      })
+    }
     markThreadRead(threadRootId)
     loadLiveMessages()
     loadThreadInbox()
@@ -1043,6 +1052,19 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     loadLiveMessages()
   }
 
+  // Bell notification for the person on the other side of this conversation —
+  // they get an instant alert (the bell listens via realtime) that links back
+  // to the Messages tab. activeConvo.id is the other person's profile id.
+  function notifyRecipient(preview) {
+    const otherId = activeConvo?.id
+    if (!otherId || !myProfileId || otherId === myProfileId || activeConvo?.monitor) return
+    dbInsert('notifications', {
+      recipient_id: otherId, sender_id: myProfileId, sender_name: myName,
+      type: 'message', body: `💬 New message from ${myName}: "${String(preview || '').slice(0, 80)}"`,
+      is_read: false, link_to: 'msgs',
+    })
+  }
+
   async function sendMessage() {
     const text = newMsg.trim()
     if (!text || !myProfileId || !isLive) return
@@ -1057,6 +1079,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       last_message: text.slice(0, 80),
       last_message_at: new Date().toISOString(),
     })
+    notifyRecipient(text)
     loadLiveMessages()
   }
 
@@ -1106,6 +1129,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           await dbUpdate('conversations', `id=eq.${activeConvo?.supabaseConvoId}`, {
             last_message:'🎙️ Voice memo', last_message_at:new Date().toISOString(),
           })
+          notifyRecipient('🎙️ Voice memo')
           loadLiveMessages()
         } catch { alert('Voice memo failed to send. Please try again.') }
         finally { setUploading(false) }
@@ -1151,6 +1175,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         last_message: isImage ? '📷 Photo' : `📎 ${file.name}`,
         last_message_at: new Date().toISOString(),
       })
+      notifyRecipient(isImage ? '📷 Photo' : `📎 ${file.name}`)
       loadLiveMessages()
       loadLiveFiles()
     } catch {
