@@ -53,6 +53,24 @@ test("migrate rate-limits repeated attempts for the same email", async () => {
   assert.equal(last, 429);
 });
 
+// ── update-identity (task: fix a typo in a user's name/email) ──
+test("update-identity rejects requests with no token", async () => {
+  const r = await post("/auth/update-identity", { id: "00000000-0000-0000-0000-000000000000", email: "x@example.com" });
+  assert.equal(r.status, 403);
+});
+
+test("update-identity rejects a forged token", async () => {
+  const r = await post("/auth/update-identity", { id: "00000000-0000-0000-0000-000000000000", name: "X" },
+    { Authorization: "Bearer forged.token.value" });
+  assert.equal(r.status, 403);
+});
+
+test("update-identity rejects the public anon key used as a token", async () => {
+  const r = await post("/auth/update-identity", { id: "00000000-0000-0000-0000-000000000000", name: "X" },
+    { Authorization: `Bearer ${SUPABASE_ANON}` });
+  assert.equal(r.status, 403);
+});
+
 test("demo-session endpoint is retired (404)", async () => {
   const r = await post("/auth/demo-session", { email: "admin@edencomms.io", password: "Admin1234!" });
   assert.equal(r.status, 404);

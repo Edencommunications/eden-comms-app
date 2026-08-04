@@ -89,6 +89,49 @@ export async function provisionAuthUser(
   return { ok: false, error: String(body?.msg || body?.message || `Auth API error (${r.status})`) };
 }
 
+/** Locate a Supabase Auth user's id by email — strictly read-only.
+ *  Tries the admin list with the `filter` param first (fast path on GoTrue
+ *  versions that support it), then falls back to plain pagination through
+ *  GET /admin/users, matching the exact email. Never creates or mutates
+ *  auth state. */
+async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+  const matchIn = (users: any[]): string | null => {
+    const hit = (Array.isArray(users) ? users : []).find(
+      (u: any) => String(u?.email || "").toLowerCase() === email,
+    );
+    return hit?.id ? String(hit.id) : null;
+  };
+  try {
+    const lr = await fetch(
+      `${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=50&filter=${encodeURIComponent(email)}`,
+      { headers: restHeaders(SERVICE_KEY) },
+    );
+    if (lr.ok) {
+      const lb: any = await lr.json().catch(() => ({}));
+      const id = matchIn(lb?.users);
+      if (id) return id;
+    }
+  } catch {}
+  // Fallback: full pagination (read-only). Bounded to keep the request sane.
+  const PER_PAGE = 200;
+  const MAX_PAGES = 50; // up to 10k users
+  try {
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const r = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?page=${page}&per_page=${PER_PAGE}`,
+        { headers: restHeaders(SERVICE_KEY) },
+      );
+      if (!r.ok) break;
+      const b: any = await r.json().catch(() => ({}));
+      const users = Array.isArray(b?.users) ? b.users : [];
+      const id = matchIn(users);
+      if (id) return id;
+      if (users.length < PER_PAGE) break; // last page
+    }
+  } catch {}
+  return null;
+}
+
 // ── Caller verification: real Supabase JWT, then role check ──────
 // The caller must send their Supabase Auth access token. We verify it against
 // Supabase (server-side, cannot be forged), then map the token's email to a
@@ -281,6 +324,137 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
     }
   })();
   return;
+});
+
+// POST /api/auth/update-identity — fix a typo in an existing user's name or
+// email (requires a verified super_admin JWT). Updates user_profiles AND the
+// matching Supabase Auth login email (service key), then writes a
+// 'profile_updated' audit_logs row with old → new values.
+router.post("/auth/update-identity", async (req: Request, res: Response) => {
+  const admin = await requireAdminJwt(req);
+  if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
+  if (!SERVICE_KEY) return res.status(503).json({ ok: false, error: "Auth service is not configured" });
+
+  const id = String((req.body || {}).id || "").trim();
+  const nameRaw = (req.body || {}).name;
+  const emailRaw = (req.body || {}).email;
+  if (!id) return res.status(400).json({ ok: false, error: "User id required" });
+
+  const newName = nameRaw === undefined || nameRaw === null ? undefined : String(nameRaw).trim();
+  const newEmail = emailRaw === undefined || emailRaw === null ? undefined : String(emailRaw).trim().toLowerCase();
+  if (newName !== undefined && !newName) return res.status(400).json({ ok: false, error: "Name cannot be empty" });
+  if (newEmail !== undefined && !EMAIL_RE.test(newEmail)) return res.status(400).json({ ok: false, error: "Valid email required" });
+
+  const rows = await dbGet(
+    "user_profiles",
+    `id=eq.${encodeURIComponent(id)}&select=id,name,email,role,company_id`,
+  );
+  const profile = rows[0];
+  if (!profile) return res.status(404).json({ ok: false, error: "User not found" });
+  // Tenant scoping: an org admin can only edit users inside their own org.
+  // (Eden's org admins manage the Eden org; other orgs are isolated.)
+  const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
+  if (admin.company_id && admin.company_id !== EDEN_ORG_ID && profile.company_id && profile.company_id !== admin.company_id) {
+    return res.status(403).json({ ok: false, error: "You can only edit users in your own organization" });
+  }
+
+  const oldName = String(profile.name || "");
+  const oldEmail = String(profile.email || "").toLowerCase();
+  const nameChanged = newName !== undefined && newName !== oldName;
+  const emailChanged = newEmail !== undefined && newEmail !== oldEmail;
+  if (!nameChanged && !emailChanged) return res.json({ ok: true, changed: false });
+
+  // Pre-checks + read-only auth lookup happen BEFORE any write.
+  let authUserId: string | null = null;
+  if (emailChanged) {
+    // No other profile may already use the new email.
+    const dupes = await dbGet("user_profiles", `email=eq.${encodeURIComponent(newEmail!)}&select=id`);
+    if (dupes.length > 0) return res.status(409).json({ ok: false, error: "That email already belongs to another account" });
+    // Read-only lookup of the Supabase Auth user by the OLD email. A legacy
+    // account (temp-password, no auth user yet) simply has nothing to update.
+    authUserId = await findAuthUserIdByEmail(oldEmail);
+    if (!authUserId) logger.info({ oldEmail }, "[Auth] update-identity: no auth user for old email (legacy account)");
+  }
+
+  // Write 1: user_profiles (the app's source of truth) first, so a failure
+  // here leaves everything untouched.
+  const patchBody: Record<string, string> = {};
+  if (nameChanged) patchBody.name = newName!;
+  if (emailChanged) patchBody.email = newEmail!;
+  const patch = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: restHeaders(SERVICE_KEY),
+    body: JSON.stringify(patchBody),
+  });
+  if (!patch.ok) {
+    const pb = await patch.text().catch(() => "");
+    logger.error({ status: patch.status, body: pb }, "[Auth] update-identity profile patch failed");
+    return res.status(502).json({ ok: false, error: "Could not save the profile changes" });
+  }
+
+  // Write 2: the Supabase Auth login email (admin update — no confirmation
+  // email round-trip). If this fails, roll the profile back so the login
+  // email and the profile email can never disagree.
+  let authUpdated = false;
+  if (emailChanged && authUserId) {
+    const ur = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authUserId}`, {
+      method: "PUT",
+      headers: restHeaders(SERVICE_KEY),
+      body: JSON.stringify({ email: newEmail, email_confirm: true }),
+    });
+    if (!ur.ok) {
+      const ub: any = await ur.json().catch(() => ({}));
+      logger.warn({ status: ur.status, body: ub }, "[Auth] update-identity auth email change failed — rolling back profile");
+      const rollback = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: restHeaders(SERVICE_KEY),
+        body: JSON.stringify({ name: oldName, email: oldEmail }),
+      });
+      if (!rollback.ok) logger.error({ status: rollback.status }, "[Auth] update-identity profile rollback ALSO failed — manual fix needed");
+      return res.status(502).json({ ok: false, error: String(ub?.msg || ub?.message || "Could not update the login email — nothing was changed") });
+    }
+    authUpdated = true;
+  }
+
+  // Best-effort: refresh the display name stored on the auth user's metadata.
+  if (nameChanged && !emailChanged) {
+    void (async () => {
+      try {
+        const uid = await findAuthUserIdByEmail(oldEmail);
+        if (uid) {
+          await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${uid}`, {
+            method: "PUT",
+            headers: restHeaders(SERVICE_KEY),
+            body: JSON.stringify({ user_metadata: { name: newName } }),
+          });
+        }
+      } catch {}
+    })();
+  }
+
+  // Audit trail: who changed it, old → new, timestamped (created_at default).
+  const audit = await fetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
+    method: "POST",
+    headers: { ...restHeaders(SERVICE_KEY), Prefer: "return=minimal" },
+    body: JSON.stringify({
+      action: "profile_updated",
+      actor_id: admin.id,
+      actor_name: admin.name || "Admin",
+      actor_role: "super_admin",
+      target_type: "user_profile",
+      target_id: id,
+      details: {
+        name: nameChanged ? newName : oldName,
+        old: { name: oldName, email: oldEmail },
+        new: { name: nameChanged ? newName : oldName, email: emailChanged ? newEmail : oldEmail },
+        auth_email_updated: authUpdated,
+      },
+    }),
+  });
+  if (!audit.ok) logger.warn({ status: audit.status }, "[Auth] update-identity audit insert failed");
+
+  logger.info({ adminId: admin.id, target: id, nameChanged, emailChanged, authUpdated }, "[Auth] identity updated");
+  return res.json({ ok: true, changed: true, authUpdated, name: nameChanged ? newName : oldName, email: emailChanged ? newEmail : oldEmail });
 });
 
 // /auth/demo-session removed — demo accounts retired (task #71). Everyone

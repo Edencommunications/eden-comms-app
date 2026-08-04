@@ -35,6 +35,27 @@ async function provisionLogin(email, password, name, role) {
   }
 }
 
+// Fix a typo in an existing user's name or email via the API server.
+// The server verifies the admin JWT, updates user_profiles AND the Supabase
+// Auth login email, and writes a 'profile_updated' audit row (old → new).
+async function updateIdentity(id, name, email) {
+  try {
+    const { data } = await authClient.auth.getSession()
+    const token = data?.session?.access_token
+    if (!token) return { ok:false, error:"Your session can't authorize this — sign out and back in, then try again" }
+    const res = await fetch('/api/auth/update-identity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, name, email }),
+    })
+    const body = await res.json().catch(()=>({}))
+    if (!res.ok) return { ok:false, error: body.error || 'auth service unavailable' }
+    return { ok:true, ...body }
+  } catch(e) {
+    return { ok:false, error:'auth service unreachable' }
+  }
+}
+
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
   useEffect(() => {
@@ -1354,6 +1375,57 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       : 'Call note saved.')
   }
 
+  // ── Fix a typo in a user's name or email (admin only, audited server-side) ──
+  const [editIdentity, setEditIdentity] = useState(null) // {id, oldName, oldEmail, name, email, saving}
+  function openEditIdentity(u) { // u: {uuid/id, name, email}
+    setEditIdentity({ id: u.uuid || u.id, oldName: u.name || u.full_name || '', oldEmail: u.email || '',
+      name: u.name || u.full_name || '', email: u.email || '', saving: false })
+  }
+  async function saveEditIdentity() {
+    if (!editIdentity) return
+    const name  = editIdentity.name.trim()
+    const emailNew = editIdentity.email.trim().toLowerCase()
+    if (!name)  { alert('Name cannot be empty.'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNew)) { alert('Enter a valid email address.'); return }
+    const nameChanged  = name !== editIdentity.oldName
+    const emailChanged = emailNew !== (editIdentity.oldEmail||'').toLowerCase()
+    if (!nameChanged && !emailChanged) { setEditIdentity(null); return }
+    setEditIdentity(p=>({ ...p, saving:true }))
+    const res = await updateIdentity(editIdentity.id, name, emailNew)
+    if (!res.ok) {
+      setEditIdentity(p=>({ ...p, saving:false }))
+      alert(`Couldn't save the changes: ${res.error||'please try again'}`)
+      return
+    }
+    const oldEmail = editIdentity.oldEmail
+    // Sync every place the old name/email lives in local state
+    setClients(prev=>prev.map(c=>c.uuid===editIdentity.id?{...c,name,email:emailNew}:c))
+    setSelectedClient(prev=>prev?.uuid===editIdentity.id?{...prev,name,email:emailNew}:prev)
+    setSupportStaff(prev=>prev.map(s=>s.id===editIdentity.id?{...s,name,email:emailNew}:s))
+    if (emailChanged && oldEmail) {
+      // Local lifecycle caches are keyed by email — migrate the keys
+      if (deactivatedMap[oldEmail]) {
+        const next = { ...deactivatedMap, [emailNew]: deactivatedMap[oldEmail] }
+        delete next[oldEmail]
+        setDeactivatedMap(next)
+        localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
+      }
+      if (clientCoachMap[oldEmail]) {
+        const next = { ...clientCoachMap, [emailNew]: clientCoachMap[oldEmail] }
+        delete next[oldEmail]
+        setClientCoachMap(next)
+        localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
+      }
+    }
+    addAudit(info.name,'Updated name/email',name,
+      [ nameChanged  ? `Name: ${editIdentity.oldName} → ${name}` : null,
+        emailChanged ? `Email: ${oldEmail} → ${emailNew}` : null ].filter(Boolean).join(' · '))
+    setEditIdentity(null)
+    alert(emailChanged
+      ? `Saved. ${name} now signs in with ${emailNew}.`
+      : 'Saved.')
+  }
+
   // ── Edit an existing staff member's title + tab access (staff_meta:<id>) ──
   const [editStaff, setEditStaff] = useState(null) // {id, name, label, tabs:{home,msgs,team}, saving}
   async function openEditStaff(s) {
@@ -1912,7 +1984,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     fontSize:18,padding:0, display: isMobile ? 'block' : 'block'
                   }}>←</button>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:15,fontWeight:700,color:C.white}}>{selectedClient.name}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{fontSize:15,fontWeight:700,color:C.white}}>{selectedClient.name}</div>
+                    {isAdmin&&(
+                      <button onClick={()=>openEditIdentity(selectedClient)} title="Edit name / email"
+                        style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>
+                        ✏️ Edit
+                      </button>
+                    )}
+                  </div>
                   <div style={{fontSize:11,color:C.muted,marginTop:1}}>
                     {selectedClient.email} · {isAdmin?`${selectedClient.coachName} · `:''}Check-in: {selectedClient.checkInDay}s
                   </div>
@@ -2280,6 +2360,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               </div>
               {editStaff?.id===s.id&&(
                 <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase'}}>Name & Login Email</div>
+                    <button onClick={()=>openEditIdentity(s)}
+                      style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 10px',color:C.gold,fontSize:10,cursor:'pointer',fontWeight:700}}>
+                      ✏️ Fix name / email
+                    </button>
+                  </div>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Custom Title</div>
                   <input value={editStaff.label} onChange={e=>setEditStaff(p=>({...p,label:e.target.value}))}
                     placeholder="e.g. Closer, Sales Mentor (blank = default role)"
@@ -3238,6 +3325,39 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       {/* ══════════════════════════════════════════════════════
           COACH REMOVAL + CLIENT TRANSFER MODAL
       ══════════════════════════════════════════════════════ */}
+      {/* ── Fix name / email modal (admin only, audited) ── */}
+      {editIdentity&&isAdmin&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:16}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:24,width:'100%',maxWidth:420}}>
+            <div style={{fontSize:16,fontWeight:800,color:C.white,marginBottom:4}}>Edit Name & Email</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:18,lineHeight:1.5}}>
+              Fix a typo in this user's name or email. Changing the email also updates the address they sign in with. Every change is recorded in the audit log.
+            </div>
+            <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Name</div>
+            <input value={editIdentity.name} onChange={e=>setEditIdentity(p=>({...p,name:e.target.value}))}
+              style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',marginBottom:14}}/>
+            <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Login Email</div>
+            <input value={editIdentity.email} onChange={e=>setEditIdentity(p=>({...p,email:e.target.value}))} type="email"
+              style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',marginBottom:6}}/>
+            {editIdentity.email.trim().toLowerCase()!==(editIdentity.oldEmail||'').toLowerCase()&&(
+              <div style={{fontSize:10,color:'#e8b74f',marginBottom:8,lineHeight:1.5}}>
+                ⚠️ They'll sign in with the new email from now on ({editIdentity.oldEmail} stops working). Their password stays the same.
+              </div>
+            )}
+            <div style={{display:'flex',gap:10,marginTop:14}}>
+              <button onClick={()=>setEditIdentity(null)} disabled={editIdentity.saving}
+                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>
+                Cancel
+              </button>
+              <button onClick={saveEditIdentity} disabled={editIdentity.saving}
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:editIdentity.saving?0.6:1}}>
+                {editIdentity.saving?'Saving…':'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showTransferModal&&pendingRemoval&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:16}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:24,width:'100%',maxWidth:440}}>
