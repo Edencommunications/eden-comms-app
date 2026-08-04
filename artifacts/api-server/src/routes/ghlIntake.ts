@@ -298,9 +298,12 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     const notif = await dbInsert("notifications", {
       recipient_id: coach.id,
       type: "ghl_intake",
-      body: emailSent
-        ? `🤝 New client auto-imported from GHL: ${name} (${email}). They've been emailed their login details and will set their own password on first sign-in. 👉 Next step: open their profile in the Clients tab and assign their contract start date and update day.`
-        : `🤝 New client auto-imported from GHL: ${name} (${email}). ⚠️ The login email could NOT be sent — temp password: ${tempPass}. Please send them their login details manually. 👉 Then open their profile in the Clients tab and assign their contract start date and update day.`,
+      body: (emailSent
+        ? `🤝 New client auto-imported from GHL: ${name} (${email}). They've been emailed their login details and will set their own password on first sign-in.`
+        : `🤝 New client auto-imported from GHL: ${name} (${email}). ⚠️ The login email could NOT be sent — temp password: ${tempPass}. Please send them their login details manually.`)
+        + (startDate
+          ? ` ✅ Contract start date came through from GHL: ${startDate}. 👉 Next step: open their profile in the Clients tab and set their update day.`
+          : ` ⚠️ No contract start date came through from GHL — open their profile in the Clients tab and set their start date and update day, or lateness tracking won't work for them.`),
       is_read: false,
     });
     if (!notif.ok) logger.warn({ error: notif.error }, "[GHL Intake] notification insert failed");
@@ -316,7 +319,7 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
       const adminNotif = await dbInsert("notifications", {
         recipient_id: admin.id,
         type: "ghl_intake",
-        body: `🤝 New client auto-imported from GHL: ${name} (${email})${coach ? ` under coach ${coach.name}` : " — no coach assigned yet"}. ${emailSent ? "They've been emailed their login details." : `⚠️ Login email failed — temp password: ${tempPass}. Send it to them manually.`} They now appear in your Clients tab. 👉 Next step: assign their contract start date and update day.`,
+        body: `🤝 New client auto-imported from GHL: ${name} (${email})${coach ? ` under coach ${coach.name}` : " — no coach assigned yet"}. ${emailSent ? "They've been emailed their login details." : `⚠️ Login email failed — temp password: ${tempPass}. Send it to them manually.`} They now appear in your Clients tab. ${startDate ? `✅ Contract start date set from GHL: ${startDate}. 👉 Next step: set their update day.` : "⚠️ No contract start date came through from GHL — set their start date and update day in their profile, or lateness tracking won't work."}`,
         is_read: false,
       });
       if (!adminNotif.ok) logger.warn({ error: adminNotif.error }, "[GHL Intake] admin notification insert failed");

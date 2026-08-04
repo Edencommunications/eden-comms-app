@@ -1740,8 +1740,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                 👁 Admin oversight — read-only. Deleted messages are shown flagged with their original content.
               </div>
             )}
-            {/* Input bar — hidden for demo threads, admin, and oversight threads */}
-            {!activeConvo?.monitor && myRole !== 'super_admin' && (isLive || myRole === 'client') && (
+            {/* Input bar — hidden for demo threads and read-only oversight threads.
+                Admins CAN write in their own (non-monitor) conversations. */}
+            {!activeConvo?.monitor && (isLive || myRole === 'client' || myRole === 'super_admin') && (
               <div style={{ padding: isMobile ? '8px 10px 12px' : '10px 14px 14px',
                 background:C.surface, borderTop:`1px solid ${C.border}`,
                 display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
