@@ -3054,10 +3054,16 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         details:{ weight: on('weight')?ci.weight:null, habit_pct: habitScore } }),
                     }).catch(()=>{})
                   } catch {}
+                  // Bell notification for the coach (skip self-notifications)
                   const _cId = myCoachId
                   const _clId = myUUID
-                  if(_cId&&_clId) insertNotification(_cId, _clId, 'new_checkin',
-                    `📋 ${dbProfile?.name||info.name||'A client'} submitted their weekly check-in — review it in the Check-In Hub`)
+                  const _clName = dbProfile?.name||info.name||'A client'
+                  if(_cId&&_clId&&_cId!==_clId) dbInsert('notifications',{
+                    recipient_id:_cId, sender_id:_clId, sender_name:_clName,
+                    type:'checkin_received',
+                    body:`📋 ${_clName} submitted their weekly check-in — review it in the Check-In Hub`,
+                    is_read:false, link_to:'checkin',
+                  }).catch(()=>{})
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                 }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
                   Submit Weekly Check-In
