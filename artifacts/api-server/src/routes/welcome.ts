@@ -125,13 +125,13 @@ router.post("/welcome/settings", async (req: Request, res: Response) => {
     const b = req.body || {};
     const settings: WelcomeSettings = {
       enabled: !!b.enabled,
-      defaultText: String(b.defaultText || "").slice(0, 2000),
+      defaultText: String(b.defaultText || "").slice(0, 10000),
       perCoach: {},
     };
     if (b.perCoach && typeof b.perCoach === "object") {
       for (const [k, v] of Object.entries(b.perCoach as Record<string, any>)) {
         if (!v || typeof v !== "object") continue;
-        const text = String(v.text || "").slice(0, 2000);
+        const text = String(v.text || "").slice(0, 10000);
         const paused = !!v.paused;
         if (text || paused) settings.perCoach[k] = { ...(text ? { text } : {}), ...(paused ? { paused: true } : {}) };
       }
