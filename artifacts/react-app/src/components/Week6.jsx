@@ -1368,10 +1368,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     await dbInsert('notifications',{
       recipient_id: selectedClient.uuid,
       sender_id:    myUUID,
-      type:         'consultation',
-      message:      '📋 Your coach updated your Intake / Onboarding notes — check the Consultations tab',
-      read:         false,
-      created_at:   new Date().toISOString()
+      sender_name:  myName,
+      type:         'update_note',
+      body:         '📋 Your coach updated your Intake / Onboarding notes — check the Consultations tab',
+      is_read:      false,
     })
     alert('Intake saved successfully.')
   }
@@ -1419,10 +1419,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     await dbInsert('notifications',{
       recipient_id: _clientId,
       sender_id:    myUUID,
-      type:         'consultation',
-      message:      `📞 Your coach added ${newCall.callType} notes — check the Consultations tab`,
-      read:         false,
-      created_at:   new Date().toISOString()
+      sender_name:  myName,
+      type:         'update_note',
+      body:         `📞 Your coach added ${newCall.callType} notes — check the Consultations tab`,
+      is_read:      false,
     })
 
     setNewCall({callDate:new Date().toISOString().slice(0,10),callType:'Monthly Check-In',summary:'',focusPoints:'',actionItems:'',nextCallDate:'',loomUrl:'',otherLinks:''})
