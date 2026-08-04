@@ -1368,7 +1368,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     await dbInsert('notifications',{
       recipient_id: selectedClient.uuid,
       sender_id:    myUUID,
-      sender_name:  myName,
+      sender_name:  info.name,
       type:         'update_note',
       body:         '📋 Your coach updated your Intake / Onboarding notes — check the Consultations tab',
       is_read:      false,
@@ -1419,7 +1419,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     await dbInsert('notifications',{
       recipient_id: _clientId,
       sender_id:    myUUID,
-      sender_name:  myName,
+      sender_name:  info.name,
       type:         'update_note',
       body:         `📞 Your coach added ${newCall.callType} notes — check the Consultations tab`,
       is_read:      false,
