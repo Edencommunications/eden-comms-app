@@ -1123,6 +1123,15 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     return msg.from === 'client'
   }
   function msgText(msg)  { return isLive ? msg.content  : msg.text }
+  // Turn pasted http(s) URLs into clickable links (only http/https — never js:/data:)
+  function linkify(text, mine = false) {
+    return String(text||'').split(/(https?:\/\/[^\s]+)/g).map((p, i) => {
+      if (!/^https?:\/\//.test(p)) return <span key={i}>{p}</span>
+      try { const proto = new URL(p).protocol; if (proto !== 'http:' && proto !== 'https:') return <span key={i}>{p}</span> } catch { return <span key={i}>{p}</span> }
+      return <a key={i} href={p} target="_blank" rel="noreferrer"
+        style={{ color: mine ? C.black : C.gold, fontWeight:700, textDecoration:'underline', wordBreak:'break-all' }}>{p}</a>
+    })
+  }
   function msgTime(msg)  { return isLive ? formatTime(msg.created_at) : msg.time }
   function msgType(msg)  { return isLive ? msg.message_type : 'text' }
   function otherInitial(){ return activeConvo?.initials?.[0] ?? '' }
@@ -1421,7 +1430,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                           {isAdmin ? `🗑 Deleted by ${r.deleted_by_name||'staff'}: ${r.content||''}` : `Message deleted${r.deleted_by_name?` by ${r.deleted_by_name}`:''}`}
                         </div>
                       ) : (
-                        <div style={{ fontSize:12, color: mine ? C.black : C.white, lineHeight:1.5, wordBreak:'break-word' }}>{r.content}</div>
+                        <div style={{ fontSize:12, color: mine ? C.black : C.white, lineHeight:1.5, wordBreak:'break-word' }}>{linkify(r.content, mine)}</div>
                       )}
                       {!r.deleted_at && canDeleteAnyMsg && (
                         <button onClick={() => deleteMsg(r)} title="Delete reply (kept in admin audit log)"
@@ -1647,7 +1656,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                       }}>
                         {(type === 'text' || !isLive) && (
                           <div style={{ fontSize:13, color:mine?C.black:C.white, lineHeight:1.55, wordBreak:'break-word' }}>
-                            {msgText(msg)}
+                            {linkify(msgText(msg), mine)}
                           </div>
                         )}
                         {isLive && type === 'image' && (
