@@ -704,6 +704,7 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Shared canvas for the open Team Hub DM ──
   const [dmCanvasOpen, setDmCanvasOpen] = useState(false)
+  const [generalCanvasOpen, setGeneralCanvasOpen] = useState(false)
   useEffect(() => { setDmCanvasOpen(false) }, [dmTarget])
   const bottomRef   = useRef(null)
   const dmBottomRef = useRef(null)
@@ -1013,19 +1014,28 @@ export default function Week7({ currentUser, initialDm }) {
             {(chatView==='main' || chatView==='thread') && (
               <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
                 <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
-                  <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:C.white,display:'flex',alignItems:'center',gap:6}}>
-                      # {generalName}
-                      {iAmAdmin && (
-                        <button onClick={renameGeneral} title="Rename this channel (admin only)"
-                          style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>✏️</button>
-                      )}
+                  <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.white,display:'flex',alignItems:'center',gap:6}}>
+                        # {generalName}
+                        {iAmAdmin && (
+                          <button onClick={renameGeneral} title="Rename this channel (admin only)"
+                            style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>✏️</button>
+                        )}
+                      </div>
+                      <button onClick={()=>setShowChannelMembers(true)}
+                        style={{background:'none',border:'none',padding:0,fontSize:10,color:C.gold,marginTop:1,cursor:'pointer',fontWeight:600}}>
+                        Main channel · {team.length} members ▾
+                      </button>
                     </div>
-                    <button onClick={()=>setShowChannelMembers(true)}
-                      style={{background:'none',border:'none',padding:0,fontSize:10,color:C.gold,marginTop:1,cursor:'pointer',fontWeight:600}}>
-                      Main channel · {team.length} members ▾
+                    <button onClick={() => setGeneralCanvasOpen(true)} title="Open the team canvas — a live doc the whole team can edit"
+                      style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 12px',color:C.white,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                      📝 Canvas
                     </button>
                   </div>
+                  {generalCanvasOpen && orgId && (
+                    <CanvasPanel scope={`teamgeneral:${orgId}`} label={`# ${generalName}`} isMobile={isMobile} onClose={() => setGeneralCanvasOpen(false)}/>
+                  )}
 
                   <PinBar ctx="team_general" source={messages.filter(m => !m.isDm)}/>
                   <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>

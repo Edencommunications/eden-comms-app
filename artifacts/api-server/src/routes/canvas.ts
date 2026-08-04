@@ -65,6 +65,13 @@ async function authorizeScope(caller: Caller, scope: string): Promise<string | n
     const mem = (mr.ok ? await mr.json().catch(() => []) : []) as any[];
     return mem.length ? comm.company_id : null;
   }
+  if (scope.startsWith("teamgeneral:")) {
+    // The org-wide #general Team Hub channel — any staff member of that org.
+    if (caller.role === "client") return null;
+    const oid = scope.slice("teamgeneral:".length);
+    if (!UUID_RE.test(oid) || caller.companyId !== oid) return null;
+    return oid;
+  }
   if (scope.startsWith("teamdm:")) {
     if (caller.role === "client") return null;
     const pair = scope.slice("teamdm:".length).split("_");
@@ -75,7 +82,7 @@ async function authorizeScope(caller: Caller, scope: string): Promise<string | n
   return null;
 }
 
-const validScope = (s: string) => /^(community|teamdm):[0-9a-f_-]{36,80}$/i.test(s);
+const validScope = (s: string) => /^(community|teamdm|teamgeneral):[0-9a-f_-]{36,80}$/i.test(s);
 
 const router: IRouter = Router();
 
