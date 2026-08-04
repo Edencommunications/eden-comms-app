@@ -353,7 +353,12 @@ export default function Week7({ currentUser, initialDm }) {
       {text ? renderRich(text, baseColor) : null}
       {atts.length > 0 && (
         <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:text?6:0}}>
-          {atts.map((a,i) => /^image\//.test(a.type||'') ? (
+          {atts.map((a,i) => /^audio\//.test(a.type||'') ? (
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:14}}>🎙️</span>
+              <audio controls preload="metadata" src={a.url} style={{height:36,maxWidth:230}}/>
+            </div>
+          ) : /^image\//.test(a.type||'') ? (
             <a key={i} href={a.url} target="_blank" rel="noreferrer">
               <img src={a.url} alt={a.name} style={{maxWidth:220,maxHeight:180,borderRadius:8,border:`1px solid ${C.border}`,display:'block'}}/>
             </a>
@@ -428,6 +433,61 @@ export default function Week7({ currentUser, initialDm }) {
     <button onClick={() => pickFile(target)} title="Attach a file (15 MB max)"
       style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',color:C.muted,fontSize:15,cursor:'pointer',flexShrink:0}}>
       📎
+    </button>
+  )
+
+  // ── Voice memos (Slack-style) — record with the mic, upload like any file ──
+  const [recordingFor, setRecordingFor] = useState(null) // composer currently recording
+  const recRef = useRef(null)   // { recorder, chunks, stream }
+  async function toggleRecord(target) {
+    // Stop → the onstop handler uploads
+    if (recordingFor === target) { try { recRef.current?.recorder?.stop() } catch {} ; return }
+    if (recordingFor) return // one recording at a time
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true })
+      const mime = window.MediaRecorder?.isTypeSupported?.('audio/webm') ? 'audio/webm'
+                 : window.MediaRecorder?.isTypeSupported?.('audio/mp4') ? 'audio/mp4' : ''
+      const recorder = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined)
+      const chunks = []
+      recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data) }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        setRecordingFor(null)
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+        if (!blob.size) return
+        if (blob.size > 15*1024*1024) { alert('Voice memo is over the 15 MB limit — try a shorter one.'); return }
+        setUploadingFor(target)
+        try {
+          const b64 = await new Promise((resolve, reject) => {
+            const r = new FileReader()
+            r.onload  = () => resolve(String(r.result).split(',')[1]||'')
+            r.onerror = reject
+            r.readAsDataURL(blob)
+          })
+          const ext = /mp4/.test(blob.type) ? 'm4a' : 'webm'
+          const stamp = new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})
+          const resp = await fetch('/api/team/upload', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sbAccessToken()}` },
+            body: JSON.stringify({ filename:`Voice memo ${stamp}.${ext}`, contentType:blob.type, dataBase64:b64 }),
+          })
+          const out = await resp.json().catch(() => null)
+          if (!resp.ok || !out?.url) { alert('Could not upload the voice memo — please try again.'); return }
+          setPendingFiles(prev => [...prev, { name:out.name, url:out.url, type:blob.type, target }])
+        } finally { setUploadingFor(null) }
+      }
+      recorder.start()
+      recRef.current = { recorder, chunks, stream }
+      setRecordingFor(target)
+    } catch (e) {
+      alert('Microphone access was blocked — allow the mic in your browser to record voice memos.')
+    }
+  }
+  const MicBtn = ({ target }) => (
+    <button onClick={() => toggleRecord(target)}
+      title={recordingFor===target ? 'Stop recording' : 'Record a voice memo'}
+      style={{background:recordingFor===target?C.danger:'none',border:`1px solid ${recordingFor===target?C.danger:C.border}`,borderRadius:8,padding:'0 10px',color:recordingFor===target?C.white:C.muted,fontSize:15,cursor:'pointer',flexShrink:0,animation:recordingFor===target?'pulse 1.2s infinite':'none'}}>
+      {recordingFor===target ? '⏹' : '🎙️'}
     </button>
   )
 
@@ -841,7 +901,7 @@ export default function Week7({ currentUser, initialDm }) {
                     <TypingHint ctx="general"/>
                     <PendingChips target="main"/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <ClipBtn target="main"/>
+                      <ClipBtn target="main"/><MicBtn target="main"/>
                       <MentionInput value={newMessage} onChange={v => { setNewMessage(v); if (v) sendTyping('general') }} onSubmit={sendMessage}
                         candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
                         colors={C}
@@ -920,7 +980,7 @@ export default function Week7({ currentUser, initialDm }) {
                       <TypingHint ctx={`thread:${activeThread.id}`}/>
                       <PendingChips target="thread"/>
                       <div style={{display:'flex',gap:8}}>
-                        <ClipBtn target="thread"/>
+                        <ClipBtn target="thread"/><MicBtn target="thread"/>
                         <MentionInput value={newReply} onChange={v => { setNewReply(v); if (v) sendTyping(`thread:${activeThread.id}`) }} onSubmit={sendReply}
                           candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
                           colors={C}
@@ -983,7 +1043,7 @@ export default function Week7({ currentUser, initialDm }) {
                   <TypingHint ctx={`dm:${dmKey}`}/>
                   <PendingChips target="dm"/>
                   <div style={{display:'flex',gap:8}}>
-                  <ClipBtn target="dm"/>
+                  <ClipBtn target="dm"/><MicBtn target="dm"/>
                   <MentionInput value={newDm} onChange={v => { setNewDm(v); if (v) sendTyping(`dm:${dmKey}`) }} onSubmit={sendDm}
                     candidates={[dmTarget.name]}
                     colors={C}
