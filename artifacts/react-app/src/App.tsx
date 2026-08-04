@@ -5438,7 +5438,12 @@ const AppShell = ({ user, onLogout }) => {
             </button>
           )}
           <DndButton isMobile={isMobile}/>
-          <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={setTab}/>
+          <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={(dest: string, client?: any) => {
+            // Deep-link: check-in notifications carry the submitting client, so
+            // coaches land in the Check-In Hub with that client pre-selected.
+            if (client?.email && (user.role === 'coach' || user.role === 'super_admin')) openClientTool(dest, client, tab);
+            else navTab(dest);
+          }}/>
           {hasAuthSession && (
             <button onClick={() => setShowChangePw(true)} title="Change password"
               style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>

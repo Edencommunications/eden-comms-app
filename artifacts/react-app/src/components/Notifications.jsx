@@ -176,13 +176,23 @@ export default function Notifications({ currentUser, onNavigate }) {
     setNotifs(prev => prev.map(n => ({ ...n, is_read:true })))
   }
 
-  function handleNotifClick(notif) {
+  async function handleNotifClick(notif) {
     markRead(notif.id)
     setOpen(false)
-    // Tell the parent app to navigate to the right tab
-    if (onNavigate && notif.link_to) {
-      onNavigate(notif.link_to)
+    if (!onNavigate || !notif.link_to) return
+    // Check-in notifications deep-link to the submitting client's Check-In Hub:
+    // look up the sender's profile so the app can pre-select that client.
+    if (notif.type === 'checkin_received' && notif.sender_id) {
+      try {
+        const rows = await dbGet('user_profiles', `id=eq.${notif.sender_id}&select=email,name`)
+        const p = rows?.[0]
+        if (p?.email) {
+          onNavigate(notif.link_to, { email: p.email, name: p.name || notif.sender_name, role: 'client' })
+          return
+        }
+      } catch { /* fall through to plain tab navigation */ }
     }
+    onNavigate(notif.link_to)
   }
 
   const cfg = (type) => NOTIF_CONFIG[type] || { icon:'🔔', label:'Notification', color:C.gold }
