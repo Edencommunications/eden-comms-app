@@ -242,12 +242,14 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
         const newId = Array.isArray(ins) ? ins[0]?.id : ins?.id
         if (newId) {
           try {
-            await fetch('/api/broadcasts/deliver', {
+            const r = await fetch('/api/broadcasts/deliver', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', get Authorization() { return sbBearer() } },
               body: JSON.stringify({ id: newId }),
+              signal: AbortSignal.timeout(15000), // never hang the composer
             })
-          } catch {}
+            if (!r.ok) console.error('broadcast deliver failed', r.status, await r.text().catch(()=>''))
+          } catch(e) { console.error('broadcast deliver failed', e) }
         }
       } else {
         for (const sd of scheduleDates) {

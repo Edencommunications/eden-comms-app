@@ -49,7 +49,9 @@ async function dbInsert(table, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
-  if (!r.ok) console.error('INSERT', await r.text())
+  if (!r.ok) { console.error('INSERT', await r.text()); return null }
+  // H asks for return=representation, so successful inserts yield the new row(s)
+  return r.json().catch(()=>true)
 }
 async function dbGet(table, query='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
@@ -74,6 +76,7 @@ async function dbUpsert(table, body, onConflict) {
     body:JSON.stringify(body)
   })
   if (!r.ok) console.error('UPSERT', await r.text())
+  return r.ok
 }
 async function dbDelete(table, query) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
@@ -1020,6 +1023,36 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [editSupp,   setEditSupp]   = useState(null) // {dbId?, category, name, dose, directions, code, link} — modal open when set
   const [editHabit,  setEditHabit]  = useState(null) // {id, name, target} — company habit editor modal
   const [coachNotes,     setCoachNotes]     = useState('')
+  // The coach-built supplement protocol persists per client in admin_settings
+  // (key 'supp_plan:<client uuid>') so it survives refreshes and shows for the client.
+  useEffect(()=>{
+    if (!myUUID || !myCompanyId) return
+    let stale=false
+    dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('supp_plan:'+myUUID)}&select=value`)
+      .then(rows=>{
+        if (stale) return
+        try {
+          const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
+          if (v) {
+            if (Array.isArray(v.supps))     setClientSupps(v.supps)
+            if (typeof v.custom==='string') setCustomSuppText(v.custom)
+            if (typeof v.notes==='string')  setCoachNotes(v.notes)
+          }
+        } catch(e){}
+      }).catch(()=>{})
+    return ()=>{stale=true}
+  },[myUUID,myCompanyId])
+  async function saveSuppProtocol() {
+    if (!myUUID || !myCompanyId) { alert('Still loading this client\'s profile — try again in a second.'); return }
+    const ok = await dbUpsert('admin_settings',{
+      company_id: myCompanyId, key: 'supp_plan:'+myUUID,
+      value: JSON.stringify({supps:clientSupps, custom:customSuppText, notes:coachNotes}),
+      updated_at: new Date().toISOString(),
+    },'company_id,key')
+    if (!ok) { alert('Could not save the supplement protocol — please try again.'); return }
+    await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your supplement protocol — check your Supplements tab', 'supplements')
+    alert('Supplement protocol saved!')
+  }
   // Client's own notes on their supplement experience
   const [clientSuppNotes, setClientSuppNotes] = useState('')
   // Client's own prescription notes
@@ -1347,11 +1380,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   // ── Notification helpers ───────────────────────────────────
-  async function insertNotification(recipientId, senderId, type, message) {
+  async function insertNotification(recipientId, senderId, type, message, linkTo) {
     if (!recipientId) return
+    if (senderId && recipientId === senderId) return // never notify yourself
     await dbInsert('notifications',{
       recipient_id:recipientId, sender_id:senderId,
-      type, body:message, is_read:false, created_at:new Date().toISOString()
+      type, body:message, is_read:false, link_to:linkTo||null,
+      created_at:new Date().toISOString()
     })
   }
 
@@ -1734,7 +1769,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           })}
 
           {isCoach&&(
-            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});alert('Diet plan saved!')}}
+            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
@@ -3480,7 +3515,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
               </Card>
 
-              <button style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
+              <button
+                onClick={saveSuppProtocol}
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
                 Save Protocol
               </button>
             </>

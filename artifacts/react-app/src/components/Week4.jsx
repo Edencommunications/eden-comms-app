@@ -615,7 +615,7 @@ Training Principles:
     if (!CLIENT_UUID) { alert('Still loading this client\'s profile — try again in a second.'); return }
     // Embed principles + cardioWeekStart inside the workouts JSON blob so no schema change is needed
     const payload = { exercises: workouts, principles: trainingPrinciples, cardioWeekStart, stepGoal: stepGoal.trim() }
-    await fetch(`${SUPABASE_URL}/rest/v1/workout_plans`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/workout_plans`, {
       method: 'POST',
       headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({
@@ -626,6 +626,19 @@ Training Principles:
         updated_at: new Date().toISOString(),
       }),
     })
+    if (!res.ok) {
+      console.error('workout_plans save failed', await res.text())
+      alert('Could not save the workout plan — please try again.')
+      return
+    }
+    // Alert the client their plan changed (skip self — clients can't save, but be safe)
+    if (CLIENT_UUID && CLIENT_UUID !== myUUID) {
+      await dbInsert('notifications', {
+        recipient_id: CLIENT_UUID, sender_id: COACH_UUID || myUUID, sender_name: info.name,
+        type: 'workout_update', body: '💪 Your coach updated your workout & cardio plan',
+        is_read: false, link_to: 'workout',
+      })
+    }
     alert('Workout plan saved!')
   }
 

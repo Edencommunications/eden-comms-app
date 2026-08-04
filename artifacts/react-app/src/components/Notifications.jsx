@@ -67,6 +67,7 @@ const NOTIF_CONFIG = {
   message:      { icon:'💬', label:'New Message',          color: C.gold },
   diet_update:  { icon:'🥗', label:'Diet Plan Updated',    color: C.success },
   supp_update:  { icon:'💊', label:'Supplement Updated',   color:'#D4A8F0' },
+  workout_update: { icon:'💪', label:'Workout Plan Updated', color:'#6FE8A8' },
   checkin_received: { icon:'📋', label:'Check-In Received',color: C.gold },
   lab_uploaded: { icon:'🧪', label:'Lab Uploaded',         color:'#6FB8E8' },
   update_note:  { icon:'📝', label:'Coach Update',         color: C.gold },

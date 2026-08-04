@@ -150,9 +150,9 @@ const router: IRouter = Router();
 // frontend saves it as status='sent'.
 router.post("/broadcasts/deliver", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
-  if (!admin) return res.status(403).json({ error: "admin only" });
+  if (!admin) { res.status(403).json({ error: "forbidden" }); return; }
   const id = String(req.body?.id || "").trim();
-  if (!id) return res.status(400).json({ error: "id required" });
+  if (!id) { res.status(400).json({ error: "id required" }); return; }
   try {
     const result = await deliverBroadcast(id);
     res.json({ ok: true, ...result });
