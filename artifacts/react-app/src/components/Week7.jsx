@@ -348,7 +348,8 @@ export default function Week7({ currentUser, initialDm }) {
     return parts.map((p, i) => {
       if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{renderMentions(p, baseColor)}</span>
       const href = /^www\./.test(p) ? `https://${p}` : p
-      return <a key={i} href={href} target="_blank" rel="noreferrer" style={{color:C.gold,fontWeight:600}}>{linkLabel(href)}</a>
+      return <a key={i} href={href} target="_blank" rel="noreferrer" title={linkLabel(href)}
+        style={{color:C.gold,fontWeight:600,textDecoration:'underline',wordBreak:'break-all'}}>{p}</a>
     })
   }
   // Only ever render http(s) URLs as clickable/embedded — markers are stored in
