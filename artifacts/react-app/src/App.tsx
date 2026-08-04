@@ -5593,9 +5593,19 @@ const AppShell = ({ user, onLogout }) => {
 };
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
+import { useRoute } from "wouter";
+import { VideoTemplate } from "./components/video/VideoTemplate";
+
 export default function App() {
+  const [matchVideo] = useRoute("/video");
+
   const [user, setUser] = useState<any>(null);
   const [authScreen, setAuthScreen] = useState("login");
+
+  if (matchVideo) {
+    return <VideoTemplate />;
+  }
+
 
   // Password-recovery link landing: the emailed reset link signs the visitor
   // in with a temporary recovery session — show the "choose a new password"
