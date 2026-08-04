@@ -922,8 +922,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     login_failed:'failed login attempt', checkin_submitted:'submitted a check-in',
     community_renamed:'renamed a community/channel',
     checkin_day_changed:'changed check-in day for',
+    profile_updated:'fixed name/email for',
   }
-  const auditIcon = a => a==='login'?'🔐':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
+  const auditIcon = a => a==='login'?'🔐':a==='profile_updated'?'✏️':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
   function loadDbAudit() {
     dbGet('audit_logs','select=*&order=created_at.desc&limit=300')
       .then(r=>{ if(Array.isArray(r)) setDbAudit(r) })
@@ -987,11 +988,18 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
   const dbAuditRow = r => {
     const d = r.details||{}
+    // profile_updated rows carry { old:{name,email}, new:{name,email} } — show plain-language old → new lines
+    const profChanges = r.action==='profile_updated' && d.old && d.new ? [
+      d.old.name!==d.new.name ? `Name: ${d.old.name||'—'} → ${d.new.name||'—'}` : null,
+      d.old.email!==d.new.email ? `Email: ${d.old.email||'—'} → ${d.new.email||'—'}` : null,
+      d.old.email!==d.new.email && d.auth_email_updated===false ? '⚠️ login email not updated' : null,
+    ].filter(Boolean) : []
     return {
       id: r.id, icon: auditIcon(r.action), actor: r.actor_name||'Someone',
       action: AUDIT_VERBS[r.action] || String(r.action||'').replace(/_/g,' '),
       target: d.name || d.sender_name || (r.action==='login' ? '' : (d.email||'')),
       detail: [
+        ...profChanges,
         d.content ? `"${String(d.content).slice(0,140)}${String(d.content).length>140?'…':''}"` : null,
         d.file_name ? `📎 ${d.file_name}` : null,
         d.sent_at ? `sent ${audTime(d.sent_at)}` : null,
