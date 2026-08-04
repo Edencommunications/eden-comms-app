@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 import MentionInput from './MentionInput'
+import CanvasPanel from './CanvasPanel'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -86,6 +87,19 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   const [members,     setMembers]     = useState([])
   const [messages,    setMessages]    = useState([])
   const [pins,        setPins]        = useState([])
+  const [canvasOpen,  setCanvasOpen]  = useState(false)
+
+  // ── Rename a community (coaches in the client tab; admins only in Team Hub — enforced by canManage) ──
+  async function renameCommunity(c) {
+    const next = window.prompt('New name for this community:', c.name)
+    if (!next || !next.trim() || next.trim() === c.name) return
+    const name = next.trim().slice(0, 80)
+    const ok = await dbUpdate('communities', `id=eq.${c.id}`, { name })
+    if (!ok) { alert("Couldn't rename the community — try again."); return }
+    dbInsert('audit_logs', { action:'community_renamed', actor_id:myId, actor_name:myName, actor_role:myRole,
+      target_type:'community', target_id:String(c.id), details:{ from:c.name, to:name, context } }).catch(()=>{})
+    loadCommunities()
+  }
   const [newMsg,      setNewMsg]      = useState('')
   const [replyTo,     setReplyTo]     = useState(null)   // root message being replied to
   const [showCreate,  setShowCreate]  = useState(false)
@@ -466,9 +480,22 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                 <button onClick={() => setActiveId(null)} style={{ background:'none', border:'none', color:C.white, fontSize:16, cursor:'pointer', padding:'4px 6px' }}>←</button>
               )}
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:14, fontWeight:800, color:C.white }}># {active.name}</div>
+                <div style={{ fontSize:14, fontWeight:800, color:C.white, display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}># {active.name}</span>
+                  {canManage && (
+                    <button onClick={() => renameCommunity(active)} title="Rename this community"
+                      style={{ background:'none', border:'none', color:C.muted, fontSize:11, cursor:'pointer', padding:0, flexShrink:0 }}>✏️</button>
+                  )}
+                </div>
                 <div style={{ fontSize:10, color:C.muted }}>{members.length} member{members.length===1?'':'s'}</div>
               </div>
+              <button onClick={() => setCanvasOpen(true)} title="Open the shared canvas — a live doc everyone here can edit"
+                style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', color:C.white, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                📝 Canvas
+              </button>
+              {canvasOpen && active && (
+                <CanvasPanel scope={`community:${active.id}`} label={`# ${active.name}`} isMobile={isMobile} onClose={() => setCanvasOpen(false)}/>
+              )}
               {(canManage && (isAdmin || active.created_by === myId)) && (
                 <button onClick={openMembers}
                   style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', color:C.white, fontSize:11, fontWeight:700, cursor:'pointer' }}>

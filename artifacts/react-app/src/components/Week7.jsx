@@ -12,6 +12,7 @@ import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { supabase } from '../supabaseClient'
 import { loadSeen, saveSeen, seenAt } from '../lib/teamUnread'
 import Communities from './Communities'
+import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
 import { useHuddle } from './HuddleHub'
 
@@ -70,6 +71,11 @@ async function dbUpdate(table, params, body) {
     method:'PATCH', headers:H, body:JSON.stringify(body)
   })
   if (!r.ok) console.error('UPDATE', table, await r.text())
+  return r.ok
+}
+async function dbDelete(table, params) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers:H })
+  if (!r.ok) console.error('DELETE', table, await r.text())
   return r.ok
 }
 
@@ -157,13 +163,13 @@ export default function Week7({ currentUser, initialDm }) {
         setStaffLabels(map)
         return map
       }).catch(() => ({}))
-    dbGet('user_profiles', `role=neq.client&is_active=not.is.false&select=id,name,full_name,role&order=name.asc.nullslast`)
+    dbGet('user_profiles', `role=neq.client&is_active=not.is.false&select=id,name,full_name,role,email&order=name.asc.nullslast`)
       .then(async rows=>{
         if (!Array.isArray(rows)||!rows.length) return
         const labels = await metaP
         const seen = new Set()
         setTeam(rows.filter(r=>{ if(seen.has(r.id)) return false; seen.add(r.id); return true })
-          .map(r=>({ uuid:r.id, name:r.name||r.full_name||'Team member', role:r.role, label:labels[r.id]||null, isHeadCoach:r.role==='head_coach' })))
+          .map(r=>({ uuid:r.id, name:r.name||r.full_name||'Team member', role:r.role, email:(r.email||'').toLowerCase(), label:labels[r.id]||null, isHeadCoach:r.role==='head_coach' })))
       }).catch(()=>{})
   }, []) // eslint-disable-line
   const [staffLabels, setStaffLabels] = useState({})
@@ -607,6 +613,98 @@ export default function Week7({ currentUser, initialDm }) {
   const [newDm,        setNewDm]        = useState('')
   const [chatView,     setChatView]     = useState('main') // main | thread | dm
   const [showDmPicker, setShowDmPicker] = useState(false)
+
+  // ── #general custom name (admin-renameable, stored in admin_settings) ──
+  const [generalName, setGeneralName] = useState('general')
+  const iAmAdmin = myRole === 'super_admin' || myRole === 'company_admin'
+  useEffect(() => {
+    if (!orgId) return
+    dbGet('admin_settings', `company_id=eq.${orgId}&key=eq.team_general_name&select=value`)
+      .then(rows => {
+        try {
+          const v = rows?.[0]?.value
+          const parsed = typeof v === 'string' ? JSON.parse(v) : v
+          if (parsed?.name) setGeneralName(String(parsed.name))
+        } catch {}
+      }).catch(()=>{})
+  }, [orgId])
+  async function renameGeneral() {
+    if (!iAmAdmin) return
+    const next = window.prompt('New name for the main channel:', generalName)
+    if (!next || !next.trim() || next.trim() === generalName) return
+    const name = next.trim().replace(/^#/, '').slice(0, 40)
+    const prev = generalName
+    setGeneralName(name)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+        method:'POST', headers:{ ...H, 'Prefer':'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ company_id:orgId, key:'team_general_name', value: JSON.stringify({ name }), updated_at:new Date().toISOString() }),
+      })
+      if (!res.ok) throw new Error()
+      dbInsert('audit_logs', { action:'community_renamed', actor_id:myUUID, actor_name:myName, actor_role:myRole,
+        target_type:'team_channel', target_id:orgId, details:{ from:prev, to:name, context:'team_general' } }).catch(()=>{})
+    } catch { setGeneralName(prev); alert("Couldn't rename the channel — try again.") }
+  }
+
+  // ── Pins for Team Hub (#general + DMs) — per-user rows in message_pins ──
+  const [teamPins, setTeamPins] = useState([])
+  const isRealMsgId = id => typeof id === 'string' && id.length === 36
+  function loadTeamPins() {
+    if (!myUUID) return
+    dbGet('message_pins', `user_id=eq.${myUUID}&context=in.(team_general,team_dm)&select=*`)
+      .then(rows => { if (Array.isArray(rows)) setTeamPins(rows) }).catch(()=>{})
+  }
+  useEffect(() => { loadTeamPins() }, [myUUID])
+  const teamPinnedIds = new Set(teamPins.map(p => p.message_id))
+  async function togglePinTeam(m, ctx) {
+    if (!isRealMsgId(m.id)) { alert('Give this message a second to finish sending, then pin it.'); return }
+    if (teamPinnedIds.has(m.id)) {
+      await dbDelete('message_pins', `message_id=eq.${m.id}&user_id=eq.${myUUID}`)
+    } else {
+      await dbInsert('message_pins', { message_id:m.id, conversation_id:orgId, user_id:myUUID,
+        pinned_by:myUUID, pinned_by_name:myName, context:ctx })
+    }
+    loadTeamPins()
+  }
+  async function pinForAllTeam(m, ctx) {
+    if (!isRealMsgId(m.id)) { alert('Give this message a second to finish sending, then pin it.'); return }
+    const targets = ctx === 'team_dm' && dmTarget ? [myUUID, dmTarget.uuid] : team.map(t => t.uuid)
+    await Promise.all(targets.map(uid => dbInsert('message_pins', {
+      message_id:m.id, conversation_id:orgId, user_id:uid,
+      pinned_by:myUUID, pinned_by_name:myName, context:ctx })))
+    loadTeamPins()
+  }
+  const PinBar = ({ ctx, source }) => {
+    const list = teamPins.filter(p => p.context === ctx).map(p => ({ p, m: source.find(x => x.id === p.message_id) })).filter(x => x.m && !x.m.deletedAt)
+    if (!list.length) return null
+    return (
+      <div style={{background:`${C.gold}11`,borderBottom:`1px solid ${C.gold}33`,padding:'8px 16px',maxHeight:110,overflowY:'auto',flexShrink:0}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>📌 Pinned</div>
+        {list.map(({ p, m }) => (
+          <div key={p.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+            <div style={{flex:1,fontSize:11,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              <b style={{color:C.gold}}>{m.senderName}:</b> {(splitAtts(m.content).text || '📎 attachment')}
+              {p.pinned_by !== myUUID && <span style={{color:C.muted,fontSize:9}}> · pinned by {p.pinned_by_name}</span>}
+            </div>
+            <button onClick={() => togglePinTeam(m, ctx)} title="Unpin (removes it from your view only)"
+              style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:2,flexShrink:0}}>✕</button>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  const PinBtns = ({ m, ctx }) => !m.deletedAt && (
+    <>
+      <button onClick={() => togglePinTeam(m, ctx)} title={teamPinnedIds.has(m.id) ? 'Unpin' : 'Pin (only for you)'}
+        style={{background:'none',border:'none',color:teamPinnedIds.has(m.id)?C.gold:C.muted,fontSize:11,cursor:'pointer',padding:0}}>📌</button>
+      <button onClick={() => pinForAllTeam(m, ctx)} title={ctx==='team_dm' ? 'Pin for both of you' : 'Pin for the whole team'}
+        style={{background:'none',border:'none',color:C.muted,fontSize:9,fontWeight:700,cursor:'pointer',padding:0}}>📌ALL</button>
+    </>
+  )
+
+  // ── Shared canvas for the open Team Hub DM ──
+  const [dmCanvasOpen, setDmCanvasOpen] = useState(false)
+  useEffect(() => { setDmCanvasOpen(false) }, [dmTarget])
   const bottomRef   = useRef(null)
   const dmBottomRef = useRef(null)
 
@@ -709,7 +807,14 @@ export default function Week7({ currentUser, initialDm }) {
 
   const dmKey    = dmTarget ? [myUUID, dmTarget.uuid].sort().join('_') : null
   const dmConvo  = dmKey ? (dmMessages[dmKey] || []) : []
-  const otherCoaches = team.filter(c => c.uuid !== myUUID)
+  // Eden admins who aren't the owner never see OTHER non-owner Eden admins as a DM option —
+  // only the owner account appears for them among admins.
+  const OWNER_EMAIL = 'info@edencommunications.io'
+  const isAdminRole2 = r => r === 'super_admin' || r === 'company_admin'
+  const iAmNonOwnerEdenAdmin = isAdminRole2(myRole) && orgId === EDEN_ORG_ID && email.toLowerCase() !== OWNER_EMAIL
+  const otherCoaches = team.filter(c =>
+    c.uuid !== myUUID &&
+    !(iAmNonOwnerEdenAdmin && isAdminRole2(c.role) && (c.email || '') !== OWNER_EMAIL))
 
   // ── Mark conversations as seen while they're on screen ──────
   useEffect(() => {
@@ -811,7 +916,7 @@ export default function Week7({ currentUser, initialDm }) {
                 <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Channels</div>
                 <button onClick={() => setChatView('main')}
                   style={{width:'100%',textAlign:'left',background:chatView==='main'?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'6px 8px',color:chatView==='main'?C.gold:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{color:C.muted}}>#</span> <span style={{fontWeight:generalUnread>0?700:400}}>general</span>
+                  <span style={{color:C.muted}}>#</span> <span style={{fontWeight:generalUnread>0?700:400}}>{generalName}</span>
                   <UnreadPill n={generalUnread}/>
                 </button>
               </div>
@@ -909,13 +1014,20 @@ export default function Week7({ currentUser, initialDm }) {
               <div style={{flex:1,display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow: isMobile ? 'auto' : 'hidden'}}>
                 <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
                   <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:C.white}}># general</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.white,display:'flex',alignItems:'center',gap:6}}>
+                      # {generalName}
+                      {iAmAdmin && (
+                        <button onClick={renameGeneral} title="Rename this channel (admin only)"
+                          style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>✏️</button>
+                      )}
+                    </div>
                     <button onClick={()=>setShowChannelMembers(true)}
                       style={{background:'none',border:'none',padding:0,fontSize:10,color:C.gold,marginTop:1,cursor:'pointer',fontWeight:600}}>
                       Main channel · {team.length} members ▾
                     </button>
                   </div>
 
+                  <PinBar ctx="team_general" source={messages.filter(m => !m.isDm)}/>
                   <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
                     {messages.filter(m => !m.isDm).map(msg => {
                       const isMine = msg.senderId === myUUID
@@ -940,6 +1052,7 @@ export default function Week7({ currentUser, initialDm }) {
                               </div>
                             )}
                             <div style={{display:'flex',gap:8,marginTop:5,alignItems:'center'}}>
+                              <PinBtns m={msg} ctx="team_general"/>
                               {!msg.deletedAt && canDeleteTeamMsg(msg) && (
                                 <button onClick={() => deleteTeamMsg(msg)} title="Delete (kept in admin audit log)"
                                   style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>🗑</button>
@@ -977,7 +1090,7 @@ export default function Week7({ currentUser, initialDm }) {
                       <MentionInput value={newMessage} onChange={v => { setNewMessage(v); if (v) sendTyping('general') }} onSubmit={sendMessage}
                         candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
                         colors={C}
-                        placeholder="Message #general… tag with @Name (Enter to send)"
+                        placeholder={`Message #${generalName}… tag with @Name (Enter to send)`}
                         inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
                       <button onClick={sendMessage} disabled={!newMessage.trim() && !hasPending('main')}
                         style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:(newMessage.trim()||hasPending('main'))?1:.4}}>
@@ -1083,12 +1196,20 @@ export default function Week7({ currentUser, initialDm }) {
                       {dmTarget.label || dmTarget.role}{dmTarget.isHeadCoach?' · Head Coach':''}
                     </div>
                   </div>
+                  <button onClick={() => setDmCanvasOpen(true)} title="Open your shared canvas — a live doc you both can edit"
+                    style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 12px',color:C.white,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                    📝 Canvas
+                  </button>
                   <button onClick={() => { setSection('huddle'); startHuddle() }}
                     style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:7,padding:'6px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                     🎙 Huddle
                   </button>
                 </div>
 
+                {dmCanvasOpen && dmKey && (
+                  <CanvasPanel scope={`teamdm:${dmKey}`} label={`you & ${dmTarget.name.split(' ')[0]}`} isMobile={isMobile} onClose={() => setDmCanvasOpen(false)}/>
+                )}
+                <PinBar ctx="team_dm" source={dmConvo}/>
                 <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
                   {dmConvo.length===0 && (
                     <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>
@@ -1103,7 +1224,10 @@ export default function Week7({ currentUser, initialDm }) {
                           <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
                             <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
                           </div>
-                          <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:isMine?'right':'left'}}>{timeAgo(msg.createdAt)}</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:isMine?'right':'left',display:'flex',gap:8,alignItems:'center',justifyContent:isMine?'flex-end':'flex-start'}}>
+                            <span>{timeAgo(msg.createdAt)}</span>
+                            <PinBtns m={msg} ctx="team_dm"/>
+                          </div>
                         </div>
                       </div>
                     )
@@ -1138,7 +1262,7 @@ export default function Week7({ currentUser, initialDm }) {
                 onClick={()=>setShowChannelMembers(false)}>
                 <div onClick={e=>e.stopPropagation()}
                   style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:20,width:'100%',maxWidth:400,maxHeight:'75vh',display:'flex',flexDirection:'column'}}>
-                  <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:2}}>Members — # general</div>
+                  <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:2}}>Members — # {generalName}</div>
                   <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Everyone on your team is in the main channel automatically.</div>
                   <div style={{overflowY:'auto'}}>
                     {team.map(t=>(

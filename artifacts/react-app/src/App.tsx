@@ -2968,6 +2968,7 @@ const ACTION_LABELS:Record<string,{label:string,icon:string}> = {
   login_failed:       { label:'Failed login attempt', icon:'⚠️' },
   checkin_submitted:  { label:'Check-in submitted', icon:'📋' },
   checkin_day_changed:{ label:'Check-in day changed', icon:'🗓' },
+  community_renamed:  { label:'Community renamed',  icon:'✏️' },
   user_added:         { label:'User added',         icon:'👤' },
   staff_removed:      { label:'Staff removed',      icon:'👋' },
   staff_updated:      { label:'Staff title/access changed', icon:'🛠' },

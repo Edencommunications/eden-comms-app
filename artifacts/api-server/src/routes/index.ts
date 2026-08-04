@@ -10,6 +10,7 @@ import profileAuditRouter from "./profileAudit";
 import welcomeRouter from "./welcome";
 import teamUploadRouter from "./teamUpload";
 import auditLoginRouter from "./auditLogin";
+import canvasRouter from "./canvas";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(profileAuditRouter);
 router.use(welcomeRouter);
 router.use(teamUploadRouter);
 router.use(auditLoginRouter);
+router.use(canvasRouter);
 
 export default router;

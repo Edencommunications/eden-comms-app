@@ -920,6 +920,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     org_updated:'updated organization', package_added:'added package', package_updated:'updated package', package_deleted:'removed package',
     start_date_changed:'changed start date for',
     login_failed:'failed login attempt', checkin_submitted:'submitted a check-in',
+    community_renamed:'renamed a community/channel',
     checkin_day_changed:'changed check-in day for',
   }
   const auditIcon = a => a==='login'?'🔐':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
@@ -2226,14 +2227,6 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'staff'}))}}
                 style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer'}}>
                 + Add Team Member
-              </button>
-              <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'va'}))}}
-                style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer'}}>
-                + Add VA
-              </button>
-              <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'coach'}))}}
-                style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>
-                + Add Coach
               </button>
             </div>
           </div>
