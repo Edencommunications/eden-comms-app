@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
+import { sendNotification } from './Notifications'
 import { TZ_OPTIONS, DEFAULT_TZ, zonedTimeToIso, tzShort } from '../lib/tz'
 import Communities from './Communities'
 
@@ -845,10 +846,10 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     // Alert the other side of whichever conversation this thread lives in
     const convo = conversations.find(c => c.supabaseConvoId === convoId)
     if (convo?.id && convo.id !== myProfileId && !convo.monitor) {
-      dbInsert('notifications', {
-        recipient_id: convo.id, sender_id: myProfileId, sender_name: myName,
+      sendNotification({
+        recipientId: convo.id, senderId: myProfileId, senderName: myName,
         type: 'message', body: `💬 ${myName} replied in a thread: "${text.slice(0, 80)}"`,
-        is_read: false, link_to: 'msgs',
+        linkTo: 'msgs',
       })
     }
     markThreadRead(threadRootId)
@@ -1090,10 +1091,10 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   function notifyRecipient(preview) {
     const otherId = activeConvo?.id
     if (!otherId || !myProfileId || otherId === myProfileId || activeConvo?.monitor) return
-    dbInsert('notifications', {
-      recipient_id: otherId, sender_id: myProfileId, sender_name: myName,
+    sendNotification({
+      recipientId: otherId, senderId: myProfileId, senderName: myName,
       type: 'message', body: `💬 New message from ${myName}: "${String(preview || '').slice(0, 80)}"`,
-      is_read: false, link_to: 'msgs',
+      linkTo: 'msgs',
     })
   }
 

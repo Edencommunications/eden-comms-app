@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
+import { sendNotification } from './Notifications'
 import { supabase } from '../supabaseClient'
 import { loadSeen, saveSeen, seenAt } from '../lib/teamUnread'
 import Communities from './Communities'
@@ -310,10 +311,10 @@ export default function Week7({ currentUser, initialDm }) {
   function notifyMentions(text, where) {
     const mentioned = findMentions(text)
     for (const t of mentioned) {
-      dbInsert('notifications', {
-        recipient_id: t.uuid, sender_id: myUUID, sender_name: myName,
+      sendNotification({
+        recipientId: t.uuid, senderId: myUUID, senderName: myName,
         type: 'mention', body: `💬 ${myName} tagged you in ${where}: "${text.slice(0,80)}"`,
-        is_read: false, link_to: 'team',
+        linkTo: 'team',
       })
     }
     return mentioned
@@ -326,10 +327,10 @@ export default function Week7({ currentUser, initialDm }) {
     const preview = String(body || '').replace(/\[\[file\|[^\]]*\]\]/g, '📎 attachment').trim().slice(0, 80)
     for (const r of recipients) {
       if (!r?.uuid || r.uuid === myUUID || skipIds.has(r.uuid)) continue
-      dbInsert('notifications', {
-        recipient_id: r.uuid, sender_id: myUUID, sender_name: myName,
+      sendNotification({
+        recipientId: r.uuid, senderId: myUUID, senderName: myName,
         type: 'message', body: `💬 ${myName} in Team Hub: "${preview}"`,
-        is_read: false, link_to: 'team',
+        linkTo: 'team',
       })
     }
   }

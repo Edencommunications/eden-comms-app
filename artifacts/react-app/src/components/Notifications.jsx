@@ -370,19 +370,50 @@ export default function Notifications({ currentUser, onNavigate }) {
 //     linkTo:      'diet',
 //   })
 // ════════════════════════════════════════════════════════════════
+// Failures are never swallowed: the insert is checked, retried once, and if it
+// still fails it's logged to the console AND to the server-side audit trail so
+// a missing bell alert always leaves a trace.
 export async function sendNotification({ recipientId, senderId, senderName, type, body, linkTo }) {
-  if (!recipientId) return
-  await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
-    method: 'POST',
-    headers: H,
-    body: JSON.stringify({
-      recipient_id: recipientId,
-      sender_id:    senderId,
-      sender_name:  senderName,
-      type,
-      body,
-      link_to:      linkTo,
-      is_read:      false,
-    }),
-  })
+  if (!recipientId) return false
+  if (senderId && recipientId === senderId) return false // never notify yourself
+  const row = {
+    recipient_id: recipientId,
+    sender_id:    senderId,
+    sender_name:  senderName,
+    type,
+    body,
+    link_to:      linkTo || null,
+    is_read:      false,
+  }
+  const attempt = async () => {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+      method: 'POST', headers: H, body: JSON.stringify(row),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text().catch(()=>'')).slice(0,300)}`)
+  }
+  let lastErr = null
+  for (let i = 0; i < 2; i++) {
+    try { await attempt(); return true }
+    catch (e) {
+      lastErr = e
+      if (i === 0) await new Promise(r => setTimeout(r, 800)) // brief pause, then retry once
+    }
+  }
+  const errMsg = lastErr?.message || String(lastErr)
+  console.error('[notifications] insert failed after retry', { type, recipientId, linkTo, error: errMsg })
+  // Best-effort audit-trail record (server-side, service key) so the gap is visible to admins
+  try {
+    const tok = sbAccessToken()
+    if (tok) fetch('/api/audit/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+      body: JSON.stringify({
+        action: 'notification_send_failed',
+        target_type: 'notification',
+        target_id: String(recipientId),
+        details: { type, link_to: linkTo || null, error: errMsg.slice(0, 300) },
+      }),
+    }).catch(() => {})
+  } catch {}
+  return false
 }

@@ -8,6 +8,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
+import { sendNotification } from './Notifications'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -455,9 +456,9 @@ Training Principles:
     for (const rid of recipientIds) {
       if (!rid || rid === myUUID || seen.has(rid)) continue
       seen.add(rid)
-      dbInsert('notifications', {
-        recipient_id: rid, sender_id: myUUID, sender_name: info.name,
-        type, body, is_read: false, link_to: 'labs',
+      sendNotification({
+        recipientId: rid, senderId: myUUID, senderName: info.name,
+        type, body, linkTo: 'labs',
       })
     }
   }
@@ -633,10 +634,10 @@ Training Principles:
     }
     // Alert the client their plan changed (skip self — clients can't save, but be safe)
     if (CLIENT_UUID && CLIENT_UUID !== myUUID) {
-      await dbInsert('notifications', {
-        recipient_id: CLIENT_UUID, sender_id: COACH_UUID || myUUID, sender_name: info.name,
+      await sendNotification({
+        recipientId: CLIENT_UUID, senderId: COACH_UUID || myUUID, senderName: info.name,
         type: 'workout_update', body: '💪 Your coach updated your workout & cardio plan',
-        is_read: false, link_to: 'workout',
+        linkTo: 'workout',
       })
     }
     alert('Workout plan saved!')

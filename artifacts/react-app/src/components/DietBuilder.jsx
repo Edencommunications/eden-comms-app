@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
+import { sendNotification } from './Notifications'
 import { useDeadline } from '../lib/tz'
 import { useCheckinForm } from '../lib/checkinForm'
 import {
@@ -1380,14 +1381,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   // ── Notification helpers ───────────────────────────────────
+  // Delegates to the shared sendNotification helper (logs + retries + audit-trails failures)
   async function insertNotification(recipientId, senderId, type, message, linkTo) {
-    if (!recipientId) return
-    if (senderId && recipientId === senderId) return // never notify yourself
-    await dbInsert('notifications',{
-      recipient_id:recipientId, sender_id:senderId,
-      type, body:message, is_read:false, link_to:linkTo||null,
-      created_at:new Date().toISOString()
-    })
+    await sendNotification({ recipientId, senderId, type, body: message, linkTo })
   }
 
   function markAllRead() {
@@ -3110,11 +3106,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   const _cId = myCoachId
                   const _clId = myUUID
                   const _clName = dbProfile?.name||info.name||'A client'
-                  if(_cId&&_clId&&_cId!==_clId) dbInsert('notifications',{
-                    recipient_id:_cId, sender_id:_clId, sender_name:_clName,
+                  if(_cId&&_clId&&_cId!==_clId) sendNotification({
+                    recipientId:_cId, senderId:_clId, senderName:_clName,
                     type:'checkin_received',
                     body:`📋 ${_clName} submitted their weekly check-in — review it in the Check-In Hub`,
-                    is_read:false, link_to:'checkin',
+                    linkTo:'checkin',
                   }).catch(()=>{})
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                 }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
