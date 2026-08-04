@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
+import { sendNotification } from './Notifications'
 import { useDeadline, TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, clearTzCache } from '../lib/tz'
 import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
@@ -1365,13 +1366,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       start_weight: intake.startWeight,
       updated_at:   new Date().toISOString(),
     })
-    await dbInsert('notifications',{
-      recipient_id: selectedClient.uuid,
-      sender_id:    myUUID,
-      sender_name:  info.name,
-      type:         'update_note',
-      body:         '📋 Your coach updated your Intake / Onboarding notes — check the Consultations tab',
-      is_read:      false,
+    await sendNotification({
+      recipientId: selectedClient.uuid,
+      senderId:    myUUID,
+      senderName:  info.name,
+      type:        'update_note',
+      body:        '📋 Your coach updated your Intake / Onboarding notes — check the Consultations tab',
     })
     alert('Intake saved successfully.')
   }
@@ -1416,13 +1416,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       otherLinks:   linksDropped ? '' : newCall.otherLinks,
     }
     setCallNotes(prev=>[note,...prev])
-    await dbInsert('notifications',{
-      recipient_id: _clientId,
-      sender_id:    myUUID,
-      sender_name:  info.name,
-      type:         'update_note',
-      body:         `📞 Your coach added ${newCall.callType} notes — check the Consultations tab`,
-      is_read:      false,
+    await sendNotification({
+      recipientId: _clientId,
+      senderId:    myUUID,
+      senderName:  info.name,
+      type:        'update_note',
+      body:        `📞 Your coach added ${newCall.callType} notes — check the Consultations tab`,
     })
 
     setNewCall({callDate:new Date().toISOString().slice(0,10),callType:'Monthly Check-In',summary:'',focusPoints:'',actionItems:'',nextCallDate:'',loomUrl:'',otherLinks:''})

@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 import MentionInput from './MentionInput'
+import { sendNotification } from './Notifications'
 import CanvasPanel from './CanvasPanel'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
@@ -199,9 +200,9 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
       if (p.role === 'client' && p.is_active === false && !p.community_only) {
         await dbUpdate('user_profiles', `id=eq.${p.id}`, { community_only: true })
       }
-      dbInsert('notifications', {
-        recipient_id: p.id, sender_id: myId, sender_name: myName, type: 'community',
-        body: `👥 ${myName} added you to the "${name}" community`, is_read: false,
+      sendNotification({
+        recipientId: p.id, senderId: myId, senderName: myName, type: 'community',
+        body: `👥 ${myName} added you to the "${name}" community`,
       })
     }
     setNewName(''); setShowCreate(false); setNewMembers([])
@@ -250,9 +251,9 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     if (p.role === 'client' && p.is_active === false && !p.community_only) {
       await dbUpdate('user_profiles', `id=eq.${p.id}`, { community_only: true })
     }
-    dbInsert('notifications', {
-      recipient_id: p.id, sender_id: myId, sender_name: myName, type: 'community',
-      body: `👥 ${myName} added you to the "${active?.name}" community`, is_read: false,
+    sendNotification({
+      recipientId: p.id, senderId: myId, senderName: myName, type: 'community',
+      body: `👥 ${myName} added you to the "${active?.name}" community`,
     })
     loadMembers()
   }
@@ -302,9 +303,9 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     if (r === null) { alert('Could not send — run the database update first.'); setNewMsg(text); return }
     setReplyTo(null)
     for (const m of findMentions(text)) {
-      dbInsert('notifications', {
-        recipient_id: m.user_id, sender_id: myId, sender_name: myName, type: 'mention',
-        body: `💬 ${myName} tagged you in "${active?.name}": "${text.slice(0,80)}"`, is_read: false,
+      sendNotification({
+        recipientId: m.user_id, senderId: myId, senderName: myName, type: 'mention',
+        body: `💬 ${myName} tagged you in "${active?.name}": "${text.slice(0,80)}"`,
       })
     }
     loadMessages()
