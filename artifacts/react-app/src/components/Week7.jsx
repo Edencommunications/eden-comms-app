@@ -308,11 +308,28 @@ export default function Week7({ currentUser, initialDm }) {
     return hits
   }
   function notifyMentions(text, where) {
-    for (const t of findMentions(text)) {
+    const mentioned = findMentions(text)
+    for (const t of mentioned) {
       dbInsert('notifications', {
         recipient_id: t.uuid, sender_id: myUUID, sender_name: myName,
         type: 'mention', body: `💬 ${myName} tagged you in ${where}: "${text.slice(0,80)}"`,
-        is_read: false,
+        is_read: false, link_to: 'team',
+      })
+    }
+    return mentioned
+  }
+  // Bell notification for every Team Hub message — recipients get an instant
+  // alert (the bell listens via realtime). `skip` = people already notified
+  // through an @mention, so nobody gets two alerts for one message.
+  function notifyTeamMessage(recipients, body, skip = []) {
+    const skipIds = new Set(skip.map(t => t.uuid))
+    const preview = String(body || '').replace(/\[\[file\|[^\]]*\]\]/g, '📎 attachment').trim().slice(0, 80)
+    for (const r of recipients) {
+      if (!r?.uuid || r.uuid === myUUID || skipIds.has(r.uuid)) continue
+      dbInsert('notifications', {
+        recipient_id: r.uuid, sender_id: myUUID, sender_name: myName,
+        type: 'message', body: `💬 ${myName} in Team Hub: "${preview}"`,
+        is_read: false, link_to: 'team',
       })
     }
   }
@@ -767,7 +784,8 @@ export default function Week7({ currentUser, initialDm }) {
     stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, sender_role:myRole, content:msg.content, is_dm:false })
       .then(() => { loadTeamChat(); broadcastNewMessage() })
-    notifyMentions(msg.content, 'Team Hub #general')
+    const mentioned = notifyMentions(msg.content, 'Team Hub #general')
+    notifyTeamMessage(otherCoaches, msg.content, mentioned)
   }
 
   function sendReply() {
@@ -783,7 +801,12 @@ export default function Week7({ currentUser, initialDm }) {
     stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, sender_role:myRole, content:reply.content, thread_id:activeThread.id, is_dm:false })
       .then(() => { loadTeamChat(); broadcastNewMessage() })
-    notifyMentions(reply.content, 'a Team Hub thread')
+    const mentioned = notifyMentions(reply.content, 'a Team Hub thread')
+    // Alert the thread starter plus everyone who has replied in the thread.
+    const participants = new Map()
+    if (activeThread?.senderId) participants.set(activeThread.senderId, { uuid: activeThread.senderId })
+    for (const r of (threadReplies[activeThread.id] || [])) if (r.senderId) participants.set(r.senderId, { uuid: r.senderId })
+    notifyTeamMessage([...participants.values()], reply.content, mentioned)
   }
 
   function sendDm() {
@@ -796,6 +819,7 @@ export default function Week7({ currentUser, initialDm }) {
     stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name })
       .then(() => { loadTeamChat(); broadcastNewMessage() })
+    notifyTeamMessage([dmTarget], msg.content)
   }
 
   // ── Huddle helpers — thin wrappers over the global HuddleHub ─

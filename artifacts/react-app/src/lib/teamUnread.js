@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 import { sbBearer } from './sbAuth'
+import { supabase } from '../supabaseClient'
 
 const SUPABASE_URL = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -39,6 +40,7 @@ export function useTeamHubUnread(user) {
     if (!email || role === 'client' || user?.communityOnly) { setUnread(false); return }
     let stopped = false
     let me = null
+    let liveChan = null
     const H = { apikey: SUPABASE_ANON, get Authorization() { return sbBearer() } }
     async function check() {
       try {
@@ -47,6 +49,16 @@ export function useTeamHubUnread(user) {
           const rows = r.ok ? await r.json() : []
           me = rows?.[0]
           if (!me?.id) return
+          // Instant updates: listen to the same broadcast channel Week7 uses
+          // when anyone sends a Team Hub message, so the sidebar dot lights
+          // up immediately instead of waiting for the next poll.
+          if (!stopped && !liveChan) {
+            try {
+              liveChan = supabase.channel(`teamhub-live-${me.company_id || EDEN_ORG_ID}`)
+                .on('broadcast', { event: 'new-message' }, () => check())
+                .subscribe()
+            } catch {}
+          }
         }
         const orgId = me.company_id || EDEN_ORG_ID
         const r2 = await fetch(
@@ -70,7 +82,10 @@ export function useTeamHubUnread(user) {
     const iv = setInterval(check, 20000)
     const onSeen = () => check()
     window.addEventListener('teamhub-seen', onSeen)
-    return () => { stopped = true; clearInterval(iv); window.removeEventListener('teamhub-seen', onSeen) }
+    return () => {
+      stopped = true; clearInterval(iv); window.removeEventListener('teamhub-seen', onSeen)
+      try { if (liveChan) supabase.removeChannel(liveChan) } catch {}
+    }
   }, [email, role]) // eslint-disable-line
   return unread
 }
