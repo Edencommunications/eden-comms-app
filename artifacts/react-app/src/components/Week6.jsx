@@ -681,7 +681,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (!name || isNaN(price)) return
     const res = await dbInsert('packages',{ name, price, includes_recipes:newPkg.includes_recipes })
     const row = Array.isArray(res)?res[0]:res
-    if (row?.id) { setPackages(p=>[...p,row].sort((a,b)=>a.price-b.price)); setNewPkg({name:'',price:'',includes_recipes:false}) }
+    if (row?.id) {
+      setPackages(p=>[...p,row].sort((a,b)=>a.price-b.price)); setNewPkg({name:'',price:'',includes_recipes:false})
+      dbInsert('audit_logs',{ action:'package_added', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+        target_type:'package', target_id:row.id, details:{ name, price } }).catch(()=>{})
+    }
     else alert('Could not save the tier. Make sure the packages table exists (run the SQL I gave you), then try again.')
   }
   async function savePackage() {
@@ -691,6 +695,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const ok = await dbUpdate('packages',`id=eq.${editPkg.id}`,{ name, price, includes_recipes:!!editPkg.includes_recipes })
     if (!ok) { alert("Couldn't save this tier — try again."); return }
     setPackages(p=>p.map(x=>x.id===editPkg.id?{...x,name,price,includes_recipes:!!editPkg.includes_recipes}:x).sort((a,b)=>a.price-b.price))
+    dbInsert('audit_logs',{ action:'package_updated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'package', target_id:editPkg.id, details:{ name, price } }).catch(()=>{})
     setEditPkg(null)
   }
   async function saveManagedOrg() {
@@ -703,6 +709,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     })
     if (!ok) { alert("Couldn't save the organization changes — try again."); return }
     setOrgs(prev=>prev.map(o=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
+    dbInsert('audit_logs',{ action:'org_updated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'organization', target_id:manageOrg.id, details:{ name:manageOrg.name.trim(), plan:manageOrg.plan, active:!!manageOrg.active } }).catch(()=>{})
     setManageOrg(null)
   }
   const tierOf = planName => packages.find(p=>(p.name||'').toLowerCase()===(planName||'').toLowerCase())
@@ -711,6 +719,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const ok = await dbUpdate('packages',`id=eq.${pkg.id}`,{ active:false })
     if (!ok) { alert("Couldn't remove this tier — try again."); return }
     setPackages(p=>p.filter(x=>x.id!==pkg.id))
+    dbInsert('audit_logs',{ action:'package_deleted', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'package', target_id:pkg.id, details:{ name:pkg.name } }).catch(()=>{})
   }
 
   // ── Admin org context (loaded from Supabase) ─────────────
@@ -904,6 +914,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .then(ok=>{ if(!ok) alert(`Couldn't save the Head Coach promotion for ${coach.name} — try again.`) })
       .catch(()=>alert(`Couldn't save the Head Coach promotion for ${coach.name} — try again.`))
     addAudit(info.name,'Promoted to Head Coach',coach.name,'')
+    dbInsert('audit_logs',{ action:'staff_promoted', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'user_profile', target_id:coach.uuid||null, details:{ name:coach.name } }).catch(()=>{})
   }
   function demoteFromHeadCoach(coach) {
     const next = headCoaches.filter(id=>id!==coach.uuid)
@@ -913,6 +925,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .then(ok=>{ if(!ok) alert(`Couldn't remove the Head Coach designation for ${coach.name} — try again.`) })
       .catch(()=>alert(`Couldn't remove the Head Coach designation for ${coach.name} — try again.`))
     addAudit(info.name,'Removed Head Coach designation',coach.name,'')
+    dbInsert('audit_logs',{ action:'staff_demoted', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'user_profile', target_id:coach.uuid||null, details:{ name:coach.name } }).catch(()=>{})
   }
   // Sync deactivations + coach transfers + coach removals FROM the database so
   // every device (coach, admin, anywhere) sees the same state. Runs on mount
@@ -1124,6 +1138,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .catch(()=>{})
     addAudit(info.name,'Removed coach',pendingRemoval.name,
       transferred>0?`${transferred} client${transferred!==1?'s':''} transferred to ${targetCoach?.name||'new coach'}`:'No active clients to transfer')
+    dbInsert('audit_logs',{ action:'staff_removed', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'user_profile', target_id:pendingRemoval.uuid||null,
+      details:{ name:pendingRemoval.name, transferred_clients:transferred, new_coach:targetCoach?.name||null } }).catch(()=>{})
     setShowTransferModal(false)
     setPendingRemoval(null)
   }
@@ -1273,6 +1290,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       })
       if (!res.ok) throw new Error('save failed')
       addAudit(info.name,'Updated staff title/access',editStaff.name, meta.label ? `Title: ${meta.label} · Tabs: ${meta.tabs.join(', ')}` : `Tabs: ${meta.tabs.join(', ')}`)
+      dbInsert('audit_logs',{ action:'staff_updated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+        target_type:'user_profile', target_id:editStaff.id, details:{ name:editStaff.name, title:meta.label, tabs:meta.tabs } }).catch(()=>{})
       setEditStaff(null)
       alert('Saved. The change takes effect the next time they log in or refresh.')
     } catch(e) {
@@ -1389,6 +1408,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Show setup instructions card
     setLastAdded({ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role, tempPass })
     setAuditLog(prev=>[{id:Date.now(),actor:info.name,action:`Added ${newUser.role}`,target:newUser.name,detail:newUser.email,time:new Date().toLocaleString()},...prev])
+    dbInsert('audit_logs',{ action:'user_added', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:'user_profile', target_id:localUser.uuid||null,
+      details:{ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role } }).catch(()=>{})
     setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday',title:'',accessHome:true,accessMsgs:true,accessTeam:true})
     setShowNewUser(false)
   }
@@ -1830,6 +1852,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,startDate:sd}:c))
                         setSelectedClient(prev=>({...prev,startDate:sd}))
                         const ok = await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{start_date:sd||null})
+                        if (ok) dbInsert('audit_logs',{ action:'start_date_changed', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+                          target_type:'user_profile', target_id:selectedClient.uuid, details:{ name:selectedClient.name, from:prevSd||null, to:sd||null } }).catch(()=>{})
                         if (!ok) {
                           setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,startDate:prevSd}:c))
                           setSelectedClient(prev=>({...prev,startDate:prevSd}))

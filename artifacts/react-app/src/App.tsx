@@ -251,6 +251,12 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
             return;
           }
+          // Audit trail: record every successful login (never blocks the login itself)
+          sbInsert('audit_logs', {
+            action:'login', actor_id: p?.id || null,
+            actor_name: p?.name || p?.full_name || emailNorm, actor_role: p?.role || 'client',
+            target_type:'session', details:{ email: emailNorm },
+          }).catch(()=>{});
           onLogin({
             email: emailNorm,
             name: p?.name || p?.full_name || authUser?.user_metadata?.name || emailNorm,
@@ -2950,6 +2956,17 @@ const ACTION_LABELS:Record<string,{label:string,icon:string}> = {
   client_transferred: { label:'Client transferred', icon:'🔁' },
   community_restored: { label:'Community restored', icon:'♻️' },
   message_restored:   { label:'Message restored',   icon:'♻️' },
+  login:              { label:'Logged in',          icon:'🔐' },
+  user_added:         { label:'User added',         icon:'👤' },
+  staff_removed:      { label:'Staff removed',      icon:'👋' },
+  staff_updated:      { label:'Staff title/access changed', icon:'🛠' },
+  staff_promoted:     { label:'Promoted to Head Coach', icon:'⭐' },
+  staff_demoted:      { label:'Head Coach removed', icon:'⬇️' },
+  org_updated:        { label:'Organization updated', icon:'🏢' },
+  package_added:      { label:'Package added',      icon:'📦' },
+  package_updated:    { label:'Package updated',    icon:'📦' },
+  package_deleted:    { label:'Package removed',    icon:'📦' },
+  start_date_changed: { label:'Start date changed', icon:'🗓' },
 };
 const actionMeta = (a:string) => ACTION_LABELS[a] || { label:(a||'action').replace(/_/g,' '), icon:'•' };
 const centralTime = (iso:string) => {
@@ -3023,9 +3040,16 @@ const AdminActivityLog = ({ user }:any) => {
   }
 
   const actions = useMemo(() => Array.from(new Set((rows||[]).map(r=>r.action).filter(Boolean))), [rows]);
+  const [person, setPerson]     = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo]     = useState('');
+  const people = useMemo(() => Array.from(new Set((rows||[]).map(r=>r.actor_name).filter(Boolean))).sort(), [rows]);
   const shown = useMemo(() => {
     let list = rows || [];
     if (filter !== 'all') list = list.filter(r => r.action === filter);
+    if (person !== 'all') list = list.filter(r => r.actor_name === person);
+    if (dateFrom) list = list.filter(r => (r.created_at||'') >= dateFrom);
+    if (dateTo)   list = list.filter(r => (r.created_at||'').slice(0,10) <= dateTo);
     const q = search.trim().toLowerCase();
     if (q) list = list.filter(r =>
       (r.actor_name||'').toLowerCase().includes(q) ||
@@ -3033,7 +3057,7 @@ const AdminActivityLog = ({ user }:any) => {
       JSON.stringify(r.details||{}).toLowerCase().includes(q) ||
       (r.target_type||'').toLowerCase().includes(q));
     return list;
-  }, [rows, filter, search]);
+  }, [rows, filter, search, person, dateFrom, dateTo]);
 
   const detailText = (r:any) => {
     const d = r.details || {};
@@ -3058,6 +3082,25 @@ const AdminActivityLog = ({ user }:any) => {
           <option value="all">All actions</option>
           {actions.map(a => <option key={a} value={a}>{actionMeta(a).label}</option>)}
         </select>
+        <select value={person} onChange={e=>setPerson(e.target.value)}
+          style={{ padding:'9px 12px', borderRadius:8, border:`1px solid ${B.border}`,
+            background:B.surface, color:B.text, fontSize:13, maxWidth:180 }}>
+          <option value="all">All people</option>
+          {people.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} title="From date"
+            style={{ padding:'8px 10px', borderRadius:8, border:`1px solid ${B.border}`, background:B.surface, color:B.text, fontSize:12, colorScheme:'dark' }}/>
+          <span style={{ color:B.muted, fontSize:12 }}>→</span>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} title="To date"
+            style={{ padding:'8px 10px', borderRadius:8, border:`1px solid ${B.border}`, background:B.surface, color:B.text, fontSize:12, colorScheme:'dark' }}/>
+          {(dateFrom||dateTo||person!=='all') && (
+            <button onClick={()=>{ setDateFrom(''); setDateTo(''); setPerson('all'); }}
+              style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8, padding:'7px 10px', color:B.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {rows === null && <p style={{ color:B.muted, fontSize:13 }}>Loading activity…</p>}
@@ -3944,7 +3987,7 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Tab bar */}
       <div style={{ display:'flex', borderBottom:`1px solid ${B.border}`, background:B.surface, padding:'0 20px', flexShrink:0 }}>
-        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations'],['activity','📋 Activity']].map(([key,label])=>(
+        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations'],['activity','📋 Audit Log']].map(([key,label])=>(
           <button key={key} onClick={()=>setAdminTab(key)}
             style={{ padding:'12px 16px', background:'none', border:'none', borderBottom:`2px solid ${adminTab===key?B.gold:'transparent'}`,
               color:adminTab===key?B.gold:B.muted, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
