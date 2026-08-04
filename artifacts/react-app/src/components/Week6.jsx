@@ -594,6 +594,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       // Real login first (Supabase Auth — hashed, must set own password on first sign-in)
       const authRes = await provisionLogin(r.email, tempPass, r.name, 'client')
       if (!authRes.ok) { failed.push({email:r.email, reason:authRes.error||'Could not create their login'}); continue }
+      const emailed = !!authRes.emailed
       const payload = {
         id:            crypto.randomUUID(),
         name:          r.name,
@@ -620,7 +621,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           })
         } catch(e) {}
       }
-      created.push({name:r.name, email:r.email, tempPass})
+      created.push({name:r.name, email:r.email, tempPass, emailed})
       setClients(prev=>[...prev,{
         uuid:profileId, name:r.name, email:r.email, role:'client',
         coachId:acCoachId, coachName, checkInDay:acCheckInDay,
@@ -3229,11 +3230,20 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     <div style={{background:C.surface,borderRadius:10,padding:'12px 14px',marginBottom:12}}>
                       <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Send These Credentials</div>
                       {acResults.created.map((c,i)=>(
-                        <div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'5px 0',borderTop:i?`1px solid ${C.border}`:'none'}}>
+                        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'5px 0',borderTop:i?`1px solid ${C.border}`:'none'}}>
                           <span style={{fontSize:11,color:C.white,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.email}</span>
                           <span style={{fontSize:11,color:C.gold,fontWeight:700,fontFamily:'monospace',flexShrink:0}}>{c.tempPass}</span>
+                          <span title={c.emailed?'Their login details were emailed automatically':'The welcome email did not send — use ✉️ Invites → Resend or send the credentials manually'}
+                            style={{fontSize:10,fontWeight:700,flexShrink:0,color:c.emailed?C.success:C.danger}}>
+                            {c.emailed?'✉️ emailed':'⚠️ email failed'}
+                          </span>
                         </div>
                       ))}
+                      {acResults.created.some(c=>!c.emailed)&&(
+                        <div style={{marginTop:8,fontSize:10,color:C.danger,lineHeight:1.5}}>
+                          ⚠️ {acResults.created.filter(c=>!c.emailed).length} welcome email{acResults.created.filter(c=>!c.emailed).length>1?'s':''} didn't send — those clients haven't received their login details. Use ✉️ Invites → Resend, or copy the credentials and send them manually.
+                        </div>
+                      )}
                       <button onClick={()=>{navigator.clipboard?.writeText(acResults.created.map(c=>`${c.name}\t${c.email}\t${c.tempPass}`).join('\n')).then(()=>alert('Copied to clipboard.')).catch(()=>{})}}
                         style={{marginTop:10,width:'100%',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px',color:C.gold,fontWeight:700,fontSize:11,cursor:'pointer'}}>
                         📋 Copy All Credentials
