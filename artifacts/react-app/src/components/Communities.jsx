@@ -494,7 +494,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                 📝 Canvas
               </button>
               {canvasOpen && active && (
-                <CanvasPanel scope={`community:${active.id}`} label={`# ${active.name}`} isMobile={isMobile} onClose={() => setCanvasOpen(false)}/>
+                <CanvasPanel scope={`community:${active.id}`} label={`# ${active.name}`} isMobile={isMobile} myId={myId} isAdmin={isAdmin} onClose={() => setCanvasOpen(false)}/>
               )}
               {(canManage && (isAdmin || active.created_by === myId)) && (
                 <button onClick={openMembers}

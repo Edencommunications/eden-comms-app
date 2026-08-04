@@ -1034,7 +1034,7 @@ export default function Week7({ currentUser, initialDm }) {
                     </button>
                   </div>
                   {generalCanvasOpen && orgId && (
-                    <CanvasPanel scope={`teamgeneral:${orgId}`} label={`# ${generalName}`} isMobile={isMobile} onClose={() => setGeneralCanvasOpen(false)}/>
+                    <CanvasPanel scope={`teamgeneral:${orgId}`} label={`# ${generalName}`} isMobile={isMobile} myId={myUUID} isAdmin={iAmAdmin} onClose={() => setGeneralCanvasOpen(false)}/>
                   )}
 
                   <PinBar ctx="team_general" source={messages.filter(m => !m.isDm)}/>
@@ -1217,7 +1217,7 @@ export default function Week7({ currentUser, initialDm }) {
                 </div>
 
                 {dmCanvasOpen && dmKey && (
-                  <CanvasPanel scope={`teamdm:${dmKey}`} label={`you & ${dmTarget.name.split(' ')[0]}`} isMobile={isMobile} onClose={() => setDmCanvasOpen(false)}/>
+                  <CanvasPanel scope={`teamdm:${dmKey}`} label={`you & ${dmTarget.name.split(' ')[0]}`} isMobile={isMobile} myId={myUUID} isAdmin={iAmAdmin} onClose={() => setDmCanvasOpen(false)}/>
                 )}
                 <PinBar ctx="team_dm" source={dmConvo}/>
                 <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
