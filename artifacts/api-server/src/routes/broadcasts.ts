@@ -148,7 +148,9 @@ const router: IRouter = Router();
 
 // POST /broadcasts/deliver — deliver an immediate broadcast right after the
 // frontend saves it as status='sent'.
-router.post("/broadcasts/deliver", requireAdminJwt, async (req: Request, res: Response) => {
+router.post("/broadcasts/deliver", async (req: Request, res: Response) => {
+  const admin = await requireAdminJwt(req);
+  if (!admin) return res.status(403).json({ error: "admin only" });
   const id = String(req.body?.id || "").trim();
   if (!id) return res.status(400).json({ error: "id required" });
   try {
