@@ -2636,7 +2636,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>They will receive login credentials manually until auto-auth is configured in production.</div>
             <Inp label="Full Name" value={newUser.name} onChange={setNU('name')} placeholder="e.g. Sarah Johnson"/>
             <Inp label="Email Address" value={newUser.email} onChange={setNU('email')} placeholder="e.g. sarah@email.com" type="email"/>
-            <Sel label="Role" value={newUser.role} onChange={setNU('role')} options={['client','coach','head_coach','va','staff','org_admin']}/>
+            <Sel label="Role"
+              value={newUser.role==='staff'&&newUser.title&&staffRoles.includes(newUser.title)?`saved:${newUser.title}`:newUser.role}
+              onChange={v=>{
+                if (v.startsWith('saved:')) { const t=v.slice(6); setNewUser(p=>({...p,role:'staff',title:t})) }
+                else setNU('role')(v)
+              }}
+              options={[
+                'client','coach','head_coach','va','staff','org_admin',
+                ...staffRoles.map(r=>({value:`saved:${r}`,label:`${r} (saved role)`})),
+              ]}/>
             {['va','head_coach','staff'].includes(newUser.role)&&(
               <>
                 <div style={{marginBottom:12}}>
