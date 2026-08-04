@@ -343,13 +343,14 @@ export default function Week7({ currentUser, initialDm }) {
       return '🔗 ' + h
     } catch { return '🔗 Link' }
   }
-  function renderRich(text, baseColor) {
+  function renderRich(text, baseColor, mine = false) {
     const parts = String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g)
     return parts.map((p, i) => {
       if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{renderMentions(p, baseColor)}</span>
       const href = /^www\./.test(p) ? `https://${p}` : p
+      // Own bubbles have a gold background — a gold link would be invisible
       return <a key={i} href={href} target="_blank" rel="noreferrer" title={linkLabel(href)}
-        style={{color:C.gold,fontWeight:600,textDecoration:'underline',wordBreak:'break-all'}}>{p}</a>
+        style={{color:mine?C.black:C.gold,fontWeight:700,textDecoration:'underline',wordBreak:'break-all'}}>{p}</a>
     })
   }
   // Only ever render http(s) URLs as clickable/embedded — markers are stored in
@@ -395,7 +396,7 @@ export default function Week7({ currentUser, initialDm }) {
     const { text, atts: rawAtts } = splitAtts(content)
     const atts = rawAtts.filter(a => safeUrl(a.url))
     return (<>
-      {text ? renderRich(text, baseColor) : null}
+      {text ? renderRich(text, baseColor, mine) : null}
       {atts.length > 0 && (
         <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:text?6:0}}>
           {atts.map((a,i) => /^audio\//.test(a.type||'') ? (
