@@ -251,12 +251,13 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             setError("Your account has been deactivated. Please contact your coach or the admin to regain access.");
             return;
           }
-          // Audit trail: record every successful login (never blocks the login itself)
-          sbInsert('audit_logs', {
-            action:'login', actor_id: p?.id || null,
-            actor_name: p?.name || p?.full_name || emailNorm, actor_role: p?.role || 'client',
-            target_type:'session', details:{ email: emailNorm },
-          }).catch(()=>{});
+          // Audit trail: record every successful login server-side, so it works
+          // for ALL roles including clients (never blocks the login itself)
+          try {
+            const { data: sess } = await supabase.auth.getSession();
+            const tok = sess?.session?.access_token;
+            if (tok) fetch('/api/audit/login', { method:'POST', headers:{ Authorization:`Bearer ${tok}` } }).catch(()=>{});
+          } catch {}
           onLogin({
             email: emailNorm,
             name: p?.name || p?.full_name || authUser?.user_metadata?.name || emailNorm,

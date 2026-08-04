@@ -9,6 +9,7 @@ import huddleRouter from "./huddle";
 import profileAuditRouter from "./profileAudit";
 import welcomeRouter from "./welcome";
 import teamUploadRouter from "./teamUpload";
+import auditLoginRouter from "./auditLogin";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(huddleRouter);
 router.use(profileAuditRouter);
 router.use(welcomeRouter);
 router.use(teamUploadRouter);
+router.use(auditLoginRouter);
 
 export default router;
