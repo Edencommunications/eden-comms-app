@@ -911,6 +911,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   useEffect(()=>{ if(tab==='audit') loadDbAudit() },[tab])
   // Audit tab filters + restore
   const [audSearch, setAudSearch] = useState('')
+  const [audTz, setAudTz] = useState(()=>{ try { return localStorage.getItem('audit_tz')||'local' } catch { return 'local' } })
+  function setAudTzPersist(v){ setAudTz(v); try { localStorage.setItem('audit_tz',v) } catch {} }
+  const audTime = iso => { try {
+    return new Date(iso).toLocaleString(undefined, audTz==='local' ? {} : { timeZone: audTz })
+  } catch { return String(iso||'') } }
   const [audAction, setAudAction] = useState('all')
   const [audPerson, setAudPerson] = useState('all')
   const [audFrom,   setAudFrom]   = useState('')
@@ -967,12 +972,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       detail: [
         d.content ? `"${String(d.content).slice(0,140)}${String(d.content).length>140?'…':''}"` : null,
         d.file_name ? `📎 ${d.file_name}` : null,
-        d.sent_at ? `sent ${(()=>{try{return new Date(d.sent_at).toLocaleString()}catch{return d.sent_at}})()}` : null,
+        d.sent_at ? `sent ${audTime(d.sent_at)}` : null,
         d.community_name ? `in ${d.community_name}` : null,
         d.from&&d.to?`${d.from} → ${d.to}`:null, d.title?`Title: ${d.title}`:null, d.new_coach?`→ ${d.new_coach}`:null,
         d.context?`(${String(d.context).replace(/_/g,' ')})`:null,
       ].filter(Boolean).join(' · '),
-      time: (()=>{ try { return new Date(r.created_at).toLocaleString() } catch { return r.created_at } })(),
+      time: audTime(r.created_at),
     }
   }
 
@@ -2526,6 +2531,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               style={{padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:12,maxWidth:160}}>
               <option value="all">All people</option>
               {audPeople.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+            <select value={audTz} onChange={e=>setAudTzPersist(e.target.value)} title="Timestamp timezone"
+              style={{padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:12}}>
+              <option value="local">🕐 My device time</option>
+              {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>🕐 {o.label}</option>)}
             </select>
             <div style={{display:'flex',gap:6,alignItems:'center'}}>
               <input type="date" value={audFrom} onChange={e=>setAudFrom(e.target.value)} title="From date"
