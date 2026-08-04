@@ -907,6 +907,55 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
   useEffect(()=>{ if(isAdmin) loadDbAudit() },[])
   useEffect(()=>{ if(tab==='audit') loadDbAudit() },[tab])
+  // Audit tab filters + restore
+  const [audSearch, setAudSearch] = useState('')
+  const [audAction, setAudAction] = useState('all')
+  const [audPerson, setAudPerson] = useState('all')
+  const [audFrom,   setAudFrom]   = useState('')
+  const [audTo,     setAudTo]     = useState('')
+  const [audRestoring, setAudRestoring] = useState(null)
+  const [audRestoredNow, setAudRestoredNow] = useState(new Set())
+  const audActions = useMemo(()=>Array.from(new Set((dbAudit||[]).map(r=>r.action).filter(Boolean))),[dbAudit])
+  const audPeople  = useMemo(()=>Array.from(new Set((dbAudit||[]).map(r=>r.actor_name).filter(Boolean))).sort(),[dbAudit])
+  const audShown   = useMemo(()=>{
+    let list = dbAudit||[]
+    if (audAction!=='all') list = list.filter(r=>r.action===audAction)
+    if (audPerson!=='all') list = list.filter(r=>r.actor_name===audPerson)
+    if (audFrom) list = list.filter(r=>(r.created_at||'')>=audFrom)
+    if (audTo)   list = list.filter(r=>(r.created_at||'').slice(0,10)<=audTo)
+    const q = audSearch.trim().toLowerCase()
+    if (q) list = list.filter(r=>
+      (r.actor_name||'').toLowerCase().includes(q) ||
+      (r.action||'').toLowerCase().includes(q) ||
+      JSON.stringify(r.details||{}).toLowerCase().includes(q) ||
+      (r.target_type||'').toLowerCase().includes(q))
+    return list
+  },[dbAudit,audAction,audPerson,audFrom,audTo,audSearch])
+  const AUD_RESTORE_TABLE = { community:'communities', community_message:'community_messages', team_message:'team_messages', message:'messages' }
+  const audUndone = useMemo(()=>{
+    const s = new Set()
+    ;(dbAudit||[]).forEach(r=>{ if(r.action==='community_restored'||r.action==='message_restored') s.add(`${r.target_type}:${r.target_id}`) })
+    return s
+  },[dbAudit])
+  const audCanRestore = r =>
+    (r.action==='community_archived'||r.action==='message_deleted') &&
+    r.target_id && AUD_RESTORE_TABLE[r.target_type] &&
+    !audUndone.has(`${r.target_type}:${r.target_id}`) && !audRestoredNow.has(r.id)
+  async function audRestore(r) {
+    const table = AUD_RESTORE_TABLE[r.target_type]
+    const label = r.target_type==='community' ? `community "${r.details?.name||''}"` : 'this message'
+    if (!confirm(`Restore ${label}? It will become visible again.`)) return
+    setAudRestoring(r.id)
+    const patch = r.target_type==='community' ? { is_active:true } : { deleted_at:null, deleted_by:null, deleted_by_name:null }
+    const ok = await dbUpdate(table,`id=eq.${r.target_id}`,patch)
+    setAudRestoring(null)
+    if (!ok) { alert("Couldn't restore — the item may no longer exist."); return }
+    setAudRestoredNow(prev=>new Set(prev).add(r.id))
+    dbInsert('audit_logs',{ action:r.target_type==='community'?'community_restored':'message_restored',
+      actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+      target_type:r.target_type, target_id:r.target_id, details:{ ...(r.details||{}), restored_from:r.id } })
+      .then(()=>loadDbAudit()).catch(()=>{})
+  }
   const dbAuditRow = r => {
     const d = r.details||{}
     return {
@@ -2452,9 +2501,37 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       {tab==='audit'&&isAdmin&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
           <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:14}}>Audit Log</div>
+
+          {/* Filter bar — person / action / date range + search */}
+          <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+            <input value={audSearch} onChange={e=>setAudSearch(e.target.value)} placeholder="Search by person or action…"
+              style={{flex:'1 1 180px',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:12,outline:'none'}}/>
+            <select value={audAction} onChange={e=>setAudAction(e.target.value)}
+              style={{padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:12}}>
+              <option value="all">All actions</option>
+              {audActions.map(a=><option key={a} value={a}>{(AUDIT_VERBS[a]||a.replace(/_/g,' '))}</option>)}
+            </select>
+            <select value={audPerson} onChange={e=>setAudPerson(e.target.value)}
+              style={{padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:12,maxWidth:160}}>
+              <option value="all">All people</option>
+              {audPeople.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <input type="date" value={audFrom} onChange={e=>setAudFrom(e.target.value)} title="From date"
+                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:11,colorScheme:'dark'}}/>
+              <span style={{color:C.muted,fontSize:12}}>→</span>
+              <input type="date" value={audTo} onChange={e=>setAudTo(e.target.value)} title="To date"
+                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:11,colorScheme:'dark'}}/>
+              {(audFrom||audTo||audPerson!=='all'||audAction!=='all'||audSearch)&&(
+                <button onClick={()=>{setAudFrom('');setAudTo('');setAudPerson('all');setAudAction('all');setAudSearch('')}}
+                  style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px',color:C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>Clear</button>
+              )}
+            </div>
+          </div>
+
           {dbAudit===null&&<div style={{fontSize:12,color:C.muted}}>Loading audit trail…</div>}
-          {dbAudit!==null&&dbAudit.length===0&&<div style={{fontSize:12,color:C.muted}}>No audit events recorded yet.</div>}
-          {(dbAudit||[]).map(dbAuditRow).map(a=>(
+          {dbAudit!==null&&audShown.length===0&&<div style={{fontSize:12,color:C.muted}}>No audit events match.</div>}
+          {audShown.map(r=>{ const a=dbAuditRow(r); return (
             <div key={a.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',marginBottom:8,display:'flex',gap:12,alignItems:'flex-start'}}>
               <div style={{width:34,height:34,borderRadius:8,background:`${C.gold}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>
                 {a.icon}
@@ -2467,8 +2544,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <div style={{fontSize:11,color:C.muted,marginTop:2}}>{a.detail}</div>
                 <div style={{fontSize:10,color:C.dim,marginTop:3}}>{a.time}</div>
               </div>
+              {audCanRestore(r)&&(
+                <button onClick={()=>audRestore(r)} disabled={audRestoring===r.id}
+                  style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'4px 10px',
+                    color:C.gold,fontSize:11,fontWeight:800,cursor:'pointer',flexShrink:0,opacity:audRestoring===r.id?0.5:1}}>
+                  {audRestoring===r.id?'Restoring…':'♻ Restore'}
+                </button>
+              )}
+              {audRestoredNow.has(r.id)&&<span style={{fontSize:11,color:C.success,fontWeight:700,flexShrink:0}}>✓ Restored</span>}
             </div>
-          ))}
+          )})}
+          {dbAudit!==null&&dbAudit.length>=300&&(
+            <div style={{fontSize:11,color:C.muted,textAlign:'center'}}>Showing the 300 most recent events.</div>
+          )}
         </div>
       )}
 

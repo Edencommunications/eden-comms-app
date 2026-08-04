@@ -3988,7 +3988,7 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Tab bar */}
       <div style={{ display:'flex', borderBottom:`1px solid ${B.border}`, background:B.surface, padding:'0 20px', flexShrink:0 }}>
-        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations'],['activity','📋 Audit Log']].map(([key,label])=>(
+        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations']].map(([key,label])=>(
           <button key={key} onClick={()=>setAdminTab(key)}
             style={{ padding:'12px 16px', background:'none', border:'none', borderBottom:`2px solid ${adminTab===key?B.gold:'transparent'}`,
               color:adminTab===key?B.gold:B.muted, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
