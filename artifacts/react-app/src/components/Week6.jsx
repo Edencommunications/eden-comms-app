@@ -29,7 +29,9 @@ async function provisionLogin(email, password, name, role) {
     })
     const body = await res.json().catch(()=>({}))
     if (!res.ok) return { ok:false, error: body.error || 'auth service unavailable' }
-    return { ok:true }
+    // Pass the server's "welcome email sent" flag through so the UI can tell
+    // the admin whether the login details were emailed automatically.
+    return { ok:true, emailed: !!body.emailed }
   } catch(e) {
     return { ok:false, error:'auth service unreachable' }
   }
