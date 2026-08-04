@@ -465,6 +465,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     } catch(e) {}
   }
 
+  // ── Manage Roles modal (Coaches tab, next to + Add Team Member) ──
+  const [showRoleMgr, setShowRoleMgr] = useState(false)
+
   // ── Add Client (manual single under a chosen coach) ──
   const [showAddClients, setShowAddClients] = useState(false)
   const [acCoachId,      setAcCoachId]      = useState('')
@@ -2013,6 +2016,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:700,color:C.white}}>All Coaches</div>
             <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>setShowRoleMgr(true)}
+                style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.muted,fontSize:12,cursor:'pointer'}}>
+                🏷 Manage Roles
+              </button>
               <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'staff'}))}}
                 style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer'}}>
                 + Add Team Member
@@ -2628,6 +2635,54 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       )}
 
       {/* ── Add User Modal ────────────────────────────────── */}
+      {/* ── Manage Roles modal ── */}
+      {showRoleMgr&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={()=>{setShowRoleMgr(false);setEditingRole(null);setEditRoleName('')}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:20,width:'100%',maxWidth:460,maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
+            <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:2}}>🏷 Team Roles</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Reusable role titles (e.g. Closer, Sales Mentor) shown in the Role dropdown when adding a team member. Renaming asks whether to update existing people too; deleting never removes anyone's account.</div>
+            <div style={{overflowY:'auto',flex:1}}>
+              {staffRoles.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:10}}>No saved roles yet — add your first below.</div>}
+              {staffRoles.map(r=>(
+                <div key={r} style={{display:'flex',alignItems:'center',gap:8,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 12px',marginBottom:7}}>
+                  {editingRole===r ? (
+                    <>
+                      <input value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} autoFocus
+                        onKeyDown={e=>{if(e.key==='Enter')renameStaffRole(r); if(e.key==='Escape'){setEditingRole(null);setEditRoleName('')}}}
+                        style={{flex:1,background:C.surface,border:`1px solid ${C.gold}`,borderRadius:8,padding:'6px 9px',color:C.white,fontSize:12,outline:'none'}}/>
+                      <button onClick={()=>renameStaffRole(r)} disabled={!editRoleName.trim()}
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'6px 12px',fontWeight:800,color:C.black,fontSize:11,cursor:'pointer',opacity:editRoleName.trim()?1:.4}}>Save</button>
+                      <button onClick={()=>{setEditingRole(null);setEditRoleName('')}}
+                        style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
+                    </>
+                  ):(
+                    <>
+                      <div style={{flex:1,fontSize:13,fontWeight:700,color:C.white}}>{r}</div>
+                      <button onClick={()=>{setEditingRole(r);setEditRoleName(r)}}
+                        style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>✎ Rename</button>
+                      <button onClick={()=>deleteStaffRole(r)}
+                        style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',color:C.danger||'#e5484d',fontSize:11,fontWeight:700,cursor:'pointer'}}>✕ Delete</button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',gap:8,marginTop:12}}>
+              <input value={newRoleName} onChange={e=>setNewRoleName(e.target.value)}
+                onKeyDown={e=>{if(e.key==='Enter'&&newRoleName.trim()){saveNewStaffRole()}}}
+                placeholder='New role name — e.g. "Sales", "Module Mentor"'
+                style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',color:C.white,fontSize:12,outline:'none'}}/>
+              <button onClick={saveNewStaffRole} disabled={!newRoleName.trim()}
+                style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 14px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:newRoleName.trim()?1:.4}}>+ Add</button>
+            </div>
+            <button onClick={()=>{setShowRoleMgr(false);setEditingRole(null);setEditRoleName('')}}
+              style={{marginTop:12,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',color:C.muted,fontSize:12,cursor:'pointer',alignSelf:'flex-end'}}>Close</button>
+          </div>
+        </div>
+      )}
+
       {showNewUser&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget)setShowNewUser(false)}}>
