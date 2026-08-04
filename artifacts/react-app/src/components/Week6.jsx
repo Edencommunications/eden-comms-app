@@ -906,6 +906,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .catch(()=>{})
   }
   useEffect(()=>{ if(isAdmin) loadDbAudit() },[])
+  useEffect(()=>{ if(tab==='audit') loadDbAudit() },[tab])
   const dbAuditRow = r => {
     const d = r.details||{}
     return {
@@ -1549,6 +1550,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     ['coaches',   '🏋 Staff'],
     ['orgs',      '🏢 Orgs'],
     ['library',   '📚 Library'],
+    ['audit',     '🔐 Audit Log'],
   ]
   const TABS_COACH = [
     ['clients',      '👥 My Clients'],
@@ -2445,6 +2447,29 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       ══════════════════════════════════════════════════════ */}
       {tab==='library'&&isAdmin&&(
         <LibraryTab companyId={adminCompanyId||EDEN_ORG_ID}/>
+      )}
+
+      {tab==='audit'&&isAdmin&&(
+        <div style={{flex:1,overflowY:'auto',padding:16}}>
+          <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:14}}>Audit Log</div>
+          {dbAudit===null&&<div style={{fontSize:12,color:C.muted}}>Loading audit trail…</div>}
+          {dbAudit!==null&&dbAudit.length===0&&<div style={{fontSize:12,color:C.muted}}>No audit events recorded yet.</div>}
+          {(dbAudit||[]).map(dbAuditRow).map(a=>(
+            <div key={a.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',marginBottom:8,display:'flex',gap:12,alignItems:'flex-start'}}>
+              <div style={{width:34,height:34,borderRadius:8,background:`${C.gold}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>
+                {a.icon}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,color:C.white,fontWeight:500,lineHeight:1.4}}>
+                  <span style={{color:C.gold,fontWeight:700}}>{a.actor}</span> {a.action}
+                  {a.target&&a.target!=='Self'&&<> → <span style={{color:C.white}}>{a.target}</span></>}
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{a.detail}</div>
+                <div style={{fontSize:10,color:C.dim,marginTop:3}}>{a.time}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════
