@@ -30,12 +30,16 @@ async function processDue() {
     const rows = (await res.json()) as { id: string }[]
     if (!rows?.length) return
 
-    // Mark each one as sent
+    // Mark each one as sent, then actually deliver it to its recipients
+    // (conversation messages + bell notifications)
+    const { deliverBroadcast } = await import('../routes/broadcasts')
     for (const row of rows) {
       await fetch(
         `${SUPABASE_URL}/rest/v1/broadcast_messages?id=eq.${row.id}`,
         { method: 'PATCH', headers: H, body: JSON.stringify({ status: 'sent', sent_at: now }) }
       )
+      try { await deliverBroadcast(row.id) }
+      catch (err) { logger.warn({ err: String(err), id: row.id }, '[BroadcastScheduler] delivery failed') }
     }
 
     logger.info({ count: rows.length }, '[BroadcastScheduler] processed scheduled broadcasts')

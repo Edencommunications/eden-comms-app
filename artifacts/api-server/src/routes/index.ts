@@ -12,6 +12,7 @@ import teamUploadRouter from "./teamUpload";
 import auditLoginRouter from "./auditLogin";
 import canvasRouter from "./canvas";
 import invitesRouter from "./invites";
+import broadcastsRouter from "./broadcasts";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(teamUploadRouter);
 router.use(auditLoginRouter);
 router.use(canvasRouter);
 router.use(invitesRouter);
+router.use(broadcastsRouter);
 
 export default router;

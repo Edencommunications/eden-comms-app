@@ -92,12 +92,14 @@ function formatBytes(b) {
 // ── Broadcast Composer ────────────────────────────────────────
 function BroadcastComposer({ onClose, senderName, senderEmail }) {
   const [audienceType,    setAudienceType]    = useState('company_wide')
+  const [senderId,        setSenderId]        = useState(null)   // sender's own profile id — needed for real delivery
   // Real coach → client roster from the database (for broadcast targeting)
   const [broadcastCoaches, setBroadcastCoaches] = useState([])
   useEffect(() => { (async () => {
     try {
-      const me = await dbGet('user_profiles', `email=eq.${encodeURIComponent(senderEmail || '')}&select=company_id`)
+      const me = await dbGet('user_profiles', `email=eq.${encodeURIComponent(senderEmail || '')}&select=id,company_id`)
       const cid = me?.[0]?.company_id
+      if (me?.[0]?.id) setSenderId(me[0].id)
       if (!cid) return
       const [coachRows, clientRows] = await Promise.all([
         dbGet('user_profiles', `company_id=eq.${cid}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name&order=name.asc`),
@@ -204,21 +206,49 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
     return true
   }
 
+  // Resolve exactly who this broadcast goes to — client ids + staff ids —
+  // so the server can deliver real messages & notifications to each person.
+  function resolveRecipients() {
+    const allClients = broadcastCoaches.flatMap(c => c.clients.map(cl => cl.id))
+    const allCoaches = broadcastCoaches.map(c => c.id)
+    switch (audienceType) {
+      case 'company_wide': return { ids: allClients, staff: allCoaches }
+      case 'coaches_only': return { ids: [], staff: allCoaches }
+      case 'coach_roster': return { ids: (coach?.clients || []).map(c => c.id), staff: [] }
+      case 'coach_day':    return { ids: filteredClients.map(c => c.id), staff: [] }
+      case 'individuals':  return { ids: [...selectedClients], staff: [] }
+      default:             return { ids: [], staff: [] }
+    }
+  }
+
   async function send() {
     if (!isReady()) return
     setSending(true)
     try {
+      const { ids, staff } = resolveRecipients()
       const base = {
         sent_by_name:   senderName || 'Admin',
         audience_type:  audienceType,
         audience_label: audienceLabel(),
         coach_id:       selectedCoachId || null,
         check_in_day:   selectedDays.join(', ') || null,
-        recipient_ids:  JSON.stringify([...selectedClients]),
+        recipient_ids:  JSON.stringify({ sender: senderId, ids, staff }),
         message:        message.trim(),
       }
       if (sendMode === 'now') {
-        await dbInsert('broadcast_messages', { ...base, status:'sent', sent_at: new Date().toISOString() })
+        const ins = await dbInsert('broadcast_messages', { ...base, status:'sent', sent_at: new Date().toISOString() })
+        // Actually deliver it — messages into each client's chat + bell
+        // notifications for everyone (server-side, service key)
+        const newId = Array.isArray(ins) ? ins[0]?.id : ins?.id
+        if (newId) {
+          try {
+            await fetch('/api/broadcasts/deliver', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', get Authorization() { return sbBearer() } },
+              body: JSON.stringify({ id: newId }),
+            })
+          } catch {}
+        }
       } else {
         for (const sd of scheduleDates) {
           await dbInsert('broadcast_messages', { ...base, status:'scheduled', scheduled_for: sd.iso })
