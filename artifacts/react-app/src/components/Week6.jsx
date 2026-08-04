@@ -1321,12 +1321,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
     // Create their real login first (Supabase Auth — hashed password, forced
     // "set your own password" on first sign-in). No plain-text storage.
+    let emailedLogin = false
     try {
       const authRes = await provisionLogin(emailNorm, tempPass, newUser.name.trim(), newUser.role)
       if (!authRes.ok) {
         alert(`Could not create this user's login: ${authRes.error || 'auth service unavailable'}. No account was created.`)
         return
       }
+      emailedLogin = !!authRes.emailed
     } catch(e) {
       alert('Could not reach the auth service — no account was created. Please try again.')
       return
@@ -1406,7 +1408,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     refreshOrgCounts()
 
     // Show setup instructions card
-    setLastAdded({ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role, tempPass })
+    setLastAdded({ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role, tempPass, emailed:emailedLogin })
     setAuditLog(prev=>[{id:Date.now(),actor:info.name,action:`Added ${newUser.role}`,target:newUser.name,detail:newUser.email,time:new Date().toLocaleString()},...prev])
     dbInsert('audit_logs',{ action:'user_added', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:localUser.uuid||null,
@@ -2598,7 +2600,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <div style={{fontSize:12,color:C.muted,marginBottom:16,textTransform:'capitalize'}}>{lastAdded.role.replace(/_/g,' ')} · {lastAdded.email}</div>
 
             <div style={{background:C.surface,borderRadius:10,padding:'14px 16px',marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Send These Credentials</div>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>{lastAdded.emailed?'Their Login Details (Emailed To Them)':'Send These Credentials'}</div>
               <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
                 <span style={{fontSize:12,color:C.muted}}>Email</span>
                 <span style={{fontSize:12,color:C.white,fontWeight:600}}>{lastAdded.email}</span>
@@ -2610,11 +2612,17 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </div>
 
             <div style={{background:`${C.success}11`,border:`1px solid ${C.success}33`,borderRadius:10,padding:'12px 14px',marginBottom:16}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.success,marginBottom:6}}>📋 What To Do</div>
+              <div style={{fontSize:11,fontWeight:700,color:C.success,marginBottom:6}}>{lastAdded.emailed?'✉️ Login Details Emailed Automatically':'📋 What To Do'}</div>
               <div style={{fontSize:11,color:C.muted,lineHeight:1.7}}>
-                1. Send them these credentials — they can log in right away with this temporary password.<br/>
-                2. On their first sign-in they'll be asked to set their own password.<br/>
-                3. The temp password is only shown here once — it's stored securely encrypted, never in plain text.
+                {lastAdded.emailed ? (<>
+                  1. We've emailed {lastAdded.name.split(' ')[0]} their login link and temporary password — nothing to send manually.<br/>
+                  2. On their first sign-in they'll be asked to set their own password.<br/>
+                  3. The temp password is shown here once as a backup in case they can't find the email.
+                </>) : (<>
+                  1. The automatic email couldn't be sent — send them these credentials yourself; they can log in right away.<br/>
+                  2. On their first sign-in they'll be asked to set their own password.<br/>
+                  3. The temp password is only shown here once — it's stored securely encrypted, never in plain text.
+                </>)}
               </div>
             </div>
 

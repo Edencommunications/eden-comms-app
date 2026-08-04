@@ -29,7 +29,7 @@
 
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
-import { mailerConfigured, resetEmail, sendEmail } from "../lib/mailer";
+import { mailerConfigured, resetEmail, sendEmail, welcomeEmail } from "../lib/mailer";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
@@ -151,7 +151,31 @@ router.post("/auth/provision", async (req: Request, res: Response) => {
   const result = await provisionAuthUser(email, password, name, true, meta);
   if (!result.ok) return res.status(502).json(result);
   logger.info({ adminId: admin.id, email: email.toLowerCase() }, "[Auth] admin provisioned auth user");
-  return res.json(result);
+  // Email the new user their login details automatically so the admin
+  // never has to send credentials by hand. Best-effort: a mail failure
+  // must not fail the provisioning itself.
+  let emailed = false;
+  if (mailerConfigured()) {
+    try {
+      let orgName = "Eden Communications";
+      if (admin.company_id) {
+        const org = await dbGet("companies", `id=eq.${encodeURIComponent(admin.company_id)}&select=name`);
+        if (org?.[0]?.name) orgName = org[0].name;
+      }
+      const m = welcomeEmail({
+        clientName: name || email,
+        email: email.toLowerCase(),
+        tempPassword: password,
+        orgName,
+      });
+      const sent = await sendEmail({ to: email.toLowerCase(), subject: m.subject, html: m.html, text: m.text, fromName: orgName });
+      emailed = !!sent.ok;
+      if (!sent.ok) logger.warn({ email: email.toLowerCase(), error: sent.error }, "[Auth] welcome email failed");
+    } catch (e) {
+      logger.warn({ err: e }, "[Auth] welcome email errored");
+    }
+  }
+  return res.json({ ...result, emailed });
 });
 
 router.post("/auth/migrate", async (req: Request, res: Response) => {
