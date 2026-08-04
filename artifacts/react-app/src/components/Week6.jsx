@@ -7,7 +7,7 @@
 //   import Week6 from './components/Week6'
 //   {tab === 'admin' && <Week6 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { useDeadline, TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, clearTzCache } from '../lib/tz'
 import { createClient } from '@supabase/supabase-js'
