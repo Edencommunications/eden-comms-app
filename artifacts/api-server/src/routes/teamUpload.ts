@@ -94,4 +94,48 @@ router.post("/team/upload", async (req: Request, res: Response) => {
   }
 });
 
+// POST /team/transcribe — speech-to-text for Team Hub voice memos via the
+// Replit AI Integrations OpenAI proxy. Best-effort: callers should treat a
+// failure as "no transcript", never block the memo itself.
+router.post("/team/transcribe", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireStaffJwt(req);
+    if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+
+    const baseUrl = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"] || "";
+    const apiKey = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"] || "";
+    if (!baseUrl || !apiKey) { res.status(503).json({ error: "Transcription not configured" }); return; }
+
+    const { dataBase64, contentType } = (req.body || {}) as { dataBase64?: string; contentType?: string };
+    if (!dataBase64) { res.status(400).json({ error: "dataBase64 required" }); return; }
+    let buf: Buffer;
+    try { buf = Buffer.from(dataBase64, "base64"); } catch { res.status(400).json({ error: "Bad audio data" }); return; }
+    if (!buf.length || buf.length > MAX_BYTES) { res.status(400).json({ error: "Bad audio size" }); return; }
+
+    const type = contentType || "audio/webm";
+    const ext = /mp4|m4a/.test(type) ? "m4a" : /wav/.test(type) ? "wav" : /mp3|mpeg/.test(type) ? "mp3" : "webm";
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(buf)], { type }), `memo.${ext}`);
+    form.append("model", "gpt-4o-mini-transcribe");
+    form.append("response_format", "json");
+
+    const r = await fetch(`${baseUrl.replace(/\/$/, "")}/audio/transcriptions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form as any,
+    });
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      logger.error({ status: r.status, body }, "[TeamTranscribe] transcription failed");
+      res.status(502).json({ error: "Transcription failed" });
+      return;
+    }
+    const out: any = await r.json().catch(() => null);
+    res.json({ text: String(out?.text || "").trim() });
+  } catch (e) {
+    logger.error({ err: e }, "[TeamTranscribe] error");
+    res.status(500).json({ error: "Transcription failed" });
+  }
+});
+
 export default router;

@@ -320,10 +320,16 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Attachments & smart links (Slack-style) ─────────────────────────
   // Uploaded files travel inside message content as markers: [[file|name|url|type]]
-  const ATT_RE = /\[\[file\|([^|\]]*)\|([^|\]]*)\|([^\]]*)\]\]/g
+  // Optional 4th field: URI-encoded transcript (voice memos)
+  const ATT_RE = /\[\[file\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)(?:\|([^\]]*))?\]\]/g
   function splitAtts(text) {
     const atts = []
-    const rest = String(text||'').replace(ATT_RE, (_, name, url, type) => { atts.push({ name, url, type }); return '' })
+    const rest = String(text||'').replace(ATT_RE, (_, name, url, type, tx) => {
+      let transcript = ''
+      try { transcript = tx ? decodeURIComponent(tx) : '' } catch {}
+      atts.push({ name, url, type, transcript })
+      return ''
+    })
     return { text: rest.trim(), atts }
   }
   function linkLabel(url) {
@@ -346,6 +352,42 @@ export default function Week7({ currentUser, initialDm }) {
   // Only ever render http(s) URLs as clickable/embedded — markers are stored in
   // chat content, so a crafted message could otherwise smuggle javascript:/data: URLs
   function safeUrl(u) { try { const p = new URL(u).protocol; return p === 'https:' || p === 'http:' } catch { return false } }
+  // Voice memo attachment — player plus optional transcript (collapsed by
+  // default), download, and copy controls
+  function AudioAtt({ att }) {
+    const [showTx, setShowTx] = useState(false)
+    const [copied, setCopied] = useState(false)
+    const copy = async () => {
+      try {
+        await navigator.clipboard.writeText(att.transcript || att.url)
+        setCopied(true); setTimeout(() => setCopied(false), 1500)
+      } catch { alert('Could not copy — your browser blocked clipboard access.') }
+    }
+    const btn = {background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 8px',color:C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}
+    return (
+      <div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:14}}>🎙️</span>
+          <audio controls preload="metadata" src={att.url} style={{height:36,maxWidth:230}}/>
+        </div>
+        <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+          {att.transcript && (
+            <button onClick={() => setShowTx(s=>!s)} style={{...btn,color:showTx?C.gold:C.muted,borderColor:showTx?`${C.gold}66`:C.border}}>
+              {showTx ? 'Hide transcript' : '📝 Transcript'}
+            </button>
+          )}
+          <a href={att.url} download target="_blank" rel="noreferrer" style={{...btn,textDecoration:'none'}}>⬇️ Download</a>
+          <button onClick={copy} style={btn}>{copied ? '✓ Copied' : (att.transcript ? '⧉ Copy text' : '⧉ Copy link')}</button>
+        </div>
+        {showTx && att.transcript && (
+          <div style={{marginTop:6,fontSize:11,color:C.muted,lineHeight:1.6,background:'#00000030',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',maxWidth:280,whiteSpace:'pre-wrap'}}>
+            {att.transcript}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderBody(content, baseColor, mine = false) {
     const { text, atts: rawAtts } = splitAtts(content)
     const atts = rawAtts.filter(a => safeUrl(a.url))
@@ -354,10 +396,7 @@ export default function Week7({ currentUser, initialDm }) {
       {atts.length > 0 && (
         <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:text?6:0}}>
           {atts.map((a,i) => /^audio\//.test(a.type||'') ? (
-            <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontSize:14}}>🎙️</span>
-              <audio controls preload="metadata" src={a.url} style={{height:36,maxWidth:230}}/>
-            </div>
+            <AudioAtt key={i} att={a}/>
           ) : /^image\//.test(a.type||'') ? (
             <a key={i} href={a.url} target="_blank" rel="noreferrer">
               <img src={a.url} alt={a.name} style={{maxWidth:220,maxHeight:180,borderRadius:8,border:`1px solid ${C.border}`,display:'block'}}/>
@@ -410,7 +449,7 @@ export default function Week7({ currentUser, initialDm }) {
   function takePending(target) {
     const mine = pendingFiles.filter(p => p.target===target)
     if (mine.length) setPendingFiles(prev => prev.filter(p => p.target!==target))
-    return mine.map(a => `[[file|${a.name.replace(/[|[\]]/g,'_')}|${a.url}|${a.type}]]`).join('\n')
+    return mine.map(a => `[[file|${a.name.replace(/[|[\]]/g,'_')}|${a.url}|${a.type}${a.transcript?`|${encodeURIComponent(a.transcript).replace(/[|[\]]/g,'')}`:''}]]`).join('\n')
   }
   const hasPending = (target) => pendingFiles.some(p => p.target===target)
   const PendingChips = ({ target }) => {
@@ -473,7 +512,18 @@ export default function Week7({ currentUser, initialDm }) {
           })
           const out = await resp.json().catch(() => null)
           if (!resp.ok || !out?.url) { alert('Could not upload the voice memo — please try again.'); return }
-          setPendingFiles(prev => [...prev, { name:out.name, url:out.url, type:blob.type, target }])
+          // Best-effort transcript — the memo still sends if this fails
+          let transcript = ''
+          try {
+            const tr = await fetch('/api/team/transcribe', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sbAccessToken()}` },
+              body: JSON.stringify({ dataBase64:b64, contentType:blob.type }),
+            })
+            const tj = await tr.json().catch(() => null)
+            if (tr.ok && tj?.text) transcript = tj.text
+          } catch {}
+          setPendingFiles(prev => [...prev, { name:out.name, url:out.url, type:blob.type, transcript, target }])
         } finally { setUploadingFor(null) }
       }
       recorder.start()
