@@ -2100,7 +2100,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           {/* ── Support staff (VAs, head coaches) from the database ── */}
           <div style={{fontSize:14,fontWeight:700,color:C.white,margin:'20px 0 10px'}}>Support Staff</div>
           {supportStaff.length===0&&(
-            <Card><div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'8px 0'}}>No VAs or additional staff yet — use "+ Add VA" above.</div></Card>
+            <Card><div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'8px 0'}}>No VAs or additional staff yet.</div></Card>
           )}
           {supportStaff.map(s=>(
             <Card key={s.id} sx={{marginBottom:8}}>
