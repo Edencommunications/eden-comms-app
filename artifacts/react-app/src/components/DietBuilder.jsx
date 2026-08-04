@@ -788,6 +788,26 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // Customizable check-in form: the client's coach's form → org form → standard.
   const ciForm = useCheckinForm(myCompanyId, myCoachId)
   const on = k => !ciForm.off.includes(k)              // is a standard metric enabled?
+  // Vitals row for a submitted check-in — shows every metric on the coach's
+  // form: filled values normally, skipped ones as a dimmed "not provided"
+  // marker so it's obvious what the client left blank.
+  const VitalsRow = ({ci}) => {
+    const defs = [
+      ['weight','weight','⚖️','Weight',v=>`${v} lbs`],
+      ['temp','temp','🌡️','Temp',v=>`${v}°F`],
+      ['heartRate','heartRate','❤️','Heart rate',v=>`${v} BPM`],
+      ['hrv','hrv','📡','HRV',v=>`HRV ${v}`],
+      ['steps','steps','👟','Steps',v=>`${v} steps`],
+      ['bp','bloodPressure','🩺','Blood pressure',v=>v],
+    ].filter(([k])=>on(k))
+    if(!defs.length) return null
+    return defs.map(([k,f,icon,label,fmt])=>{
+      const v=ci[f]
+      return v
+        ? <span key={k} style={{fontSize:12,color:C.muted}}>{icon} {fmt(v)}</span>
+        : <span key={k} style={{fontSize:11,color:'#555',fontStyle:'italic'}}>{icon} {label} — not provided</span>
+    })
+  }
   const [customAnswers, setCustomAnswers] = useState({})  // { customMetricLabel: value }
   const [protocolDurations, setProtocolDurations] = useState({})  // { protocolName: duration string }
   const setProtDur = (name,val) => setProtocolDurations(p=>({...p,[name]:val}))
@@ -2069,17 +2089,12 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           ))}
                         </div>
 
-                        {/* Vitals */}
-                        {(ci.weight||ci.temp||ci.heartRate||ci.hrv||ci.steps||ci.bloodPressure)&&(
+                        {/* Vitals — every metric on the form shows here; skipped ones are marked */}
+                        {(['weight','temp','steps','bp','heartRate','hrv'].some(on)||ci.weight||ci.temp||ci.heartRate||ci.hrv||ci.steps||ci.bloodPressure)&&(
                           <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
                             <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Vitals</div>
                             <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
-                              {ci.weight&&<span style={{fontSize:12,color:C.muted}}>⚖️ {ci.weight} lbs</span>}
-                              {ci.temp&&<span style={{fontSize:12,color:C.muted}}>🌡️ {ci.temp}°F</span>}
-                              {ci.heartRate&&<span style={{fontSize:12,color:C.muted}}>❤️ {ci.heartRate} BPM</span>}
-                              {ci.hrv&&<span style={{fontSize:12,color:C.muted}}>📡 HRV {ci.hrv}</span>}
-                              {ci.steps&&<span style={{fontSize:12,color:C.muted}}>👟 {ci.steps} steps</span>}
-                              {ci.bloodPressure&&<span style={{fontSize:12,color:C.muted}}>🩺 {ci.bloodPressure}</span>}
+                              <VitalsRow ci={ci}/>
                             </div>
                           </div>
                         )}
@@ -2117,14 +2132,20 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           </div>
                         )}
 
-                        {/* Custom form metrics (coach's customized check-in form) */}
-                        {ci.custom&&Object.keys(ci.custom).length>0&&(
+                        {/* Custom form metrics (coach's customized check-in form) — skipped ones are marked */}
+                        {((ci.custom&&Object.keys(ci.custom).length>0)||ciForm.custom.length>0)&&(
                           <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
                             <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>📋 Custom Metrics</div>
-                            {Object.entries(ci.custom).map(([label,val])=>(
+                            {Object.entries(ci.custom||{}).map(([label,val])=>(
                               <div key={label} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0'}}>
                                 <span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,flexShrink:0}}>{label}</span>
                                 <span style={{fontSize:12,color:C.white,whiteSpace:'pre-wrap'}}>{val}</span>
+                              </div>
+                            ))}
+                            {ciForm.custom.filter(cm=>!(ci.custom&&String(ci.custom[cm.label]??'').trim()!=='')).map(cm=>(
+                              <div key={cm.label} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0'}}>
+                                <span style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,flexShrink:0}}>{cm.label}</span>
+                                <span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>— not provided</span>
                               </div>
                             ))}
                           </div>
@@ -2431,13 +2452,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             ))}
                           </div>
 
-                          {/* Vitals row */}
+                          {/* Vitals row — skipped metrics show as "not provided" */}
                           <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:12}}>
-                            {ci.weight&&<span style={{fontSize:12,color:C.muted}}>⚖️ {ci.weight} lbs</span>}
-                            {ci.temp&&<span style={{fontSize:12,color:C.muted}}>🌡️ {ci.temp}°F</span>}
-                            {ci.heartRate&&<span style={{fontSize:12,color:C.muted}}>❤️ {ci.heartRate} BPM</span>}
-                            {ci.hrv&&<span style={{fontSize:12,color:C.muted}}>📡 HRV {ci.hrv}</span>}
-                            {ci.steps&&<span style={{fontSize:12,color:C.muted}}>👟 {ci.steps} steps</span>}
+                            <VitalsRow ci={ci}/>
                           </div>
 
                           {/* Client notes */}
