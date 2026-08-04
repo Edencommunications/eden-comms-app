@@ -171,14 +171,10 @@ export default function CanvasPanel({ scope, label, onClose, isMobile = false, m
               placeholder={'Write anything here — notes, plans, checklists, links…\nEveryone in this conversation can see and edit this canvas. No length limit.'}
               style={{flex:1,background:C.surface,border:'none',outline:'none',resize:'none',padding:18,color:C.white,fontSize:13,lineHeight:1.7,fontFamily:'inherit'}}/>
           )}
-          {/* ── Save bar ── */}
+          {/* ── Footer note ── */}
           {doc && (
-            <div style={{padding:'10px 18px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'flex-end',alignItems:'center',gap:10,flexShrink:0}}>
+            <div style={{padding:'8px 18px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'flex-end',flexShrink:0}}>
               <span style={{fontSize:10,color:C.dim}}>Autosaves as you type — closing also saves</span>
-              <button onClick={() => saveNow()}
-                style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer'}}>
-                Save changes
-              </button>
             </div>
           )}
         </>)}
