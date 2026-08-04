@@ -422,6 +422,12 @@ Training Principles:
         setLabs(p=>[arr[0],...p])
         setNewLabNote('')
         setNewLabLoomUrl('')
+        // Alert the other side: client upload → coach; coach upload → client
+        notifyLabPeople(
+          [CLIENT_UUID, COACH_UUID],
+          'lab_uploaded',
+          `🧪 ${info.name} uploaded a new ${newLabType} lab`
+        )
       }
     } catch(err) {
       console.error('Lab upload error',err)
@@ -442,19 +448,42 @@ Training Principles:
     }
   }
 
+  // Bell notification helper — alerts everyone involved with a lab except
+  // whoever performed the action (the bell picks these up instantly via realtime).
+  function notifyLabPeople(recipientIds, type, body) {
+    const seen = new Set()
+    for (const rid of recipientIds) {
+      if (!rid || rid === myUUID || seen.has(rid)) continue
+      seen.add(rid)
+      dbInsert('notifications', {
+        recipient_id: rid, sender_id: myUUID, sender_name: info.name,
+        type, body, is_read: false, link_to: 'labs',
+      })
+    }
+  }
+
   async function postComment(labId) {
     if (!newComment.trim()) return
+    const text = newComment.trim()
     const inserted = await dbInsert('lab_comments',{
       lab_id:      labId,
       author_id:   myUUID,
       author_name: info.name,
       author_role: role,
-      content:     newComment.trim(),
+      content:     text,
     })
     if (inserted) {
       const arr = Array.isArray(inserted)?inserted:[inserted]
       setLabComments(p=>({...p,[labId]:[...(p[labId]||[]),arr[0]]}))
       setNewComment('')
+      // Alert the lab's client, their coach, and anyone else who has commented
+      const lab = labs.find(l => l.id === labId) || activeLab
+      const prior = (labComments[labId] || []).map(c => c.author_id)
+      notifyLabPeople(
+        [lab?.client_id, lab?.coach_id, lab?.uploaded_by, ...prior],
+        'update_note',
+        `📝 ${info.name} commented on ${lab?.lab_type || 'a lab'}: "${text.slice(0, 80)}"`
+      )
     }
   }
 
