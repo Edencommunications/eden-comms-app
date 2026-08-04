@@ -1125,10 +1125,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   function msgText(msg)  { return isLive ? msg.content  : msg.text }
   // Turn pasted http(s) URLs into clickable links (only http/https — never js:/data:)
   function linkify(text, mine = false) {
-    return String(text||'').split(/(https?:\/\/[^\s]+)/g).map((p, i) => {
-      if (!/^https?:\/\//.test(p)) return <span key={i}>{p}</span>
-      try { const proto = new URL(p).protocol; if (proto !== 'http:' && proto !== 'https:') return <span key={i}>{p}</span> } catch { return <span key={i}>{p}</span> }
-      return <a key={i} href={p} target="_blank" rel="noreferrer"
+    return String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g).map((p, i) => {
+      if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{p}</span>
+      const href = /^www\./.test(p) ? `https://${p}` : p
+      try { const proto = new URL(href).protocol; if (proto !== 'http:' && proto !== 'https:') return <span key={i}>{p}</span> } catch { return <span key={i}>{p}</span> }
+      return <a key={i} href={href} target="_blank" rel="noreferrer"
         style={{ color: mine ? C.black : C.gold, fontWeight:700, textDecoration:'underline', wordBreak:'break-all' }}>{p}</a>
     })
   }

@@ -267,10 +267,11 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   }
   // Pasted http(s) URLs become clickable links (http/https only — never js:/data:)
   function linkifyText(text) {
-    return String(text||'').split(/(https?:\/\/[^\s]+)/g).map((p, i) => {
-      if (!/^https?:\/\//.test(p)) return <span key={i}>{p}</span>
-      try { const proto = new URL(p).protocol; if (proto !== 'http:' && proto !== 'https:') return <span key={i}>{p}</span> } catch { return <span key={i}>{p}</span> }
-      return <a key={i} href={p} target="_blank" rel="noreferrer"
+    return String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g).map((p, i) => {
+      if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{p}</span>
+      const href = /^www\./.test(p) ? `https://${p}` : p
+      try { const proto = new URL(href).protocol; if (proto !== 'http:' && proto !== 'https:') return <span key={i}>{p}</span> } catch { return <span key={i}>{p}</span> }
+      return <a key={i} href={href} target="_blank" rel="noreferrer"
         style={{ color:C.gold, fontWeight:700, textDecoration:'underline', wordBreak:'break-all' }}>{p}</a>
     })
   }

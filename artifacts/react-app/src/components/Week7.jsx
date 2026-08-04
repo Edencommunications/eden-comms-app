@@ -344,10 +344,12 @@ export default function Week7({ currentUser, initialDm }) {
     } catch { return '🔗 Link' }
   }
   function renderRich(text, baseColor) {
-    const parts = String(text||'').split(/(https?:\/\/[^\s]+)/g)
-    return parts.map((p, i) => /^https?:\/\//.test(p)
-      ? <a key={i} href={p} target="_blank" rel="noreferrer" style={{color:C.gold,fontWeight:600}}>{linkLabel(p)}</a>
-      : <span key={i}>{renderMentions(p, baseColor)}</span>)
+    const parts = String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g)
+    return parts.map((p, i) => {
+      if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{renderMentions(p, baseColor)}</span>
+      const href = /^www\./.test(p) ? `https://${p}` : p
+      return <a key={i} href={href} target="_blank" rel="noreferrer" style={{color:C.gold,fontWeight:600}}>{linkLabel(href)}</a>
+    })
   }
   // Only ever render http(s) URLs as clickable/embedded — markers are stored in
   // chat content, so a crafted message could otherwise smuggle javascript:/data: URLs
