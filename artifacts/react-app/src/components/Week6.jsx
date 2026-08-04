@@ -886,6 +886,37 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   // ── Audit log ─────────────────────────────────────────────
   const [auditLog, setAuditLog] = useState([])
+  // The REAL audit trail — same audit_logs table the Eden Admin Panel reads,
+  // so both screens always show identical, permanent data.
+  const [dbAudit, setDbAudit] = useState(null)
+  const AUDIT_VERBS = {
+    login:'logged in', message_deleted:'deleted a message', message_restored:'restored a message',
+    community_archived:'archived a community', community_restored:'restored a community', community_created:'created a community',
+    course_granted:'granted a course', course_revoked:'revoked a course',
+    client_deactivated:'deactivated client', client_reactivated:'reactivated client', client_transferred:'transferred client',
+    user_added:'added user', staff_removed:'removed staff member', staff_updated:'updated staff title/access',
+    staff_promoted:'promoted to Head Coach', staff_demoted:'removed Head Coach designation',
+    org_updated:'updated organization', package_added:'added package', package_updated:'updated package', package_deleted:'removed package',
+    start_date_changed:'changed start date for',
+  }
+  const auditIcon = a => a==='login'?'🔐':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
+  function loadDbAudit() {
+    dbGet('audit_logs','select=*&order=created_at.desc&limit=300')
+      .then(r=>{ if(Array.isArray(r)) setDbAudit(r) })
+      .catch(()=>{})
+  }
+  useEffect(()=>{ if(isAdmin) loadDbAudit() },[])
+  useEffect(()=>{ if(tab==='audit') loadDbAudit() },[tab])
+  const dbAuditRow = r => {
+    const d = r.details||{}
+    return {
+      id: r.id, icon: auditIcon(r.action), actor: r.actor_name||'Someone',
+      action: AUDIT_VERBS[r.action] || String(r.action||'').replace(/_/g,' '),
+      target: d.name || (r.action==='login' ? '' : (d.email||'')),
+      detail: [d.from&&d.to?`${d.from} → ${d.to}`:null, d.title?`Title: ${d.title}`:null, d.new_coach?`→ ${d.new_coach}`:null, d.context?`(${String(d.context).replace(/_/g,' ')})`:null].filter(Boolean).join(' · '),
+      time: (()=>{ try { return new Date(r.created_at).toLocaleString() } catch { return r.created_at } })(),
+    }
+  }
 
   // ── Client lifecycle management (all persisted to localStorage) ──
   // Keyed by client email so the LoginScreen can read the same store.
@@ -1649,10 +1680,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           {/* Recent audit activity */}
           <Card sx={{marginBottom:14}}>
             <Lbl t="Recent Activity"/>
-            {auditLog.slice(0,5).map(a=>(
+            {(dbAudit||[]).length===0&&<div style={{fontSize:11,color:C.muted,padding:'6px 0'}}>No recent activity yet.</div>}
+            {(dbAudit||[]).slice(0,5).map(dbAuditRow).map(a=>(
               <div key={a.id} style={{padding:'9px 0',borderTop:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'flex-start'}}>
                 <div style={{width:32,height:32,borderRadius:8,background:`${C.gold}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>
-                  {a.action.includes('course')?'🎓':a.action.includes('diet')?'🥗':a.action.includes('check')?'📋':'⚡'}
+                  {a.icon}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,color:C.white,fontWeight:500}}><span style={{color:C.gold}}>{a.actor}</span> {a.action} — {a.target}</div>
@@ -2420,10 +2452,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       {tab==='audit'&&isAdmin&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
           <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:14}}>Audit Log</div>
-          {auditLog.map(a=>(
+          {dbAudit===null&&<div style={{fontSize:12,color:C.muted}}>Loading audit trail…</div>}
+          {dbAudit!==null&&dbAudit.length===0&&<div style={{fontSize:12,color:C.muted}}>No audit events recorded yet.</div>}
+          {(dbAudit||[]).map(dbAuditRow).map(a=>(
             <div key={a.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',marginBottom:8,display:'flex',gap:12,alignItems:'flex-start'}}>
               <div style={{width:34,height:34,borderRadius:8,background:`${C.gold}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>
-                {a.action.includes('course')?'🎓':a.action.includes('diet')?'🥗':a.action.includes('check')?'📋':a.action.includes('Add')?'➕':'⚡'}
+                {a.icon}
               </div>
               <div style={{flex:1}}>
                 <div style={{fontSize:12,color:C.white,fontWeight:500,lineHeight:1.4}}>
