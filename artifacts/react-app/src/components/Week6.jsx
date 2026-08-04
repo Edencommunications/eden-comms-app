@@ -489,6 +489,49 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // ── Manage Roles modal (Coaches tab, next to + Add Team Member) ──
   const [showRoleMgr, setShowRoleMgr] = useState(false)
 
+  // ── Invites list (who was invited, resend / uninvite) ──
+  const [showInvites,   setShowInvites]   = useState(false)
+  const [inviteRows,    setInviteRows]    = useState(null)   // null = loading
+  const [inviteErr,     setInviteErr]     = useState('')
+  const [inviteBusy,    setInviteBusy]    = useState('')     // email currently being acted on
+  const [inviteNotice,  setInviteNotice]  = useState('')
+
+  async function inviteApi(path, body) {
+    const { data } = await authClient.auth.getSession()
+    const token = data?.session?.access_token
+    if (!token) return { ok:false, error:"Your session can't authorize this — sign out and back in" }
+    const res = await fetch(`/api${path}`, {
+      method: body?'POST':'GET',
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
+      body: body?JSON.stringify(body):undefined,
+    })
+    const j = await res.json().catch(()=>({}))
+    if (!res.ok) return { ok:false, error: j.error||'Request failed' }
+    return j
+  }
+  async function loadInvites() {
+    setInviteRows(null); setInviteErr('')
+    const r = await inviteApi('/invites')
+    if (r.ok) setInviteRows(r.invites||[])
+    else { setInviteRows([]); setInviteErr(r.error||'Could not load the invite list') }
+  }
+  async function resendInvite(row) {
+    if (!confirm(`Re-send the welcome email to ${row.name} (${row.email})?\n\nThis gives them a NEW temporary password — any old one stops working.`)) return
+    setInviteBusy(row.email); setInviteNotice('')
+    const r = await inviteApi('/invites/resend', { email: row.email })
+    setInviteBusy('')
+    if (r.ok) { setInviteNotice(`✉️ Invite re-sent to ${row.email}`); loadInvites() }
+    else setInviteNotice(`⚠️ ${r.error||'Could not resend'}`)
+  }
+  async function revokeInvite(row) {
+    if (!confirm(`Uninvite ${row.name} (${row.email})?\n\nThis deletes their login and profile entirely. They have never signed in, so no data is lost.`)) return
+    setInviteBusy(row.email); setInviteNotice('')
+    const r = await inviteApi('/invites/revoke', { email: row.email })
+    setInviteBusy('')
+    if (r.ok) { setInviteNotice(`🗑 ${row.name} uninvited`); loadInvites() }
+    else setInviteNotice(`⚠️ ${r.error||'Could not uninvite'}`)
+  }
+
   // ── Add Client (manual single under a chosen coach) ──
   const [showAddClients, setShowAddClients] = useState(false)
   const [acCoachId,      setAcCoachId]      = useState('')
@@ -921,6 +964,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     start_date_changed:'changed start date for',
     login_failed:'failed login attempt', checkin_submitted:'submitted a check-in',
     community_renamed:'renamed a community/channel',
+    invite_resent:'re-sent an invite email',
+    invite_revoked:'uninvited someone (never signed in)',
     checkin_day_changed:'changed check-in day for',
     profile_updated:'fixed name/email for',
   }
@@ -2228,6 +2273,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:700,color:C.white}}>All Coaches</div>
             <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{setShowInvites(true);setInviteNotice('');loadInvites()}}
+                style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.muted,fontSize:12,cursor:'pointer'}}>
+                ✉️ Invites
+              </button>
               <button onClick={()=>setShowRoleMgr(true)}
                 style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.muted,fontSize:12,cursor:'pointer'}}>
                 🏷 Manage Roles
@@ -2941,6 +2990,60 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 14px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:newRoleName.trim()?1:.4}}>+ Add</button>
             </div>
             <button onClick={()=>{setShowRoleMgr(false);setEditingRole(null);setEditRoleName('')}}
+              style={{marginTop:12,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',color:C.muted,fontSize:12,cursor:'pointer',alignSelf:'flex-end'}}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Invites modal ── */}
+      {showInvites&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+          onClick={()=>setShowInvites(false)}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:20,width:'100%',maxWidth:640,maxHeight:'82vh',display:'flex',flexDirection:'column'}}>
+            <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:2}}>✉️ Invites</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Everyone added to the app, whether their login email was sent, and whether they've actually signed in. Resend gives them a fresh temporary password; Uninvite removes people who never signed in.</div>
+            {inviteNotice&&<div style={{fontSize:12,fontWeight:700,color:inviteNotice.startsWith('⚠️')?(C.danger||'#e5484d'):C.success,marginBottom:10}}>{inviteNotice}</div>}
+            <div style={{overflowY:'auto',flex:1}}>
+              {inviteRows===null&&<div style={{fontSize:12,color:C.muted,padding:'16px 0'}}>Loading…</div>}
+              {inviteRows!==null&&inviteErr&&<div style={{fontSize:12,color:C.danger||'#e5484d',padding:'8px 0'}}>{inviteErr}</div>}
+              {inviteRows!==null&&!inviteErr&&inviteRows.length===0&&<div style={{fontSize:12,color:C.muted,padding:'16px 0'}}>No one has been added yet.</div>}
+              {(inviteRows||[]).map(row=>{
+                const busy = inviteBusy===row.email
+                const fmt = d => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null
+                return (
+                  <div key={row.email} style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:7,flexWrap:'wrap'}}>
+                    <div style={{flex:'1 1 180px',minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{row.name} <span style={{fontSize:10,fontWeight:600,color:C.muted}}>· {row.role==='super_admin'?'admin':row.role}</span></div>
+                      <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{row.email}</div>
+                    </div>
+                    <div style={{flex:'0 0 auto',textAlign:'right'}}>
+                      {row.joined
+                        ? <div style={{fontSize:11,fontWeight:700,color:C.success}}>✓ Signed in{row.lastSignIn?` · ${fmt(row.lastSignIn)}`:''}</div>
+                        : <div style={{fontSize:11,fontWeight:700,color:C.gold}}>⏳ Hasn't signed in yet</div>}
+                      <div style={{fontSize:10,color:C.muted}}>
+                        {row.lastEmailAt
+                          ? (row.lastEmailOk===false?`⚠️ Email failed ${fmt(row.lastEmailAt)}`:`Email sent ${fmt(row.lastEmailAt)}`)
+                          : 'No login email on record'}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:6,flex:'0 0 auto'}}>
+                      <button onClick={()=>resendInvite(row)} disabled={busy}
+                        style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'6px 11px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer',opacity:busy?.5:1}}>
+                        {busy?'…':'✉️ Resend'}
+                      </button>
+                      {!row.joined&&(
+                        <button onClick={()=>revokeInvite(row)} disabled={busy}
+                          style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 11px',color:C.danger||'#e5484d',fontSize:11,fontWeight:700,cursor:'pointer',opacity:busy?.5:1}}>
+                          🗑 Uninvite
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <button onClick={()=>setShowInvites(false)}
               style={{marginTop:12,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',color:C.muted,fontSize:12,cursor:'pointer',alignSelf:'flex-end'}}>Close</button>
           </div>
         </div>

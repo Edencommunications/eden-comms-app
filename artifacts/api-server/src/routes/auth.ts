@@ -217,6 +217,12 @@ router.post("/auth/provision", async (req: Request, res: Response) => {
     } catch (e) {
       logger.warn({ err: e }, "[Auth] welcome email errored");
     }
+    // Record the send in the org's invite log so the Invites screen can show
+    // whether/when each person got their login email.
+    try {
+      const { recordInviteEmail } = await import("./invites");
+      await recordInviteEmail(admin.company_id || "b0000000-0000-0000-0000-000000000001", email.toLowerCase(), emailed);
+    } catch {}
   }
   return res.json({ ...result, emailed });
 });
