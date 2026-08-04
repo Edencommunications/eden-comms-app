@@ -1060,6 +1060,65 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     loadLiveMessages()
   }
 
+  // ── Voice memos — COACH-SIDE ONLY (clients never get a mic button).
+  // Records with MediaRecorder, uploads to chat-media, transcribes best-effort,
+  // then sends as an audio file message with the transcript in content.
+  const [recording,  setRecording]  = useState(false)
+  const [recSecs,    setRecSecs]    = useState(0)
+  const recRef      = useRef(null)
+  const recChunks   = useRef([])
+  const recTimerRef = useRef(null)
+
+  async function startVoiceMemo() {
+    if (recording || !isLive) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true })
+      const mr = new MediaRecorder(stream)
+      recChunks.current = []
+      mr.ondataavailable = ev => { if (ev.data?.size) recChunks.current.push(ev.data) }
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t=>t.stop())
+        clearInterval(recTimerRef.current)
+        const blob = new Blob(recChunks.current, { type:'audio/webm' })
+        setRecording(false); setRecSecs(0)
+        if (blob.size < 1000) return
+        setUploading(true)
+        try {
+          const path  = `${activeConvo?.supabaseConvoId}/${Date.now()}-voice-memo.webm`
+          const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/chat-media/${path}`, {
+            method:'POST', headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':'audio/webm' }, body: blob,
+          })
+          if (!upRes.ok) throw new Error('upload failed')
+          const fileUrl = `${SUPABASE_URL}/storage/v1/object/public/chat-media/${path}`
+          // Best-effort transcript — memo still sends if this fails
+          let transcript = null
+          try {
+            const fd = new FormData()
+            fd.append('audio', blob, 'voice-memo.webm')
+            const tr = await fetch('/api/team/transcribe', { method:'POST', headers:{ get Authorization(){ return sbBearer() } }, body:fd })
+            if (tr.ok) { const d = await tr.json(); transcript = d?.text || null }
+          } catch {}
+          await dbInsert('messages', {
+            conversation_id: activeConvo?.supabaseConvoId, sender_id: myProfileId,
+            content: transcript, message_type:'file',
+            file_url: fileUrl, file_name:'Voice memo', file_size: blob.size, file_type:'audio/webm',
+          })
+          await dbUpdate('conversations', `id=eq.${activeConvo?.supabaseConvoId}`, {
+            last_message:'🎙️ Voice memo', last_message_at:new Date().toISOString(),
+          })
+          loadLiveMessages()
+        } catch { alert('Voice memo failed to send. Please try again.') }
+        finally { setUploading(false) }
+      }
+      recRef.current = mr
+      mr.start()
+      setRecording(true); setRecSecs(0)
+      recTimerRef.current = setInterval(()=>setRecSecs(s=>s+1), 1000)
+    } catch { alert('Microphone access was blocked. Allow mic access in your browser and try again.') }
+  }
+  function stopVoiceMemo() { try { recRef.current?.stop() } catch {} }
+  const recClock = `${Math.floor(recSecs/60)}:${String(recSecs%60).padStart(2,'0')}`
+
   async function handleUpload(e) {
     const file = e.target.files?.[0]
     if (!file || !myProfileId || !isLive) return
@@ -1665,7 +1724,19 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                             style={{ maxWidth:220, maxHeight:220, borderRadius:8, display:'block', cursor:'pointer' }}
                             onClick={() => window.open(msg.file_url,'_blank')}/>
                         )}
-                        {isLive && type === 'file' && (
+                        {isLive && type === 'file' && (msg.file_type||'').startsWith('audio/') && (
+                          <div style={{ maxWidth:260 }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:mine?C.black:C.gold, marginBottom:4 }}>🎙️ Voice memo</div>
+                            <audio controls src={msg.file_url} style={{ width:'100%', height:36 }}/>
+                            {msg.content && (
+                              <details style={{ marginTop:6 }}>
+                                <summary style={{ fontSize:11, fontWeight:700, color:mine?'rgba(0,0,0,.6)':C.muted, cursor:'pointer' }}>📝 Transcript</summary>
+                                <div style={{ fontSize:12, color:mine?C.black:C.white, lineHeight:1.5, marginTop:4, whiteSpace:'pre-wrap' }}>{msg.content}</div>
+                              </details>
+                            )}
+                          </div>
+                        )}
+                        {isLive && type === 'file' && !(msg.file_type||'').startsWith('audio/') && (
                           <a href={msg.file_url} target="_blank" rel="noreferrer"
                             style={{ display:'flex', alignItems:'center', gap:8, textDecoration:'none' }}>
                             <span style={{ fontSize:22 }}>{fileIcon(msg.file_name)}</span>
@@ -1764,6 +1835,17 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                     display:'flex', alignItems:'center', justifyContent:'center' }}>
                   {uploading ? '⏳' : '📎'}
                 </button>
+                {/* Voice memo — coaches/staff only, never shown to clients */}
+                {myRole !== 'client' && isLive && (
+                  <button onClick={recording ? stopVoiceMemo : startVoiceMemo} disabled={uploading}
+                    title={recording ? 'Stop & send voice memo' : 'Record a voice memo'}
+                    style={{ background: recording ? '#e5484d' : C.card, border:`1px solid ${recording ? '#e5484d' : C.border}`, borderRadius:8,
+                      minWidth: isMobile ? 44 : 38, height: isMobile ? 44 : 38, cursor:'pointer', fontSize: recording ? 11 : 17, flexShrink:0,
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:4, padding: recording ? '0 8px' : 0,
+                      color:'#fff', fontWeight:800, animation: recording ? 'pulse 1.2s infinite' : 'none' }}>
+                    {recording ? `■ ${recClock}` : '🎙️'}
+                  </button>
+                )}
                 <input value={newMsg} onChange={e => setNewMsg(e.target.value)}
                   onKeyDown={e => e.key==='Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
                   placeholder={isMobile ? 'Message…' : 'Type a message… Enter to send'}
