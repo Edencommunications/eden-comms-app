@@ -961,8 +961,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     return {
       id: r.id, icon: auditIcon(r.action), actor: r.actor_name||'Someone',
       action: AUDIT_VERBS[r.action] || String(r.action||'').replace(/_/g,' '),
-      target: d.name || (r.action==='login' ? '' : (d.email||'')),
-      detail: [d.from&&d.to?`${d.from} → ${d.to}`:null, d.title?`Title: ${d.title}`:null, d.new_coach?`→ ${d.new_coach}`:null, d.context?`(${String(d.context).replace(/_/g,' ')})`:null].filter(Boolean).join(' · '),
+      target: d.name || d.sender_name || (r.action==='login' ? '' : (d.email||'')),
+      detail: [
+        d.content ? `"${String(d.content).slice(0,140)}${String(d.content).length>140?'…':''}"` : null,
+        d.file_name ? `📎 ${d.file_name}` : null,
+        d.sent_at ? `sent ${(()=>{try{return new Date(d.sent_at).toLocaleString()}catch{return d.sent_at}})()}` : null,
+        d.community_name ? `in ${d.community_name}` : null,
+        d.from&&d.to?`${d.from} → ${d.to}`:null, d.title?`Title: ${d.title}`:null, d.new_coach?`→ ${d.new_coach}`:null,
+        d.context?`(${String(d.context).replace(/_/g,' ')})`:null,
+      ].filter(Boolean).join(' · '),
       time: (()=>{ try { return new Date(r.created_at).toLocaleString() } catch { return r.created_at } })(),
     }
   }

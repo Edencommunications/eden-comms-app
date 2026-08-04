@@ -1038,7 +1038,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       action: 'message_deleted', actor_id: myProfileId, actor_name: myName, actor_role: myRole,
       target_type: 'message', target_id: String(msg.id),
       details: { content: msg.content || null, file_url: msg.file_url || null, file_name: msg.file_name || null,
-        conversation_id: msg.conversation_id, sender_id: msg.sender_id, context: 'dm' },
+        conversation_id: msg.conversation_id, sender_id: msg.sender_id, sent_at: msg.created_at || null, context: 'dm' },
     })
     loadLiveMessages()
   }

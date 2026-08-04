@@ -569,7 +569,7 @@ export default function Week7({ currentUser, initialDm }) {
     if (!ok) { alert('Could not delete — run the database update first.'); return }
     dbInsert('audit_logs', { action:'message_deleted', actor_id:myUUID, actor_name:myName, actor_role:myRole,
       target_type:'team_message', target_id:String(m.id),
-      details:{ content:m.content, sender_id:m.senderId, sender_name:m.senderName, context:'team_hub', org_id:orgId } })
+      details:{ content:m.content, sender_id:m.senderId, sender_name:m.senderName, sent_at:m.createdAt||null, context:'team_hub', org_id:orgId } })
     loadTeamChat()
   }
   const [activeThread, setActiveThread] = useState(null)

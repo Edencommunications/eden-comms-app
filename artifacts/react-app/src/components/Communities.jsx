@@ -306,7 +306,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     if (!ok) { alert('Could not delete — run the database update first.'); return }
     dbInsert('audit_logs', { action:'message_deleted', actor_id:myId, actor_name:myName, actor_role:myRole,
       target_type:'community_message', target_id:String(m.id),
-      details:{ content:m.content, sender_id:m.sender_id, sender_name:m.sender_name, community_id:activeId, community_name:active?.name, context:'community' } })
+      details:{ content:m.content, sender_id:m.sender_id, sender_name:m.sender_name, sent_at:m.created_at||null, community_id:activeId, community_name:active?.name, context:'community' } })
     loadMessages()
   }
 
