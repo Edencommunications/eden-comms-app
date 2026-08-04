@@ -389,6 +389,28 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   },[])
   const [editingRole, setEditingRole]     = useState(null)   // role name being renamed
   const [editRoleName, setEditRoleName]   = useState('')
+  // ── Voice memo tier gating — Eden-level admin_settings key `voice_memo_tiers`
+  // null = never configured → every tier includes voice memos
+  const [voiceTiers, setVoiceTiers] = useState(null)
+  useEffect(()=>{
+    dbGet('admin_settings','key=eq.voice_memo_tiers&select=value').then(rows=>{
+      try { const v = rows?.[0]?.value; const arr = typeof v==='string'?JSON.parse(v):v; if (Array.isArray(arr)) setVoiceTiers(arr.map(String)) } catch{}
+    }).catch(()=>{})
+  },[])
+  async function toggleVoiceTier(pkg) {
+    const base = voiceTiers===null ? packages.map(p=>String(p.id)) : voiceTiers
+    const id = String(pkg.id)
+    const next = base.includes(id) ? base.filter(x=>x!==id) : [...base, id]
+    setVoiceTiers(next)
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+        method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({ company_id:adminCompanyId, key:'voice_memo_tiers', value:JSON.stringify(next) }),
+      })
+    } catch(e) {}
+  }
+  const tierHasVoice = pkg => voiceTiers===null || voiceTiers.includes(String(pkg.id))
+
   async function persistStaffRoles(next) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
@@ -2216,6 +2238,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       <div style={{fontSize:9,color:C.muted,marginTop:2}}>
                         Includes: {pkg.includes_recipes?'🍽 Recipe Book':'their own content only'} · 🎓 Eden Courses set per course below
                       </div>
+                      <button onClick={()=>toggleVoiceTier(pkg)}
+                        title="Toggle whether this tier's teams get voice memos & transcripts in Team Hub"
+                        style={{marginTop:4,background:tierHasVoice(pkg)?`${C.gold}15`:'none',border:`1px solid ${tierHasVoice(pkg)?`${C.gold}66`:C.border}`,
+                          borderRadius:6,padding:'2px 8px',fontSize:9,fontWeight:700,cursor:'pointer',
+                          color:tierHasVoice(pkg)?C.gold:C.muted}}>
+                        🎙️ Voice memos {tierHasVoice(pkg)?'included ✓':'off'}
+                      </button>
                       {(()=>{ const list = edenCourses.filter(c=>Array.isArray(c.tiers)&&c.tiers.includes(pkg.id)); return (
                         <div style={{marginTop:4}}>
                           <button onClick={()=>setPkgCoursesOpen(o=>o===pkg.id?null:pkg.id)} disabled={!list.length}

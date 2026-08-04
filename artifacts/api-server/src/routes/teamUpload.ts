@@ -94,6 +94,52 @@ router.post("/team/upload", async (req: Request, res: Response) => {
   }
 });
 
+// ── Voice memo gating (per pricing tier, controlled by Eden) ────────────
+// Zero-DDL: admin_settings row (Eden org) key `voice_memo_tiers` holds a JSON
+// array of package ids where voice memos are INCLUDED. No row = every tier
+// (and every org) has voice memos. Eden's own team always has them.
+const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
+
+async function voiceMemosEnabled(companyId: string | null): Promise<boolean> {
+  if (!companyId || companyId === EDEN_ORG_ID) return true;
+  const sr = await fetch(
+    `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${EDEN_ORG_ID}&key=eq.voice_memo_tiers&select=value`,
+    { headers: SVC_H },
+  );
+  const srows: any[] = sr.ok ? await sr.json().catch(() => []) : [];
+  if (!srows[0]?.value) return true; // gating never configured → on for everyone
+  let enabledTiers: string[] = [];
+  try {
+    const v = srows[0].value;
+    const parsed = typeof v === "string" ? JSON.parse(v) : v;
+    if (Array.isArray(parsed)) enabledTiers = parsed.map(String);
+  } catch { return true; }
+  // Org's plan name → matching package id
+  const or = await fetch(
+    `${SUPABASE_URL}/rest/v1/organizations?id=eq.${companyId}&select=plan`,
+    { headers: SVC_H },
+  );
+  const orows: any[] = or.ok ? await or.json().catch(() => []) : [];
+  const plan = String(orows[0]?.plan || "").toLowerCase();
+  if (!plan) return false; // gating configured + org has no tier → off
+  const pr = await fetch(`${SUPABASE_URL}/rest/v1/packages?select=id,name`, { headers: SVC_H });
+  const prows: any[] = pr.ok ? await pr.json().catch(() => []) : [];
+  const pkg = prows.find((p) => String(p.name || "").toLowerCase() === plan);
+  return !!pkg && enabledTiers.includes(String(pkg.id));
+}
+
+// GET /team/voice-memos-enabled — the frontend asks whether to show the mic
+router.get("/team/voice-memos-enabled", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireStaffJwt(req);
+    if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+    res.json({ enabled: await voiceMemosEnabled(caller.company_id) });
+  } catch (e) {
+    logger.error({ err: e }, "[VoiceMemoGate] error");
+    res.json({ enabled: true }); // fail open — never brick chat over a gate check
+  }
+});
+
 // POST /team/transcribe — speech-to-text for Team Hub voice memos via the
 // Replit AI Integrations OpenAI proxy. Best-effort: callers should treat a
 // failure as "no transcript", never block the memo itself.
@@ -101,6 +147,10 @@ router.post("/team/transcribe", async (req: Request, res: Response) => {
   try {
     const caller = await requireStaffJwt(req);
     if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+    if (!(await voiceMemosEnabled(caller.company_id))) {
+      res.status(403).json({ error: "Voice memos are not included in this organization's tier" });
+      return;
+    }
 
     const baseUrl = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"] || "";
     const apiKey = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"] || "";

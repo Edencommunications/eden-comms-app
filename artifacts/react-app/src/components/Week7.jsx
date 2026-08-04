@@ -480,6 +480,13 @@ export default function Week7({ currentUser, initialDm }) {
   const [recordSecs, setRecordSecs] = useState(0)
   const recRef = useRef(null)   // { recorder, chunks, stream }
   const [showChannelMembers, setShowChannelMembers] = useState(false)
+  // Tier gate: does this org's plan include voice memos? (Eden always yes)
+  const [voiceMemosOn, setVoiceMemosOn] = useState(true)
+  useEffect(()=>{
+    fetch('/api/team/voice-memos-enabled', { headers:{ Authorization:`Bearer ${sbAccessToken()}` } })
+      .then(r=>r.json()).then(j=>{ if (j && typeof j.enabled==='boolean') setVoiceMemosOn(j.enabled) })
+      .catch(()=>{}) // fail open — worst case the server still refuses transcription
+  },[])
   useEffect(() => {
     if (!recordingFor) { setRecordSecs(0); return }
     const t = setInterval(() => setRecordSecs(s => s + 1), 1000)
@@ -541,7 +548,7 @@ export default function Week7({ currentUser, initialDm }) {
       alert('Microphone access was blocked — allow the mic in your browser to record voice memos.')
     }
   }
-  const MicBtn = ({ target }) => (
+  const MicBtn = ({ target }) => voiceMemosOn && (
     <button onClick={() => toggleRecord(target)}
       title={recordingFor===target ? 'Stop recording' : 'Record a voice memo'}
       style={{background:recordingFor===target?C.danger:'none',border:`1px solid ${recordingFor===target?C.danger:C.border}`,borderRadius:8,padding:'0 10px',color:recordingFor===target?C.white:C.muted,fontSize:recordingFor===target?12:15,fontWeight:800,cursor:'pointer',flexShrink:0,animation:recordingFor===target?'pulse 1.2s infinite':'none',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
