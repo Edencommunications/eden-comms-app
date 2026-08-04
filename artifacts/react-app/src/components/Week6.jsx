@@ -898,8 +898,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     staff_promoted:'promoted to Head Coach', staff_demoted:'removed Head Coach designation',
     org_updated:'updated organization', package_added:'added package', package_updated:'updated package', package_deleted:'removed package',
     start_date_changed:'changed start date for',
+    login_failed:'failed login attempt', checkin_submitted:'submitted a check-in',
+    checkin_day_changed:'changed check-in day for',
   }
-  const auditIcon = a => a==='login'?'🔐':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
+  const auditIcon = a => a==='login'?'🔐':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
   function loadDbAudit() {
     dbGet('audit_logs','select=*&order=created_at.desc&limit=300')
       .then(r=>{ if(Array.isArray(r)) setDbAudit(r) })
@@ -1920,6 +1922,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,checkInDay:day}:c))
                       setSelectedClient(prev=>({...prev,checkInDay:day}))
                       const ok = await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{update_day:day})
+                      if (ok) dbInsert('audit_logs',{ action:'checkin_day_changed', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
+                        target_type:'user_profile', target_id:selectedClient.uuid, details:{ name:selectedClient.name, from:prevDay||null, to:day } }).catch(()=>{})
                       if (!ok) {
                         setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,checkInDay:prevDay}:c))
                         setSelectedClient(prev=>({...prev,checkInDay:prevDay}))

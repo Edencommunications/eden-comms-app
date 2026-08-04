@@ -5,7 +5,7 @@
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
-import { sbBearer } from '../lib/sbAuth'
+import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { useDeadline } from '../lib/tz'
 import { useCheckinForm } from '../lib/checkinForm'
 import {
@@ -3045,6 +3045,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                          __custom: hasCustom ? custom : undefined}
                       : null,
                   })
+                  // Audit trail (server-side — RLS blocks clients from direct inserts)
+                  try {
+                    const tok = sbAccessToken()
+                    if (tok) fetch('/api/audit/event', {
+                      method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${tok}` },
+                      body: JSON.stringify({ action:'checkin_submitted', target_type:'weekly_checkin',
+                        details:{ weight: on('weight')?ci.weight:null, habit_pct: habitScore } }),
+                    }).catch(()=>{})
+                  } catch {}
                   const _cId = myCoachId
                   const _clId = myUUID
                   if(_cId&&_clId) insertNotification(_cId, _clId, 'new_checkin',

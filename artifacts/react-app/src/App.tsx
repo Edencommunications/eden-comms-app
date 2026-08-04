@@ -293,6 +293,13 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             return;
           }
         } catch {}
+        // Audit trail: record the failed attempt (server only logs real accounts)
+        try {
+          fetch('/api/audit/login-failed', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailNorm }),
+          }).catch(() => {});
+        } catch {}
         setError("Invalid email or password.");
       }
       setLoading(false);
@@ -2958,6 +2965,9 @@ const ACTION_LABELS:Record<string,{label:string,icon:string}> = {
   community_restored: { label:'Community restored', icon:'♻️' },
   message_restored:   { label:'Message restored',   icon:'♻️' },
   login:              { label:'Logged in',          icon:'🔐' },
+  login_failed:       { label:'Failed login attempt', icon:'⚠️' },
+  checkin_submitted:  { label:'Check-in submitted', icon:'📋' },
+  checkin_day_changed:{ label:'Check-in day changed', icon:'🗓' },
   user_added:         { label:'User added',         icon:'👤' },
   staff_removed:      { label:'Staff removed',      icon:'👋' },
   staff_updated:      { label:'Staff title/access changed', icon:'🛠' },
