@@ -51,6 +51,7 @@ export default function InstallBanner() {
   const [visible,   setVisible]   = useState(false)   // show full banner
   const [collapsed, setCollapsed] = useState(false)   // show mini pill
   const [ios,       setIos]       = useState(false)
+  const [androidSteps, setAndroidSteps] = useState(false)  // manual fallback when Chrome gives us no prompt
   const deferredRef = useRef<any>(null)
 
   useEffect(() => {
@@ -60,7 +61,13 @@ export default function InstallBanner() {
     setIos(isIOS())
     setVisible(true)
 
-    // Android — capture the browser's install prompt so we can trigger it on demand
+    // Chrome usually fires beforeinstallprompt BEFORE this component mounts —
+    // main.tsx catches it early and stashes it here.
+    if ((window as any).__edenInstallPrompt) {
+      deferredRef.current = (window as any).__edenInstallPrompt
+    }
+
+    // Android — also capture the browser's install prompt if it fires later
     const onPrompt = (e: Event) => {
       e.preventDefault()
       deferredRef.current = e
@@ -90,15 +97,26 @@ export default function InstallBanner() {
   }, [])
 
   async function handleInstall() {
-    if (deferredRef.current) {
-      deferredRef.current.prompt()
-      const { outcome } = await deferredRef.current.userChoice
-      if (outcome === 'accepted') {
-        markInstalled()
-        setVisible(false)
-        setCollapsed(false)
+    const prompt = deferredRef.current || (window as any).__edenInstallPrompt
+    if (prompt) {
+      try {
+        prompt.prompt()
+        const { outcome } = await prompt.userChoice
+        if (outcome === 'accepted') {
+          markInstalled()
+          setVisible(false)
+          setCollapsed(false)
+        }
+      } catch {
+        // Prompt was already used or rejected by the browser — fall back to steps
+        setAndroidSteps(true)
       }
       deferredRef.current = null
+      ;(window as any).__edenInstallPrompt = null
+    } else {
+      // No native prompt available (non-Chrome browser, already prompted this
+      // session, etc.) — never fail silently: show manual instructions instead.
+      setAndroidSteps(true)
     }
   }
 
@@ -188,6 +206,46 @@ export default function InstallBanner() {
               ))}
             </div>
             {/* Dismiss once-installed — user taps after doing it */}
+            <button
+              onClick={() => { markInstalled(); setVisible(false); setCollapsed(false) }}
+              style={{
+                width: '100%', background: `${GOLD}22`, border: `1px solid ${GOLD}55`,
+                borderRadius: 10, padding: '11px', color: GOLD, fontSize: 13,
+                fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              ✅ Done — I added it to my home screen
+            </button>
+          </>
+        ) : androidSteps ? (
+          // ── Android manual instructions (fallback when the one-tap prompt isn't available) ──
+          <>
+            <div style={{ fontSize: 12, color: MUTED, marginBottom: 12, lineHeight: 1.5 }}>
+              Add Eden from your browser's menu — takes two taps:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {[
+                { n: 1, icon: '⋮', text: 'Tap the menu button (three dots) in the top-right of your browser' },
+                { n: 2, icon: '📲', text: 'Tap "Add to Home screen" or "Install app"' },
+                { n: 3, icon: '✅', text: 'Confirm — Eden will appear on your home screen' },
+              ].map(s => (
+                <div key={s.n} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  background: '#1a1a1a', border: `1px solid ${BORDER}`,
+                  borderRadius: 10, padding: '10px 12px',
+                }}>
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, background: GOLD, color: BLACK,
+                    borderRadius: '50%', width: 18, height: 18, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
+                  }}>{s.n}</span>
+                  <span style={{ fontSize: 13, lineHeight: 1 }}>
+                    <span style={{ marginRight: 6 }}>{s.icon}</span>
+                    <span style={{ color: WHITE }}>{s.text}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
             <button
               onClick={() => { markInstalled(); setVisible(false); setCollapsed(false) }}
               style={{
