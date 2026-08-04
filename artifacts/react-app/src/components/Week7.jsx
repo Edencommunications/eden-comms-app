@@ -477,7 +477,15 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Voice memos (Slack-style) — record with the mic, upload like any file ──
   const [recordingFor, setRecordingFor] = useState(null) // composer currently recording
+  const [recordSecs, setRecordSecs] = useState(0)
   const recRef = useRef(null)   // { recorder, chunks, stream }
+  const [showChannelMembers, setShowChannelMembers] = useState(false)
+  useEffect(() => {
+    if (!recordingFor) { setRecordSecs(0); return }
+    const t = setInterval(() => setRecordSecs(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [recordingFor])
+  const recClock = `${Math.floor(recordSecs/60)}:${String(recordSecs%60).padStart(2,'0')}`
   async function toggleRecord(target) {
     // Stop → the onstop handler uploads
     if (recordingFor === target) { try { recRef.current?.recorder?.stop() } catch {} ; return }
@@ -536,8 +544,8 @@ export default function Week7({ currentUser, initialDm }) {
   const MicBtn = ({ target }) => (
     <button onClick={() => toggleRecord(target)}
       title={recordingFor===target ? 'Stop recording' : 'Record a voice memo'}
-      style={{background:recordingFor===target?C.danger:'none',border:`1px solid ${recordingFor===target?C.danger:C.border}`,borderRadius:8,padding:'0 10px',color:recordingFor===target?C.white:C.muted,fontSize:15,cursor:'pointer',flexShrink:0,animation:recordingFor===target?'pulse 1.2s infinite':'none'}}>
-      {recordingFor===target ? '⏹' : '🎙️'}
+      style={{background:recordingFor===target?C.danger:'none',border:`1px solid ${recordingFor===target?C.danger:C.border}`,borderRadius:8,padding:'0 10px',color:recordingFor===target?C.white:C.muted,fontSize:recordingFor===target?12:15,fontWeight:800,cursor:'pointer',flexShrink:0,animation:recordingFor===target?'pulse 1.2s infinite':'none',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
+      {recordingFor===target ? <>⏹ {recClock}</> : '🎙️'}
     </button>
   )
 
@@ -891,7 +899,10 @@ export default function Week7({ currentUser, initialDm }) {
                 <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
                   <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
                     <div style={{fontSize:14,fontWeight:700,color:C.white}}># general</div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:1}}>Main channel · {team.length} members</div>
+                    <button onClick={()=>setShowChannelMembers(true)}
+                      style={{background:'none',border:'none',padding:0,fontSize:10,color:C.gold,marginTop:1,cursor:'pointer',fontWeight:600}}>
+                      Main channel · {team.length} members ▾
+                    </button>
                   </div>
 
                   <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
@@ -1109,6 +1120,37 @@ export default function Week7({ currentUser, initialDm }) {
             )}
             {/* Hidden file input shared by all three composers */}
             <input ref={fileInputRef} type="file" multiple style={{display:'none'}} onChange={onFilePicked}/>
+
+            {/* #general members modal */}
+            {showChannelMembers && (
+              <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+                onClick={()=>setShowChannelMembers(false)}>
+                <div onClick={e=>e.stopPropagation()}
+                  style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:20,width:'100%',maxWidth:400,maxHeight:'75vh',display:'flex',flexDirection:'column'}}>
+                  <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:2}}>Members — # general</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Everyone on your team is in the main channel automatically.</div>
+                  <div style={{overflowY:'auto'}}>
+                    {team.map(t=>(
+                      <div key={t.uuid} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                        <div style={{width:30,height:30,borderRadius:15,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:C.gold,flexShrink:0}}>
+                          {(t.name||'?')[0]}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:700,color:C.white}}>{t.name}{t.uuid===myUUID?' (you)':''}</div>
+                          <div style={{fontSize:10,color:C.muted,textTransform:t.label?'none':'capitalize'}}>{t.label || (t.role||'').replace(/_/g,' ')}{t.isHeadCoach?' · Head Coach':''}</div>
+                        </div>
+                        {t.uuid!==myUUID && (
+                          <button onClick={()=>{ setShowChannelMembers(false); setDmTarget(t); setChatView('dm') }}
+                            style={{background:`${C.gold}15`,border:`1px solid ${C.gold}55`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:10,fontWeight:700,cursor:'pointer'}}>💬 DM</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={()=>setShowChannelMembers(false)}
+                    style={{marginTop:14,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',color:C.muted,fontSize:12,cursor:'pointer',alignSelf:'flex-end'}}>Close</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
