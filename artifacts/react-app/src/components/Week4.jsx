@@ -145,6 +145,23 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1)+' MB'
 }
 
+// ── Lab date — stored as a hidden [[labdate|YYYY-MM-DD]] marker at the start
+// of notes (the lab_results table has no date column and we can't add one).
+// Labs sort by this date so out-of-order uploads land in the right place.
+const LABDATE_RE = /^\[\[labdate\|(\d{4}-\d{2}-\d{2})\]\]\s*/
+function labDateOf(lab)  { const m = LABDATE_RE.exec(lab?.notes||''); return m ? m[1] : null }
+function labNotesOf(lab) { return String(lab?.notes||'').replace(LABDATE_RE,'') }
+function labSortKey(lab) { return labDateOf(lab) || String(lab?.created_at||'').slice(0,10) }
+function fmtLabDate(d) {
+  if (!d) return ''
+  const [y,m,day] = d.split('-').map(Number)
+  return new Date(y, m-1, day).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+}
+function withLabDate(notes, date) {
+  const clean = String(notes||'').replace(LABDATE_RE,'')
+  return date ? `[[labdate|${date}]] ${clean}`.trimEnd() : clean
+}
+
 // ── Mini UI ───────────────────────────────────────────────────
 function Lbl({t}) {
   return <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'14px 0 7px'}}>{t}</div>
@@ -229,6 +246,7 @@ export default function Week4({currentUser, initialTab='labs', onBack}) {
   const [labFilter,   setLabFilter]   = useState('All')
   const [uploading,   setUploading]   = useState(false)
   const [newLabNote,    setNewLabNote]    = useState('')
+  const [newLabDate,    setNewLabDate]    = useState(()=>new Date().toISOString().slice(0,10))
   const [newLabType,    setNewLabType]    = useState('Blood Work')
   const [newLabLoomUrl, setNewLabLoomUrl] = useState('')
   const labFileRef = useRef(null)
@@ -396,7 +414,7 @@ Training Principles:
         file_url:     fileUrl,
         file_name:    file.name,
         file_size:    file.size,
-        notes:        newLabNote,
+        notes:        withLabDate(newLabNote, newLabDate),
         loom_url:     newLabLoomUrl||null,
       })
       if (inserted) {
@@ -411,7 +429,7 @@ Training Principles:
       await dbInsert('lab_results',{
         client_id:CLIENT_UUID, coach_id:COACH_UUID,
         uploaded_by:myUUID, uploader_name:info.name,
-        lab_type:newLabType, notes:newLabNote,
+        lab_type:newLabType, notes:withLabDate(newLabNote, newLabDate),
         file_name:file.name, file_size:file.size,
         loom_url:newLabLoomUrl||null,
       })
@@ -598,7 +616,10 @@ Training Principles:
        .map(e=>({name:e,cat}))
   ).filter(e=>!exSearch?e.cat===exCategory:true)
 
-  const filteredLabs = labFilter==='All'?labs:labs.filter(l=>l.lab_type===labFilter)
+  // Sort by the actual lab date (falls back to upload date), newest first —
+  // so labs uploaded out of order still line up chronologically
+  const filteredLabs = (labFilter==='All'?labs:labs.filter(l=>l.lab_type===labFilter))
+    .slice().sort((a,b)=>labSortKey(b).localeCompare(labSortKey(a)))
 
   const TABS = initialTab === 'labs'
     ? [['labs',    '🧪 Labs']]
@@ -661,6 +682,7 @@ Training Principles:
             {/* Upload area */}
             <div style={{padding:14,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
               <Sel label="Lab Type" value={newLabType} onChange={setNewLabType} options={LAB_TYPES}/>
+              <Inp label="Date labs were taken" value={newLabDate} onChange={setNewLabDate} type="date"/>
               <Inp label="Notes (optional)" value={newLabNote} onChange={setNewLabNote} placeholder="e.g. Fasted 12hr before draw"/>
               <Inp label="Loom Recording URL (optional)" value={newLabLoomUrl} onChange={setNewLabLoomUrl} placeholder="https://www.loom.com/share/…"/>
               <input type="file" ref={labFileRef} onChange={handleLabUpload} style={{display:'none'}}
@@ -707,14 +729,16 @@ Training Principles:
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:600,color:activeLab?.id===lab.id?C.gold:C.white}}>{lab.lab_type}</div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{formatTime(lab.created_at)}</div>
-                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>Uploaded by {lab.uploader_name}</div>
+                      <div style={{fontSize:11,color:labDateOf(lab)?C.gold:C.muted,marginTop:2}}>
+                        {labDateOf(lab) ? `🗓 Labs from ${fmtLabDate(labDateOf(lab))}` : formatTime(lab.created_at)}
+                      </div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>Uploaded {formatTime(lab.created_at)} by {lab.uploader_name}</div>
                     </div>
                     <span style={{fontSize:10,background:`${C.gold}22`,color:C.gold,padding:'2px 7px',borderRadius:10,fontWeight:700,flexShrink:0,marginLeft:8}}>
                       {lab.lab_type.split(' ')[0]}
                     </span>
                   </div>
-                  {lab.notes&&<div style={{fontSize:11,color:C.muted,marginTop:4,fontStyle:'italic'}}>{lab.notes}</div>}
+                  {labNotesOf(lab)&&<div style={{fontSize:11,color:C.muted,marginTop:4,fontStyle:'italic'}}>{labNotesOf(lab)}</div>}
                 </button>
               ))}
 
@@ -756,7 +780,18 @@ Training Principles:
                   style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,padding:0,lineHeight:1, display: isMobile ? 'block' : 'block'}}>←</button>
                 <div style={{flex:1}}>
                   <div style={{fontSize:14,fontWeight:700,color:C.white}}>{activeLab.lab_type}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{formatTime(activeLab.created_at)} · {activeLab.uploader_name}</div>
+                  <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                    <span>{labDateOf(activeLab) ? `🗓 Labs from ${fmtLabDate(labDateOf(activeLab))}` : `Uploaded ${formatTime(activeLab.created_at)}`} · {activeLab.uploader_name}</span>
+                    <input type="date" value={labDateOf(activeLab)||''} title="Change the date these labs were taken — the list re-orders automatically"
+                      onChange={async e=>{
+                        const d = e.target.value; if (!d) return
+                        const notes = withLabDate(activeLab.notes, d)
+                        await dbUpdate('lab_results', `id=eq.${activeLab.id}`, { notes })
+                        setActiveLab(p=>({...p, notes}))
+                        setLabs(p=>p.map(l=>l.id===activeLab.id?{...l, notes}:l))
+                      }}
+                      style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,color:C.gold,fontSize:10,padding:'2px 6px',outline:'none',colorScheme:'dark'}}/>
+                  </div>
                 </div>
                 {activeLab.file_url&&(
                   <a href={activeLab.file_url} target="_blank" rel="noreferrer"
