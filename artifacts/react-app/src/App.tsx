@@ -2486,6 +2486,117 @@ const DEFAULT_PERMS:any = { messages:true, diet:false, labs:false, workout:false
 const FALLBACK_STAFF:any[]   = [];
 const FALLBACK_CLIENTS:any[] = [];
 
+// ── Team Roles — manage the reusable saved role names (Closer, Sales…) ──
+// Same admin_settings `staff_roles` list the Add User modal reads; renames can
+// optionally sweep existing staff titles (staff_meta:<id> labels) too.
+const TeamRolesManager = ({ user }:any) => {
+  const [companyId, setCompanyId] = useState<string|null>(null);
+  const [roles,     setRoles]     = useState<string[]>([]);
+  const [staffMeta, setStaffMeta] = useState<any[]>([]); // [{key,value:{label,tabs}}]
+  const [loaded,    setLoaded]    = useState(false);
+  const [newName,   setNewName]   = useState('');
+  const [editing,   setEditing]   = useState<string|null>(null);
+  const [editName,  setEditName]  = useState('');
+  const [busy,      setBusy]      = useState(false);
+
+  useEffect(() => { (async () => {
+    const rows:any[] = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id,company_id`);
+    const cid = rows?.[0]?.company_id; if (!cid) { setLoaded(true); return; }
+    setCompanyId(cid);
+    const [rr, mm] = await Promise.all([
+      sbGet('admin_settings', `company_id=eq.${cid}&key=eq.staff_roles&select=value`),
+      sbGet('admin_settings', `company_id=eq.${cid}&key=like.${encodeURIComponent('staff_meta:*')}&select=key,value`),
+    ]);
+    try { const v = rr?.[0]?.value; const arr = typeof v==='string'?JSON.parse(v):v; if (Array.isArray(arr)) setRoles(arr); } catch {}
+    setStaffMeta((mm||[]).map((m:any) => { try { return { key:m.key, value: typeof m.value==='string'?JSON.parse(m.value):m.value }; } catch { return { key:m.key, value:{} }; } }));
+    setLoaded(true);
+  })(); }, []);
+
+  const countFor = (name:string) => staffMeta.filter(m => (m.value?.label||'') === name).length;
+
+  async function persist(next:string[]) {
+    setRoles(next);
+    await fetch(`${SB_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+      method:'POST', headers:{ ...SB_H, 'Prefer':'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ company_id:companyId, key:'staff_roles', value:JSON.stringify(next) }),
+    }).catch(()=>{});
+  }
+  async function addRole() {
+    const name = newName.trim(); if (!name) return;
+    if (roles.some(r=>r.toLowerCase()===name.toLowerCase())) { alert('That role already exists.'); return; }
+    setNewName(''); await persist([...roles, name]);
+  }
+  async function saveRename(oldName:string) {
+    const name = editName.trim(); if (!name || name===oldName) { setEditing(null); return; }
+    if (roles.some(r=>r!==oldName && r.toLowerCase()===name.toLowerCase())) { alert('That role name already exists.'); return; }
+    setBusy(true);
+    const n = countFor(oldName);
+    const sweep = n>0 && window.confirm(`Also update the ${n} team member${n===1?'':'s'} currently titled "${oldName}" to "${name}"? OK = update them too, Cancel = only rename the saved role.`);
+    await persist(roles.map(r=>r===oldName?name:r));
+    if (sweep) {
+      for (const m of staffMeta.filter(x=>(x.value?.label||'')===oldName)) {
+        await sbPatch('admin_settings', `company_id=eq.${companyId}&key=eq.${encodeURIComponent(m.key)}`,
+          { value: JSON.stringify({ ...m.value, label:name }) });
+      }
+      setStaffMeta(prev=>prev.map(x=>(x.value?.label||'')===oldName?{...x,value:{...x.value,label:name}}:x));
+    }
+    setEditing(null); setEditName(''); setBusy(false);
+  }
+  async function removeRole(name:string) {
+    const n = countFor(name);
+    if (!window.confirm(`Delete the saved role "${name}"?${n?` The ${n} team member${n===1?'':'s'} with this title will keep it — this only removes it from the reusable list.`:''}`)) return;
+    await persist(roles.filter(r=>r!==name));
+  }
+
+  return (
+    <div style={{ padding:24, maxWidth:640 }}>
+      <h2 style={{ fontSize:16, fontWeight:800, color:B.text, margin:'0 0 4px' }}>🏷 Team Roles</h2>
+      <p style={{ fontSize:12, color:B.muted, margin:'0 0 16px' }}>
+        Reusable role titles for staff (e.g. Closer, Sales Mentor). These appear in the Role dropdown when adding a team member. Renaming or deleting here never removes anyone's account.
+      </p>
+      {!loaded ? <div style={{ fontSize:12, color:B.muted }}>Loading roles…</div> : (
+        <>
+          {roles.length===0 && <div style={{ fontSize:12, color:B.muted, marginBottom:12 }}>No saved roles yet — add your first below.</div>}
+          {roles.map(r => (
+            <div key={r} style={{ display:'flex', alignItems:'center', gap:10, background:B.surface, border:`1px solid ${B.border}`, borderRadius:10, padding:'10px 14px', marginBottom:8 }}>
+              {editing===r ? (
+                <>
+                  <input value={editName} onChange={e=>setEditName(e.target.value)} autoFocus
+                    onKeyDown={e=>{ if(e.key==='Enter') saveRename(r); if(e.key==='Escape') setEditing(null); }}
+                    style={{ flex:1, background:B.bg, border:`1px solid ${B.gold}`, borderRadius:8, padding:'7px 10px', color:B.text, fontSize:13, outline:'none' }}/>
+                  <button onClick={()=>saveRename(r)} disabled={busy||!editName.trim()}
+                    style={{ background:B.gold, border:'none', borderRadius:8, padding:'7px 14px', fontWeight:800, color:'#000', fontSize:11, cursor:'pointer', opacity:editName.trim()?1:.4 }}>{busy?'Saving…':'Save'}</button>
+                  <button onClick={()=>{setEditing(null);setEditName('');}}
+                    style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8, padding:'7px 10px', color:B.muted, fontSize:11, cursor:'pointer' }}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:B.text }}>{r}</div>
+                    <div style={{ fontSize:10, color:B.muted, marginTop:1 }}>{countFor(r)===0?'Nobody has this title yet':`${countFor(r)} team member${countFor(r)===1?'':'s'} with this title`}</div>
+                  </div>
+                  <button onClick={()=>{setEditing(r);setEditName(r);}}
+                    style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8, padding:'6px 12px', color:B.gold, fontSize:11, fontWeight:700, cursor:'pointer' }}>✎ Rename</button>
+                  <button onClick={()=>removeRole(r)}
+                    style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8, padding:'6px 12px', color:'#e5484d', fontSize:11, fontWeight:700, cursor:'pointer' }}>✕ Delete</button>
+                </>
+              )}
+            </div>
+          ))}
+          <div style={{ display:'flex', gap:8, marginTop:14 }}>
+            <input value={newName} onChange={e=>setNewName(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Enter') addRole(); }}
+              placeholder='New role name — e.g. "Sales", "Module Mentor"'
+              style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:'9px 12px', color:B.text, fontSize:13, outline:'none' }}/>
+            <button onClick={addRole} disabled={!newName.trim()}
+              style={{ background:B.gold, border:'none', borderRadius:8, padding:'9px 16px', fontWeight:800, color:'#000', fontSize:12, cursor:'pointer', opacity:newName.trim()?1:.4 }}>+ Add role</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const StaffAccessManager = ({ user }:any) => {
   const [companyId,   setCompanyId]   = useState<string|null>(null);
   const [adminId,     setAdminId]     = useState<string|null>(null);
@@ -3944,7 +4055,7 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Tab bar */}
       <div style={{ display:'flex', borderBottom:`1px solid ${B.border}`, background:B.surface, padding:'0 20px', flexShrink:0 }}>
-        {[['overview','📊 Overview'],['access','👥 Staff Access'],['convos','💬 Conversations'],['activity','📋 Activity']].map(([key,label])=>(
+        {[['overview','📊 Overview'],['access','👥 Staff Access'],['roles','🏷 Team Roles'],['convos','💬 Conversations'],['activity','📋 Activity']].map(([key,label])=>(
           <button key={key} onClick={()=>setAdminTab(key)}
             style={{ padding:'12px 16px', background:'none', border:'none', borderBottom:`2px solid ${adminTab===key?B.gold:'transparent'}`,
               color:adminTab===key?B.gold:B.muted, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
@@ -4265,6 +4376,9 @@ const AdminDashboard = ({ user }:any) => {
 
       {/* Staff Access */}
       {adminTab==='access' && <StaffAccessManager user={user}/>}
+
+      {/* Team Roles — reusable staff role names (rename/delete/add) */}
+      {adminTab==='roles' && <TeamRolesManager user={user}/>}
 
       {/* Conversations — admin reads all coach↔client threads */}
       {adminTab==='convos' && <AdminConversationMonitor user={user}/>}
