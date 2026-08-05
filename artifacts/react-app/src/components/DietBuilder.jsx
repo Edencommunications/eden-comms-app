@@ -2277,6 +2277,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                       coach_notes:draftNote.trim(), coach_loom:draftLoom.trim(),
                                       updated_at:new Date().toISOString()
                                     },'client_id,checkin_date')
+                                    // Mark the check-in reviewed so it drops out of the
+                                    // "needs review" highlight on the coach's Clients tab
+                                    if(saved._dbId) dbUpdate('weekly_checkins', `id=eq.${saved._dbId}`,
+                                      { coach_reviewed_at:new Date().toISOString() }).catch(()=>{})
                                     insertNotification(clientId, coachId, 'coach_response',
                                       `💬 Your coach reviewed your ${saved.date} check-in — new feedback waiting`)
                                   }

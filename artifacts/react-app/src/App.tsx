@@ -2105,19 +2105,25 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
       if (!myId) { setClients([]); return; }
       const rows = (await sbGet('user_profiles',
         `coach_id=eq.${myId}&role=eq.client&is_active=not.is.false&select=id,name,email,initials,update_day,start_date&order=name.asc`)) || [];
-      // Last check-in per client (single batched query)
+      // Last check-in per client (single batched query) + whether the latest
+      // one still needs a coach review (no coach_reviewed_at yet)
       let lastMap: Record<string,string> = {};
+      let reviewMap: Record<string,boolean> = {};
       if (rows.length > 0) {
         const ids = rows.map((r:any) => r.id).join(',');
         const cks = (await sbGet('weekly_checkins',
-          `client_id=in.(${ids})&select=client_id,submitted_at&order=submitted_at.desc`)) || [];
-        for (const ck of cks) if (!lastMap[ck.client_id]) lastMap[ck.client_id] = ck.submitted_at;
+          `client_id=in.(${ids})&select=client_id,submitted_at,coach_reviewed_at&order=submitted_at.desc`)) || [];
+        for (const ck of cks) if (!lastMap[ck.client_id]) {
+          lastMap[ck.client_id] = ck.submitted_at;
+          reviewMap[ck.client_id] = !ck.coach_reviewed_at;
+        }
       }
       setClients(rows.map((r:any) => ({
         uuid: r.id, name: r.name || '', email: r.email || '',
         initials: r.initials || (r.name || '?').split(' ').map((w:string)=>w[0]).join('').slice(0,2).toUpperCase(),
         checkInDay: r.update_day || '', startDate: r.start_date || null,
         lastCheckinAt: lastMap[r.id] || null,
+        needsReview: !!reviewMap[r.id],
         lastCheckin: lastMap[r.id]
           ? new Date(lastMap[r.id]).toLocaleDateString('en-US',{month:'short',day:'numeric'})
           : '—',
@@ -2378,7 +2384,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
 
         {rosterOpen && (
           <>
-            {clients.map((c,i)=>{
+            {[...clients].sort((a:any,b:any)=>(b.needsReview?1:0)-(a.needsReview?1:0)).map((c,i)=>{
               const alertOn = isAlertActive(c);
               return (
                 <div key={i} style={{ width:"100%", background:B.card,
@@ -2390,6 +2396,10 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                       onClick={()=>setSelectedClient(c)}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                         <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
+                        {!loomMode && c.needsReview && (
+                          <span style={{ fontSize:9, fontWeight:800, color:B.black, background:B.gold,
+                            borderRadius:4, padding:"2px 6px", letterSpacing:.5, whiteSpace:"nowrap" }}>📋 NEW CHECK-IN</span>
+                        )}
                         {!loomMode && c.checkInDay && (
                           <span style={{ fontSize:9, color:B.muted, background:B.surface, border:`1px solid ${B.border}`,
                             borderRadius:4, padding:"1px 5px", fontWeight:600 }}>{c.checkInDay}</span>
