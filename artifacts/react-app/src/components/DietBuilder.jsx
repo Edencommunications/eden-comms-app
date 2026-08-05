@@ -917,13 +917,20 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           energy:           r.energy,           sleep:            r.sleep,
           bloating:         r.bloating,         brainFog:         r.brain_fog,
           sexDrive:         r.sex_drive,        hunger:           r.hunger,
-          stress:           r.stress,           compliance:       r.compliance,
-          mood:             r.mood||'',         sleepWindow:      r.sleep_window||'',
-          sleepCycles:      r.sleep_cycles||'', sleepDisruption:  r.sleep_disruption||'',
-          bowelCount:       r.bowel_count||'',  bowelType:        r.bowel_type||'',
-          clientNotes:      r.notes||'',        coachNotes:       '',
+          // stress/compliance/mood/habits have no real columns — they live in
+          // protocol_durations.__extra (older rows may have the legacy columns)
+          stress:           r.protocol_durations?.__extra?.stress ?? r.stress,
+          compliance:       r.protocol_durations?.__extra?.compliance ?? r.compliance,
+          mood:             r.protocol_durations?.__extra?.mood || r.mood || '',
+          sleepWindow:      r.sleepWindow || r.sleep_window || '',
+          sleepCycles:      r.sleepCycles || r.sleep_cycles || '',
+          sleepDisruption:  r.sleepDisruption || r.sleep_disruption || '',
+          bowelCount:       r.bowel_count||'',  bowelType:        r.bowelType || r.bowel_type || '',
+          clientNotes:      r.other_notes || r.notes || '',
+          coachNotes:       '',
           coachLoom:        '',
-          habits:           r.habits || null,   habitPct:         r.habit_pct,
+          habits:           r.protocol_durations?.__extra?.habits ?? r.habits ?? null,
+          habitPct:         r.protocol_durations?.__extra?.habit_pct ?? r.habit_pct,
           mealNotes:        r.meal_notes || null,
           custom:           r.protocol_durations?.__custom || null,
           _dbId:            r.id,
@@ -3071,7 +3078,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     custom['Period Pain (1–10)']=String(ci.cyclePain)
                   }
                   const hasCustom=Object.keys(custom).length>0
-                  await dbInsert('weekly_checkins',{
+                  // NOTE: the live table has no columns for stress/compliance/mood/habits/
+                  // habit_pct — those ride inside protocol_durations.__extra. Notes live in
+                  // other_notes, and sleep/bowel details use the camelCase columns.
+                  const inserted = await dbInsert('weekly_checkins',{
                     client_id:        myUUID,
                     coach_id:         myCoachId,
                     weight:           V('weight',ci.weight), temp:           V('temp',ci.temp),
@@ -3080,19 +3090,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     energy:           V('energy',ci.energy), sleep:          V('sleep',ci.sleep),
                     bloating:         V('bloating',ci.bloating), brain_fog:  V('brainFog',ci.brainFog),
                     sex_drive:        V('sexDrive',ci.sexDrive), hunger:     V('hunger',ci.hunger),
-                    stress:           ci.stress,             compliance:     ci.compliance,
-                    mood:             ci.mood,               sleep_window:   V('wakeTime',ci.wakeTime),
-                    sleep_cycles:     ci.sleepCycles,        sleep_disruption: V('sleepNotes',ci.sleepNotes),
-                    bowel_count:      V('bowelCount',ci.bowelCount), bowel_type: V('bowelType',ci.bowelType),
-                    notes:            ci.notes,              habits:         habitCounts,
-                    habit_pct:        habitScore,            submitted_at:   new Date().toISOString(),
+                    sleepWindow:      V('wakeTime',ci.wakeTime),
+                    sleepCycles:      ci.sleepCycles,        sleepDisruption: V('sleepNotes',ci.sleepNotes),
+                    bowel_count:      V('bowelCount',ci.bowelCount), bowelType: V('bowelType',ci.bowelType),
+                    other_notes:      ci.notes,
+                    submitted_at:     new Date().toISOString(),
                     meal_notes:       Object.keys(mealNotes).some(k=>mealNotes[k]) ? mealNotes : null,
-                    protocol_durations: (Object.keys(protocolDurations).some(k=>protocolDurations[k])||otherProtocols.length>0||hasCustom)
-                      ? {...protocolDurations,
+                    protocol_durations: {...protocolDurations,
                          __others: otherProtocols.length>0 ? otherProtocols : undefined,
-                         __custom: hasCustom ? custom : undefined}
-                      : null,
+                         __custom: hasCustom ? custom : undefined,
+                         __extra: { stress:ci.stress, compliance:ci.compliance, mood:ci.mood,
+                                    habits:habitCounts, habit_pct:habitScore }},
                   })
+                  if(!inserted){
+                    alert('Your check-in could not be saved — please try again. If this keeps happening, tell your coach.')
+                    return
+                  }
                   // Audit trail (server-side — RLS blocks clients from direct inserts)
                   try {
                     const tok = sbAccessToken()
