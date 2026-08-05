@@ -20,6 +20,7 @@ import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
 import Notifications from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
+import { LN, LoomPicker, loomSet } from "./components/LoomPrivacy";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
@@ -32,36 +33,6 @@ import { supabase } from "./supabaseClient";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
-// ── Global Loom Mode (admin) — blur names app-wide, click a name to reveal it ──
-function useLoomOn() {
-  const [on, setOn] = useState<boolean>(!!(window as any).__edenLoom);
-  useEffect(() => {
-    const h = () => setOn(!!(window as any).__edenLoom);
-    window.addEventListener('eden-loom', h);
-    return () => window.removeEventListener('eden-loom', h);
-  }, []);
-  return on;
-}
-// Wrap any name/email in <LN>…</LN>: normally invisible; in Loom Mode it blurs
-// the content and a click toggles it back to readable (click again to re-blur).
-const LN = ({ children, style }: any) => {
-  const loom = useLoomOn();
-  const [show, setShow] = useState(false);   // pinned visible (click)
-  const [hover, setHover] = useState(false); // temporary peek (mouse over)
-  if (!loom) return <>{children}</>;
-  const visible = show || hover;
-  return (
-    <span onClick={(e) => { e.stopPropagation(); setShow(s => !s); }}
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      title={show ? 'Click to blur again' : 'Hover to peek · click to keep visible'}
-      style={{ filter: visible ? 'none' : 'blur(6px)', cursor: 'pointer',
-        userSelect: visible ? 'auto' : 'none', borderRadius: 4,
-        outline: show ? '1px dashed #ffa60066' : 'none', ...style }}>
-      {children}
-    </span>
-  );
-};
-
 const B = {
   gold:    "#ffa600",   // PRIMARY — buttons, accents, active states
   black:   "#000000",   // BASE — page backgrounds
@@ -5501,8 +5472,7 @@ const AppShell = ({ user, onLogout }) => {
                 // the last-clicked client (set by the Clients list / dashboard)
                 if (on && coachClient?.name) setLoomFeatured(new Set([coachClient.name]));
                 // Global flag for admin screens: <LN> wrappers blur names when this is on
-                (window as any).__edenLoom = on;
-                window.dispatchEvent(new Event('eden-loom'));
+                loomSet(on);
                 return on;
               })}
               title={loomMode ? "Exit Loom Mode" : "Enable Loom Mode — hides other client names"}
@@ -5519,6 +5489,7 @@ const AppShell = ({ user, onLogout }) => {
               )}
             </button>
           )}
+          {(user.role === "coach" || user.role === "super_admin") && <LoomPicker isMobile={isMobile}/>}
           <DndButton isMobile={isMobile}/>
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={(dest: string, client?: any) => {
             // Deep-link: check-in notifications carry the submitting client, so

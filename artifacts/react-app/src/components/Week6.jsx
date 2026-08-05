@@ -2565,7 +2565,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 </div>
                 <div style={{flex:1}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{fontSize:14,fontWeight:700,color:C.white}}>{org.name}</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.white}}><LN>{org.name}</LN></div>
                     {!org.isWhiteLabel&&<span style={{fontSize:9,background:`${C.gold}22`,color:C.gold,padding:'2px 7px',borderRadius:10,fontWeight:700}}>PLATFORM OWNER</span>}
                     {org.isWhiteLabel&&<span style={{fontSize:9,background:`#D4A8F022`,color:'#D4A8F0',padding:'2px 7px',borderRadius:10,fontWeight:700}}>WHITE LABEL</span>}
                   </div>
@@ -3376,7 +3376,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget)setManageOrg(null)}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:440,padding:24,maxHeight:'90vh',overflowY:'auto'}}>
-            <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>Manage — {manageOrg.name}</div>
+            <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>Manage — <LN>{manageOrg.name}</LN></div>
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>Change their tier, branding, or status. MRR updates automatically when the tier changes.</div>
             <Inp label="Company Name" value={manageOrg.name} onChange={v=>setManageOrg(p=>({...p,name:v}))}/>
             {manageOrg.isWhiteLabel
