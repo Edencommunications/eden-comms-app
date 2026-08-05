@@ -830,7 +830,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [coachCheckinTab,  setCoachCheckinTab]  = useState('checkins')
   const [clientPhotos,     setClientPhotos]     = useState(null)
   const [photoUploading,   setPhotoUploading]   = useState(false)
-  const [photoLabel,       setPhotoLabel]       = useState('')   // label for the next photo upload
   const photoFileRef = useRef(null)
   const [updateDay, setUpdateDay] = useState(null)
   const deadline = useDeadline(currentUser?.email || '')
@@ -968,31 +967,39 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .catch(() => setClientPhotos([]))
   }, [email, myUUID])
 
-  // Next default label = one past the highest existing "Week N" group
-  function nextWeekLabel(photos) {
+  // Week numbers are automatic and can't be edited: photos taken within 7 days
+  // of the current week's first photo join that week; after that a new week starts.
+  function currentWeekLabel(photos) {
     let maxWeek = 0
     for (const p of photos || []) {
       const m = /^week\s*(\d+)$/i.exec(String(p.week_label || '').trim())
       if (m) maxWeek = Math.max(maxWeek, parseInt(m[1]))
     }
+    if (!maxWeek) return 'Week 1'
+    const label = `Week ${maxWeek}`
+    const group = (photos || []).filter(p => String(p.week_label || '').trim().toLowerCase() === label.toLowerCase())
+    const first = group.map(p => new Date(p.taken_at || p.created_at).getTime()).filter(t => !isNaN(t)).sort()[0]
+    if (first && Date.now() - first < 7 * 86400000) return label
     return `Week ${maxWeek + 1}`
   }
+  const DEFAULT_PHOTO_NAMES = ['Front', 'Side', 'Back']
 
   async function uploadProgressPhoto(e) {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
     const uuid = myUUID
     if (!uuid) { alert('Could not identify your account.'); return }
-    const label = (photoLabel || '').trim() || nextWeekLabel(clientPhotos)
+    const label = currentWeekLabel(clientPhotos)
     const existing = (clientPhotos || []).filter(p => (p.week_label || '') === label).length
     if (existing + files.length > 10) {
-      alert(`"${label}" already has ${existing} photo${existing !== 1 ? 's' : ''} — you can add up to ${10 - existing} more (max 10 per group).`)
+      alert(`${label} already has ${existing} photo${existing !== 1 ? 's' : ''} — you can add up to ${10 - existing} more (max 10 per week).`)
       if (photoFileRef.current) photoFileRef.current.value = ''
       return
     }
     setPhotoUploading(true)
     let failed = 0
     try {
+      let idx = existing
       for (const file of files) {
         try {
           const path = `${uuid}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${file.name}`
@@ -1006,9 +1013,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           const ins = await dbInsert('progress_photos', {
             client_id: uuid, week_label: label,
             photo_url: photoUrl, file_name: file.name, file_size: file.size,
+            notes: DEFAULT_PHOTO_NAMES[idx] || `Photo ${idx + 1}`,
             taken_at: new Date().toISOString(),
           })
           if (!ins) throw new Error('db insert failed')
+          idx++
         } catch { failed++ }
       }
       const rows = await dbGet('progress_photos', `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)
@@ -1018,20 +1027,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     finally { setPhotoUploading(false); if (photoFileRef.current) photoFileRef.current.value = '' }
   }
 
-  // Rename a photo group's label (e.g. "Week 2" → "Week 1" merges into that group)
-  async function renamePhotoGroup(oldLabel) {
-    const next = window.prompt('New label for these photos:', oldLabel)
+  // Rename an individual photo (e.g. "Front", "Overhead thigh") — week can't change
+  async function renamePhoto(p) {
+    const next = window.prompt('Name for this photo:', p.notes || '')
     if (next == null) return
-    const label = next.trim()
-    if (!label || label === oldLabel) return
-    const target = (clientPhotos || []).filter(p => (p.week_label || '') === label).length
-    const moving = (clientPhotos || []).filter(p => (p.week_label || 'Uncategorized') === oldLabel).length
-    if (target + moving > 10) { alert(`"${label}" would end up with more than 10 photos — pick a different label.`); return }
-    const ok = await dbUpdate('progress_photos',
-      `client_id=eq.${myUUID}&week_label=eq.${encodeURIComponent(oldLabel)}`, { week_label: label })
+    const name = next.trim()
+    if (!name || name === p.notes) return
+    const ok = await dbUpdate('progress_photos', `id=eq.${p.id}`, { notes: name })
     if (ok === null) { alert('Could not rename — please try again.'); return }
-    const rows = await dbGet('progress_photos', `client_id=eq.${myUUID}&order=taken_at.desc&limit=60`)
-    setClientPhotos(Array.isArray(rows) ? rows : [])
+    setClientPhotos(prev => (prev || []).map(x => x.id === p.id ? { ...x, notes: name } : x))
   }
 
   // Habits — assigned by coach, frequency filled by client
@@ -2404,10 +2408,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:8}}>
                         {wPhotos.map((p,i)=>(
                           p.photo_url?(
-                            <a key={i} href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
-                              <img src={p.photo_url} alt={`${week} photo ${i+1}`}
-                                style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:10,display:'block',border:`1px solid ${C.border}`}}/>
-                            </a>
+                            <div key={i}>
+                              <a href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
+                                <img src={p.photo_url} alt={`${week} — ${p.notes||`photo ${i+1}`}`}
+                                  style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:10,display:'block',border:`1px solid ${C.border}`}}/>
+                              </a>
+                              <div style={{fontSize:11,fontWeight:700,color:C.gold,textAlign:'center',marginTop:4}}>{p.notes||`Photo ${i+1}`}</div>
+                            </div>
                           ):(
                             <div key={i} style={{aspectRatio:'3/4',background:C.surface,border:`1px solid ${C.border}`,
                               borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4}}>
@@ -2788,12 +2795,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/* ─── Photos tab ─── */}
               {clientViewTab==='photos'&&(<>
                 <input type="file" ref={photoFileRef} accept="image/*" multiple style={{display:'none'}} onChange={uploadProgressPhoto}/>
-                <div style={{marginBottom:8}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Label for these photos</div>
-                  <input value={photoLabel} onChange={e=>setPhotoLabel(e.target.value)}
-                    placeholder={nextWeekLabel(clientPhotos)}
-                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
-                </div>
                 <button onClick={()=>photoFileRef.current?.click()} disabled={photoUploading}
                   style={{width:'100%',background:'none',border:`2px dashed ${C.gold}66`,borderRadius:12,
                     padding:'18px',color:C.gold,fontSize:13,fontWeight:700,
@@ -2803,7 +2804,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   {photoUploading?'⏳ Uploading…':'📸 Upload Progress Photos'}
                 </button>
                 <div style={{fontSize:11,color:C.muted,textAlign:'center',marginBottom:20}}>
-                  Select up to 10 at once (front, side, back…) — they'll all go under the label above. Your coach can see these.
+                  Select up to 10 at once — they go into {currentWeekLabel(clientPhotos)} automatically, named Front / Side / Back (tap ✏️ to rename any photo). Your coach can see these.
                 </div>
 
                 {clientPhotos===null?(
@@ -2825,11 +2826,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div key={week} style={{marginBottom:22}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                         <div>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            <div style={{fontSize:14,fontWeight:700,color:C.white}}>{week}</div>
-                            <button onClick={()=>renamePhotoGroup(week)} title="Rename this label"
-                              style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.muted,padding:0}}>✏️</button>
-                          </div>
+                          <div style={{fontSize:14,fontWeight:700,color:C.white}}>{week}</div>
                           <div style={{fontSize:11,color:C.muted}}>
                             {wPhotos[0]?.taken_at?new Date(wPhotos[0].taken_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}
                           </div>
@@ -2841,10 +2838,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:8}}>
                         {wPhotos.map((p,i)=>(
                           p.photo_url?(
-                            <a key={i} href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
-                              <img src={p.photo_url} alt={`${week} photo ${i+1}`}
-                                style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:10,display:'block',border:`1px solid ${C.border}`}}/>
-                            </a>
+                            <div key={i}>
+                              <a href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
+                                <img src={p.photo_url} alt={`${week} — ${p.notes||`photo ${i+1}`}`}
+                                  style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:10,display:'block',border:`1px solid ${C.border}`}}/>
+                              </a>
+                              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginTop:4}}>
+                                <span style={{fontSize:11,fontWeight:700,color:C.gold}}>{p.notes||`Photo ${i+1}`}</span>
+                                <button onClick={()=>renamePhoto(p)} title="Rename this photo"
+                                  style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:C.muted,padding:0}}>✏️</button>
+                              </div>
+                            </div>
                           ):(
                             <div key={i} style={{aspectRatio:'3/4',background:C.surface,border:`1px solid ${C.border}`,
                               borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4}}>
