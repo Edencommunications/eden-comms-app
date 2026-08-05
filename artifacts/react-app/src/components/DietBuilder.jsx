@@ -40,6 +40,74 @@ const C = {
   muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
 }
 
+// Side-by-side photo compare: two panes, tap a pane to select it, tap a
+// thumbnail below to fill ONLY that pane (never the whole page).
+function PhotoCompare({ photos, isMobile }) {
+  const [panes, setPanes]   = useState({ left:null, right:null })
+  const [active, setActive] = useState('left')
+  const pane = (side) => {
+    const p = panes[side]
+    const isActive = active === side
+    return (
+      <div key={side} onClick={()=>setActive(side)}
+        style={{ flex:1, minWidth:0, aspectRatio:'3/4', background:C.surface, borderRadius:12, cursor:'pointer',
+          border:`2px solid ${isActive ? C.gold : C.border}`, overflow:'hidden', position:'relative',
+          display:'flex', alignItems:'center', justifyContent:'center' }}>
+        {p ? (<>
+          <img src={p.photo_url} alt="" style={{ width:'100%', height:'100%', objectFit:'contain', display:'block' }}/>
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, background:'rgba(0,0,0,0.65)', padding:'5px 8px',
+            fontSize:11, fontWeight:700, color:C.gold, textAlign:'center' }}>
+            {p.week_label||''}{p.notes?` · ${p.notes}`:''}
+          </div>
+        </>) : (
+          <div style={{ color:C.muted, fontSize:11, textAlign:'center', padding:12 }}>
+            {isActive ? 'Tap a photo below to fill this side' : 'Tap to select this side'}
+          </div>
+        )}
+        {isActive && <div style={{ position:'absolute', top:6, left:6, fontSize:9, fontWeight:800, letterSpacing:1,
+          background:C.gold, color:'#000', borderRadius:6, padding:'2px 7px' }}>SELECTED</div>}
+      </div>
+    )
+  }
+  const byWeek = {}
+  for (const p of photos || []) {
+    if (!p.photo_url) continue
+    const k = p.week_label || 'Uncategorized'
+    if (!byWeek[k]) byWeek[k] = []
+    byWeek[k].push(p)
+  }
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, marginBottom:6 }}>{pane('left')}{pane('right')}</div>
+      <div style={{ fontSize:10, color:C.muted, textAlign:'center', marginBottom:12 }}>
+        Tap a side to select it, then tap any photo below — it fills only that side.
+      </div>
+      {Object.entries(byWeek).map(([week, wPhotos]) => (
+        <div key={week} style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.white, marginBottom:6 }}>{week}</div>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {wPhotos.map((p, i) => {
+              const inLeft = panes.left?.id === p.id, inRight = panes.right?.id === p.id
+              return (
+                <div key={i}
+                  onClick={()=>{ setPanes(prev=>({ ...prev, [active]:p })); setActive(a=>a==='left'?'right':'left') }}
+                  style={{ width:isMobile?58:72, cursor:'pointer' }}>
+                  <img src={p.photo_url} alt="" style={{ width:'100%', height:isMobile?76:94, objectFit:'cover', borderRadius:8,
+                    display:'block', border:`2px solid ${(inLeft||inRight) ? C.gold : C.border}` }}/>
+                  <div style={{ fontSize:9, color:(inLeft||inRight)?C.gold:C.muted, textAlign:'center', marginTop:2,
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {inLeft?'◀ ':''}{p.notes||`Photo ${i+1}`}{inRight?' ▶':''}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const H = {
   'apikey':SUPABASE_ANON,
   get Authorization(){ return sbBearer() },
@@ -830,6 +898,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [coachCheckinTab,  setCoachCheckinTab]  = useState('checkins')
   const [clientPhotos,     setClientPhotos]     = useState(null)
   const [photoUploading,   setPhotoUploading]   = useState(false)
+  const [photoCompare,     setPhotoCompare]     = useState(false)
   const photoFileRef = useRef(null)
   const [updateDay, setUpdateDay] = useState(null)
   const deadline = useDeadline(currentUser?.email || '')
@@ -2377,7 +2446,18 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
               {/* ── Photos sub-tab ── */}
               {coachCheckinTab==='photos'&&(<>
-                {clientPhotos===null?(
+                {Array.isArray(clientPhotos)&&clientPhotos.filter(p=>p.photo_url).length>1&&(
+                  <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
+                    <button onClick={()=>setPhotoCompare(v=>!v)}
+                      style={{background:photoCompare?C.gold:'none',color:photoCompare?'#000':C.gold,
+                        border:`1px solid ${C.gold}66`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                      {photoCompare?'✕ Exit Compare':'🔀 Compare Side-by-Side'}
+                    </button>
+                  </div>
+                )}
+                {photoCompare&&Array.isArray(clientPhotos)&&clientPhotos.length>0?(
+                  <PhotoCompare photos={clientPhotos} isMobile={isMobile}/>
+                ):clientPhotos===null?(
                   <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:12}}>Loading photos…</div>
                 ):clientPhotos.length===0?(
                   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:40,textAlign:'center'}}>
@@ -2807,7 +2887,18 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   Select up to 10 at once — they go into {currentWeekLabel(clientPhotos)} automatically, named Front / Side / Back (tap ✏️ to rename any photo). Your coach can see these.
                 </div>
 
-                {clientPhotos===null?(
+                {Array.isArray(clientPhotos)&&clientPhotos.filter(p=>p.photo_url).length>1&&(
+                  <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
+                    <button onClick={()=>setPhotoCompare(v=>!v)}
+                      style={{background:photoCompare?C.gold:'none',color:photoCompare?'#000':C.gold,
+                        border:`1px solid ${C.gold}66`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                      {photoCompare?'✕ Exit Compare':'🔀 Compare Side-by-Side'}
+                    </button>
+                  </div>
+                )}
+                {photoCompare&&Array.isArray(clientPhotos)&&clientPhotos.length>0?(
+                  <PhotoCompare photos={clientPhotos} isMobile={isMobile}/>
+                ):clientPhotos===null?(
                   <div style={{textAlign:'center',padding:40,color:C.muted}}>Loading…</div>
                 ):clientPhotos.length===0?(
                   <div style={{textAlign:'center',padding:40}}>
