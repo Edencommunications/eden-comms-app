@@ -7,6 +7,7 @@
 // ════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
+import { supabase } from '../supabaseClient'
 import MentionInput from './MentionInput'
 import { sendNotification } from './Notifications'
 import CanvasPanel from './CanvasPanel'
@@ -170,9 +171,35 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     msgCountRef.current = -1
     if (!activeId) return
     loadMembers(); loadMessages(); loadPins()
-    const iv = setInterval(() => loadMessages(), 6000)
+    // 6s poll stays only as a fallback when the realtime channel is disconnected
+    const iv = setInterval(() => { if (!rtLiveRef.current) loadMessages() }, 6000)
     return () => clearInterval(iv)
   }, [activeId])
+
+  // ── Realtime: instant message delivery (Supabase broadcast, like Team Hub) ──
+  // One channel per org+context; payload carries the communityId so only the
+  // open community refetches. No table publication needed (broadcast-only).
+  const rtChanRef = useRef(null)
+  const rtLiveRef = useRef(false)
+  const activeIdRef = useRef(null)
+  useEffect(() => { activeIdRef.current = activeId }, [activeId])
+  useEffect(() => {
+    if (!myId) return
+    const onLive = ({ payload }) => {
+      if (!payload?.communityId) return
+      if (payload.userId === myId) return // sender already refreshed locally
+      if (payload.communityId === activeIdRef.current) loadMessages(payload.communityId)
+    }
+    const ch = supabase.channel(`communities-live-${companyId}-${context}`)
+      .on('broadcast', { event: 'new-message' },     onLive)
+      .on('broadcast', { event: 'message-deleted' }, onLive)
+      .subscribe(status => { rtLiveRef.current = status === 'SUBSCRIBED' })
+    rtChanRef.current = ch
+    return () => { rtLiveRef.current = false; rtChanRef.current = null; supabase.removeChannel(ch) }
+  }, [myId, companyId, context]) // eslint-disable-line
+  function broadcastLive(event, communityId) {
+    try { rtChanRef.current?.send({ type:'broadcast', event, payload:{ communityId, userId: myId } }) } catch {}
+  }
 
   const amMember = members.some(m => m.user_id === myId)
   const canPost  = amMember || isAdmin || (active && active.created_by === myId)
@@ -302,6 +329,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     })
     if (r === null) { alert('Could not send — run the database update first.'); setNewMsg(text); return }
     setReplyTo(null)
+    broadcastLive('new-message', activeId)
     for (const m of findMentions(text)) {
       sendNotification({
         recipientId: m.user_id, senderId: myId, senderName: myName, type: 'mention',
@@ -322,6 +350,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     dbInsert('audit_logs', { action:'message_deleted', actor_id:myId, actor_name:myName, actor_role:myRole,
       target_type:'community_message', target_id:String(m.id),
       details:{ content:m.content, sender_id:m.sender_id, sender_name:m.sender_name, sent_at:m.created_at||null, community_id:activeId, community_name:active?.name, context:'community' } })
+    broadcastLive('message-deleted', activeId)
     loadMessages()
   }
 
