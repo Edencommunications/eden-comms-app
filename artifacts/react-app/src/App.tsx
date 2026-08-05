@@ -2080,7 +2080,7 @@ const UpcomingStartsSection = ({ clients, loomMode = false }: { clients: any[]; 
         {upcoming.map((c:any, i:number) => {
           const d = daysUntilStart(c);
           const col = tierColor(d);
-          const shownName = loomMode ? `Client ${String.fromCharCode(65+i)}` : c.name;
+          const shownName = <LN>{c.name}</LN>;
           return (
             <div key={c.uuid || c.email || c.name} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
               padding:"8px 10px", borderRadius:8, background:d <= 7 ? `${col}11` : "transparent",
@@ -4022,14 +4022,8 @@ const AdminDashboard = ({ user }:any) => {
   const mrr = whiteLabelOrgs.reduce((sum:number, o:any) => sum + (planPrices[(o.plan||'').toLowerCase()] || 0), 0);
   const fmtMrr = mrr >= 1000 ? `$${(mrr/1000).toFixed(1)}k` : `$${mrr}`;
 
-  const demoOrgs = [
-    { name:"Lifestyle of Eden", coaches:3, clients:24, color:B.gold },
-    { name:"Partner Brand Co.", coaches:2, clients:11, color:"#6FB8E8" },
-    { name:"Elite Performance", coaches:1, clients:6,  color:"#4FD89A" },
-  ];
-  const orgs = (dbOrgs && dbOrgs.length)
-    ? dbOrgs.map((o:any) => ({ name:o.name, coaches:'—', clients:'—', color:o.brand_color||B.gold, plan:o.plan, isWhiteLabel:o.is_white_label, row:o }))
-    : demoOrgs;
+  // Real orgs only — no demo placeholders (empty until the DB list loads)
+  const orgs = (dbOrgs || []).map((o:any) => ({ name:o.name, coaches:'—', clients:'—', color:o.brand_color||B.gold, plan:o.plan, isWhiteLabel:o.is_white_label, row:o }));
 
   const statCards = isOwnerHQ
     ? [

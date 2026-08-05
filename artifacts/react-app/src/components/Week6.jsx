@@ -376,6 +376,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const todayDay = new Date().toLocaleDateString('en-US',{weekday:'long'})
   const isCheckInDay = clients.some(c=>c.checkInDay===todayDay)
   const pendingUpdates = clients.filter(c=>c.hasUpdate).length
+
+  // Real submissions this week (from weekly_checkins) — drives "X/Y submitted"
+  const [weekSubs, setWeekSubs] = useState(new Set())
+  useEffect(()=>{
+    dbGet('weekly_checkins',`submitted_at=gte.${new Date(Date.now()-7*86400000).toISOString()}&select=client_id`)
+      .then(rows=>{ if(Array.isArray(rows)) setWeekSubs(new Set(rows.map(r=>r.client_id))) })
+      .catch(()=>{})
+  },[])
   const totalClients   = clients.length
 
   // ── Consultation state ────────────────────────────────────
@@ -1832,12 +1840,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </div>
             {allCoaches.map(coach=>{
               const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
-              const submitted    = coachClients.filter(c=>!c.hasUpdate).length
+              const submitted    = coachClients.filter(c=>weekSubs.has(c.uuid)).length
               const dl = coachDeadlines[coach.uuid]||{}
               return (
                 <div key={coach.uuid} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,flexWrap:'wrap',gap:6}}>
-                    <div style={{fontSize:13,color:C.white,fontWeight:600}}>{coach.name}</div>
+                    <div style={{fontSize:13,color:C.white,fontWeight:600}}><LN>{coach.name}</LN></div>
                     <div style={{display:'flex',alignItems:'center',gap:6}}>
                       {isAdmin&&(<>
                         <input type="time" value={dl.time||DEFAULT_TIME}
@@ -1880,7 +1888,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   {a.icon}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,color:C.white,fontWeight:500}}><span style={{color:C.gold}}>{a.actor}</span> {a.action} — {a.target}</div>
+                  <div style={{fontSize:12,color:C.white,fontWeight:500}}><span style={{color:C.gold}}><LN>{a.actor}</LN></span> {a.action} — <LN>{a.target}</LN></div>
                   <div style={{fontSize:10,color:C.muted,marginTop:2}}>{a.detail} · {a.time}</div>
                 </div>
               </div>
@@ -2395,8 +2403,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   {(s.name||s.full_name||'?')[0]}
                 </div>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.white}}>{s.name||s.full_name}</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>{s.email}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.white}}><LN>{s.name||s.full_name}</LN></div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:1}}><LN>{s.email}</LN></div>
                 </div>
                 <span style={{fontSize:10,background:`${C.gold}18`,color:C.gold,padding:'3px 9px',borderRadius:10,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5}}>
                   {(s.role||'').replace(/_/g,' ')}
@@ -2700,8 +2708,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               </div>
               <div style={{flex:1}}>
                 <div style={{fontSize:12,color:C.white,fontWeight:500,lineHeight:1.4}}>
-                  <span style={{color:C.gold,fontWeight:700}}>{a.actor}</span> {a.action}
-                  {a.target&&a.target!=='Self'&&<> → <span style={{color:C.white}}>{a.target}</span></>}
+                  <span style={{color:C.gold,fontWeight:700}}><LN>{a.actor}</LN></span> {a.action}
+                  {a.target&&a.target!=='Self'&&<> → <span style={{color:C.white}}><LN>{a.target}</LN></span></>}
                 </div>
                 <div style={{fontSize:11,color:C.muted,marginTop:2}}>{a.detail}</div>
                 <div style={{fontSize:10,color:C.dim,marginTop:3}}>{a.time}</div>
