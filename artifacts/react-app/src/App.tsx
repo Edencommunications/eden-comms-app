@@ -5244,6 +5244,27 @@ const AppShell = ({ user, onLogout }) => {
 
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ── Learn tab gating for white-label orgs ──
+  // Eden users always get Learn. White-label users only get it when their org's
+  // tier (packages row matching organizations.plan) has includes_courses=true.
+  // null = still resolving → hide Learn to avoid flashing it for gated orgs.
+  const [learnAllowed, setLearnAllowed] = useState<boolean|null>(null);
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const me = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=company_id`);
+        const cid = me?.[0]?.company_id;
+        if (!cid || cid === EDEN_ORG_ID) { if (!dead) setLearnAllowed(true); return; }
+        const org = (await sbGet('organizations', `id=eq.${cid}&select=plan,is_white_label&limit=1`))?.[0];
+        if (!org || org.is_white_label !== true) { if (!dead) setLearnAllowed(true); return; }
+        const pkg = (await sbGet('packages', `name=ilike.${encodeURIComponent(org.plan||'')}&select=includes_courses&limit=1`))?.[0];
+        if (!dead) setLearnAllowed(!!pkg?.includes_courses);
+      } catch { if (!dead) setLearnAllowed(true); } // fail open for Eden-side glitches
+    })();
+    return () => { dead = true; };
+  }, [user.email]);
+
   const clientTabs = [
     { key:"home",      icon:"home",      label:"Home" },
     { key:"msgs",      icon:"msg",       label:"Messages" },
@@ -5283,11 +5304,12 @@ const AppShell = ({ user, onLogout }) => {
 
   // Offboarded clients with community-only access: Messages/Communities is all they get
   const communityOnly = (user as any).communityOnly === true;
-  const tabs = communityOnly ? [{ key:"msgs", icon:"msg", label:"Messages" }]
+  const baseTabs = communityOnly ? [{ key:"msgs", icon:"msg", label:"Messages" }]
              : user.role === "super_admin" ? adminTabs
              : user.role === "coach"       ? coachTabs
              : isStaff                     ? staffTabs
              : clientTabs;
+  const tabs = baseTabs.filter(t => t.key !== "learn" || learnAllowed === true);
   useEffect(() => { if (communityOnly && tab !== "msgs") setTab("msgs"); }, [communityOnly, tab]);
 
   // Manual per-staff access control — admin_settings key staff_meta:<profileId>
