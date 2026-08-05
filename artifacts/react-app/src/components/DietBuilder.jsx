@@ -67,7 +67,8 @@ async function dbUpdate(table, query, body) {
       'Content-Type':'application/json', 'Prefer':'return=minimal' },
     body:JSON.stringify(body)
   })
-  if (!r.ok) console.error('UPDATE', await r.text())
+  if (!r.ok) { console.error('UPDATE', await r.text()); return null }
+  return true
 }
 async function dbUpsert(table, body, onConflict) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
@@ -829,6 +830,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [coachCheckinTab,  setCoachCheckinTab]  = useState('checkins')
   const [clientPhotos,     setClientPhotos]     = useState(null)
   const [photoUploading,   setPhotoUploading]   = useState(false)
+  const [photoLabel,       setPhotoLabel]       = useState('')   // label for the next photo upload
   const photoFileRef = useRef(null)
   const [updateDay, setUpdateDay] = useState(null)
   const deadline = useDeadline(currentUser?.email || '')
@@ -966,31 +968,70 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .catch(() => setClientPhotos([]))
   }, [email, myUUID])
 
+  // Next default label = one past the highest existing "Week N" group
+  function nextWeekLabel(photos) {
+    let maxWeek = 0
+    for (const p of photos || []) {
+      const m = /^week\s*(\d+)$/i.exec(String(p.week_label || '').trim())
+      if (m) maxWeek = Math.max(maxWeek, parseInt(m[1]))
+    }
+    return `Week ${maxWeek + 1}`
+  }
+
   async function uploadProgressPhoto(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
     const uuid = myUUID
     if (!uuid) { alert('Could not identify your account.'); return }
+    const label = (photoLabel || '').trim() || nextWeekLabel(clientPhotos)
+    const existing = (clientPhotos || []).filter(p => (p.week_label || '') === label).length
+    if (existing + files.length > 10) {
+      alert(`"${label}" already has ${existing} photo${existing !== 1 ? 's' : ''} — you can add up to ${10 - existing} more (max 10 per group).`)
+      if (photoFileRef.current) photoFileRef.current.value = ''
+      return
+    }
     setPhotoUploading(true)
+    let failed = 0
     try {
-      const path = `${uuid}/${Date.now()}-${file.name}`
-      const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/progress-photos/${path}`, {
-        method: 'POST',
-        headers: { 'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() }, 'Content-Type': file.type },
-        body: file,
-      })
-      if (!upRes.ok) throw new Error('upload failed')
-      const photoUrl = `${SUPABASE_URL}/storage/v1/object/public/progress-photos/${path}`
-      const weekNum  = (clientPhotos?.length || 0) + 1
-      await dbInsert('progress_photos', {
-        client_id: uuid, week_label: `Week ${weekNum}`,
-        photo_url: photoUrl, file_name: file.name, file_size: file.size,
-        taken_at: new Date().toISOString(),
-      })
+      for (const file of files) {
+        try {
+          const path = `${uuid}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${file.name}`
+          const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/progress-photos/${path}`, {
+            method: 'POST',
+            headers: { 'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() }, 'Content-Type': file.type },
+            body: file,
+          })
+          if (!upRes.ok) throw new Error('upload failed')
+          const photoUrl = `${SUPABASE_URL}/storage/v1/object/public/progress-photos/${path}`
+          const ins = await dbInsert('progress_photos', {
+            client_id: uuid, week_label: label,
+            photo_url: photoUrl, file_name: file.name, file_size: file.size,
+            taken_at: new Date().toISOString(),
+          })
+          if (!ins) throw new Error('db insert failed')
+        } catch { failed++ }
+      }
       const rows = await dbGet('progress_photos', `client_id=eq.${uuid}&order=taken_at.desc&limit=60`)
       setClientPhotos(Array.isArray(rows) ? rows : [])
-    } catch { alert('Upload failed. Make sure the progress-photos storage bucket exists in Supabase.') }
+      if (failed) alert(`${failed} of ${files.length} photo${files.length !== 1 ? 's' : ''} failed to upload — please try those again.`)
+    }
     finally { setPhotoUploading(false); if (photoFileRef.current) photoFileRef.current.value = '' }
+  }
+
+  // Rename a photo group's label (e.g. "Week 2" → "Week 1" merges into that group)
+  async function renamePhotoGroup(oldLabel) {
+    const next = window.prompt('New label for these photos:', oldLabel)
+    if (next == null) return
+    const label = next.trim()
+    if (!label || label === oldLabel) return
+    const target = (clientPhotos || []).filter(p => (p.week_label || '') === label).length
+    const moving = (clientPhotos || []).filter(p => (p.week_label || 'Uncategorized') === oldLabel).length
+    if (target + moving > 10) { alert(`"${label}" would end up with more than 10 photos — pick a different label.`); return }
+    const ok = await dbUpdate('progress_photos',
+      `client_id=eq.${myUUID}&week_label=eq.${encodeURIComponent(oldLabel)}`, { week_label: label })
+    if (ok === null) { alert('Could not rename — please try again.'); return }
+    const rows = await dbGet('progress_photos', `client_id=eq.${myUUID}&order=taken_at.desc&limit=60`)
+    setClientPhotos(Array.isArray(rows) ? rows : [])
   }
 
   // Habits — assigned by coach, frequency filled by client
@@ -2746,17 +2787,23 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
               {/* ─── Photos tab ─── */}
               {clientViewTab==='photos'&&(<>
-                <input type="file" ref={photoFileRef} accept="image/*" style={{display:'none'}} onChange={uploadProgressPhoto}/>
+                <input type="file" ref={photoFileRef} accept="image/*" multiple style={{display:'none'}} onChange={uploadProgressPhoto}/>
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Label for these photos</div>
+                  <input value={photoLabel} onChange={e=>setPhotoLabel(e.target.value)}
+                    placeholder={nextWeekLabel(clientPhotos)}
+                    style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                </div>
                 <button onClick={()=>photoFileRef.current?.click()} disabled={photoUploading}
                   style={{width:'100%',background:'none',border:`2px dashed ${C.gold}66`,borderRadius:12,
                     padding:'18px',color:C.gold,fontSize:13,fontWeight:700,
                     cursor:photoUploading?'not-allowed':'pointer',marginBottom:6,
                     display:'flex',alignItems:'center',justifyContent:'center',gap:8,
                     opacity:photoUploading?0.5:1}}>
-                  {photoUploading?'⏳ Uploading…':'📸 Upload Progress Photo'}
+                  {photoUploading?'⏳ Uploading…':'📸 Upload Progress Photos'}
                 </button>
                 <div style={{fontSize:11,color:C.muted,textAlign:'center',marginBottom:20}}>
-                  Upload front, side, and back — your coach can see these
+                  Select up to 10 at once (front, side, back…) — they'll all go under the label above. Your coach can see these.
                 </div>
 
                 {clientPhotos===null?(
@@ -2778,7 +2825,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div key={week} style={{marginBottom:22}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                         <div>
-                          <div style={{fontSize:14,fontWeight:700,color:C.white}}>{week}</div>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <div style={{fontSize:14,fontWeight:700,color:C.white}}>{week}</div>
+                            <button onClick={()=>renamePhotoGroup(week)} title="Rename this label"
+                              style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.muted,padding:0}}>✏️</button>
+                          </div>
                           <div style={{fontSize:11,color:C.muted}}>
                             {wPhotos[0]?.taken_at?new Date(wPhotos[0].taken_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}
                           </div>
