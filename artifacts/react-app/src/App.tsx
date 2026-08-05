@@ -3722,7 +3722,7 @@ const OrgBrandingEditor = ({ org, onSaved, onClose }:any) => {
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div onClick={e=>e.stopPropagation()} style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:16, width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", padding:20 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-          <p style={{ fontSize:13, fontWeight:800, color:accent, letterSpacing:1, textTransform:"uppercase", margin:0 }}>⚙️ Manage {org.name}</p>
+          <p style={{ fontSize:13, fontWeight:800, color:accent, letterSpacing:1, textTransform:"uppercase", margin:0 }}>⚙️ Manage <LN>{org.name}</LN></p>
           <button onClick={onClose} style={{ background:"none", border:"none", color:B.muted, fontSize:18, cursor:"pointer", padding:0, lineHeight:1 }}>✕</button>
         </div>
 
