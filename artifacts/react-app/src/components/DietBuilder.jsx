@@ -904,6 +904,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [clientPhotos,     setClientPhotos]     = useState(null)
   const [photoUploading,   setPhotoUploading]   = useState(false)
   const [photoCompare,     setPhotoCompare]     = useState(false)
+  const [ciSubmitting,     setCiSubmitting]     = useState(false)
   const photoFileRef = useRef(null)
   const [updateDay, setUpdateDay] = useState(null)
   const deadline = useDeadline(currentUser?.email || '')
@@ -3218,8 +3219,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   </Card>
                 )}
 
-                <button onClick={async()=>{
+                <button disabled={ciSubmitting} onClick={async()=>{
+                  if(ciSubmitting) return
                   if(!myUUID){alert('Still loading your profile — try again in a second.');return}
+                  setCiSubmitting(true)
+                  try{
                   // Only submit metrics that are ON the coach's form (disabled ones save as null)
                   const V=(k,v)=>on(k)?v:null
                   // Custom metric answers (+ cycle data, which has no dedicated columns)
@@ -3280,9 +3284,32 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     body:`📋 ${_clName} submitted their weekly check-in — review it in the Check-In Hub`,
                     linkTo:'checkin',
                   }).catch(()=>{})
+                  // Show the new check-in in History immediately (no reload needed)
+                  const _now=new Date()
+                  const _newId=Array.isArray(inserted)?inserted[0]?.id:inserted?.id
+                  setLocalCheckins(prev=>[{
+                    date:_now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+                    time:_now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
+                    weight:V('weight',ci.weight)||'', temp:V('temp',ci.temp)||'',
+                    steps:V('steps',ci.steps)||'', heartRate:V('heartRate',ci.heartRate)||'',
+                    hrv:V('hrv',ci.hrv)||'', bloodPressure:V('bp',ci.bp)||'',
+                    energy:V('energy',ci.energy), sleep:V('sleep',ci.sleep),
+                    bloating:V('bloating',ci.bloating), brainFog:V('brainFog',ci.brainFog),
+                    sexDrive:V('sexDrive',ci.sexDrive), hunger:V('hunger',ci.hunger),
+                    stress:ci.stress, compliance:ci.compliance, mood:ci.mood||'',
+                    sleepWindow:V('wakeTime',ci.wakeTime)||'', sleepCycles:ci.sleepCycles||'',
+                    sleepDisruption:V('sleepNotes',ci.sleepNotes)||'',
+                    bowelCount:V('bowelCount',ci.bowelCount)||'', bowelType:V('bowelType',ci.bowelType)||'',
+                    clientNotes:ci.notes||'', coachNotes:'', coachLoom:'',
+                    habits:habitCounts, habitPct:habitScore,
+                    mealNotes:Object.keys(mealNotes).some(k=>mealNotes[k])?mealNotes:null,
+                    custom:hasCustom?custom:null,
+                    _dbId:_newId,
+                  },...prev])
                   alert('Check-in submitted! Your coach will review within 48 hours.')
-                }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:24}}>
-                  Submit Weekly Check-In
+                  }finally{setCiSubmitting(false)}
+                }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:ciSubmitting?'wait':'pointer',opacity:ciSubmitting?0.6:1,marginBottom:24}}>
+                  {ciSubmitting?'⏳ Submitting…':'Submit Weekly Check-In'}
                 </button>
               </>)}
             </div>
