@@ -3331,7 +3331,7 @@ const AdminConversationMonitor = ({ user }:any) => {
                   borderLeft:`3px solid ${isActive?B.gold:'transparent'}`, border:'none',
                   borderBottom:`1px solid ${B.border}`, cursor:'pointer', textAlign:'left' }}>
                 <p style={{ fontSize:12, fontWeight:700, color:isActive?B.gold:B.text, margin:'0 0 2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                  {pName(c.participant_a_id)} ↔ {pName(c.participant_b_id)}
+                  <LN>{pName(c.participant_a_id)}</LN> ↔ <LN>{pName(c.participant_b_id)}</LN>
                 </p>
                 <p style={{ fontSize:10, color:B.muted, margin:'0 0 3px', textTransform:'capitalize' }}>
                   {pRole(c.participant_a_id)} · {pRole(c.participant_b_id)}
@@ -3349,7 +3349,7 @@ const AdminConversationMonitor = ({ user }:any) => {
           <div style={{ padding:'10px 16px', background:B.surface, borderBottom:`1px solid ${B.border}`, display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
             {isMobile && <button onClick={()=>setSelected(null)} style={{ background:'none', border:'none', color:B.gold, fontSize:13, fontWeight:700, cursor:'pointer', padding:0 }}>← Back</button>}
             <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{pName(selected.participant_a_id)} ↔ {pName(selected.participant_b_id)}</p>
+              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}><LN>{pName(selected.participant_a_id)}</LN> ↔ <LN>{pName(selected.participant_b_id)}</LN></p>
               <p style={{ fontSize:10, color:B.muted, margin:0 }}>Admin read-only · access monitored</p>
             </div>
             <button onClick={()=>openConvo(selected)} style={{ background:`${B.gold}22`, border:`1px solid ${B.goldMid}`, borderRadius:6, padding:'5px 10px', color:B.gold, fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}>Refresh</button>
@@ -3361,9 +3361,9 @@ const AdminConversationMonitor = ({ user }:any) => {
               <div key={msg.id||i} style={{ marginBottom:14 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
                   <div style={{ width:22, height:22, borderRadius:11, background:B.goldDim, border:`1px solid ${B.goldMid}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:800, color:B.gold, flexShrink:0 }}>
-                    {pInit(msg.sender_id)}
+                    <LN>{pInit(msg.sender_id)}</LN>
                   </div>
-                  <span style={{ fontSize:11, fontWeight:700, color:B.muted }}>{pName(msg.sender_id)}</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:B.muted }}><LN>{pName(msg.sender_id)}</LN></span>
                   {msg.created_at && <span style={{ fontSize:9, color:B.border }}>{new Date(msg.created_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
                 </div>
                 <div style={{ marginLeft:28, background:B.card, border:`1px solid ${msg.deleted_at ? '#ff444455' : B.border}`, borderRadius:'4px 12px 12px 12px', padding:'9px 13px' }}>
