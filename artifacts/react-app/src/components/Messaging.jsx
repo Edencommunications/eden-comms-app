@@ -1337,7 +1337,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         </div>
 
         {/* Loom Mode banner */}
-        {loomMode && myRole === 'coach' && (
+        {loomMode && (myRole === 'coach' || myRole === 'super_admin') && (
           <div style={{ padding:'6px 12px', background:'#ff525218', borderBottom:`1px solid #ff525433` }}>
             <div style={{ fontSize:10, color:'#ff5252', fontWeight:700 }}>
               🔴 Loom Mode — other clients hidden
@@ -1422,7 +1422,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             const isActive  = convo.id === activeId
             // In Loom Mode: active conversation always shows real name;
             // all others are anonymised so they can't be read on camera
-            const isHidden  = loomMode && myRole === 'coach' && !isActive && !loomFeatured.has(convo.name)
+            const isHidden  = loomMode && (myRole === 'coach' || myRole === 'super_admin') && !isActive && !loomFeatured.has(convo.name)
             const label     = isHidden ? `Client ${String.fromCharCode(65 + i)}` : convo.name
             const snippet   = isHidden ? '···' : convo.lastMessage
             const avatarTxt = isHidden ? String.fromCharCode(65 + i) : convo.initials

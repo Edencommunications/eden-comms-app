@@ -32,6 +32,32 @@ import { supabase } from "./supabaseClient";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
+// ── Global Loom Mode (admin) — blur names app-wide, click a name to reveal it ──
+function useLoomOn() {
+  const [on, setOn] = useState<boolean>(!!(window as any).__edenLoom);
+  useEffect(() => {
+    const h = () => setOn(!!(window as any).__edenLoom);
+    window.addEventListener('eden-loom', h);
+    return () => window.removeEventListener('eden-loom', h);
+  }, []);
+  return on;
+}
+// Wrap any name/email in <LN>…</LN>: normally invisible; in Loom Mode it blurs
+// the content and a click toggles it back to readable (click again to re-blur).
+const LN = ({ children, style }: any) => {
+  const loom = useLoomOn();
+  const [show, setShow] = useState(false);
+  if (!loom) return <>{children}</>;
+  return (
+    <span onClick={(e) => { e.stopPropagation(); setShow(s => !s); }}
+      title={show ? 'Click to blur again' : 'Click to reveal'}
+      style={{ filter: show ? 'none' : 'blur(6px)', cursor: 'pointer',
+        userSelect: show ? 'auto' : 'none', borderRadius: 4, ...style }}>
+      {children}
+    </span>
+  );
+};
+
 const B = {
   gold:    "#ffa600",   // PRIMARY — buttons, accents, active states
   black:   "#000000",   // BASE — page backgrounds
@@ -4080,7 +4106,7 @@ const AdminDashboard = ({ user }:any) => {
                   const dl = coachDl[c.id] || { tz: DEFAULT_TZ, time: DEFAULT_TIME };
                   return (
                     <div key={c.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderTop:`1px solid ${B.border}`, flexWrap:"wrap" }}>
-                      <span style={{ flex:1, minWidth:120, fontSize:13, fontWeight:600, color:B.text }}>{c.name}</span>
+                      <span style={{ flex:1, minWidth:120, fontSize:13, fontWeight:600, color:B.text }}><LN>{c.name}</LN></span>
                       <input type="time" value={dl.time}
                         onChange={e => { if (e.target.value) saveCoachDl(c.id, { deadline_time: e.target.value }, { time: e.target.value }); }}
                         style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 8px", color:B.gold, fontSize:12, outline:"none", colorScheme:"dark" }}/>
@@ -4185,7 +4211,7 @@ const AdminDashboard = ({ user }:any) => {
                         return (
                           <div key={c.id} style={{ borderBottom:`1px solid ${B.border}` }}>
                             <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 0" }}>
-                              <span style={{ flex:1, fontSize:12, color:B.text, fontWeight:600 }}>{c.name}{c.isAdmin && <span style={{ fontSize:10, color:B.muted, fontWeight:600 }}> · admin</span>}</span>
+                              <span style={{ flex:1, fontSize:12, color:B.text, fontWeight:600 }}><LN>{c.name}</LN>{c.isAdmin && <span style={{ fontSize:10, color:B.muted, fontWeight:600 }}> · admin</span>}</span>
                               {ov.paused && <span style={{ fontSize:10, color:"#ffa600", fontWeight:700 }}>PAUSED</span>}
                               {!ov.paused && ov.text && <span style={{ fontSize:10, color:B.gold, fontWeight:700 }}>CUSTOM</span>}
                               {!ov.paused && !ov.text && <span style={{ fontSize:10, color:B.muted }}>uses default</span>}
@@ -4343,7 +4369,7 @@ const AdminDashboard = ({ user }:any) => {
               <Card key={i} style={{ marginBottom:10, borderLeft:`3px solid ${o.color}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div>
-                    <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}>{o.name}</p>
+                    <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:"0 0 4px" }}><LN>{o.name}</LN></p>
                     <p style={{ fontSize:11, color:B.muted, margin:0 }}>
                       {o.plan
                         ? <>
@@ -5463,13 +5489,16 @@ const AppShell = ({ user, onLogout }) => {
               </span>
             </button>
           )}
-          {/* Loom Mode toggle — coach only, persists across all tabs */}
-          {user.role === "coach" && (
+          {/* Loom Mode toggle — coaches AND admins, persists across all tabs */}
+          {(user.role === "coach" || user.role === "super_admin") && (
             <button onClick={() => setLoomMode(v => {
                 const on = !v;
                 // If a client tool screen is open, they're the spotlight; otherwise keep
                 // the last-clicked client (set by the Clients list / dashboard)
                 if (on && coachClient?.name) setLoomFeatured(new Set([coachClient.name]));
+                // Global flag for admin screens: <LN> wrappers blur names when this is on
+                (window as any).__edenLoom = on;
+                window.dispatchEvent(new Event('eden-loom'));
                 return on;
               })}
               title={loomMode ? "Exit Loom Mode" : "Enable Loom Mode — hides other client names"}
