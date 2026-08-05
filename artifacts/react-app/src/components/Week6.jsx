@@ -2315,12 +2315,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     </div>
                     <div style={{flex:1}}>
                       <div style={{fontSize:14,fontWeight:700,color:isRemoved?C.muted:C.white,display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-                        {coach.name}
+                        <LN>{coach.name}</LN>
                         {isHC&&!isRemoved&&(
                           <span style={{fontSize:9,fontWeight:800,letterSpacing:0.8,background:`${C.gold}22`,border:`1px solid ${C.gold}66`,color:C.gold,padding:'2px 7px',borderRadius:8}}>★ HEAD COACH</span>
                         )}
                       </div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{coach.email}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}><LN>{coach.email}</LN></div>
                       <div style={{display:'flex',gap:12,marginTop:5,flexWrap:'wrap'}}>
                         <span style={{fontSize:10,color:C.gold,fontWeight:600}}>{activeClients.length} active client{activeClients.length!==1?'s':''}</span>
                         {archivedByCoach.length>0&&<span style={{fontSize:10,color:C.muted,fontWeight:600}}>{archivedByCoach.length} archived</span>}
@@ -2366,7 +2366,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         <button key={c.uuid}
                           onClick={()=>{ openClient(c); setTab('clients') }}
                           style={{fontSize:11,background:c.hasUpdate?`${C.gold}22`:C.surface,border:`1px solid ${c.hasUpdate?C.gold+'44':C.border}`,borderRadius:6,padding:'4px 10px',color:c.hasUpdate?C.gold:C.white,cursor:'pointer'}}>
-                          {c.name}{c.hasUpdate?' 🔔':''}
+                          <LN>{c.name}</LN>{c.hasUpdate?' 🔔':''}
                         </button>
                       ))}
                     </div>
@@ -2381,7 +2381,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         <button key={c.uuid}
                           onClick={()=>{ openClient(c); setTab('clients') }}
                           style={{fontSize:11,background:`${C.danger}11`,border:`1px solid ${C.danger}33`,borderRadius:6,padding:'4px 10px',color:C.muted,cursor:'pointer'}}>
-                          {c.name} ✕
+                          <LN>{c.name}</LN> ✕
                         </button>
                       ))}
                     </div>
