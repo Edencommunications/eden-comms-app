@@ -66,6 +66,11 @@ function PhotoCompare({ photos, isMobile }) {
         )}
         {isActive && <div style={{ position:'absolute', top:6, left:6, fontSize:9, fontWeight:800, letterSpacing:1,
           background:C.gold, color:'#000', borderRadius:6, padding:'2px 7px' }}>SELECTED</div>}
+        {p && <button title="Remove this photo from the comparison"
+          onClick={(e)=>{ e.stopPropagation(); setPanes(prev=>({ ...prev, [side]:null })); setActive(side) }}
+          style={{ position:'absolute', top:6, right:6, width:24, height:24, borderRadius:'50%', cursor:'pointer',
+            background:'rgba(0,0,0,0.7)', border:`1px solid ${C.border}`, color:C.white, fontSize:12, lineHeight:1,
+            display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>}
       </div>
     )
   }
