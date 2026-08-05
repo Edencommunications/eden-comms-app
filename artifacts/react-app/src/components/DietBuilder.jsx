@@ -2215,7 +2215,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         </div>
                         <div style={{fontSize:11,color:C.muted,marginTop:3}}>
                           ⚖ {ci.weight} lbs&nbsp;·&nbsp;
-                          {[['E',ci.energy],['Sl',ci.sleep],['Bl',ci.bloating]].filter(([,v])=>v!=null).map(([l,v])=>(
+                          {[['Energy',ci.energy],['Sleep',ci.sleep],['Bloating',ci.bloating]].filter(([,v])=>v!=null).map(([l,v])=>(
                             <span key={l} style={{color:scoreColor(v),fontWeight:700,marginRight:8}}>{l}:{v}</span>
                           ))}
                         </div>
