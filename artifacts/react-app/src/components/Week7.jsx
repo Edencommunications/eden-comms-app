@@ -1345,8 +1345,14 @@ export default function Week7({ currentUser, initialDm }) {
               </div>
 
               {!editingCal ? (
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                   {calSaved && <span style={{fontSize:10,color:C.success,fontWeight:700}}>✓ Saved</span>}
+                  {calendarUrl && (
+                    <button onClick={() => window.open('https://calendar.google.com/calendar/u/0/r', '_blank', 'noopener')}
+                      style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:7,padding:'6px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                      ↗ Open in Google
+                    </button>
+                  )}
                   <button onClick={() => { setEditingCal(true); setTempCalUrl(calendarUrl) }}
                     style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 12px',color:C.muted,fontSize:11,cursor:'pointer'}}>
                     ✏️ Update Calendar URL
@@ -1384,7 +1390,12 @@ export default function Week7({ currentUser, initialDm }) {
             )}
 
             {calendarUrl && (
-              <div style={{flex:1,overflow:'hidden',position:'relative'}}>
+              <div style={{flex:1,overflow:'hidden',position:'relative',display:'flex',flexDirection:'column'}}>
+                {isMobile && (
+                  <div style={{padding:'8px 14px',background:`${C.gold}10`,borderBottom:`1px solid ${C.border}`,fontSize:10,color:C.muted,lineHeight:1.5,flexShrink:0}}>
+                    📱 On phones, Google blocks sign-in inside embedded calendars. If you see a cookies/sign-in message below, tap <b style={{color:C.gold}}>↗ Open in Google</b> above — or make the calendar public in Google settings so it embeds without sign-in.
+                  </div>
+                )}
                 <iframe
                   src={calendarUrl}
                   style={{width:'100%',height:'100%',border:'none'}}
