@@ -2,7 +2,8 @@
 // Messaging.jsx — Multi-client conversation list
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
-import { sbBearer } from '../lib/sbAuth'
+import { sbBearer, sbAccessToken } from '../lib/sbAuth'
+import { supabase } from '../supabaseClient'
 import { sendNotification } from './Notifications'
 import { TZ_OPTIONS, DEFAULT_TZ, zonedTimeToIso, tzShort } from '../lib/tz'
 import Communities from './Communities'
@@ -855,6 +856,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       })
     }
     markThreadRead(threadRootId)
+    broadcastNewMessage(convoId, `↪️ ${text}`)
     loadLiveMessages()
     loadThreadInbox()
   }
@@ -987,6 +989,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   }
 
   // ── Reload messages when active conversation changes ──────────
+  // Realtime-first: a Supabase channel per open conversation delivers new
+  // messages instantly (hybrid postgres_changes + broadcast, same pattern as
+  // Team Hub chat). The 4s poll below only fires while realtime is unproven —
+  // a channel can report SUBSCRIBED even when no events ever arrive, so we
+  // only trust it once a real event has landed recently.
+  const convoChanRef = useRef(null)
   useEffect(() => {
     setLiveMessages([])
     setLiveFiles([])
@@ -995,10 +1003,96 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     if (isLive) {
       loadLiveMessages()
       loadLiveFiles()
-      const iv = setInterval(loadLiveMessages, 4000)
-      return () => clearInterval(iv)
+      const convoId = activeConvo.supabaseConvoId
+      // With RLS on, realtime only delivers rows the subscriber may see — authenticate.
+      try { const tok = sbAccessToken(); if (tok) supabase.realtime.setAuth(tok) } catch {}
+      let realtimeUp = false
+      let lastEventAt = 0
+      let debounce = null
+      const scheduleLoad = () => {
+        lastEventAt = Date.now()
+        clearTimeout(debounce)
+        debounce = setTimeout(loadLiveMessages, 150)
+      }
+      const ch = supabase.channel(`msgs-convo-${convoId}`)
+        .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convoId}` },
+          scheduleLoad)
+        .on('broadcast', { event: 'new-message' }, scheduleLoad)
+        .subscribe(status => {
+          const wasUp = realtimeUp
+          realtimeUp = status === 'SUBSCRIBED'
+          if (realtimeUp && !wasUp) loadLiveMessages() // catch up on anything missed
+        })
+      convoChanRef.current = ch
+      // Fallback poll — skipped only while the channel is up AND events flow.
+      const iv = setInterval(() => {
+        const proven = realtimeUp && (Date.now() - lastEventAt) < 120_000
+        if (!proven) loadLiveMessages()
+      }, 4000)
+      return () => {
+        clearTimeout(debounce)
+        clearInterval(iv)
+        convoChanRef.current = null
+        supabase.removeChannel(ch)
+      }
     }
   }, [activeId])
+
+  // ── Realtime inbox: one per-user channel so new messages update the
+  // conversation list / thread inbox instantly even when the convo is closed.
+  // Senders push a broadcast to `msgs-user-<recipientProfileId>` after every send.
+  const conversationsRef = useRef(conversations)
+  useEffect(() => { conversationsRef.current = conversations })
+  const activeIdRef = useRef(activeId)
+  useEffect(() => { activeIdRef.current = activeId })
+  useEffect(() => {
+    if (!myProfileId) return
+    try { const tok = sbAccessToken(); if (tok) supabase.realtime.setAuth(tok) } catch {}
+    let debounce = null
+    const ch = supabase.channel(`msgs-user-${myProfileId}`)
+      .on('broadcast', { event: 'new-message' }, ({ payload }) => {
+        const convoId = payload?.conversationId
+        if (!convoId) return
+        // Flag the conversation unread in the list the moment the message lands
+        const convo = conversationsRef.current.find(c => c.supabaseConvoId === convoId)
+        if (convo && convo.id !== activeIdRef.current) {
+          setMarkedUnread(prev => prev.has(convo.id) ? prev : new Set([...prev, convo.id]))
+          setDynConversations(prev => Array.isArray(prev) ? prev.map(c =>
+            c.supabaseConvoId === convoId
+              ? { ...c, lastMessage: payload?.preview ?? c.lastMessage, lastTime: 'now' }
+              : c) : prev)
+        }
+        // Thread replies land in the Threads inbox instantly too
+        clearTimeout(debounce)
+        debounce = setTimeout(loadThreadInbox, 250)
+      })
+      .subscribe()
+    return () => { clearTimeout(debounce); supabase.removeChannel(ch) }
+  }, [myProfileId])
+
+  // Cached, never-subscribed channels used purely for HTTP broadcast sends
+  const sendChansRef = useRef({})
+  useEffect(() => () => {
+    for (const ch of Object.values(sendChansRef.current)) { try { supabase.removeChannel(ch) } catch {} }
+    sendChansRef.current = {}
+  }, [])
+  // Tell the other participant a message just landed — instantly updates their
+  // open conversation (convo channel) and their inbox (user channel).
+  function broadcastNewMessage(convoId, preview = '') {
+    if (!convoId) return
+    const payload = { conversationId: convoId, senderId: myProfileId, preview: String(preview).slice(0, 80) }
+    try {
+      convoChanRef.current?.send({ type: 'broadcast', event: 'new-message', payload })
+      const other = conversationsRef.current.find(c => c.supabaseConvoId === convoId)
+      if (other?.id && other.id !== myProfileId) {
+        const topic = `msgs-user-${other.id}`
+        // send() on an unjoined channel goes over HTTP — no subscribe needed
+        const ch = sendChansRef.current[topic] ||= supabase.channel(topic)
+        ch.send({ type: 'broadcast', event: 'new-message', payload })
+      }
+    } catch {}
+  }
 
   async function loadLiveMessages() {
     if (!activeConvo?.supabaseConvoId) return
@@ -1115,6 +1209,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       last_message_at: new Date().toISOString(),
     })
     notifyRecipient(text)
+    broadcastNewMessage(activeConvo?.supabaseConvoId, text)
     loadLiveMessages()
   }
 
@@ -1165,6 +1260,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             last_message:'🎙️ Voice memo', last_message_at:new Date().toISOString(),
           })
           notifyRecipient('🎙️ Voice memo')
+          broadcastNewMessage(activeConvo?.supabaseConvoId, '🎙️ Voice memo')
           loadLiveMessages()
         } catch { alert('Voice memo failed to send. Please try again.') }
         finally { setUploading(false) }
@@ -1211,6 +1307,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         last_message_at: new Date().toISOString(),
       })
       notifyRecipient(isImage ? '📷 Photo' : `📎 ${file.name}`)
+      broadcastNewMessage(activeConvo?.supabaseConvoId, isImage ? '📷 Photo' : `📎 ${file.name}`)
       loadLiveMessages()
       loadLiveFiles()
     } catch {
