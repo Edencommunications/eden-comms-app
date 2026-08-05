@@ -1298,7 +1298,7 @@ const HabitTrackerScreen = () => {
 
 const UPDATE_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
+const ClientDetailModal = ({ client, onClose, onNavigate, onSaved, onFlagUnreviewed }: any) => {
   const modalDeadline = useDeadline(client?.email);
   const isMobile = useIsMobile();
   const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
@@ -1423,6 +1423,24 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved }: any) => {
 
         {/* Scrollable body */}
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+
+          {/* Re-flag as unreviewed — for when the coach can't finish the review now */}
+          {onFlagUnreviewed && client.lastCheckinId && (
+            <div style={{ marginBottom:14 }}>
+              {client.needsReview ? (
+                <div style={{ background:`${B.gold}15`, border:`1px solid ${B.gold}55`, borderRadius:10, padding:"9px 12px",
+                  fontSize:11, fontWeight:700, color:B.gold, textAlign:"center" }}>
+                  🔖 Flagged — this client will show the NEW CHECK-IN badge again
+                </div>
+              ) : (
+                <button onClick={async ()=>{ await onFlagUnreviewed(); }}
+                  style={{ width:"100%", background:"none", border:`1px dashed ${B.gold}66`, borderRadius:10, padding:"9px 12px",
+                    color:B.gold, fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                  🔖 Not done reviewing? Flag as NEW again so you don't forget
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Quick stats — 2×2 */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
@@ -2109,13 +2127,15 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
       // one still needs a coach review (no coach_reviewed_at yet)
       let lastMap: Record<string,string> = {};
       let reviewMap: Record<string,boolean> = {};
+      let lastIdMap: Record<string,string> = {};
       if (rows.length > 0) {
         const ids = rows.map((r:any) => r.id).join(',');
         const cks = (await sbGet('weekly_checkins',
-          `client_id=in.(${ids})&select=client_id,submitted_at,coach_reviewed_at&order=submitted_at.desc`)) || [];
+          `client_id=in.(${ids})&select=id,client_id,submitted_at,coach_reviewed_at&order=submitted_at.desc`)) || [];
         for (const ck of cks) if (!lastMap[ck.client_id]) {
           lastMap[ck.client_id] = ck.submitted_at;
           reviewMap[ck.client_id] = !ck.coach_reviewed_at;
+          lastIdMap[ck.client_id] = ck.id;
         }
       }
       setClients(rows.map((r:any) => ({
@@ -2123,6 +2143,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
         initials: r.initials || (r.name || '?').split(' ').map((w:string)=>w[0]).join('').slice(0,2).toUpperCase(),
         checkInDay: r.update_day || '', startDate: r.start_date || null,
         lastCheckinAt: lastMap[r.id] || null,
+        lastCheckinId: lastIdMap[r.id] || null,
         needsReview: !!reviewMap[r.id],
         lastCheckin: lastMap[r.id]
           ? new Date(lastMap[r.id]).toLocaleDateString('en-US',{month:'short',day:'numeric'})
@@ -2386,6 +2407,15 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
           <>
             {[...clients].sort((a:any,b:any)=>(b.needsReview?1:0)-(a.needsReview?1:0)).map((c,i)=>{
               const alertOn = isAlertActive(c);
+              // Opening a client with a new check-in clears the highlight (the
+              // modal has a "remind me" button to flag it as new again)
+              const openClient = () => {
+                if (c.needsReview && c.lastCheckinId) {
+                  sbPatch('weekly_checkins', `id=eq.${c.lastCheckinId}`, { coach_reviewed_at: new Date().toISOString() });
+                  setClients((prev:any[])=>prev.map((x:any)=>x.uuid===c.uuid?{...x,needsReview:false}:x));
+                  setSelectedClient({ ...c, needsReview:false });
+                } else setSelectedClient(c);
+              };
               return (
                 <div key={i} style={{ width:"100%", background:B.card,
                   border:`1px solid ${B.border}`,
@@ -2393,7 +2423,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                   borderRadius:14, padding:"14px 16px", marginBottom:10, boxSizing:"border-box" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <div style={{ flex:1, minWidth:0, cursor:"pointer" }}
-                      onClick={()=>setSelectedClient(c)}>
+                      onClick={openClient}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                         <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
                         {!loomMode && c.needsReview && (
@@ -2424,7 +2454,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                         </button>
                       )}
                       <span style={{ fontSize:11, color:B.gold, cursor:"pointer" }}
-                        onClick={()=>setSelectedClient(c)}>View →</span>
+                        onClick={openClient}>View →</span>
                     </div>
                   </div>
                 </div>
@@ -2439,7 +2469,16 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
 
       {selectedClient && (
         <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}
-          onSaved={(uuid:string, patch:any)=>setClients((prev:any[])=>prev.map((c:any)=>c.uuid===uuid?{...c,...patch}:c))}/>
+          onSaved={(uuid:string, patch:any)=>setClients((prev:any[])=>prev.map((c:any)=>c.uuid===uuid?{...c,...patch}:c))}
+          onFlagUnreviewed={async ()=>{
+            if (!selectedClient?.lastCheckinId) return false;
+            const ok = await sbPatch('weekly_checkins', `id=eq.${selectedClient.lastCheckinId}`, { coach_reviewed_at: null });
+            if (ok) {
+              setClients((prev:any[])=>prev.map((c:any)=>c.uuid===selectedClient.uuid?{...c,needsReview:true}:c));
+              setSelectedClient((s:any)=>s?{...s,needsReview:true}:s);
+            }
+            return ok;
+          }}/>
       )}
       {alertClient && (
         <AlertDetailModal
