@@ -14,6 +14,7 @@ import { useDeadline, TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, clearTzCache } from 
 import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 import { supabase as authClient } from '../supabaseClient'
+import { LN, loomShow, loomIsShown, useLoomOn } from './LoomPrivacy'
 
 // Create a real (Supabase Auth) login for a new user via the API server.
 // Requires the signed-in admin's own auth session (JWT) — the server verifies
@@ -345,6 +346,7 @@ function Stat({label,value,color=C.gold,sub}) {
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}, onClientFocus = () => {}}) {
+  useLoomOn() // re-render when the app-wide visible-names list changes
   const isMobile = useIsMobile()
   const email    = currentUser?.email||''
   // Real logins carry their role from App.tsx; KNOWN_USERS only covers legacy demo emails.
@@ -1329,7 +1331,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setSelectedClient(client)
     // The last-clicked client is the Loom spotlight: only they show by name when
     // Loom Mode is (or gets turned) on — everyone else stays hidden
-    if (client?.name) setLoomFeatured(new Set([client.name]))
+    if (client?.name) { setLoomFeatured(new Set([client.name])); loomShow(client.name) }
     // Report the click up to the app shell so Split View follows the last-clicked client
     if (client?.email) onClientFocus({ email: client.email, name: client.name, role: client.role || 'client' })
     if (client.hasUpdate) markViewed(client.uuid)
@@ -1940,7 +1942,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <div style={{padding:24,textAlign:'center',color:C.muted,fontSize:13}}>No clients found</div>
               )}
               {filteredClients.map((client, idx)=>{
-                const featured = loomFeatured.has(client.name)
+                const featured = loomFeatured.has(client.name) || loomIsShown(client.name)
                 const hidden   = loomMode && !featured
                 const dispName = hidden ? `Client ${String.fromCharCode(65 + idx)}` : client.name
                 const dispInitial = hidden ? '?' : client.name[0]

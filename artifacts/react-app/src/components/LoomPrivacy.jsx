@@ -12,6 +12,13 @@ export function loomSet(on) {
   if (on) shown().clear()           // every Loom session starts fully blurred
   window.dispatchEvent(new Event('eden-loom'))
 }
+// Mark a name visible app-wide (e.g. when a coach/admin clicks into a client)
+export function loomShow(k) {
+  if (!k) return
+  shown().add(k)
+  window.dispatchEvent(new Event('eden-loom'))
+}
+export function loomIsShown(k) { return !!k && shown().has(k) }
 export function loomToggleShown(k) {
   const s = shown()
   s.has(k) ? s.delete(k) : s.add(k)

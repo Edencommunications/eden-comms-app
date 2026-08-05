@@ -20,7 +20,7 @@ import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
 import Notifications from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
-import { LN, LoomPicker, loomSet } from "./components/LoomPrivacy";
+import { LN, LoomPicker, loomSet, loomShow, loomIsShown, useLoomOn } from "./components/LoomPrivacy";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
@@ -2195,7 +2195,8 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
     byDay[day].push(c);
   });
 
-  const isFeatured      = (c: any)            => featuredSet.has(c.name);
+  useLoomOn(); // re-render when the global visible-names list changes
+  const isFeatured      = (c: any)            => featuredSet.has(c.name) || loomIsShown(c.name);
   const displayName     = (c: any, i: number) => (loomMode && !isFeatured(c)) ? `Client ${String.fromCharCode(65+i)}` : c.name;
   const displayProtocol = (c: any)            => (loomMode && !isFeatured(c)) ? "Protocol hidden" : c.protocol;
   const displayCheckin  = (c: any)            => (loomMode && !isFeatured(c)) ? "—" : c.lastCheckin;
@@ -5148,9 +5149,9 @@ const AppShell = ({ user, onLogout }) => {
     if (client?.email) setSplitClient({ email: client.email, name: client.name, role: client.role || 'client' });
     setTab(dest);
     setClientNavSource(source);
-    // The last-clicked client is the Loom spotlight: only they show by name when
-    // Loom Mode is (or gets turned) on — everyone else stays hidden
-    if (client?.name) setLoomFeatured(new Set([client.name]));
+    // The last-clicked client is the Loom spotlight — and once clicked, their
+    // name stays visible on EVERY screen until Loom Mode is switched off
+    if (client?.name) { setLoomFeatured(new Set([client.name])); loomShow(client.name); }
   };
   const isMobile = useIsMobile();
 

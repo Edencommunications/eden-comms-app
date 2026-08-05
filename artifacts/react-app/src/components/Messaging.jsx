@@ -6,6 +6,7 @@ import { sbBearer } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
 import { TZ_OPTIONS, DEFAULT_TZ, zonedTimeToIso, tzShort } from '../lib/tz'
 import Communities from './Communities'
+import { loomIsShown, useLoomOn } from './LoomPrivacy'
 
 function useIsMobile(bp = 640) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -663,6 +664,7 @@ async function findOrCreateConvo(aId, bId, companyId) {
 // Props: currentUser = { email, name, role }
 // ════════════════════════════════════════════════════════════════
 export default function Messaging({ currentUser, loomMode = false, loomFeatured = new Set(), initialConvoName = null }) {
+  useLoomOn() // re-render when the app-wide visible-names list changes
   const isMobile = useIsMobile()
 
   const email    = currentUser?.email || ''
@@ -1422,7 +1424,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             const isActive  = convo.id === activeId
             // In Loom Mode: active conversation always shows real name;
             // all others are anonymised so they can't be read on camera
-            const isHidden  = loomMode && (myRole === 'coach' || myRole === 'super_admin') && !isActive && !loomFeatured.has(convo.name)
+            const isHidden  = loomMode && (myRole === 'coach' || myRole === 'super_admin') && !isActive && !loomFeatured.has(convo.name) && !loomIsShown(convo.name)
             const label     = isHidden ? `Client ${String.fromCharCode(65 + i)}` : convo.name
             const snippet   = isHidden ? '···' : convo.lastMessage
             const avatarTxt = isHidden ? String.fromCharCode(65 + i) : convo.initials
