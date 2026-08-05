@@ -2311,7 +2311,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <div style={{display:'flex',flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center',gap:12}}>
                   <div style={{display:'flex', alignItems:'center', gap:12, width:'100%'}}>
                     <div style={{width:44,height:44,borderRadius:22,background:isRemoved?`${C.danger}15`:`${C.gold}22`,border:`2px solid ${isRemoved?C.danger+'33':C.gold+'44'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:isRemoved?C.danger:C.gold,flexShrink:0}}>
-                      {coach.name[0]}
+                      <LN>{coach.name[0]}</LN>
                     </div>
                     <div style={{flex:1}}>
                       <div style={{fontSize:14,fontWeight:700,color:isRemoved?C.muted:C.white,display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
@@ -2400,7 +2400,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <Card key={s.id} sx={{marginBottom:8}}>
               <div style={{display:'flex',alignItems:'center',gap:12}}>
                 <div style={{width:40,height:40,borderRadius:20,background:`${C.gold}15`,border:`1px solid ${C.gold}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:C.gold,flexShrink:0}}>
-                  {(s.name||s.full_name||'?')[0]}
+                  <LN>{(s.name||s.full_name||'?')[0]}</LN>
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.white}}><LN>{s.name||s.full_name}</LN></div>
