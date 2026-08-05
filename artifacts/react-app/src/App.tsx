@@ -5339,6 +5339,12 @@ const AppShell = ({ user, onLogout }) => {
     if (isStaff && staffAllowedTabs && !staffAllowedTabs.includes(tab) && visibleTabs.length) setTab(visibleTabs[0].key);
   }, [isStaff, staffAllowedTabs, tab]); // eslint-disable-line
 
+  // Safety net: if someone is sitting on Learn when the tier gate resolves to
+  // "not included" (or lands there via any stray navigation), bounce them home.
+  useEffect(() => {
+    if (tab === "learn" && learnAllowed === false) setTab("home");
+  }, [tab, learnAllowed]);
+
   const SPLIT_PANELS = [
     { key:'msgs',    label:'Messages',  icon:'chat' },
     { key:'checkin', label:'Check-in',  icon:'assignment' },
@@ -5434,7 +5440,7 @@ const AppShell = ({ user, onLogout }) => {
                                           onClientFocus={(c:any) => setSplitClient(c)}/>;
     if (tab === "wearables") return <Wearables currentUser={toolUser}/>;
     if (tab === "team")      return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }} initialDm={coachClient}/>;
-    if (tab === "learn")     return <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
+    if (tab === "learn")     return learnAllowed === true ? <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/> : null;
     if (tab === "community") return <CommunityScreen user={user}/>;
     return <HomeScreen user={user} wlOrg={wlOrg}/>;
   };
