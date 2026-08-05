@@ -605,7 +605,7 @@ export function DndButton({ isMobile }) {
           background: dnd ? '#a86bff22' : 'transparent',
           border:`1.5px solid ${dnd ? '#a86bff' : C.border}`,
           borderRadius:8, padding:'4px 8px', cursor:'pointer' }}>
-        <span style={{ fontSize:15 }}>{dnd ? '🌙' : '🔔'}</span>
+        <span style={{ fontSize:15 }}>{dnd ? '🌙' : '📵'}</span>
         {!isMobile && (
           <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:'uppercase', color: dnd ? '#a86bff' : C.muted }}>
             {dnd ? 'DND ON' : 'DND'}
@@ -628,7 +628,7 @@ export function DndButton({ isMobile }) {
             <button onClick={() => pick(null)}
               style={{ width:'100%', textAlign:'left', background:`${C.success}15`, border:`1px solid ${C.success}44`,
                 borderRadius:8, padding:'10px 12px', color:C.success, fontSize:12, fontWeight:800, cursor:'pointer', marginBottom:6 }}>
-              🔔 Turn off — start ringing again
+              📞 Turn off — start ringing again
             </button>
           )}
           {dnd && (
