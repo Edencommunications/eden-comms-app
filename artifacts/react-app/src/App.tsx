@@ -46,13 +46,17 @@ function useLoomOn() {
 // the content and a click toggles it back to readable (click again to re-blur).
 const LN = ({ children, style }: any) => {
   const loom = useLoomOn();
-  const [show, setShow] = useState(false);
+  const [show, setShow] = useState(false);   // pinned visible (click)
+  const [hover, setHover] = useState(false); // temporary peek (mouse over)
   if (!loom) return <>{children}</>;
+  const visible = show || hover;
   return (
     <span onClick={(e) => { e.stopPropagation(); setShow(s => !s); }}
-      title={show ? 'Click to blur again' : 'Click to reveal'}
-      style={{ filter: show ? 'none' : 'blur(6px)', cursor: 'pointer',
-        userSelect: show ? 'auto' : 'none', borderRadius: 4, ...style }}>
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      title={show ? 'Click to blur again' : 'Hover to peek · click to keep visible'}
+      style={{ filter: visible ? 'none' : 'blur(6px)', cursor: 'pointer',
+        userSelect: visible ? 'auto' : 'none', borderRadius: 4,
+        outline: show ? '1px dashed #ffa60066' : 'none', ...style }}>
       {children}
     </span>
   );
