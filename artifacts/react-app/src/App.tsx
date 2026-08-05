@@ -1395,8 +1395,8 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved, onFlagUnrevie
         {/* Header */}
         <div style={{ padding:"14px 20px 12px", borderBottom:`1px solid ${B.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
           <div>
-            <p style={{ fontSize:18, fontWeight:800, color:B.text, margin:"0 0 4px" }}>{client.name}</p>
-            <p style={{ fontSize:11, color:B.muted, margin:0 }}>{client.email} · {client.phone}</p>
+            <p style={{ fontSize:18, fontWeight:800, color:B.text, margin:"0 0 4px" }}><LN>{client.name}</LN></p>
+            <p style={{ fontSize:11, color:B.muted, margin:0 }}><LN>{client.email}</LN> · <LN>{client.phone}</LN></p>
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <Badge color={client.alert ? B.gold : B.success}>{client.status}</Badge>
@@ -1954,7 +1954,7 @@ const AlertDetailModal = ({ client, resolved, onResolve, onClose }: {
         <div style={{ padding:"14px 20px 12px", borderBottom:`1px solid ${B.border}`,
           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div>
-            <p style={{ fontSize:16, fontWeight:800, color:B.text, margin:"0 0 2px" }}>⚠️ {client.name} — Alerts</p>
+            <p style={{ fontSize:16, fontWeight:800, color:B.text, margin:"0 0 2px" }}>⚠️ <LN>{client.name}</LN> — Alerts</p>
             <p style={{ fontSize:11, color:B.muted, margin:0 }}>{reasons.length} issue{reasons.length!==1?"s":""} flagged</p>
           </div>
           <button onClick={onClose} style={{ background:"none", border:"none", color:B.muted,
@@ -2677,7 +2677,7 @@ const StaffAccessManager = ({ user }:any) => {
               {staff.initials}
             </div>
             <div>
-              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{staff.name}</p>
+              <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}><LN>{staff.name}</LN></p>
               <p style={{ fontSize:10, color:B.muted, margin:0, textTransform:'capitalize' }}>{staffRole(staff.id)}</p>
             </div>
           </div>
@@ -3183,7 +3183,7 @@ const AdminActivityLog = ({ user }:any) => {
           <Card key={r.id} style={{ marginBottom:8, padding:'12px 14px' }}>
             <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
               <span style={{ fontSize:14 }}>{m.icon}</span>
-              <span style={{ fontSize:13, fontWeight:700, color:B.text }}>{r.actor_name || 'Unknown'}</span>
+              <span style={{ fontSize:13, fontWeight:700, color:B.text }}><LN>{r.actor_name || 'Unknown'}</LN></span>
               {r.actor_role && <span style={{ fontSize:10, fontWeight:700, color:B.gold, border:`1px solid ${B.gold}44`,
                 borderRadius:4, padding:'1px 6px', textTransform:'uppercase', letterSpacing:0.5 }}>{r.actor_role}</span>}
               <span style={{ fontSize:13, color:B.text }}>{m.label.toLowerCase()}</span>
@@ -3207,7 +3207,7 @@ const AdminActivityLog = ({ user }:any) => {
             </div>
             {open && (
               <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${B.border}`, fontSize:12, color:B.text, lineHeight:1.7 }}>
-                {d.name && <div><span style={{ color:B.muted }}>Name: </span>{d.name}</div>}
+                {d.name && <div><span style={{ color:B.muted }}>Name: </span><LN>{d.name}</LN></div>}
                 {d.content && <div><span style={{ color:B.muted }}>Content: </span>"{d.content}"</div>}
                 {d.sender_name && <div><span style={{ color:B.muted }}>Original sender: </span>{d.sender_name}</div>}
                 {d.community_name && <div><span style={{ color:B.muted }}>Community: </span>{d.community_name}</div>}
@@ -3488,10 +3488,10 @@ const StaffClientPanel = ({ user }:any) => {
                 style={{ width:'100%', padding:'12px 14px', background:isAct?`${B.gold}15`:'transparent', borderLeft:`3px solid ${isAct?B.gold:'transparent'}`, border:'none', borderBottom:`1px solid ${B.border}`, cursor:'pointer', textAlign:'left' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <div style={{ width:34, height:34, borderRadius:17, background:isAct?B.gold:B.card, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:isAct?B.black:B.muted, flexShrink:0 }}>
-                    {(c.initials||c.name[0]).slice(0,2)}
+                    <LN>{(c.initials||c.name[0]).slice(0,2)}</LN>
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:13, fontWeight:700, color:isAct?B.gold:B.text, margin:'0 0 4px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</p>
+                    <p style={{ fontSize:13, fontWeight:700, color:isAct?B.gold:B.text, margin:'0 0 4px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}><LN>{c.name}</LN></p>
                     <div style={{ display:'flex', gap:3 }}>{active.map((p:any)=><span key={p.key} style={{ fontSize:10 }}>{p.icon}</span>)}</div>
                   </div>
                 </div>

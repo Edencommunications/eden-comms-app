@@ -470,7 +470,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
                       {selectedClients.has(cl.id) ? '✓' : ''}
                     </div>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:600, color: selectedClients.has(cl.id) ? C.gold : C.white }}>{cl.name}</div>
+                      <div style={{ fontSize:13, fontWeight:600, color: selectedClients.has(cl.id) ? C.gold : C.white }}><LN>{cl.name}</LN></div>
                       <div style={{ fontSize:11, color:C.muted }}>Check-in: {cl.checkInDay}</div>
                     </div>
                   </button>

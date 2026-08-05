@@ -194,7 +194,7 @@ function LoginHealthCard({orgs=[], isEden=false}) {
         return (
         <div key={m.email} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 0',borderTop:`1px solid ${C.border}`,flexWrap:'wrap'}}>
           <div style={{flex:1,minWidth:160}}>
-            <div style={{fontSize:12,color:C.white,fontWeight:600}}>{m.name ? `${m.name} — ${m.email}` : m.email}</div>
+            <div style={{fontSize:12,color:C.white,fontWeight:600}}><LN>{m.name ? `${m.name} — ${m.email}` : m.email}</LN></div>
             <div style={{fontSize:10,color:C.danger,marginTop:1}}>Login exists but has no profile — their saves are being blocked</div>
           </div>
           {knownOrg
@@ -2021,10 +2021,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     <button onClick={()=>openClient(client)}
                       style={{width:'100%',textAlign:'left',background:selectedClient?.uuid===client.uuid?`${C.dim}33`:C.surface,border:'none',padding:'10px 14px 10px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,opacity:0.7}}>
                       <div style={{width:32,height:32,borderRadius:16,background:C.dim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.muted,flexShrink:0}}>
-                        {client.name[0]}
+                        <LN>{client.name[0]}</LN>
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+                        <div style={{fontSize:12,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><LN>{client.name}</LN></div>
                         <div style={{fontSize:9,color:C.danger,fontWeight:700,marginTop:2}}>● DEACTIVATED · {effectiveCoachName(client)}</div>
                       </div>
                     </button>
@@ -2051,7 +2051,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   }}>←</button>
                 <div style={{flex:1}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{fontSize:15,fontWeight:700,color:C.white}}>{selectedClient.name}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:C.white}}><LN>{selectedClient.name}</LN></div>
                     {isAdmin&&(
                       <button onClick={()=>openEditIdentity(selectedClient)} title="Edit name / email"
                         style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>
@@ -2060,7 +2060,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     )}
                   </div>
                   <div style={{fontSize:11,color:C.muted,marginTop:1}}>
-                    {selectedClient.email} · {isAdmin?`${selectedClient.coachName} · `:''}Check-in: {selectedClient.checkInDay}s
+                    <LN>{selectedClient.email}</LN> · {isAdmin?<><LN>{selectedClient.coachName}</LN> · </>:''}Check-in: {selectedClient.checkInDay}s
                   </div>
                 </div>
                 {/* Coach / Admin: assign or re-assign update day */}
@@ -2262,7 +2262,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <div style={{background:`${C.gold}12`,border:`1px solid ${C.gold}44`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
                     <div style={{fontSize:11,fontWeight:700,color:C.gold,marginBottom:6}}>📋 CHECK-IN RECEIVED — PENDING REVIEW</div>
                     <div style={{fontSize:12,color:C.muted,lineHeight:1.6}}>
-                      {selectedClient.name} submitted their weekly check-in. View the full Check-In tab to review and respond.
+                      <LN>{selectedClient.name}</LN> submitted their weekly check-in. View the full Check-In tab to review and respond.
                     </div>
                     <button
                       onClick={()=>onNavigate&&onNavigate('checkin',{email:selectedClient.email,name:selectedClient.name,role:selectedClient.role})}
@@ -2571,7 +2571,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <Card key={org.id} sx={{marginBottom:10}}>
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
                 <div style={{width:40,height:40,borderRadius:10,background:org.brandColor+'22',border:`2px solid ${org.brandColor}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:org.brandColor,flexShrink:0}}>
-                  {org.name[0]}
+                  <LN>{org.name[0]}</LN>
                 </div>
                 <div style={{flex:1}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -2888,8 +2888,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           onClick={e=>{if(e.target===e.currentTarget)setLastAdded(null)}}>
           <div style={{background:C.card,border:`1px solid ${C.gold}55`,borderRadius:16,width:'100%',maxWidth:440,padding:24}}>
             <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>✅ User Added Successfully</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>{lastAdded.name}</div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:16,textTransform:'capitalize'}}>{lastAdded.role.replace(/_/g,' ')} · {lastAdded.email}</div>
+            <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}><LN>{lastAdded.name}</LN></div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:16,textTransform:'capitalize'}}>{lastAdded.role.replace(/_/g,' ')} · <LN>{lastAdded.email}</LN></div>
 
             <div style={{background:C.surface,borderRadius:10,padding:'14px 16px',marginBottom:14}}>
               <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>{lastAdded.emailed?'Their Login Details (Emailed To Them)':'Send These Credentials'}</div>

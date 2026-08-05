@@ -16,6 +16,7 @@ import Communities from './Communities'
 import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
 import { useHuddle } from './HuddleHub'
+import { LN } from './LoomPrivacy'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -972,10 +973,10 @@ export default function Week7({ currentUser, initialDm }) {
                     <button key={coach.uuid} onClick={() => { setDmTarget(coach); setChatView('dm') }}
                       style={{width:'100%',textAlign:'left',background:isDmActive?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'6px 8px',color:isDmActive?C.gold:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
                       <div style={{width:20,height:20,borderRadius:10,background:`${C.gold}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.gold,flexShrink:0}}>
-                        {coach.name[0]}
+                        <LN>{coach.name[0]}</LN>
                       </div>
                       <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,fontWeight:unread>0?700:400}}>
-                        {coach.name.split(' ')[0]}{isTyping && <span style={{color:C.gold,fontStyle:'italic',fontWeight:400}}> …typing</span>}
+                        <LN>{coach.name.split(' ')[0]}</LN>{isTyping && <span style={{color:C.gold,fontStyle:'italic',fontWeight:400}}> …typing</span>}
                       </span>
                       {coach.isHeadCoach && unread===0 && <span style={{fontSize:8,color:C.gold,fontWeight:700,flexShrink:0}}>HC</span>}
                       <UnreadPill n={unread}/>
@@ -1223,10 +1224,10 @@ export default function Week7({ currentUser, initialDm }) {
                 <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:10}}>
                   <button onClick={() => setChatView('main')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,padding:0}}>←</button>
                   <div style={{width:30,height:30,borderRadius:15,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.gold,flexShrink:0}}>
-                    {dmTarget.name[0]}
+                    <LN>{dmTarget.name[0]}</LN>
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.white}}>{dmTarget.name}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.white}}><LN>{dmTarget.name}</LN></div>
                     <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:dmTarget.label?'none':'capitalize'}}>
                       {dmTarget.label || dmTarget.role}{dmTarget.isHeadCoach?' · Head Coach':''}
                     </div>
@@ -1248,7 +1249,7 @@ export default function Week7({ currentUser, initialDm }) {
                 <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
                   {dmConvo.length===0 && (
                     <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>
-                      Start your conversation with {dmTarget.name}
+                      Start your conversation with <LN>{dmTarget.name}</LN>
                     </div>
                   )}
                   {dmConvo.map(msg => {
@@ -1448,10 +1449,10 @@ export default function Week7({ currentUser, initialDm }) {
                   {otherCoaches.map(coach => (
                     <div key={coach.uuid} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
                       <div style={{width:36,height:36,borderRadius:18,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:C.gold,flexShrink:0}}>
-                        {coach.name[0]}
+                        <LN>{coach.name[0]}</LN>
                       </div>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,color:C.white,fontWeight:500}}>{coach.name}</div>
+                        <div style={{fontSize:13,color:C.white,fontWeight:500}}><LN>{coach.name}</LN></div>
                         <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:'capitalize'}}>
                           {coach.role}{coach.isHeadCoach?' · Head Coach':''}
                         </div>
@@ -1483,9 +1484,9 @@ export default function Week7({ currentUser, initialDm }) {
                   {otherCoaches.map(coach => (
                     <div key={coach.uuid} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderTop:`1px solid ${C.border}`}}>
                       <div style={{width:32,height:32,borderRadius:16,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.gold,flexShrink:0}}>
-                        {coach.name[0]}
+                        <LN>{coach.name[0]}</LN>
                       </div>
-                      <div style={{flex:1,fontSize:12,color:C.white}}>{coach.name}</div>
+                      <div style={{flex:1,fontSize:12,color:C.white}}><LN>{coach.name}</LN></div>
                       <button onClick={() => pingCoach(coach)}
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:7,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                         {huddlePinging===coach.name?'Invited ✓':'Ping to Join'}
@@ -1524,10 +1525,10 @@ export default function Week7({ currentUser, initialDm }) {
                 onClick={() => { setDmTarget(coach); setChatView('dm'); setShowDmPicker(false) }}
                 style={{width:'100%',textAlign:'left',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',marginBottom:8}}>
                 <div style={{width:36,height:36,borderRadius:18,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:C.gold,flexShrink:0}}>
-                  {coach.name[0]}
+                  <LN>{coach.name[0]}</LN>
                 </div>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:13,color:C.white,fontWeight:500}}>{coach.name}</div>
+                  <div style={{fontSize:13,color:C.white,fontWeight:500}}><LN>{coach.name}</LN></div>
                   <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:'capitalize'}}>
                     {coach.role}{coach.isHeadCoach?' · Head Coach':''}
                   </div>

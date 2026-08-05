@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { LN } from './LoomPrivacy'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
@@ -512,7 +513,7 @@ export function HuddleProvider({ currentUser, children }) {
             animation:'pulse 1.5s infinite' }}>
             <div style={{ fontSize:56, marginBottom:14 }}>🎙</div>
             <div style={{ fontSize:20, fontWeight:800, color:C.white, marginBottom:6 }}>
-              {incoming.name} is calling you
+              <LN>{incoming.name}</LN> is calling you
             </div>
             <div style={{ fontSize:13, color:C.muted, marginBottom:26 }}>
               Live huddle invite — jump in face-to-face
