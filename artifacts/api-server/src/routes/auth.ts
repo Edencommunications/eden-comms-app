@@ -201,15 +201,23 @@ router.post("/auth/provision", async (req: Request, res: Response) => {
   if (mailerConfigured()) {
     try {
       let orgName = "Eden Communications";
+      let orgSlug: string | null = null;
       if (admin.company_id) {
-        const org = await dbGet("companies", `id=eq.${encodeURIComponent(admin.company_id)}&select=name`);
+        const org = await dbGet("organizations", `id=eq.${encodeURIComponent(admin.company_id)}&select=name,slug`);
         if (org?.[0]?.name) orgName = org[0].name;
+        if (org?.[0]?.slug) orgSlug = org[0].slug;
+        if (!org?.[0]?.name) {
+          // Legacy fallback: companies row without a mirrored organization
+          const co = await dbGet("companies", `id=eq.${encodeURIComponent(admin.company_id)}&select=name`);
+          if (co?.[0]?.name) orgName = co[0].name;
+        }
       }
       const m = welcomeEmail({
         clientName: name || email,
         email: email.toLowerCase(),
         tempPassword: password,
         orgName,
+        orgSlug,
       });
       const sent = await sendEmail({ to: email.toLowerCase(), subject: m.subject, html: m.html, text: m.text, fromName: orgName });
       emailed = !!sent.ok;
@@ -302,14 +310,21 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
 
       // Org branding for the email
       let orgName = "Eden Comms";
+      let orgSlug: string | null = null;
       if (profile.company_id) {
-        const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(profile.company_id)}&select=name`);
+        const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(profile.company_id)}&select=name,slug`);
         if (orgs[0]?.name) orgName = orgs[0].name;
+        if (orgs[0]?.slug) orgSlug = orgs[0].slug;
       }
 
       // Server-owned destination only — caller input is never trusted here.
       // With no APP_URL set, Supabase falls back to its configured Site URL.
-      const redirectTo = /^https?:\/\//i.test(process.env.APP_URL || "") ? process.env.APP_URL : undefined;
+      // Branded landing: use ?org=<slug> (query form) so the base URL still
+      // matches Supabase's redirect allow-list while the login page brands itself.
+      const baseUrl = /^https?:\/\//i.test(process.env.APP_URL || "") ? String(process.env.APP_URL) : "";
+      const redirectTo = baseUrl
+        ? (orgSlug ? `${baseUrl.replace(/\/+$/, "")}/?org=${encodeURIComponent(orgSlug)}` : baseUrl)
+        : undefined;
       const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
         method: "POST",
         headers: restHeaders(SERVICE_KEY),

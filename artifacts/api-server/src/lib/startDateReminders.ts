@@ -81,7 +81,7 @@ async function processReminders() {
 
     // Org names for branding (one fetch per distinct org)
     const orgIds = [...new Set(clients.map(c => c.company_id || EDEN_ORG_ID))];
-    const orgs = await sbGet("organizations", `id=in.(${orgIds.join(",")})&select=id,name`);
+    const orgs = await sbGet("organizations", `id=in.(${orgIds.join(",")})&select=id,name,slug`);
     const orgName = (id: string) =>
       orgs.find(o => o.id === id)?.name || "Eden Communications";
 
@@ -126,7 +126,7 @@ async function processReminders() {
       if (mailerConfigured() && c.email) {
         const org = orgName(c.company_id || EDEN_ORG_ID);
         const first = String(c.name || "").split(" ")[0] || "there";
-        const url = appUrl();
+        const url = appUrl(orgs.find(o => o.id === (c.company_id || EDEN_ORG_ID))?.slug);
         const line = m.line(esc(nice));
         const html = `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;background:#111111;border-radius:12px;overflow:hidden">

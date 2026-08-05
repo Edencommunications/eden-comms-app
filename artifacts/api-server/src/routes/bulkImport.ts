@@ -131,8 +131,9 @@ router.post("/admin/bulk-import", async (req: Request, res: Response) => {
   const coachByEmail = new Map<string, { id: string; name: string }>();
   for (const c of orgCoaches) coachByEmail.set(String(c.email || "").toLowerCase(), { id: c.id, name: c.name });
 
-  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=name`);
+  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=name,slug`);
   const orgName = orgs[0]?.name || "Eden Comms";
+  const orgSlug = orgs[0]?.slug || null;
 
   // Coaches first, then clients — so same-file coach links resolve.
   const ordered = [...cleaned.filter((r) => r.role !== "client"), ...cleaned.filter((r) => r.role === "client")];
@@ -217,7 +218,7 @@ router.post("/admin/bulk-import", async (req: Request, res: Response) => {
     // Welcome email with login details
     let entry: Report = { email: r.email, name: r.name, role: r.role, status: "created" };
     if (sendEmails) {
-      const msg = welcomeEmail({ clientName: r.name, email: r.email, tempPassword: pass, orgName, coachName: coach?.name || null });
+      const msg = welcomeEmail({ clientName: r.name, email: r.email, tempPassword: pass, orgName, coachName: coach?.name || null, orgSlug });
       const sent = await sendEmail({ to: r.email, fromName: orgName, ...msg });
       if (sent.ok) entry.detail = "Login emailed";
       else { entry.detail = "Created, but the login email failed — share their temp password manually"; entry.temp_password = pass; }

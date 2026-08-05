@@ -17,4 +17,5 @@
 - [Invite emails & Invites list](invite-emails.md) — invite_log in admin_settings, /invites routes; false "email failed" = frontend dropped the server's emailed flag; verify which build prod runs before debugging.
 - [Plan-change alerts](plan-change-alerts.md) — notifications only after confirmed saves, skip self; supplement protocols persist in admin_settings supp_plan:<client> keys.
 - [weekly_checkins live schema](weekly-checkins-schema.md) — live columns ≠ .sql files; stress/mood/habits/notes ride in protocol_durations.__extra; probe schema before trusting repo SQL.
+- [Branded login links](branded-login-links.md) — orgs get `/<slug>` subpath + `?org=` login branding; all emails must pass org slug to appUrl; reserved segments video/api/__mockup.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.

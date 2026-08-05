@@ -209,14 +209,22 @@ router.post("/invites/resend", async (req: Request, res: Response) => {
   }
 
   let orgName = "Eden Communications";
-  const org = await rest(`companies?id=eq.${companyId}&select=name`);
+  let orgSlug: string | null = null;
+  const org = await rest(`organizations?id=eq.${companyId}&select=name,slug`);
   if (org[0]?.name) orgName = org[0].name;
+  if (org[0]?.slug) orgSlug = org[0].slug;
+  if (!org[0]?.name) {
+    // Legacy fallback: companies row without a mirrored organization
+    const co = await rest(`companies?id=eq.${companyId}&select=name`);
+    if (co[0]?.name) orgName = co[0].name;
+  }
 
   const m = welcomeEmail({
     clientName: profile.name || profile.full_name || email,
     email,
     tempPassword,
     orgName,
+    orgSlug,
   });
   const sent = await sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text, fromName: orgName });
   await recordInviteEmail(companyId, email, !!sent.ok);

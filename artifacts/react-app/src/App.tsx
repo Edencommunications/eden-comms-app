@@ -4220,7 +4220,7 @@ const AdminDashboard = ({ user }:any) => {
             <UpcomingStartsSection clients={upcomingClients}/>
             {/* White-label admin: branded login link */}
             {!isOwnerHQ && myOrg && (() => {
-              const brandedUrl = `${window.location.origin}${window.location.pathname}?org=${myOrg.slug}`;
+              const brandedUrl = `${window.location.origin}${(import.meta.env.BASE_URL || '/').replace(/\/+$/, '')}/${myOrg.slug}`;
               const accent = myOrg.brand_color || B.gold;
               return (
                 <Card style={{ marginBottom:20, borderLeft:`3px solid ${accent}` }}>
@@ -5773,12 +5773,23 @@ export default function App() {
       .catch(()=>{});
   }, [user?.role, user?.email]);
 
-  // Branded login link: ?org=<slug> loads that org's name + palette before auth.
-  // Plain visits keep brandOrg = null → Eden gold login.
+  // Branded login link: ?org=<slug> or a subpath like /my-org loads that org's
+  // name + palette before auth. Plain visits keep brandOrg = null → Eden gold login.
   const [brandOrg, setBrandOrg] = useState<any>(null);
   useEffect(() => { (async () => {
     try {
-      const slug = new URLSearchParams(window.location.search).get('org');
+      let slug = new URLSearchParams(window.location.search).get('org');
+      if (!slug) {
+        // Subpath form: first path segment is treated as an org slug
+        // (reserved app routes excluded). Unknown slugs fall back to Eden login.
+        const RESERVED = new Set(['video', 'api', '__mockup']);
+        // Base-path aware: strip the app's mount path before reading the slug segment
+        const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
+        const path = window.location.pathname.startsWith(base)
+          ? window.location.pathname.slice(base.length) : window.location.pathname;
+        const seg = (path.split('/').filter(Boolean)[0] || '').toLowerCase();
+        if (seg && !RESERVED.has(seg) && /^[a-z0-9][a-z0-9-]*$/.test(seg)) slug = seg;
+      }
       if (!slug) return;
       const rows = await sbGet('organizations',
         `slug=eq.${encodeURIComponent(slug.toLowerCase())}&select=id,name,slug,brand_color,logo_url,is_white_label,is_active&limit=1`);

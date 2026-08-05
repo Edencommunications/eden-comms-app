@@ -165,7 +165,7 @@ router.get("/webhooks/ghl-intake/:companyId/config", async (req, res) => {
   if (!(await requireAdmin(req, companyId))) {
     return res.status(403).json({ error: "Admin access required" });
   }
-  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=id,name`);
+  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=id,name,slug`);
   if (!orgs.length) return res.status(404).json({ error: "Unknown organization" });
   const host = req.get("x-forwarded-host") || req.get("host");
   const proto = req.get("x-forwarded-proto") || "https";
@@ -197,7 +197,7 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
     return fail(401, "rejected", "Invalid or missing webhook secret/signature");
   }
 
-  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=id,name,is_active`);
+  const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(companyId)}&select=id,name,slug,is_active`);
   if (!orgs.length) return fail(404, "rejected", "Unknown organization");
 
   const { name, email, phone, coachEmail, startDate } = parsePayload(req.body);
@@ -269,6 +269,7 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
   {
     const orgName = orgs[0].name || "Eden Comms";
     const msg = welcomeEmail({
+      orgSlug: orgs[0].slug || null,
       clientName: name,
       email,
       tempPassword: tempPass,

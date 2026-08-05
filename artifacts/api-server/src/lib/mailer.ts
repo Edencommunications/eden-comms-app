@@ -25,11 +25,17 @@ export function mailerConfigured(): boolean {
   return Boolean(SENDER && PASSWORD);
 }
 
-export function appUrl(): string {
-  return (
+export function appUrl(orgSlug?: string | null): string {
+  const base =
     process.env.APP_URL ||
-    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}/` : "")
-  );
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}/` : "");
+  if (!base) return "";
+  // Branded destination: /<org-slug> lands on the org's white-label login page.
+  const slug = String(orgSlug || "").trim().toLowerCase();
+  if (slug && /^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+    return `${base.replace(/\/+$/, "")}/${slug}`;
+  }
+  return base;
 }
 
 let transporter: nodemailer.Transporter | null = null;
@@ -128,9 +134,10 @@ export function welcomeEmail(params: {
   tempPassword: string;
   orgName: string;
   coachName?: string | null;
+  orgSlug?: string | null;
 }): { subject: string; html: string; text: string } {
-  const { clientName, email, tempPassword, orgName, coachName } = params;
-  const url = appUrl();
+  const { clientName, email, tempPassword, orgName, coachName, orgSlug } = params;
+  const url = appUrl(orgSlug);
   const firstName = clientName.split(" ")[0] || clientName;
   const subject = `Welcome to ${orgName} — your login details`;
 

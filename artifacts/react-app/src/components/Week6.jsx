@@ -1651,7 +1651,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   async function createOrg() {
     if (!newOrg.name.trim()) return
-    const slug = newOrg.slug||newOrg.name.toLowerCase().replace(/\s+/g,'-')
+    const slug = (newOrg.slug||newOrg.name).toLowerCase().trim().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')
+    // Reserved: these path segments are app routes, not branded login slugs
+    if (['video','api','__mockup'].includes(slug) || !slug) {
+      alert('That URL slug is reserved — please choose a different one.')
+      return
+    }
     const inserted = await dbInsert('organizations',{
       name:           newOrg.name,
       slug,
