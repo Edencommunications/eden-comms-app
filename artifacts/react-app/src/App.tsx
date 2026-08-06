@@ -211,9 +211,9 @@ const OrgLogo = ({ org, size = 44 }) => {
   if (logoUrl && !imgFailed) {
     return (
       <div style={{ width:size, height:size, borderRadius:"50%", border:`2px solid ${p.primary}`, overflow:"hidden",
-        background:"#ffffff", flexShrink:0 }}>
+        background:"#ffffff", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
         <img src={logoUrl} alt={org?.name || "Organization logo"} onError={()=>setImgFailed(true)}
-          style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}/>
+          style={{ width:"88%", height:"88%", objectFit:"contain", display:"block" }}/>
       </div>
     );
   }
