@@ -106,6 +106,20 @@ async function dbInsert(table, body) {
   if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
+// Upload an org logo to Supabase Storage (bucket: org-logos) → public URL, or null
+async function uploadOrgLogo(prefix, file) {
+  try {
+    const ext = ((file.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,''))||'png'
+    const path = `${prefix}-${Date.now()}.${ext}`
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/org-logos/${path}`, {
+      method:'POST',
+      headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':file.type||'image/png' },
+      body:file,
+    })
+    if (!r.ok) return null
+    return `${SUPABASE_URL}/storage/v1/object/public/org-logos/${path}`
+  } catch { return null }
+}
 async function dbDelete(table, params) {
   try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:H}) } catch {}
 }
@@ -683,8 +697,34 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [showNewOrg, setShowNewOrg] = useState(false)
   const [newOrg, setNewOrg] = useState({
     name:'', slug:'', brandColor:'#ffa600', brandColors:[], calendarUrl:'',
-    billingEmail:'', plan:'standard',
+    billingEmail:'', plan:'standard', logoUrl:'',
   })
+  const [orgLogoBusy, setOrgLogoBusy] = useState(false)
+  const [orgLogoErr,  setOrgLogoErr]  = useState('')
+  const orgLogoFileRef = useRef(null)
+  async function onNewOrgLogoFile(file) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setOrgLogoErr('Please choose an image file.'); return }
+    if (file.size > 2*1024*1024) { setOrgLogoErr('Image too large — please use a file under 2 MB.'); return }
+    setOrgLogoErr(''); setOrgLogoBusy(true)
+    try {
+      // Preferred: real file storage
+      const url = await uploadOrgLogo('neworg', file)
+      if (url) { setNewOrg(p=>({...p, logoUrl:url})); return }
+      // Fallback if the storage bucket isn't set up yet: small images inline
+      if (file.size > 400*1024) {
+        setOrgLogoErr('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.')
+        return
+      }
+      const dataUrl = await new Promise((resolve,reject)=>{
+        const rd = new FileReader()
+        rd.onload = ()=>resolve(String(rd.result||'')); rd.onerror = reject
+        rd.readAsDataURL(file)
+      })
+      setNewOrg(p=>({...p, logoUrl:dataUrl}))
+    } catch { setOrgLogoErr('Upload failed — try again or paste a hosted image URL.') }
+    finally { setOrgLogoBusy(false) }
+  }
   const [colorsColSupported, setColorsColSupported] = useState(false) // organizations.brand_colors exists?
   const setNO = k=>v=>setNewOrg(p=>({...p,[k]:v}))
 
@@ -1692,6 +1732,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       billing_email:  newOrg.billingEmail,
       is_white_label: true,
       plan:           newOrg.plan,
+      logo_url:       (newOrg.logoUrl||'').trim() || null,
       ...(colorsColSupported ? { brand_colors: newOrg.brandColors||[] } : {}),
     })
     const dbId = Array.isArray(inserted)?inserted[0]?.id:inserted?.id
@@ -3477,6 +3518,33 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <ColorRow primary={newOrg.brandColor} colors={newOrg.brandColors||[]}
               onPrimary={setNO('brandColor')}
               onColors={setNO('brandColors')}/>
+            {/* Logo — upload a file or paste a hosted URL (optional) */}
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>Logo (optional)</div>
+              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                {newOrg.logoUrl
+                  ? <img src={newOrg.logoUrl} alt="logo" style={{width:38,height:38,borderRadius:8,objectFit:'cover',border:`1px solid ${C.border}`,background:C.surface}}/>
+                  : <div style={{width:38,height:38,borderRadius:8,border:`1px dashed ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontSize:16}}>🖼</div>}
+                <input value={(newOrg.logoUrl||'').startsWith('data:') ? '(uploaded image)' : newOrg.logoUrl}
+                  readOnly={(newOrg.logoUrl||'').startsWith('data:')}
+                  onChange={e=>{ setNO('logoUrl')(e.target.value); setOrgLogoErr('') }}
+                  placeholder="https://yourdomain.com/logo.png — or upload →"
+                  style={{flex:1,minWidth:160,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                <button onClick={()=>orgLogoFileRef.current?.click()} disabled={orgLogoBusy}
+                  style={{background:C.card,color:C.white,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',fontSize:11,fontWeight:700,cursor:orgLogoBusy?'wait':'pointer',opacity:orgLogoBusy?.6:1}}>
+                  {orgLogoBusy ? 'Uploading…' : 'Upload Image…'}
+                </button>
+                {newOrg.logoUrl && (
+                  <button onClick={()=>{ setNO('logoUrl')(''); setOrgLogoErr('') }}
+                    style={{background:'none',color:C.danger,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'8px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                    Remove
+                  </button>
+                )}
+                <input ref={orgLogoFileRef} type="file" accept="image/*" style={{display:'none'}}
+                  onChange={e=>{ onNewOrgLogoFile(e.target.files?.[0]||null); e.target.value='' }}/>
+              </div>
+              {orgLogoErr && <div style={{fontSize:11,color:C.danger,marginTop:6}}>{orgLogoErr}</div>}
+            </div>
             <Inp label="Calendar / Booking URL" value={newOrg.calendarUrl} onChange={setNO('calendarUrl')} placeholder="GHL or Calendly booking link"/>
             <div style={{display:'flex',gap:10,marginTop:6}}>
               <button onClick={()=>setShowNewOrg(false)}
