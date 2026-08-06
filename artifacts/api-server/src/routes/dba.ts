@@ -252,6 +252,59 @@ router.get("/dba/brand", async (req: Request, res: Response) => {
   return res.json({ ok: true, dba: publicBrand(hit.dba, orgs[0] || null) });
 });
 
+// ── Public: per-DBA PWA manifest ──────────────────────────────────
+// GET /dba/manifest?slug=<slug> — a real same-origin manifest so a phone
+// install from a DBA link saves an icon that reopens /<slug> with the DBA's
+// branding (blob/data manifests can't establish Chrome's install scope).
+// Never 404s: unknown slugs fall back to the Eden default so installability
+// is never broken. Icon/start_url paths are absolute (manifest lives under
+// /api/, the app at /).
+router.get("/dba/manifest", async (req: Request, res: Response) => {
+  const slug = sanitizeSlug(String(req.query.slug || ""));
+  // Optional frontend base path (Vite BASE_URL) so start_url/scope/icons stay
+  // inside the deployed app when it isn't served at the site root.
+  const rawBase = String(req.query.base || "/");
+  const p = /^\/[a-zA-Z0-9\-_/]*$/.test(rawBase) ? rawBase.replace(/\/+$/, "") : "";
+  const edenDefault = {
+    name: "Eden Communications",
+    short_name: "Eden Comms",
+    description: "The private platform for Lifestyle of Eden coaches and clients",
+    start_url: `${p}/`,
+    scope: `${p}/`,
+    display: "standalone",
+    background_color: "#000000",
+    theme_color: "#ffa600",
+    orientation: "portrait",
+    icons: [
+      { src: `${p}/icon-192.png`, sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: `${p}/icon-512.png`, sizes: "512x512", type: "image/png", purpose: "any maskable" },
+    ],
+  };
+  res.setHeader("Content-Type", "application/manifest+json");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  if (!slug) return res.json(edenDefault);
+  const all = await loadAllDbas();
+  const hit = all.find((x) => x.dba.slug === slug && x.dba.is_active);
+  if (!hit) return res.json(edenDefault);
+  const d = hit.dba;
+  const logoOk = typeof d.logo_url === "string" && /^https?:\/\//i.test(d.logo_url);
+  return res.json({
+    name: d.name,
+    short_name: d.name.length > 12 ? d.name.slice(0, 12) : d.name,
+    description: `The private space for ${d.name} members`,
+    start_url: `${p}/${d.slug}`,
+    scope: `${p}/`,
+    display: "standalone",
+    background_color: "#000000",
+    theme_color: d.brand_color || "#ffa600",
+    orientation: "portrait",
+    icons: [
+      ...(logoOk ? [{ src: d.logo_url, sizes: "512x512", type: "image/png", purpose: "any" }] : []),
+      ...edenDefault.icons,
+    ],
+  });
+});
+
 // ── Admin: list org DBAs ──────────────────────────────────────────
 router.get("/dba/list", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);

@@ -9,6 +9,28 @@
 
     <!-- PWA / home screen -->
     <link rel="manifest" href="/manifest.json" />
+    <script>
+      // Branded installs: visits to a DBA/sub-brand link (/<slug>) swap the
+      // manifest to the API's per-slug manifest BEFORE Chrome evaluates
+      // installability, so "Add to Home Screen" saves that space's link and
+      // branding. Unknown slugs fall back server-side to the Eden default,
+      // so this can never break installability. Runs at parse time — before
+      // any framework code or beforeinstallprompt.
+      (function () {
+        var base = '%BASE_URL%'.replace(/\/+$/, ''); // Vite base, '' at root
+        var path = location.pathname;
+        if (base && path.indexOf(base + '/') === 0) path = path.slice(base.length);
+        var seg = (path.split('/')[1] || '').toLowerCase();
+        var reserved = { '': 1, video: 1, api: 1, __mockup: 1, 'index.html': 1 };
+        if (!reserved[seg] && /^[a-z0-9-]{2,40}$/.test(seg)) {
+          window.__edenManifestSlug = seg;
+          // API mounts at the site root (/api) regardless of the app base;
+          // the app base only shapes start_url/scope/icons inside the manifest.
+          var link = document.querySelector('link[rel="manifest"]');
+          if (link) link.href = '/api/dba/manifest?slug=' + encodeURIComponent(seg) + '&base=' + encodeURIComponent(base || '/');
+        }
+      })();
+    </script>
     <meta name="theme-color" content="#ffa600" />
     <meta name="mobile-web-app-capable" content="yes" />
 

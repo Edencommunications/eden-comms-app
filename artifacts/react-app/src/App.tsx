@@ -32,6 +32,7 @@ import { useTeamHubUnread } from "./lib/teamUnread";
 import Wearables from "./components/Wearables";
 import CheckinFormEditor from "./components/CheckinFormEditor";
 import InstallBanner from "./components/InstallBanner";
+import { applyPwaBrand, resetPwaBrand } from "./pwaBrand";
 import { supabase } from "./supabaseClient";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
@@ -5999,6 +6000,16 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   }, [dba?.id]);
   useEffect(() => { setContent(null); setTab("home"); loadContent(); }, [dba?.id, loadContent]);
 
+  // Point the phone-install target at this DBA — an installed icon should
+  // reopen /<slug> with the DBA's name (and logo where the platform allows).
+  useEffect(() => {
+    if (!dba?.slug) return;
+    applyPwaBrand({ name: dba.name, slug: dba.slug, logoUrl: dba.logo_url, themeColor: dba.brand_color });
+  }, [dba?.id]); // eslint-disable-line
+  // Restore the Eden install target on any way out of the DBA space
+  // (staff "Open the full app", logout, unmount)
+  useEffect(() => () => resetPwaBrand(), []);
+
   const postDba = async (path: string, body: any) => {
     setBusy(true);
     try {
@@ -6129,6 +6140,9 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           ))}
         </div>
       )}
+
+      {/* Same install nudge as the main app, branded for this DBA */}
+      <InstallBanner brandName={dba?.name || 'Eden'} />
     </div>
   );
 };
@@ -6559,6 +6573,8 @@ export default function App() {
   const cameViaDba = !!brandOrg?.__dba;
   const [myDbas, setMyDbas] = useState<any[] | null>(null);
   const [dbaExited, setDbaExited] = useState(false);
+  // Staff who exit a DBA back into the main app: restore the Eden install target
+  useEffect(() => { if (dbaExited) resetPwaBrand(); }, [dbaExited]);
   useEffect(() => {
     if (!user?.email || user.mustChangePassword || !(isDbaMember || cameViaDba)) return;
     fetch(`${(import.meta.env.BASE_URL || '/')}api/dba/mine`, { headers: { Authorization: sbBearer() } })

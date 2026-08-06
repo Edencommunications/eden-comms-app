@@ -47,7 +47,7 @@ function wasInstalled() {
   try { return localStorage.getItem(INSTALLED_KEY) === '1' } catch { return false }
 }
 
-export default function InstallBanner() {
+export default function InstallBanner({ brandName = 'Eden' }: { brandName?: string }) {
   const [visible,   setVisible]   = useState(false)   // show full banner
   const [collapsed, setCollapsed] = useState(false)   // show mini pill
   const [ios,       setIos]       = useState(false)
@@ -74,6 +74,11 @@ export default function InstallBanner() {
     }
     window.addEventListener('beforeinstallprompt', onPrompt)
 
+    // Manifest was rebranded after capture — a held prompt would install the
+    // wrong app. Drop it; the button then shows manual install steps instead.
+    const onBrandChanged = () => { deferredRef.current = null }
+    window.addEventListener('eden-pwa-brand-changed', onBrandChanged)
+
     // Hide permanently if the user installs via the browser's own UI
     const onInstalled = () => {
       markInstalled()
@@ -90,6 +95,7 @@ export default function InstallBanner() {
     mq.addEventListener('change', onMqChange)
 
     return () => {
+      window.removeEventListener('eden-pwa-brand-changed', onBrandChanged)
       window.removeEventListener('beforeinstallprompt', onPrompt)
       window.removeEventListener('appinstalled', onInstalled)
       mq.removeEventListener('change', onMqChange)
@@ -160,7 +166,7 @@ export default function InstallBanner() {
             <span style={{ fontSize: 26 }}>📲</span>
             <div>
               <div style={{ fontSize: 14, fontWeight: 800, color: WHITE, letterSpacing: .2 }}>
-                Add Eden to Your Home Screen
+                Add {brandName} to Your Home Screen
               </div>
               <div style={{ fontSize: 11, color: MUTED, marginTop: 1 }}>
                 One tap access — works like a native app
@@ -186,7 +192,7 @@ export default function InstallBanner() {
               {[
                 { n: 1, icon: '⬆️', text: 'Tap the Share button at the bottom of Safari' },
                 { n: 2, icon: '➕', text: 'Scroll down and tap "Add to Home Screen"' },
-                { n: 3, icon: '✅', text: 'Tap "Add" — Eden will appear on your home screen' },
+                { n: 3, icon: '✅', text: `Tap "Add" — ${brandName} will appear on your home screen` },
               ].map(s => (
                 <div key={s.n} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -221,13 +227,13 @@ export default function InstallBanner() {
           // ── Android manual instructions (fallback when the one-tap prompt isn't available) ──
           <>
             <div style={{ fontSize: 12, color: MUTED, marginBottom: 12, lineHeight: 1.5 }}>
-              Add Eden from your browser's menu — takes two taps:
+              Add {brandName} from your browser's menu — takes two taps:
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               {[
                 { n: 1, icon: '⋮', text: 'Tap the menu button (three dots) in the top-right of your browser' },
                 { n: 2, icon: '📲', text: 'Tap "Add to Home screen" or "Install app"' },
-                { n: 3, icon: '✅', text: 'Confirm — Eden will appear on your home screen' },
+                { n: 3, icon: '✅', text: `Confirm — ${brandName} will appear on your home screen` },
               ].map(s => (
                 <div key={s.n} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -261,7 +267,7 @@ export default function InstallBanner() {
           // ── Android / Chrome one-tap install ─────────────
           <>
             <div style={{ fontSize: 12, color: MUTED, marginBottom: 14, lineHeight: 1.5 }}>
-              Install Eden as an app — no App Store needed. Loads instantly, works offline.
+              Install {brandName} as an app — no App Store needed. Loads instantly, works offline.
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button

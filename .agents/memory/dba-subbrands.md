@@ -43,3 +43,7 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 - Staff delegation lives in `delegates` inside the dba:<id> JSON record; dbaAccess re-derives manage rights live from it on every request (same-org, non-client roles only). GET /dba/list now serves non-admin staff too (scope "mine" = coached + delegated DBAs); admins keep org-wide scope.
 - Delegates get coach-equivalent rights only — DBA member invites remain org-admin-only by design.
 - Audit-log labels for all dba_* actions live in the App.tsx ACTION_LABELS map; new server audit actions need a matching entry there or they render as fallback text.
+
+## Branded phone installs (PWA)
+- Chrome ignores blob/data manifests for install scope — branded installs must use a real same-origin manifest endpoint, swapped into <link rel=manifest> at document-parse time (inline index.html script using Vite %BASE_URL%) before beforeinstallprompt fires.
+- A captured install prompt is bound to the manifest at capture time: discard it whenever the manifest changes after load (fall back to manual install steps), or the wrong app gets installed.
