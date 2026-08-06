@@ -56,7 +56,9 @@ const toLocalInput = (iso) => {
 
 const EMPTY_FORM = { id:null, title:'', start:'', end:'', description:'', link:'' }
 
-export default function DbaCalendar({ dba, primary, isMobile }) {
+export default function DbaCalendar({ dba, primary, palette = null, isMobile }) {
+  // Event dots cycle through the DBA's saved palette so extra colors show up
+  const eventColor = (i) => (palette?.extra?.length ? palette.nth(i) : primary)
   const [data, setData]   = useState(null)  // {can_manage, can_set_booking, my_booking, events, bookings, roster?}
   const [busy, setBusy]   = useState(false)
   const [view, setView]   = useState(() => { const n = new Date(); return { y:n.getFullYear(), m:n.getMonth() } })
@@ -253,7 +255,7 @@ export default function DbaCalendar({ dba, primary, isMobile }) {
                       border:`1px solid ${isSel ? primary+'66' : k === todayK ? C.border : 'transparent'}` }}>
                     <span style={{ fontSize:11, fontWeight: k === todayK ? 800 : 600, color: k === todayK ? primary : C.white }}>{d.getDate()}</span>
                     <div style={{ display:'flex', gap:2, flexWrap:'wrap', marginTop:3 }}>
-                      {evs.slice(0,4).map(e => <span key={e.id} style={{ width:6, height:6, borderRadius:3, background:primary }} />)}
+                      {evs.slice(0,4).map((e, ei) => <span key={e.id} style={{ width:6, height:6, borderRadius:3, background:eventColor(ei) }} />)}
                       {evs.length > 4 && <span style={{ fontSize:8, color:C.muted }}>+{evs.length-4}</span>}
                     </div>
                   </div>

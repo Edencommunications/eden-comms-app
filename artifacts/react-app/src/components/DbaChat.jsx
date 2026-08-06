@@ -100,7 +100,9 @@ function safeUrl(u) { try { const p = new URL(u).protocol; return p === 'https:'
 //   primary = brand accent color for this DBA
 //   isMobile
 // ════════════════════════════════════════════════════════════════
-export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) {
+export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMobile = false }) {
+  // Channel rows cycle through the DBA's saved palette so extra colors show up
+  const channelColor = (i) => (palette?.extra?.length ? palette.nth(i) : primary)
   const C = {
     gold: primary, black: '#000000', white: '#ffffff',
     surface: '#111111', card: '#1a1a1a', border: '#2a2a2a',
@@ -667,15 +669,16 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
                 No groups yet.{canManage ? ' Tap ＋ New to create one.' : ' Your coach can add you to one.'}
               </div>
             )}
-            {channels.map(c => (
+            {channels.map((c, ci) => (
               <div key={c.id} onClick={() => setActiveId(c.id)}
                 style={{ padding:'10px 10px', borderRadius:8, cursor:'pointer', marginBottom:2,
-                  background: activeId===c.id ? `${C.gold}18` : 'transparent',
-                  border: activeId===c.id ? `1px solid ${C.gold}44` : '1px solid transparent',
+                  background: activeId===c.id ? `${channelColor(ci)}18` : 'transparent',
+                  border: activeId===c.id ? `1px solid ${channelColor(ci)}44` : '1px solid transparent',
+                  borderLeft: `3px solid ${activeId===c.id ? channelColor(ci) : 'transparent'}`,
                   display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:14 }}>#</span>
+                <span style={{ fontSize:14, color: channelColor(ci) }}>#</span>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color: activeId===c.id ? C.gold : C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color: activeId===c.id ? channelColor(ci) : C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
                   <div style={{ fontSize:9, color:C.muted }}>{allFlags[c.id] ? 'everyone in this community' : `by ${c.created_by_name || '—'}`}</div>
                 </div>
                 {canManage && (

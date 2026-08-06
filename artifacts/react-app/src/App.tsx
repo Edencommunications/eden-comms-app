@@ -563,6 +563,8 @@ const HomeScreen = ({ user, wlOrg = null }) => {
   const hp = wlPalette(wlOrg);
   const primary   = wlOrg ? hp.primary   : B.gold;
   const secondary = wlOrg ? hp.secondary : "#ffa600";
+  const accent    = wlOrg ? hp.accent    : B.gold;
+  const hasPalette = wlOrg && hp.extra.length > 0;
   return (
     <Screen>
       {/* Header */}
@@ -589,7 +591,7 @@ const HomeScreen = ({ user, wlOrg = null }) => {
         const nice = new Date(startInfo.startDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', timeZone:'UTC' });
         const isToday = days === 0;
         return (
-          <div style={{ margin:"16px 20px 0", background:`linear-gradient(135deg, ${primary}1e, ${B.card})`, border:`1px solid ${primary}55`, borderRadius:12, padding:"16px 18px", textAlign:"center" }}>
+          <div style={{ margin:"16px 20px 0", background: hasPalette ? `linear-gradient(135deg, ${primary}1e, ${secondary}14)` : `linear-gradient(135deg, ${primary}1e, ${B.card})`, border:`1px solid ${hasPalette ? accent : primary}55`, borderRadius:12, padding:"16px 18px", textAlign:"center" }}>
             <p style={{ fontSize:11, fontWeight:700, color:primary, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>
               {isToday ? "🎉 Today's the Day!" : "🚀 Your Program Starts Soon"}
             </p>
@@ -610,8 +612,8 @@ const HomeScreen = ({ user, wlOrg = null }) => {
       })()}
 
       {/* Announcement banner */}
-      <div style={{ margin:"16px 20px 0", background:B.card, border:`1px solid ${primary}33`, borderLeft:`3px solid ${primary}`, borderRadius:10, padding:"12px 14px" }}>
-        <p style={{ fontSize:11, fontWeight:700, color:primary, margin:"0 0 3px", letterSpacing:0.8 }}>COACH UPDATE</p>
+      <div style={{ margin:"16px 20px 0", background:B.card, border:`1px solid ${primary}33`, borderLeft:`3px solid ${secondary}`, borderRadius:10, padding:"12px 14px" }}>
+        <p style={{ fontSize:11, fontWeight:700, color:secondary, margin:"0 0 3px", letterSpacing:0.8 }}>COACH UPDATE</p>
         <p style={{ fontSize:13, color:B.text, margin:0 }}>Your weekly check-in is due before {homeDeadline.text} on your assigned update day. Remember to take your morning weight fasted.</p>
       </div>
 
@@ -622,12 +624,15 @@ const HomeScreen = ({ user, wlOrg = null }) => {
           { label:"Habit Tracker", status:"3/7 days", color:B.gold },
           { label:"Weekly Check-In", status:"Due Wednesday", color:"#ffa600" },
           { label:"Diet Adherence", status:"On track", color:B.success },
-        ].map(({ label, status, color }) => (
+        ].map(({ label, status, color }, i) => {
+          // White-label orgs with a saved palette: badges cycle through it
+          if (hasPalette) color = hp.nth(i);
+          return (
           <div key={label} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <span style={{ fontSize:13, color:B.text, fontWeight:500 }}>{label}</span>
             <Badge color={color}>{status}</Badge>
           </div>
-        ))}
+        );})}
       </div>
 
       {/* Resources links */}
@@ -5615,20 +5620,23 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
               </p>
               <p style={{ fontSize:13, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
-            {visibleTabs.map(t => (
+            {visibleTabs.map((t, ti) => {
+              // White-label orgs with extra palette colors: each tab gets its own accent
+              const tc = wlOrg && wp.extra.length > 0 ? wp.nth(ti) : shellPrimary;
+              return (
               <button key={t.key}
                 onClick={() => { navTab(t.key); setMenuOpen(false); }}
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 16px",
-                  background:tab===t.key?`${shellPrimary}15`:"none", border:"none",
-                  borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`,
+                  background:tab===t.key?`${tc}15`:"none", border:"none",
+                  borderLeft:`3px solid ${tab===t.key?tc:"transparent"}`,
                   cursor:"pointer", textAlign:"left", width:"100%" }}>
-                <Ic n={t.icon} size={19} c={tab===t.key?shellPrimary:B.muted}/>
-                <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?shellPrimary:B.text }}>{t.label}</span>
+                <Ic n={t.icon} size={19} c={tab===t.key?tc:B.muted}/>
+                <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?tc:B.text }}>{t.label}</span>
                 {t.key==="team" && teamHubUnread && tab!=="team" && (
                   <span style={{ width:8, height:8, borderRadius:4, background:shellPrimary, marginLeft:"auto", flexShrink:0 }}/>
                 )}
               </button>
-            ))}
+            );})}
           </div>
         </>
       )}
@@ -5645,16 +5653,19 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
               </p>
               <p style={{ fontSize:12, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
-            {visibleTabs.map(t => (
+            {visibleTabs.map((t, ti) => {
+              // White-label orgs with extra palette colors: each tab gets its own accent
+              const tc = wlOrg && wp.extra.length > 0 ? wp.nth(ti) : shellPrimary;
+              return (
               <button key={t.key} onClick={() => navTab(t.key)}
-                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${shellPrimary}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?shellPrimary:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
-                <Ic n={t.icon} size={17} c={tab===t.key?shellPrimary:B.muted}/>
-                <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?shellPrimary:B.muted }}>{t.label}</span>
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${tc}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?tc:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
+                <Ic n={t.icon} size={17} c={tab===t.key?tc:B.muted}/>
+                <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?tc:B.muted }}>{t.label}</span>
                 {t.key==="team" && teamHubUnread && tab!=="team" && (
                   <span style={{ width:8, height:8, borderRadius:4, background:shellPrimary, marginLeft:"auto", flexShrink:0 }}/>
                 )}
               </button>
-            ))}
+            );})}
             <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.border}` }}>
               <div style={{ padding:"8px 10px", background: wlOrg ? `linear-gradient(135deg, ${shellPrimary}18, ${shellSecondary}18)` : B.goldDim, border:`1px solid ${wlOrg ? `${shellAccent}44` : B.goldMid}`, borderRadius:8 }}>
                 <p style={{ fontSize:9, color: shellPrimary, margin:0, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase" }}>{wlOrg ? wlOrg.name : "LIFESTYLE OF EDEN"}</p>
@@ -5902,7 +5913,9 @@ const dbaToEmbed = (raw: string) => {
 };
 
 // Learn tab — assigned courses; viewer with progress + manager course builder
-const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy, saveCourse, saveLesson, deleteLesson }: any) => {
+const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson, busy, saveCourse, saveLesson, deleteLesson }: any) => {
+  // Course cards cycle through the DBA's saved palette so extra colors show up
+  const courseColor = (i: number) => (palette?.extra?.length ? palette.nth(i) : primary);
   const canManage = content?.can_manage;
   const courses = content?.courses || [];
   const completed: Set<string> = useMemo(() => new Set(content?.completed || []), [content?.completed]);
@@ -5986,14 +5999,14 @@ const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy, saveCour
               {canManage ? "No courses assigned yet — use “Choose courses” to pick what members see here." : "No courses yet — content from your coach will appear here."}
             </p></Card>
           )}
-          {courses.map((c: any) => (
+          {courses.map((c: any, i: number) => (
             <div key={c.id} onClick={() => setOpenCourse(c.id)}
-              style={{ background: B.card, border: `1px solid ${B.border}`, borderLeft: `3px solid ${primary}`, borderRadius: 12, padding: "16px", marginBottom: 12, cursor: "pointer" }}>
+              style={{ background: B.card, border: `1px solid ${B.border}`, borderLeft: `3px solid ${courseColor(i)}`, borderRadius: 12, padding: "16px", marginBottom: 12, cursor: "pointer" }}>
               <p style={{ fontSize: 15, fontWeight: 800, color: B.text, margin: 0 }}>{c.title}</p>
               {c.description && <p style={{ fontSize: 12, color: B.muted, margin: "5px 0 0", lineHeight: 1.5 }}>{c.description}</p>}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
                 <div style={{ flex: 1, height: 5, background: B.dim, borderRadius: 4, overflow: "hidden" }}>
-                  <div style={{ width: `${pct(c)}%`, height: "100%", background: primary }} />
+                  <div style={{ width: `${pct(c)}%`, height: "100%", background: courseColor(i) }} />
                 </div>
                 <span style={{ fontSize: 11, color: B.muted, fontWeight: 700 }}>{pct(c)}%</span>
               </div>
@@ -6099,6 +6112,9 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const dba = dbas.find((d: any) => d.id === activeId) || dbas[0];
   const wl = wlPalette(dba);
   const primary = wl?.primary || B.gold;
+  const secondary = wl?.secondary || primary;
+  const accent = wl?.accent || primary;
+  const hasPalette = (wl?.extra || []).length > 0;
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<"home" | "community" | "huddles" | "calendar" | "connect" | "learn">("home");
   // Light poll so the join banner shows on any tab when a huddle we're
@@ -6180,15 +6196,17 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
             <p style={{ fontSize: 14, fontWeight: 800, color: B.text, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
             {dba?.org?.name && <p style={{ fontSize: 9, color: B.muted, margin: 0 }}>part of {dba.org.name}</p>}
           </div>
-          {content?.can_manage && <span style={{ fontSize: 9, fontWeight: 800, color: primary, border: `1px solid ${primary}55`, borderRadius: 20, padding: "2px 8px", letterSpacing: 0.6 }}>MANAGER VIEW</span>}
+          {content?.can_manage && <span style={{ fontSize: 9, fontWeight: 800, color: accent, border: `1px solid ${accent}55`, borderRadius: 20, padding: "2px 8px", letterSpacing: 0.6 }}>MANAGER VIEW</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {!isMobile && TABS.map(t => (
+          {!isMobile && TABS.map((t, i) => {
+            const tc = hasPalette ? wl.nth(i) : primary; // each tab picks up a palette color
+            return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ background: tab === t.id ? `${primary}22` : "none", color: tab === t.id ? primary : B.muted, border: `1px solid ${tab === t.id ? primary + "55" : "transparent"}`, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              style={{ background: tab === t.id ? `${tc}22` : "none", color: tab === t.id ? tc : B.muted, border: `1px solid ${tab === t.id ? tc + "55" : "transparent"}`, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
               {t.label}
             </button>
-          ))}
+          );})}
           {dbas.length > 1 && (
             <select value={activeId} onChange={(e) => setActiveId(e.target.value)}
               style={{ background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none" }}>
@@ -6210,9 +6228,9 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
 
       {liveHuddleCount > 0 && tab !== "huddles" && (
         <div onClick={() => setTab("huddles")}
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: `${primary}1e`, borderBottom: `1px solid ${primary}55`, padding: "8px 14px", cursor: "pointer" }}>
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: `${secondary}1e`, borderBottom: `1px solid ${secondary}55`, padding: "8px 14px", cursor: "pointer" }}>
           <span style={{ width: 8, height: 8, borderRadius: 4, background: "#4FD89A", boxShadow: "0 0 8px #4FD89A" }} />
-          <span style={{ fontSize: 12, fontWeight: 800, color: primary }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: secondary }}>
             {liveHuddleCount === 1 ? "A huddle is live" : `${liveHuddleCount} huddles are live`} — tap to join
           </span>
         </div>
@@ -6225,34 +6243,41 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           </div>
         ) : tab === "community" ? (
           <div style={{ maxWidth: 1080, margin: "0 auto", padding: isMobile ? "10px 8px 16px" : "20px 16px 30px", height: "100%", boxSizing: "border-box" }}>
-            <DbaChat dba={dba} primary={primary} isMobile={isMobile} />
+            <DbaChat dba={dba} primary={primary} palette={wl} isMobile={isMobile} />
           </div>
         ) : tab === "huddles" ? (
           <DbaHuddles dba={dba} primary={primary} isMobile={isMobile} />
         ) : tab === "calendar" ? (
-          <DbaCalendar dba={dba} primary={primary} isMobile={isMobile} />
+          <DbaCalendar dba={dba} primary={primary} palette={wl} isMobile={isMobile} />
         ) : tab === "connect" ? (
           <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} dba={dba} />
         ) : tab === "learn" ? (
-          <DbaLearn primary={primary} content={content} dba={dba} saveLearn={saveLearn} markLesson={markLesson} busy={busy}
+          <DbaLearn primary={primary} palette={wl} content={content} dba={dba} saveLearn={saveLearn} markLesson={markLesson} busy={busy}
             saveCourse={saveCourse} saveLesson={saveLesson} deleteLesson={deleteLesson} />
         ) : (
           <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px 40px" }}>
-            <div style={{ textAlign: "center", background: `linear-gradient(160deg, ${primary}18 0%, ${B.surface} 100%)`, border: `1px solid ${B.border}`, borderRadius: 16, padding: isMobile ? "32px 20px" : "42px 32px", marginBottom: 18 }}>
+            <div style={{ textAlign: "center", background: hasPalette ? `linear-gradient(160deg, ${primary}20 0%, ${secondary}12 55%, ${B.surface} 100%)` : `linear-gradient(160deg, ${primary}18 0%, ${B.surface} 100%)`, border: `1px solid ${hasPalette ? `${accent}33` : B.border}`, borderRadius: 16, padding: isMobile ? "32px 20px" : "42px 32px", marginBottom: 18 }}>
               <OrgLogo org={dba} size={76} />
               <h1 style={{ fontSize: 24, fontWeight: 800, color: B.text, margin: "16px 0 6px" }}>Welcome to {dba?.name}</h1>
               <p style={{ fontSize: 13, color: B.muted, margin: 0, lineHeight: 1.7 }}>
                 Hi {String(user?.name || "").split(" ")[0] || "there"} — this is {dba?.name}'s private member space.
               </p>
+              {hasPalette && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 14 }}>
+                  {wl.all.slice(0, 6).map((c: string, i: number) => (
+                    <span key={i} style={{ width: 12, height: 12, borderRadius: 6, background: c, display: "inline-block", border: "1px solid #00000055" }} />
+                  ))}
+                </div>
+              )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-              <div onClick={() => setTab("connect")} style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer" }}>
-                <Ic n="links" size={22} c={primary} />
+              <div onClick={() => setTab("connect")} style={{ background: B.card, border: `1px solid ${B.border}`, borderLeft: `3px solid ${secondary}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer" }}>
+                <Ic n="links" size={22} c={secondary} />
                 <p style={{ fontSize: 15, fontWeight: 800, color: B.text, margin: "10px 0 2px" }}>Connect</p>
                 <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.5 }}>{linkCount ? `${linkCount} link${linkCount === 1 ? '' : 's'} from your coach` : "Links & resources"}</p>
               </div>
-              <div onClick={() => setTab("learn")} style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer" }}>
-                <Ic n="learn" size={22} c={primary} />
+              <div onClick={() => setTab("learn")} style={{ background: B.card, border: `1px solid ${B.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer" }}>
+                <Ic n="learn" size={22} c={accent} />
                 <p style={{ fontSize: 15, fontWeight: 800, color: B.text, margin: "10px 0 2px" }}>Learn</p>
                 <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.5 }}>{courseCount ? `${courseCount} course${courseCount === 1 ? '' : 's'} available` : "Courses & lessons"}</p>
               </div>
@@ -6264,12 +6289,14 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
 
       {isMobile && (
         <div style={{ display: "flex", background: B.surface, borderTop: `1px solid ${B.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
-          {TABS.map(t => (
+          {TABS.map((t, i) => {
+            const tc = hasPalette ? wl.nth(i) : primary; // mobile tabs cycle the palette too
+            return (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "8px 0 10px" }}>
-              <Ic n={t.icon} size={20} c={tab === t.id ? primary : B.muted} />
-              <span style={{ fontSize: 9, fontWeight: 600, color: tab === t.id ? primary : B.muted, letterSpacing: 0.5, textTransform: "uppercase" }}>{t.label}</span>
+              <Ic n={t.icon} size={20} c={tab === t.id ? tc : B.muted} />
+              <span style={{ fontSize: 9, fontWeight: 600, color: tab === t.id ? tc : B.muted, letterSpacing: 0.5, textTransform: "uppercase" }}>{t.label}</span>
             </button>
-          ))}
+          );})}
         </div>
       )}
 
