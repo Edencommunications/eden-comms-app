@@ -22,6 +22,13 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 - DBA member-remove hard-revokes chat: deletes their community_members + pins across the DBA's channels and deactivates their 1v1s. JSON-only removal would leave table access intact.
 - Member 1v1s stay locked until dm_enabled (Phase 4 hook); coach↔org-admin DM always allowed.
 
+## Per-DBA tiers & HQ tab
+- Each DBA can now own its ladder: `dba.tier_defs` (1–3 tiers {id,name,desc,dm,app}) overrides the org `dba_tier_defs`; `effectiveTierDefs(companyId,dba)` is the single lookup used everywhere (chat-config, dm-open, tier-set, promote).
+- Course gating: `dba.learn_tiers` maps courseId → allowed tier ids (missing/empty = everyone). Enforced server-side in BOTH /dba/content listing AND /dba/progress writes — any new member-facing course endpoint must reuse `courseOpenToMember`.
+- Manager-only HQ endpoints: POST /dba/tier-defs-set, GET /dba/hq, POST /dba/learn-tiers; member-add/member-remove accept org admins OR DBA managers (manager grant re-checked on the fresh record *inside* the write lock — revocation during lock-wait must not still mutate).
+- **Why (review):** in tier-defs-set, scrubbed chat-cfg assignments must save BEFORE the ladder, with checked failure — otherwise a removed tier id can linger on a member and be revived if a later tier reuses the id.
+- Frontend: HQ tab in DbaHome (managers only, `content.can_manage`) — DbaHq component: ladder editor, invite, roster tier dropdowns, per-course tier checkboxes (optimistic updates).
+
 ## Delegated authority & tiers (Phase 4)
 - Leader authority (delete/pin/canvas) is strictly per-channel and lives in the DBA chat config JSON; the org-wide tier ladder lives in per-org `dba_tier_defs`. Only the org super_admin edits the ladder; DBA managers assign tiers and grants.
 - All moderation and DM-pair decisions are server-side; the frontend only renders what chat-config returns (`my_dm`, `dm_targets`, `leaders`, `tiers`). Never gate these client-side.

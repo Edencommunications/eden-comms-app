@@ -88,7 +88,10 @@ export type DbaRecord = {
   delegates: DbaDelegate[]; // org staff/VAs granted manage access into this DBA
   connect: DbaLink[]; // per-DBA Connect tab links
   learn_course_ids: string[]; // org/Eden course ids assigned to this DBA's Learn tab
+  tier_defs: DbaTierDef[]; // per-DBA tier ladder (empty = org default ladder)
+  learn_tiers: Record<string, string[]>; // courseId → tier ids allowed (missing/empty = everyone)
 };
+export type DbaTierDef = { id: string; name: string; desc: string | null; dm: boolean; app: boolean };
 
 function parseDba(value: any): DbaRecord | null {
   try {
@@ -109,6 +112,14 @@ function parseDba(value: any): DbaRecord | null {
       delegates: Array.isArray(v.delegates) ? v.delegates.filter((d: any) => d && d.id) : [],
       connect: Array.isArray(v.connect) ? v.connect : [],
       learn_course_ids: Array.isArray(v.learn_course_ids) ? v.learn_course_ids.map(String) : [],
+      tier_defs: Array.isArray(v.tier_defs)
+        ? v.tier_defs
+            .filter((t: any) => t && t.id && String(t.name || "").trim())
+            .map((t: any) => ({ id: String(t.id), name: String(t.name).trim().slice(0, 60), desc: t.desc ? String(t.desc).trim().slice(0, 300) : null, dm: !!t.dm, app: !!t.app }))
+        : [],
+      learn_tiers: v.learn_tiers && typeof v.learn_tiers === "object" && !Array.isArray(v.learn_tiers)
+        ? Object.fromEntries(Object.entries(v.learn_tiers).map(([k, arr]) => [String(k), Array.isArray(arr) ? arr.map(String) : []]))
+        : {},
     };
   } catch {
     return null;
@@ -462,6 +473,8 @@ router.post("/dba/save", async (req: Request, res: Response) => {
     members: existing?.members || [],
     connect: existing?.connect || [],
     learn_course_ids: existing?.learn_course_ids || [],
+    tier_defs: existing?.tier_defs || [],
+    learn_tiers: existing?.learn_tiers || {},
   };
   if (!(await saveDbaRow(companyId, dba))) {
     return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
@@ -491,11 +504,25 @@ router.post("/dba/archive", async (req: Request, res: Response) => {
 
 // ── Admin: add a member (provisions a real login + branded email) ─
 router.post("/dba/member-add", async (req: Request, res: Response) => {
-  const admin = await requireAdminJwt(req);
-  if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const companyId = await adminOrgScope(admin, req);
-  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   const { dbaId } = (req.body || {}) as Record<string, any>;
+  // Org admins invite from the main app; DBA managers (coach/delegates)
+  // invite from the DBA's own HQ tab — same checks, same flow.
+  let admin = await requireAdminJwt(req);
+  let companyId: string | null = null;
+  let managerMe: Me | null = null;
+  if (admin) {
+    companyId = await adminOrgScope(admin, req);
+    if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
+  } else {
+    const me = await requireUserJwt(req);
+    if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    admin = me as any;
+    managerMe = me;
+    companyId = hit.companyId;
+  }
   const email = String((req.body || {}).email || "").trim().toLowerCase();
   const name = String((req.body || {}).name || "").trim();
   if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: "Valid email required" });
@@ -504,6 +531,9 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
   return withLock("dba-write", async () => {
   const dba = (await loadOrgDbas(companyId)).find((d) => d.id === dbaId);
   if (!dba) return res.status(404).json({ ok: false, error: "DBA not found" });
+  // Managers are re-checked on the fresh record — a grant revoked while we
+  // waited on the lock must not still add members.
+  if (managerMe && !dbaAccess(managerMe, companyId!, dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
   if (!dba.is_active) return res.status(400).json({ ok: false, error: "This DBA is archived — restore it first" });
   if (dba.members.some((m) => m.email.toLowerCase() === email)) {
     return res.status(409).json({ ok: false, error: "That person is already a member of this DBA" });
@@ -582,17 +612,31 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
   });
 });
 
-// ── Admin: remove a member (keeps their login/profile) ──────────
+// ── Admin or DBA manager: remove a member (keeps their login/profile) ──
 router.post("/dba/member-remove", async (req: Request, res: Response) => {
-  const admin = await requireAdminJwt(req);
-  if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const companyId = await adminOrgScope(admin, req);
-  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   const { dbaId } = (req.body || {}) as Record<string, any>;
+  let admin = await requireAdminJwt(req);
+  let companyId: string | null = null;
+  let managerMe: Me | null = null;
+  if (admin) {
+    companyId = await adminOrgScope(admin, req);
+    if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
+  } else {
+    const me = await requireUserJwt(req);
+    if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    admin = me as any;
+    managerMe = me;
+    companyId = hit.companyId;
+  }
   const email = String((req.body || {}).email || "").trim().toLowerCase();
   return withLock("dba-write", async () => {
   const dba = (await loadOrgDbas(companyId)).find((d) => d.id === dbaId);
   if (!dba) return res.status(404).json({ ok: false, error: "DBA not found" });
+  // Re-check manager grant on the fresh record after acquiring the lock
+  if (managerMe && !dbaAccess(managerMe, companyId!, dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
   const before = dba.members.length;
   dba.members = dba.members.filter((m) => m.email.toLowerCase() !== email);
   if (dba.members.length === before) return res.status(404).json({ ok: false, error: "Not a member" });
@@ -658,6 +702,18 @@ router.get("/dba/content", async (req: Request, res: Response) => {
     );
     // Only courses of the DBA's own org or Eden can ever be served
     courses = courses.filter((c) => c.company_id === companyId || isEdenCourse(c));
+    // Tier gating: members only see courses open to their tier (managers see all)
+    if (!acc.manage && courses.length) {
+      const gated = Object.keys(dba.learn_tiers).length > 0;
+      if (gated) {
+        const cfg = await loadChatCfg(companyId, dba.id);
+        const myTier = cfg.tiers[me.id] || null;
+        courses = courses.filter((c) => {
+          const allowed = dba.learn_tiers[String(c.id)];
+          return !allowed || !allowed.length || (myTier !== null && allowed.includes(myTier));
+        });
+      }
+    }
     if (courses.length) {
       modules = await rest(
         `course_modules?course_id=in.(${courses.map((c) => c.id).join(",")})&select=id,course_id,module_id,title,duration,video_url,admin_notes,section_id,section_title,section_color,sort_order&order=sort_order.asc`,
@@ -875,6 +931,10 @@ router.post("/dba/progress", async (req: Request, res: Response) => {
   if (!hit.dba.learn_course_ids.includes(String(courseId))) {
     return res.status(403).json({ ok: false, error: "That course isn't part of this DBA" });
   }
+  // Tier gate applies to API writes too, not just the Learn-tab listing
+  if (!acc.manage && !(await courseOpenToMember(hit.companyId, hit.dba, me.id, String(courseId)))) {
+    return res.status(403).json({ ok: false, error: "Your tier doesn't include that course" });
+  }
   // The module must actually belong to that course — never trust a raw id
   const modCheck = await fetch(
     `${SUPABASE_URL}/rest/v1/course_modules?id=eq.${encodeURIComponent(String(moduleId || ""))}&course_id=eq.${encodeURIComponent(String(courseId))}&select=id&limit=1`,
@@ -991,6 +1051,24 @@ async function saveTierDefs(companyId: string, defs: TierDef[]): Promise<boolean
     body: JSON.stringify({ company_id: companyId, key: "dba_tier_defs", value: JSON.stringify(defs) }),
   });
   return r.ok;
+}
+
+// Single source of truth for "can this member see/touch this course?"
+// Managers bypass upstream; here we only judge plain members.
+async function courseOpenToMember(companyId: string, dba: DbaRecord, userId: string, courseId: string): Promise<boolean> {
+  const allowed = dba.learn_tiers[courseId];
+  if (!allowed || !allowed.length) return true; // ungated course
+  const cfg = await loadChatCfg(companyId, dba.id);
+  const myTier = cfg.tiers[userId] || null;
+  return myTier !== null && allowed.includes(myTier);
+}
+
+// A DBA's live tier ladder: its own definitions when set, else the org's.
+// Sub-brands own their tiers (names, descriptions, DM rights); the org
+// ladder is only a fallback for DBAs that never customized one.
+async function effectiveTierDefs(companyId: string, dba: DbaRecord): Promise<TierDef[]> {
+  if (dba.tier_defs.length) return dba.tier_defs.map((t) => ({ id: t.id, name: t.name, dm: t.dm, app: t.app }));
+  return loadTierDefs(companyId);
 }
 
 // Does this user's side of a 1v1 qualify? Privileged (coach/org admin),
@@ -1132,7 +1210,7 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
     loadChatCfg(hit.companyId, hit.dba.id),
     chatRoster(hit.companyId, hit.dba),
     voiceMemosEnabled(hit.companyId),
-    loadTierDefs(hit.companyId),
+    effectiveTierDefs(hit.companyId, hit.dba),
     // Channel list served here (service key) so managers get it even when
     // their own login's RLS wouldn't let them read another org's communities
     // (Eden HQ managing a white-label org's DBA).
@@ -1364,7 +1442,7 @@ router.post("/dba/dm-open", async (req: Request, res: Response) => {
     const otherIsPriv = privileged(other.id, other.role, other.company_id);
     const [cfg, tierDefs] = await Promise.all([
       loadChatCfg(hit.companyId, hit.dba.id),
-      loadTierDefs(hit.companyId),
+      effectiveTierDefs(hit.companyId, hit.dba),
     ]);
     // BOTH sides must qualify: privileged (coach/org admin), a dm-capable
     // tier, an explicit grant, or delegated leadership in this DBA.
@@ -1461,6 +1539,95 @@ router.post("/dba/tier-defs", async (req: Request, res: Response) => {
   return res.json({ ok: true, defs });
 });
 
+// ── DBA HQ: per-DBA tier ladder + member roster (manager-only) ───
+// Each DBA owns its tiers: 1–3 levels with a name, description and DM right.
+router.post("/dba/tier-defs-set", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, defs: raw } = (req.body || {}) as Record<string, any>;
+  if (!Array.isArray(raw) || !raw.length || raw.length > 3) return res.status(400).json({ ok: false, error: "Set between 1 and 3 tiers" });
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const defs: DbaTierDef[] = [];
+    for (const t of raw) {
+      const name = String(t?.name || "").trim().slice(0, 60);
+      if (!name) return res.status(400).json({ ok: false, error: "Every tier needs a name" });
+      defs.push({
+        id: String(t?.id || "").trim() || randomUUID().slice(0, 8),
+        name,
+        desc: t?.desc ? String(t.desc).trim().slice(0, 300) : null,
+        dm: !!t?.dm,
+        app: !!t?.app,
+      });
+    }
+    if (new Set(defs.map((d) => d.id)).size !== defs.length) return res.status(400).json({ ok: false, error: "Duplicate tier ids" });
+    // Scrub member assignments and course gates pointing at removed tiers
+    const keep = new Set(defs.map((d) => d.id));
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    let cfgChanged = false;
+    for (const [uid, tid] of Object.entries(cfg.tiers)) {
+      if (!keep.has(tid)) { delete cfg.tiers[uid]; cfgChanged = true; }
+    }
+    for (const [cid, arr] of Object.entries(hit.dba.learn_tiers)) {
+      const filtered = arr.filter((t) => keep.has(t));
+      if (filtered.length !== arr.length) hit.dba.learn_tiers[cid] = filtered;
+      if (!hit.dba.learn_tiers[cid].length) delete hit.dba.learn_tiers[cid];
+    }
+    hit.dba.tier_defs = defs;
+    // Scrubbed assignments first — if that write fails we abort before the
+    // ladder changes, so a removed tier id can never linger on a member.
+    if (cfgChanged && !(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) {
+      return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    }
+    if (!(await saveDbaRow(hit.companyId, hit.dba))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_tiers_set", hit.dba.id, { dba: hit.dba.name, tiers: defs.map((d) => d.name) });
+    return res.json({ ok: true, defs });
+  });
+});
+
+// GET /dba/hq?dbaId — everything the in-DBA HQ tab needs in one call
+router.get("/dba/hq", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const hit = await findDbaAnywhere(String(req.query.dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+  const defs = await effectiveTierDefs(hit.companyId, hit.dba);
+  return res.json({
+    ok: true,
+    members: hit.dba.members.map((m) => ({ id: m.id, email: m.email, name: m.name, added_at: m.added_at, tier: (m.id && cfg.tiers[m.id]) || null })),
+    tier_defs: hit.dba.tier_defs, // the DBA's own ladder ([] = using org default)
+    effective_defs: defs, // what's actually in force right now
+    custom: hit.dba.tier_defs.length > 0,
+    learn_tiers: hit.dba.learn_tiers,
+  });
+});
+
+// POST /dba/learn-tiers {dbaId, courseId, tierIds} — which tiers see a course
+// (empty list = every member sees it)
+router.post("/dba/learn-tiers", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, courseId, tierIds } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    if (!hit.dba.learn_course_ids.includes(String(courseId))) return res.status(404).json({ ok: false, error: "That course isn't assigned to this DBA" });
+    const defs = await effectiveTierDefs(hit.companyId, hit.dba);
+    const valid = new Set(defs.map((d) => d.id));
+    const want = (Array.isArray(tierIds) ? tierIds : []).map(String).filter((t) => valid.has(t));
+    if (want.length) hit.dba.learn_tiers[String(courseId)] = want;
+    else delete hit.dba.learn_tiers[String(courseId)];
+    if (!(await saveDbaRow(hit.companyId, hit.dba))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_learn_tiers_set", hit.dba.id, { dba: hit.dba.name, course: String(courseId), tiers: want });
+    return res.json({ ok: true, learn_tiers: hit.dba.learn_tiers });
+  });
+});
+
 // POST /dba/tier-set {dbaId, userId, tierId} — manager assigns a member's tier
 // (empty tierId clears back to the base tier).
 router.post("/dba/tier-set", async (req: Request, res: Response) => {
@@ -1472,7 +1639,7 @@ router.post("/dba/tier-set", async (req: Request, res: Response) => {
     if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
     if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
     if (!hit.dba.members.some((m) => m.id === String(userId))) return res.status(404).json({ ok: false, error: "That person isn't a member of this DBA" });
-    const defs = await loadTierDefs(hit.companyId);
+    const defs = await effectiveTierDefs(hit.companyId, hit.dba);
     const tid = String(tierId || "");
     if (tid && !defs.some((d) => d.id === tid)) return res.status(400).json({ ok: false, error: "Unknown tier" });
     const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
@@ -1612,7 +1779,7 @@ router.post("/dba/promote", async (req: Request, res: Response) => {
     // be promoted (org admins configure which tiers carry `app`).
     const [cfg, tierDefs] = await Promise.all([
       loadChatCfg(hit.companyId, hit.dba.id),
-      loadTierDefs(hit.companyId),
+      effectiveTierDefs(hit.companyId, hit.dba),
     ]);
     const memberTier = tierDefs.find((t) => t.id === cfg.tiers[String(member.id)]) || tierDefs[0];
     if (!memberTier?.app) {

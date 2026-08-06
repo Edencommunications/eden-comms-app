@@ -6104,6 +6104,158 @@ const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson
   );
 };
 
+// HQ tab — the DBA's own back office: invite members, assign tiers,
+// define the tier ladder, and gate courses by tier. Managers only.
+const DbaHq = ({ dba, primary, content }: any) => {
+  const [hq, setHq] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [invite, setInvite] = useState({ name: "", email: "" });
+  const [tierDraft, setTierDraft] = useState<any[] | null>(null);
+  const load = useCallback(() => {
+    fetch(`${DBA_API('hq')}?dbaId=${encodeURIComponent(dba.id)}`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null)).then(b => setHq(b?.ok ? b : { members: [], effective_defs: [], tier_defs: [], learn_tiers: {} }))
+      .catch(() => setHq({ members: [], effective_defs: [], tier_defs: [], learn_tiers: {} }));
+  }, [dba.id]);
+  useEffect(() => { setHq(null); load(); }, [load]);
+  const post = async (path: string, body: any) => {
+    setBusy(true);
+    try {
+      const r = await fetch(DBA_API(path), { method: "POST", headers: { "Content-Type": "application/json", Authorization: sbBearer() }, body: JSON.stringify({ dbaId: dba.id, ...body }) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(b?.error || "Couldn't save — try again."); return false; }
+      load();
+      return true;
+    } catch { alert("Couldn't reach the server — try again."); return false; }
+    finally { setBusy(false); }
+  };
+  const inp = { width: "100%", boxSizing: "border-box" as const, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", marginBottom: 6 };
+  const defs = hq?.effective_defs || [];
+  const courses = (content?.courses || []);
+  if (hq === null) return <div style={{ padding: 60, textAlign: "center" }}><p style={{ color: B.muted, fontSize: 13 }}>Loading…</p></div>;
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 40px" }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>{dba?.name} HQ</h2>
+      <p style={{ fontSize: 12, color: B.muted, margin: "0 0 16px", lineHeight: 1.6 }}>Invite members, set their tier, and decide what each tier unlocks. Members never see this tab.</p>
+
+      {/* ── Tier ladder ── */}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: 0 }}>Membership tiers</p>
+          {!tierDraft && (
+            <button onClick={() => setTierDraft((hq.custom ? hq.tier_defs : defs).map((t: any) => ({ ...t })))}
+              style={{ background: "none", color: primary, border: `1px solid ${primary}55`, borderRadius: 8, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit tiers</button>
+          )}
+        </div>
+        {!hq.custom && !tierDraft && <p style={{ fontSize: 11, color: B.muted, margin: "0 0 8px", lineHeight: 1.5 }}>Using your organization's default ladder — edit to make tiers specific to {dba?.name}.</p>}
+        {!tierDraft && defs.map((t: any, i: number) => (
+          <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderBottom: i < defs.length - 1 ? `1px solid ${B.border}` : "none" }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: primary, border: `1px solid ${primary}55`, borderRadius: 6, padding: "2px 7px", flexShrink: 0, marginTop: 1 }}>TIER {i + 1}</span>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: B.text, margin: 0 }}>{t.name}{t.dm && <span style={{ fontSize: 9, color: B.muted, fontWeight: 600 }}> · can DM</span>}</p>
+              {t.desc && <p style={{ fontSize: 11, color: B.muted, margin: "2px 0 0", lineHeight: 1.5 }}>{t.desc}</p>}
+            </div>
+          </div>
+        ))}
+        {tierDraft && (
+          <>
+            {tierDraft.map((t: any, i: number) => (
+              <div key={i} style={{ borderBottom: `1px solid ${B.border}`, paddingBottom: 10, marginBottom: 10 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: primary, flexShrink: 0 }}>TIER {i + 1}</span>
+                  <input value={t.name} onChange={e => setTierDraft(p => p!.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} placeholder={`Tier ${i + 1} name`} style={{ ...inp, marginBottom: 0, flex: 1 }} />
+                  {tierDraft.length > 1 && <button onClick={() => setTierDraft(p => p!.filter((_, j) => j !== i))} style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 7, padding: "6px 10px", fontSize: 10, cursor: "pointer" }}>Remove</button>}
+                </div>
+                <input value={t.desc || ""} onChange={e => setTierDraft(p => p!.map((x, j) => j === i ? { ...x, desc: e.target.value } : x))} placeholder="What this tier includes (members-facing detail)" style={inp} />
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: B.muted, cursor: "pointer", marginRight: 14 }}>
+                  <input type="checkbox" checked={!!t.dm} onChange={e => setTierDraft(p => p!.map((x, j) => j === i ? { ...x, dm: e.target.checked } : x))} /> Can send direct messages
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: B.muted, cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!t.app} onChange={e => setTierDraft(p => p!.map((x, j) => j === i ? { ...x, app: e.target.checked } : x))} /> Eligible for full app access
+                </label>
+              </div>
+            ))}
+            {tierDraft.length < 3 && (
+              <button onClick={() => setTierDraft(p => [...p!, { id: "", name: "", desc: "", dm: false, app: false }])}
+                style={{ background: "none", color: primary, border: `1px dashed ${primary}66`, borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 10 }}>+ Add tier</button>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button disabled={busy || tierDraft.some(t => !t.name.trim())} onClick={async () => { if (await post("tier-defs-set", { defs: tierDraft })) setTierDraft(null); }}
+                style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy || tierDraft.some(t => !t.name.trim()) ? 0.6 : 1 }}>{busy ? "Saving…" : "Save tiers"}</button>
+              <button onClick={() => setTierDraft(null)} style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+            </div>
+            <p style={{ fontSize: 10, color: B.muted, margin: "8px 0 0", lineHeight: 1.5 }}>Up to 3 tiers. Removing a tier clears it from any member who held it.</p>
+          </>
+        )}
+      </Card>
+
+      {/* ── Invite ── */}
+      <Card style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 8px" }}>Invite a member</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input value={invite.name} onChange={e => setInvite(p => ({ ...p, name: e.target.value }))} placeholder="Full name" style={{ ...inp, flex: 1, minWidth: 140 }} />
+          <input value={invite.email} onChange={e => setInvite(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ ...inp, flex: 1.4, minWidth: 180 }} />
+          <button disabled={busy || !invite.name.trim() || !invite.email.trim()}
+            onClick={async () => { if (await post("member-add", { name: invite.name.trim(), email: invite.email.trim() })) setInvite({ name: "", email: "" }); }}
+            style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy || !invite.name.trim() || !invite.email.trim() ? 0.6 : 1, alignSelf: "flex-start" }}>Invite</button>
+        </div>
+        <p style={{ fontSize: 10, color: B.muted, margin: "6px 0 0", lineHeight: 1.5 }}>New people get a {dba?.name}-branded welcome email with their login. Assign their tier below once they appear.</p>
+      </Card>
+
+      {/* ── Members & tiers ── */}
+      <Card style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 8px" }}>Members ({hq.members.length})</p>
+        {hq.members.length === 0 && <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>No members yet — invite your first one above.</p>}
+        {hq.members.map((m: any) => (
+          <div key={m.email} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${B.border}`, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: B.text, margin: 0 }}>{m.name || m.email}</p>
+              <p style={{ fontSize: 10, color: B.muted, margin: 0 }}>{m.email}</p>
+            </div>
+            <select value={m.tier || ""} disabled={busy || !m.id}
+              onChange={e => post("tier-set", { userId: m.id, tierId: e.target.value })}
+              style={{ background: B.dim, color: m.tier ? B.text : B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "6px 8px", fontSize: 11, outline: "none" }}>
+              <option value="">No tier</option>
+              {defs.map((t: any, i: number) => <option key={t.id} value={t.id}>Tier {i + 1} — {t.name}</option>)}
+            </select>
+            <button disabled={busy} onClick={() => { if (confirm(`Remove ${m.name || m.email} from ${dba?.name}? Their login stays, but they lose access to this space.`)) post("member-remove", { email: m.email }); }}
+              style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>Remove</button>
+          </div>
+        ))}
+      </Card>
+
+      {/* ── Course access by tier ── */}
+      <Card>
+        <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>Course access by tier</p>
+        <p style={{ fontSize: 11, color: B.muted, margin: "0 0 10px", lineHeight: 1.5 }}>Untick every tier to open a course to all members. Members below the required tier simply don't see the course.</p>
+        {courses.length === 0 && <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>No courses assigned yet — add them in the Learn tab first.</p>}
+        {courses.map((c: any) => {
+          const gate: string[] = hq.learn_tiers?.[String(c.id)] || [];
+          return (
+            <div key={c.id} style={{ padding: "9px 0", borderBottom: `1px solid ${B.border}` }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: B.text, margin: "0 0 5px" }}>{c.title}
+                {gate.length === 0 && <span style={{ fontSize: 9, color: B.muted, fontWeight: 600 }}> · everyone</span>}</p>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {defs.map((t: any, i: number) => (
+                  <label key={t.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: B.muted, cursor: "pointer" }}>
+                    <input type="checkbox" checked={gate.includes(t.id)} disabled={busy}
+                      onChange={async e => {
+                        const next = e.target.checked ? [...gate, t.id] : gate.filter(x => x !== t.id);
+                        // Optimistic so rapid toggles never build on a stale list
+                        const prev = hq.learn_tiers;
+                        setHq((h: any) => ({ ...h, learn_tiers: { ...h.learn_tiers, [String(c.id)]: next } }));
+                        if (!(await post("learn-tiers", { courseId: c.id, tierIds: next }))) setHq((h: any) => ({ ...h, learn_tiers: prev }));
+                      }} /> Tier {i + 1} — {t.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+    </div>
+  );
+};
+
 const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const [activeId, setActiveId] = useState(() => {
     const hit = initialSlug ? dbas.find((d: any) => d.slug === initialSlug) : null;
@@ -6116,7 +6268,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const accent = wl?.accent || primary;
   const hasPalette = (wl?.extra || []).length > 0;
   const isMobile = useIsMobile();
-  const [tab, setTab] = useState<"home" | "community" | "huddles" | "calendar" | "connect" | "learn">("home");
+  const [tab, setTab] = useState<"home" | "community" | "huddles" | "calendar" | "connect" | "learn" | "hq">("home");
   // Light poll so the join banner shows on any tab when a huddle we're
   // allowed into goes live (the Huddles tab does its own full loading).
   const [liveHuddleCount, setLiveHuddleCount] = useState(0);
@@ -6176,13 +6328,15 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
     await postDba("progress", { dbaId: dba.id, courseId, moduleId, completed: done });
   };
 
-  const TABS: Array<{ id: "home" | "community" | "huddles" | "calendar" | "connect" | "learn"; icon: string; label: string }> = [
+  const TABS: Array<{ id: "home" | "community" | "huddles" | "calendar" | "connect" | "learn" | "hq"; icon: string; label: string }> = [
     { id: "home", icon: "home", label: "Home" },
     { id: "community", icon: "community", label: "Community" },
     { id: "huddles", icon: "watch", label: "Huddles" },
     { id: "calendar", icon: "calendar", label: "Calendar" },
     { id: "connect", icon: "links", label: "Connect" },
     { id: "learn", icon: "learn", label: "Learn" },
+    // Managers get the DBA's own back office
+    ...(content?.can_manage ? [{ id: "hq" as const, icon: "settings", label: "HQ" }] : []),
   ];
   const linkCount = content?.connect?.length || 0;
   const courseCount = content?.courses?.length || 0;
@@ -6251,6 +6405,8 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           <DbaCalendar dba={dba} primary={primary} palette={wl} isMobile={isMobile} />
         ) : tab === "connect" ? (
           <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} dba={dba} />
+        ) : tab === "hq" && content?.can_manage ? (
+          <DbaHq dba={dba} primary={primary} content={content} />
         ) : tab === "learn" ? (
           <DbaLearn primary={primary} palette={wl} content={content} dba={dba} saveLearn={saveLearn} markLesson={markLesson} busy={busy}
             saveCourse={saveCourse} saveLesson={saveLesson} deleteLesson={deleteLesson} />
