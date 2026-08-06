@@ -6196,6 +6196,39 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
   const [promoteFor, setPromoteFor] = useState('');               // member id showing coach picker
   const [staff, setStaff] = useState<any[]>([]);                  // org staff/VAs for delegation
   const [channels, setChannels] = useState<any[] | null>(null);   // openId's chat channels
+  // Logo upload (same flow as org logos: real file storage, small-file fallback)
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoErr, setLogoErr] = useState('');
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const onLogoFile = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setLogoErr('Please choose an image file.'); return; }
+    if (file.size > 2 * 1024 * 1024) { setLogoErr('Image too large — please use a file under 2 MB.'); return; }
+    setLogoErr(''); setLogoBusy(true);
+    // Only apply the finished upload to the draft that started it — if the
+    // editor was cancelled or switched to another DBA meanwhile, drop it.
+    const draftId = form?.id || null;
+    const applyIfSameDraft = (url: string) =>
+      setForm((p: any) => (p && (p.id || null) === draftId ? { ...p, logoUrl: url } : p));
+    try {
+      // Preferred: real file storage (shared org-logos bucket, dba-prefixed path)
+      const url = await sbUploadLogo(`dba-${draftId || org.id}`, file);
+      if (url) { applyIfSameDraft(url); return; }
+      // Fallback if the storage bucket isn't set up yet: store small images inline
+      if (file.size > 400 * 1024) {
+        setLogoErr('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.');
+        return;
+      }
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      applyIfSameDraft(dataUrl);
+    } catch { setLogoErr('Upload failed — try again or paste a hosted image URL.'); }
+    finally { setLogoBusy(false); }
+  };
   const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: sbBearer() });
   const reload = () =>
     fetch(`${BASE}api/dba/list${orgQs ? `?${orgQs}` : ''}`, { headers: { Authorization: sbBearer() } })
@@ -6287,7 +6320,7 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
                       style={{ background: `${accent}22`, color: accent, border: `1px solid ${accent}55`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                       Open DBA ↗
                     </button>
-                    <button onClick={() => { setForm({ id: d.id, name: d.name, slug: d.slug, coachId: d.coach_id || '', brandColor: d.brand_color || '#ffa600', logoUrl: d.logo_url || '' }); setErr(''); setNotice(''); }}
+                    <button onClick={() => { setForm({ id: d.id, name: d.name, slug: d.slug, coachId: d.coach_id || '', brandColor: d.brand_color || '#ffa600', brandColors: Array.isArray(d.brand_colors) ? d.brand_colors.filter((c:any)=>typeof c==='string') : [], logoUrl: d.logo_url || '' }); setErr(''); setNotice(''); }}
                       style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                       Edit
                     </button>
@@ -6416,17 +6449,67 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
                   <option value="">No coach assigned yet</option>
                   {coaches.map((c: any) => <option key={c.id} value={c.id}>{c.name}{c.role === 'super_admin' ? ' (admin)' : ''}</option>)}
                 </select>
-                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(form.brandColor) ? form.brandColor : '#ffa600'}
+              </div>
+              {/* Brand colors — same controls as the org branding editor */}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", width: 60, flexShrink: 0 }}>Primary</span>
+                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test((form.brandColor||'').trim()) ? form.brandColor.trim() : '#ffa600'}
                   onChange={e => setForm((p: any) => ({ ...p, brandColor: e.target.value }))}
                   style={{ width: 40, height: 34, padding: 2, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, cursor: "pointer" }} />
-                <input value={form.logoUrl} onChange={e => setForm((p: any) => ({ ...p, logoUrl: e.target.value }))} placeholder="Logo URL (optional)"
-                  style={{ flex: 1.4, minWidth: 160, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                <input value={form.brandColor} onChange={e => setForm((p: any) => ({ ...p, brandColor: e.target.value }))}
+                  placeholder="#ffa600" maxLength={7}
+                  style={{ width: 90, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", fontFamily: "monospace" }} />
               </div>
+              {(form.brandColors || []).map((c: string, i: number) => (
+                <div key={i} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", width: 60, flexShrink: 0 }}>Color {i + 2}</span>
+                  <input type="color" value={/^#[0-9a-fA-F]{6}$/.test((c||'').trim()) ? c.trim() : '#888888'}
+                    onChange={e => setForm((p: any) => ({ ...p, brandColors: p.brandColors.map((v: string, j: number) => j === i ? e.target.value : v) }))}
+                    style={{ width: 40, height: 34, padding: 2, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, cursor: "pointer" }} />
+                  <input value={c} onChange={e => setForm((p: any) => ({ ...p, brandColors: p.brandColors.map((v: string, j: number) => j === i ? e.target.value : v) }))}
+                    placeholder="#6FB8E8" maxLength={7}
+                    style={{ width: 90, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", fontFamily: "monospace" }} />
+                  <button onClick={() => setForm((p: any) => ({ ...p, brandColors: p.brandColors.filter((_: any, j: number) => j !== i) }))}
+                    style={{ background: "none", color: "#e05a5a", border: `1px solid #e05a5a44`, borderRadius: 8, padding: "7px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+              {(form.brandColors || []).length < 4 && (
+                <button onClick={() => setForm((p: any) => ({ ...p, brandColors: [...(p.brandColors || []), '#6FB8E8'] }))}
+                  style={{ background: B.card, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginBottom: 8 }}>
+                  + Add Palette Color
+                </button>
+              )}
+              {/* Logo — paste a URL or upload an image (same flow as org logos) */}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                <OrgLogo org={{ name: form.name || 'DBA', brand_color: /^#[0-9a-fA-F]{6}$/.test((form.brandColor||'').trim()) ? form.brandColor.trim() : '#ffa600', logo_url: form.logoUrl || null }} size={38} />
+                <input value={(form.logoUrl || '').startsWith('data:') ? '(uploaded image)' : form.logoUrl} readOnly={(form.logoUrl || '').startsWith('data:')}
+                  onChange={e => { setForm((p: any) => ({ ...p, logoUrl: e.target.value })); setLogoErr(''); }} placeholder="Logo URL (optional) — or upload →"
+                  style={{ flex: 1.4, minWidth: 160, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                <button onClick={() => logoFileRef.current?.click()} disabled={logoBusy}
+                  style={{ background: B.card, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 11, fontWeight: 700, cursor: logoBusy ? "wait" : "pointer", opacity: logoBusy ? 0.6 : 1 }}>
+                  {logoBusy ? 'Uploading…' : 'Upload Image…'}
+                </button>
+                {form.logoUrl && (
+                  <button onClick={() => { setForm((p: any) => ({ ...p, logoUrl: '' })); setLogoErr(''); }}
+                    style={{ background: "none", color: "#e05a5a", border: `1px solid #e05a5a44`, borderRadius: 8, padding: "7px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    Remove
+                  </button>
+                )}
+                <input ref={logoFileRef} type="file" accept="image/*" style={{ display: "none" }}
+                  onChange={e => { onLogoFile(e.target.files?.[0] || null); e.target.value = ''; }} />
+              </div>
+              {logoErr && <p style={{ fontSize: 11, color: "#e05a5a", margin: "0 0 8px" }}>{logoErr}</p>}
               <p style={{ fontSize: 10, color: B.muted, margin: "0 0 8px" }}>Login link will be: <code style={{ color: accent }}>{window.location.origin}{BASE.replace(/\/+$/, '')}/{form.slug || '…'}</code></p>
               <div style={{ display: "flex", gap: 8 }}>
-                <button disabled={busy || !form.name.trim()}
+                <button disabled={busy || logoBusy || !form.name.trim()}
                   onClick={async () => {
-                    const b = await post('save', { id: form.id, name: form.name.trim(), slug: form.slug, coachId: form.coachId, brandColor: form.brandColor, logoUrl: form.logoUrl });
+                    const primary = (form.brandColor || '').trim();
+                    if (primary && !/^#[0-9a-fA-F]{6}$/.test(primary)) { setErr('Primary color must be a 6-digit hex value like #ffa600.'); return; }
+                    const extras = (form.brandColors || []).map((c: string) => (c || '').trim()).filter(Boolean);
+                    if (extras.some((c: string) => !/^#[0-9a-fA-F]{6}$/.test(c))) { setErr('Palette colors must be 6-digit hex values like #6FB8E8.'); return; }
+                    const b = await post('save', { id: form.id, name: form.name.trim(), slug: form.slug, coachId: form.coachId, brandColor: primary, brandColors: extras, logoUrl: form.logoUrl });
                     if (b) { setForm(null); setNotice('✅ Saved'); setTimeout(() => setNotice(''), 2500); }
                   }}
                   style={{ background: accent, color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
@@ -6439,7 +6522,7 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
               </div>
             </div>
           ) : (
-            <button onClick={() => { setForm({ name: '', slug: '', coachId: '', brandColor: '#ffa600', logoUrl: '' }); setErr(''); setNotice(''); }}
+            <button onClick={() => { setForm({ name: '', slug: '', coachId: '', brandColor: '#ffa600', brandColors: [], logoUrl: '' }); setErr(''); setNotice(''); }}
               style={{ background: "none", color: accent, border: `1px dashed ${accent}66`, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", width: "100%" }}>
               + New DBA
             </button>
