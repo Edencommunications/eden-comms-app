@@ -278,6 +278,7 @@ function ColorRow({primary, colors=[], onPrimary, onColors}) {
         <input value={hexNew} maxLength={7} placeholder="#hex"
           onChange={e=>setHexNew(e.target.value)}
           onKeyDown={e=>{ if(e.key==='Enter'){ const n=norm(hexNew); if(n&&!(colors||[]).includes(n)){ onColors([...(colors||[]),n]); setHexNew('#') } } }}
+          onBlur={()=>{ const n=norm(hexNew); if(n&&!(colors||[]).includes(n)){ onColors([...(colors||[]),n]); setHexNew('#') } }}
           style={{width:74,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',color:C.white,fontSize:11,outline:'none'}}/>
         <button onClick={()=>{ const n=norm(hexNew); if(!n) return; if(!(colors||[]).includes(n)) onColors([...(colors||[]),n]); setHexNew('#') }}
           style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',color:C.gold,fontSize:11,cursor:'pointer',fontWeight:700}}>+ Add</button>

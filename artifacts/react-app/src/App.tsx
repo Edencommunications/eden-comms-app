@@ -3705,6 +3705,7 @@ const OrgBrandingEditor = ({ org, onSaved, onClose }:any) => {
     const row = check?.[0];
     if (row && row.name === name && (row.brand_color||'').toLowerCase() === primary.toLowerCase() && (row.logo_url||'') === (logo||'')) {
       onSaved({ ...org, ...body });
+      window.dispatchEvent(new Event('eden:branding-updated'));
       setSaved(true); setTimeout(()=>setSaved(false), 2000);
     } else {
       setError('Could not save changes. Please try again.');
@@ -3885,6 +3886,7 @@ const AdminDashboard = ({ user }:any) => {
     const savedPrimary = check?.[0]?.brand_color ?? null;
     if ((savedPrimary || '').toLowerCase() === primary.toLowerCase()) {
       setMyOrg((o:any) => ({ ...o, brand_color: primary, brand_colors: extras.length ? extras : null }));
+      window.dispatchEvent(new Event('eden:branding-updated'));
       setColorSaved(true); setTimeout(()=>setColorSaved(false), 2000);
     } else {
       setColorError('Could not save your colors. Please try again.');
@@ -3906,6 +3908,7 @@ const AdminDashboard = ({ user }:any) => {
     const saved = check?.[0]?.logo_url ?? null;
     if ((saved || '') === (trimmed || '')) {
       setMyOrg((o:any) => ({ ...o, logo_url: trimmed || null }));
+      window.dispatchEvent(new Event('eden:branding-updated'));
       setLogoDraft(trimmed);
       setLogoSaved(true); setTimeout(()=>setLogoSaved(false), 2000);
     } else {
@@ -5131,22 +5134,28 @@ const AppShell = ({ user, onLogout }) => {
   const [tab, setTab]           = useState("home");
   // White-label branding: if this user belongs to a white-label company, brand the shell as theirs
   const [wlOrg, setWlOrg] = useState<any>(null);
-  useEffect(() => { (async () => {
-    try {
-      const prof = await sbGet('user_profiles', `email=eq.${encodeURIComponent((user.email||'').toLowerCase())}&select=company_id&limit=1`);
-      const cid = prof?.[0]?.company_id;
-      if (!cid || cid === EDEN_ORG_ID) { setWlOrg(null); return; }
-      const org = await sbGet('organizations', `id=eq.${cid}&select=id,name,brand_color,logo_url,is_white_label&limit=1`);
-      if (!org?.[0]?.is_white_label) { setWlOrg(null); return; }
-      let row = org[0];
-      // Palette column added later — fetch separately so a missing column can't break primary branding
+  useEffect(() => {
+    const loadWlOrg = async () => {
       try {
-        const pal = await sbGet('organizations', `id=eq.${cid}&select=brand_colors&limit=1`);
-        if (Array.isArray(pal?.[0]?.brand_colors)) row = { ...row, brand_colors: pal[0].brand_colors };
-      } catch {}
-      setWlOrg(row);
-    } catch { setWlOrg(null); }
-  })(); }, [user.email]);
+        const prof = await sbGet('user_profiles', `email=eq.${encodeURIComponent((user.email||'').toLowerCase())}&select=company_id&limit=1`);
+        const cid = prof?.[0]?.company_id;
+        if (!cid || cid === EDEN_ORG_ID) { setWlOrg(null); return; }
+        const org = await sbGet('organizations', `id=eq.${cid}&select=id,name,brand_color,logo_url,is_white_label&limit=1`);
+        if (!org?.[0]?.is_white_label) { setWlOrg(null); return; }
+        let row = org[0];
+        // Palette column added later — fetch separately so a missing column can't break primary branding
+        try {
+          const pal = await sbGet('organizations', `id=eq.${cid}&select=brand_colors&limit=1`);
+          if (Array.isArray(pal?.[0]?.brand_colors)) row = { ...row, brand_colors: pal[0].brand_colors };
+        } catch {}
+        setWlOrg(row);
+      } catch { setWlOrg(null); }
+    };
+    loadWlOrg();
+    // Re-theme instantly when branding is saved anywhere in the app (no refresh needed)
+    window.addEventListener('eden:branding-updated', loadWlOrg);
+    return () => window.removeEventListener('eden:branding-updated', loadWlOrg);
+  }, [user.email]);
   // Full org palette (primary + secondary/accent) — falls back to Eden gold
   const wp = wlPalette(wlOrg);
   const shellPrimary   = wlOrg ? wp.primary   : B.gold;
