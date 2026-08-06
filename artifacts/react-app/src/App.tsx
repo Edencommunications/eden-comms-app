@@ -5803,9 +5803,15 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
 const DBA_API = (p: string) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`;
 
 // Connect tab — member view + manager editing of the per-DBA link list
-const DbaConnect = ({ primary, content, saveConnect, busy }: any) => {
+const DbaConnect = ({ primary, content, saveConnect, busy, dba }: any) => {
   const canManage = content?.can_manage;
   const links = content?.connect || [];
+  const isMobile = useIsMobile();
+  // Cycle through the DBA's full palette so multi-color brands look multi-color
+  const palette = useMemo(() => {
+    const extras = Array.isArray(dba?.brand_colors) ? dba.brand_colors.filter((c: string) => /^#[0-9a-f]{6}$/i.test(String(c || ""))) : [];
+    return [primary, ...extras];
+  }, [dba?.brand_colors, primary]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<any[]>([]);
   const startEdit = () => { setDraft(links.map((l: any) => ({ ...l }))); setEditing(true); };
@@ -5823,19 +5829,38 @@ const DbaConnect = ({ primary, content, saveConnect, busy }: any) => {
           {canManage ? "No links yet — add your community, socials, booking page or anything members should reach fast." : "Nothing here yet — links from your coach will appear here."}
         </p></Card>
       )}
-      {!editing && links.map((l: any) => (
-        <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block", marginBottom: 10 }}>
-          <div style={{ background: B.card, border: `1px solid ${B.border}`, borderLeft: `3px solid ${primary}`, borderRadius: 12, padding: "14px 16px" }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: B.text, margin: 0 }}>{l.title} <span style={{ color: primary }}>↗</span></p>
-            {l.desc && <p style={{ fontSize: 12, color: B.muted, margin: "4px 0 0", lineHeight: 1.5 }}>{l.desc}</p>}
+      {!editing && links.length > 0 && (
+        <>
+          <div style={{ textAlign: "center", background: `linear-gradient(160deg, ${primary}1c 0%, ${B.surface} 100%)`, border: `1px solid ${B.border}`, borderRadius: 16, padding: "26px 20px", marginBottom: 16 }}>
+            <p style={{ fontSize: 10, fontWeight: 800, color: primary, letterSpacing: 1.4, textTransform: "uppercase", margin: "0 0 6px" }}>{dba?.name || "Connect"}</p>
+            <h3 style={{ fontSize: 19, fontWeight: 800, color: B.text, margin: 0 }}>Stay connected</h3>
+            <p style={{ fontSize: 12, color: B.muted, margin: "6px 0 0", lineHeight: 1.6 }}>Community, socials and everything worth bookmarking — all in one place.</p>
           </div>
-        </a>
-      ))}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+            {links.map((l: any, i: number) => {
+              const accent = palette[i % palette.length] || primary;
+              return (
+                <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
+                  <div style={{ height: "100%", boxSizing: "border-box", background: `linear-gradient(150deg, ${accent}16 0%, ${B.card} 70%)`, border: `1px solid ${accent}44`, borderRadius: 14, padding: "16px" }}>
+                    {l.emoji && <span style={{ fontSize: 22, display: "block", marginBottom: 8 }}>{l.emoji}</span>}
+                    <p style={{ fontSize: 14, fontWeight: 800, color: B.text, margin: 0 }}>{l.title}</p>
+                    {l.desc && <p style={{ fontSize: 12, color: B.muted, margin: "4px 0 0", lineHeight: 1.5 }}>{l.desc}</p>}
+                    <p style={{ fontSize: 11, fontWeight: 800, color: accent, margin: "10px 0 0" }}>Open →</p>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </>
+      )}
       {editing && (
         <Card>
           {draft.map((l, i) => (
             <div key={l.id || i} style={{ borderBottom: `1px solid ${B.border}`, paddingBottom: 10, marginBottom: 10 }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                <input value={l.emoji || ""} onChange={e => setD(i, "emoji", e.target.value)} placeholder="📸"
+                  maxLength={4} title="Emoji shown on the card (optional)"
+                  style={{ width: 46, textAlign: "center", background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 4px", color: B.text, fontSize: 14, outline: "none" }} />
                 <input value={l.title} onChange={e => setD(i, "title", e.target.value)} placeholder="Title (e.g. Our Instagram)"
                   style={{ flex: 1, minWidth: 140, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
                 <button onClick={() => setDraft(p => p.filter((_, j) => j !== i))}
@@ -5847,7 +5872,7 @@ const DbaConnect = ({ primary, content, saveConnect, busy }: any) => {
                 style={{ width: "100%", boxSizing: "border-box", background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
             </div>
           ))}
-          <button onClick={() => setDraft(p => [...p, { id: "", title: "", url: "", desc: "" }])}
+          <button onClick={() => setDraft(p => [...p, { id: "", emoji: "", title: "", url: "", desc: "" }])}
             style={{ background: "none", color: primary, border: `1px dashed ${primary}66`, borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 10 }}>+ Add link</button>
           <div style={{ display: "flex", gap: 8 }}>
             <button disabled={busy} onClick={async () => { if (await saveConnect(draft)) setEditing(false); }}
@@ -5861,8 +5886,23 @@ const DbaConnect = ({ primary, content, saveConnect, busy }: any) => {
   );
 };
 
-// Learn tab — assigned courses; simple section/lesson viewer with progress
-const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy }: any) => {
+// Turn common share links into embeddable player URLs (mirrors the main
+// course builder's behavior so pasted YouTube/Vimeo/Loom links just work)
+const dbaToEmbed = (raw: string) => {
+  const u = String(raw || "").trim();
+  let m = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{6,})/i);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  m = u.match(/vimeo\.com\/(\d+)/i);
+  if (m) return `https://player.vimeo.com/video/${m[1]}`;
+  m = u.match(/loom\.com\/share\/([\w-]+)/i);
+  if (m) return `https://www.loom.com/embed/${m[1]}`;
+  m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/i);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  return u;
+};
+
+// Learn tab — assigned courses; viewer with progress + manager course builder
+const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy, saveCourse, saveLesson, deleteLesson }: any) => {
   const canManage = content?.can_manage;
   const courses = content?.courses || [];
   const completed: Set<string> = useMemo(() => new Set(content?.completed || []), [content?.completed]);
@@ -5870,6 +5910,12 @@ const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy }: any) =
   const [openLesson, setOpenLesson] = useState<any>(null);
   const [assigning, setAssigning] = useState(false);
   const [picks, setPicks] = useState<Set<string>>(new Set());
+  // Builder state (managers only)
+  const [creating, setCreating] = useState(false);
+  const [cTitle, setCTitle] = useState(""); const [cDesc, setCDesc] = useState("");
+  const [editMode, setEditMode] = useState(false);
+  const [lForm, setLForm] = useState<any>(null); // {lessonId?, sectionTitle, title, duration, videoUrl, notes}
+  const inp = { width: "100%", boxSizing: "border-box" as const, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", marginBottom: 6 };
   const course = openCourse ? courses.find((c: any) => c.id === openCourse) : null;
   useEffect(() => { if (openCourse && !course) { setOpenCourse(null); setOpenLesson(null); } }, [openCourse, course]);
   const sections = useMemo(() => {
@@ -5895,11 +5941,28 @@ const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy }: any) =
         <>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: B.text, margin: 0 }}>Learn</h2>
-            {canManage && !assigning && (
-              <button onClick={() => { setPicks(new Set(courses.map((c: any) => String(c.id)))); setAssigning(true); }}
-                style={{ background: "none", color: primary, border: `1px solid ${primary}55`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Choose courses</button>
+            {canManage && !assigning && !creating && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => { setCTitle(""); setCDesc(""); setCreating(true); }}
+                  style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>+ New course</button>
+                <button onClick={() => { setPicks(new Set(courses.map((c: any) => String(c.id)))); setAssigning(true); }}
+                  style={{ background: "none", color: primary, border: `1px solid ${primary}55`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Choose courses</button>
+              </div>
             )}
           </div>
+          {creating && (
+            <Card style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 8px" }}>New course for {dba?.name}</p>
+              <input value={cTitle} onChange={e => setCTitle(e.target.value)} placeholder="Course title" style={inp} />
+              <textarea value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Short description (optional)" rows={2} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button disabled={busy || !cTitle.trim()} onClick={async () => { if (await saveCourse(null, cTitle, cDesc)) setCreating(false); }}
+                  style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy || !cTitle.trim() ? 0.6 : 1 }}>{busy ? "Creating…" : "Create course"}</button>
+                <button onClick={() => setCreating(false)} style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </div>
+              <p style={{ fontSize: 10, color: B.muted, margin: "8px 0 0", lineHeight: 1.5 }}>The course is created inside your organization's catalog and assigned to this DBA right away — open it to add lessons.</p>
+            </Card>
+          )}
           {assigning && (
             <Card style={{ marginBottom: 14 }}>
               <p style={{ fontSize: 12, color: B.muted, margin: "0 0 10px", lineHeight: 1.5 }}>Pick which courses {dba?.name} members can see. Only your organization's courses (and Eden's) can be assigned.</p>
@@ -5941,20 +6004,61 @@ const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy }: any) =
       )}
       {course && !lesson && (
         <>
-          <button onClick={() => setOpenCourse(null)} style={{ background: "none", border: "none", color: B.muted, fontSize: 12, cursor: "pointer", padding: 0, marginBottom: 12 }}>← All courses</button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <button onClick={() => { setOpenCourse(null); setEditMode(false); setLForm(null); }} style={{ background: "none", border: "none", color: B.muted, fontSize: 12, cursor: "pointer", padding: 0 }}>← All courses</button>
+            {canManage && course.editable && (
+              <button onClick={() => { setEditMode(e => !e); setLForm(null); }}
+                style={{ background: editMode ? primary : "none", color: editMode ? "#000" : primary, border: `1px solid ${primary}55`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                {editMode ? "Done editing" : "✎ Edit course"}</button>
+            )}
+          </div>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>{course.title}</h2>
           {course.description && <p style={{ fontSize: 12, color: B.muted, margin: "0 0 16px", lineHeight: 1.6 }}>{course.description}</p>}
+          {editMode && !lForm && (
+            <button onClick={() => setLForm({ lessonId: null, sectionTitle: sections[sections.length - 1]?.title || "", title: "", duration: "", videoUrl: "", notes: "" })}
+              style={{ background: "none", color: primary, border: `1px dashed ${primary}66`, borderRadius: 10, padding: "10px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 14 }}>+ Add a lesson</button>
+          )}
+          {editMode && lForm && (
+            <Card style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 8px" }}>{lForm.lessonId ? "Edit lesson" : "New lesson"}</p>
+              {!lForm.lessonId && <input value={lForm.sectionTitle} onChange={e => setLForm((p: any) => ({ ...p, sectionTitle: e.target.value }))} placeholder='Section (e.g. "Getting Started" — reuses a section with the same name)' style={inp} />}
+              <input value={lForm.title} onChange={e => setLForm((p: any) => ({ ...p, title: e.target.value }))} placeholder="Lesson title" style={inp} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={lForm.duration} onChange={e => setLForm((p: any) => ({ ...p, duration: e.target.value }))} placeholder="Duration (e.g. 8 min)" style={{ ...inp, flex: 1 }} />
+              </div>
+              <input value={lForm.videoUrl} onChange={e => setLForm((p: any) => ({ ...p, videoUrl: e.target.value }))} placeholder="Video link — YouTube, Vimeo or Loom (optional)" style={{ ...inp, fontFamily: "monospace" }} />
+              <textarea value={lForm.notes} onChange={e => setLForm((p: any) => ({ ...p, notes: e.target.value }))} placeholder="Lesson notes members will read (optional)" rows={4} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button disabled={busy || !lForm.title.trim()} onClick={async () => {
+                  const ok = await saveLesson({ courseId: course.id, lessonId: lForm.lessonId, sectionTitle: lForm.sectionTitle, title: lForm.title, duration: lForm.duration, videoUrl: dbaToEmbed(lForm.videoUrl), notes: lForm.notes });
+                  if (ok) setLForm(null);
+                }} style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy || !lForm.title.trim() ? 0.6 : 1 }}>{busy ? "Saving…" : "Save lesson"}</button>
+                <button onClick={() => setLForm(null)} style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </Card>
+          )}
+          {sections.length === 0 && editMode && !lForm && (
+            <p style={{ fontSize: 12, color: B.muted, lineHeight: 1.6 }}>No lessons yet — add your first one above. Group lessons by giving them the same section name.</p>
+          )}
           {sections.map((s: any) => (
             <div key={s.id} style={{ marginBottom: 18 }}>
               <p style={{ fontSize: 11, fontWeight: 800, color: s.color || primary, letterSpacing: 0.8, textTransform: "uppercase", margin: "0 0 8px" }}>{s.title}</p>
               {s.mods.map((m: any) => {
                 const done = completed.has(String(m.id));
                 return (
-                  <div key={m.id} onClick={() => setOpenLesson(m.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 10, background: B.card, border: `1px solid ${B.border}`, borderRadius: 10, padding: "11px 14px", marginBottom: 8, cursor: "pointer" }}>
+                  <div key={m.id} onClick={() => { if (!editMode) setOpenLesson(m.id); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, background: B.card, border: `1px solid ${B.border}`, borderRadius: 10, padding: "11px 14px", marginBottom: 8, cursor: editMode ? "default" : "pointer" }}>
                     <span style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: done ? primary : B.dim, color: done ? "#000" : B.muted, fontSize: 11, fontWeight: 800 }}>{done ? "✓" : ""}</span>
                     <span style={{ flex: 1, fontSize: 13, color: B.text, fontWeight: 600 }}>{m.title}</span>
                     {m.duration && <span style={{ fontSize: 10, color: B.muted }}>{m.duration}</span>}
+                    {editMode && (
+                      <>
+                        <button onClick={() => setLForm({ lessonId: m.id, sectionTitle: s.title, title: m.title || "", duration: m.duration || "", videoUrl: m.video_url || "", notes: m.admin_notes || "" })}
+                          style={{ background: "none", color: primary, border: `1px solid ${primary}55`, borderRadius: 7, padding: "4px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Edit</button>
+                        <button disabled={busy} onClick={() => { if (confirm(`Delete "${m.title}"? Members' progress on it is lost.`)) deleteLesson(course.id, m.id); }}
+                          style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 7, padding: "4px 10px", fontSize: 10, cursor: "pointer" }}>Delete</button>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -6047,6 +6151,9 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   };
   const saveConnect = (links: any[]) => postDba("connect-save", { dbaId: dba.id, connect: links });
   const saveLearn = (courseIds: string[]) => postDba("learn-save", { dbaId: dba.id, courseIds });
+  const saveCourse = (courseId: string | null, title: string, description: string) => postDba("course-save", { dbaId: dba.id, courseId, title, description });
+  const saveLesson = (body: any) => postDba("lesson-save", { dbaId: dba.id, ...body });
+  const deleteLesson = (courseId: string, lessonId: string) => postDba("lesson-delete", { dbaId: dba.id, courseId, lessonId });
   const markLesson = async (courseId: string, moduleId: string, done: boolean) => {
     // Optimistic update so the checkmark feels instant
     setContent((p: any) => p ? { ...p, completed: done ? [...p.completed, String(moduleId)] : p.completed.filter((x: string) => x !== String(moduleId)) } : p);
@@ -6125,9 +6232,10 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
         ) : tab === "calendar" ? (
           <DbaCalendar dba={dba} primary={primary} isMobile={isMobile} />
         ) : tab === "connect" ? (
-          <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} />
+          <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} dba={dba} />
         ) : tab === "learn" ? (
-          <DbaLearn primary={primary} content={content} dba={dba} saveLearn={saveLearn} markLesson={markLesson} busy={busy} />
+          <DbaLearn primary={primary} content={content} dba={dba} saveLearn={saveLearn} markLesson={markLesson} busy={busy}
+            saveCourse={saveCourse} saveLesson={saveLesson} deleteLesson={deleteLesson} />
         ) : (
           <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px 40px" }}>
             <div style={{ textAlign: "center", background: `linear-gradient(160deg, ${primary}18 0%, ${B.surface} 100%)`, border: `1px solid ${B.border}`, borderRadius: 16, padding: isMobile ? "32px 20px" : "42px 32px", marginBottom: 18 }}>

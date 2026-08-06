@@ -72,7 +72,7 @@ export type DbaMember = { id: string | null; email: string; name: string; added_
 // Org staff/VAs the admin delegated into this DBA — they get full manage
 // rights inside it (Phase 7 "admin oversight & staff delegation").
 export type DbaDelegate = { id: string; name: string; email: string; granted_at: string; granted_by: string | null };
-export type DbaLink = { id: string; title: string; url: string; desc: string | null };
+export type DbaLink = { id: string; title: string; url: string; desc: string | null; emoji?: string | null };
 export type DbaRecord = {
   id: string;
   name: string;
@@ -624,8 +624,15 @@ function dbaAccess(me: Me, companyId: string, dba: DbaRecord): { member: boolean
     me.role !== "dba_member" &&
     (dba.delegates || []).some((d) => d.id === me.id);
   // Eden HQ super_admins (owner) manage every org's DBAs.
+  // The assigned coach only manages while still non-client staff of the
+  // DBA's own org — a demoted or transferred former coach loses access.
+  const activeCoach =
+    dba.coach_id === me.id &&
+    me.company_id === companyId &&
+    me.role !== "client" &&
+    me.role !== "dba_member";
   const manage =
-    dba.coach_id === me.id ||
+    activeCoach ||
     (me.role === "super_admin" && (me.company_id === companyId || isHqAdmin(me))) ||
     delegated;
   return { member, manage };
@@ -680,6 +687,8 @@ router.get("/dba/content", async (req: Request, res: Response) => {
       id: c.id,
       title: c.title,
       description: c.description || "",
+      // Managers may edit courses owned by the DBA's org (never Eden's shared ones)
+      editable: acc.manage && c.company_id === companyId,
       modules: modules.filter((m) => m.course_id === c.id),
     })),
     completed,
@@ -700,6 +709,7 @@ router.post("/dba/connect-save", async (req: Request, res: Response) => {
     const clean: DbaLink[] = (Array.isArray(connect) ? connect : [])
       .map((l: any) => ({
         id: typeof l?.id === "string" && l.id ? l.id : randomUUID(),
+        emoji: l?.emoji ? String(l.emoji).trim().slice(0, 8) : null,
         title: String(l?.title || "").trim().slice(0, 120),
         url: String(l?.url || "").trim().slice(0, 500),
         desc: l?.desc ? String(l.desc).trim().slice(0, 300) : null,
@@ -732,6 +742,124 @@ router.post("/dba/learn-save", async (req: Request, res: Response) => {
     if (!(await saveDbaRow(hit.companyId, hit.dba))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
     void audit({ id: me.id, name: me.name }, "dba_learn_updated", hit.dba.id, { dba: hit.dba.name, courses: valid.length });
     return res.json({ ok: true, learn_course_ids: valid });
+  });
+});
+
+// ── Manager: build courses from inside the DBA space ─────────────
+// Courses created here live in the org's normal catalog (company_id = org),
+// so org admins also see them in the main-app course builder.
+async function dbaEditableCourse(me: Me, dbaId: string) {
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return { err: 404 as const };
+  if (!dbaAccess(me, hit.companyId, hit.dba).manage) return { err: 403 as const };
+  return { hit };
+}
+
+router.post("/dba/course-save", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, courseId, title, description } = (req.body || {}) as Record<string, any>;
+  const t = String(title || "").trim().slice(0, 160);
+  const d = String(description || "").trim().slice(0, 1000);
+  if (!t) return res.status(400).json({ ok: false, error: "Course needs a title" });
+  return withLock("dba-write", async () => {
+    const { err, hit } = await dbaEditableCourse(me, dbaId);
+    if (err) return res.status(err).json({ ok: false, error: err === 404 ? "DBA not found" : "Not authorized" });
+    const { companyId, dba } = hit!;
+    if (courseId) {
+      // Edit — only org-owned courses assigned to this DBA
+      const rows = await rest(`courses?id=eq.${encodeURIComponent(String(courseId))}&company_id=eq.${encodeURIComponent(companyId)}&select=id`);
+      if (!rows[0] || !dba.learn_course_ids.includes(String(courseId)))
+        return res.status(403).json({ ok: false, error: "That course can't be edited here" });
+      // company_id in the predicate too, so a concurrent ownership change can't be raced
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/courses?id=eq.${encodeURIComponent(String(courseId))}&company_id=eq.${encodeURIComponent(companyId)}`, {
+        method: "PATCH", headers: { ...SVC_H, Prefer: "return=minimal" },
+        body: JSON.stringify({ title: t, description: d || null }),
+      });
+      if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+      void audit({ id: me.id, name: me.name }, "dba_course_updated", dba.id, { dba: dba.name, course: t });
+      return res.json({ ok: true, courseId });
+    }
+    // Create — active immediately, owned by the DBA's org, auto-assigned to this DBA
+    const maxRows = await rest(`courses?select=sort_order&order=sort_order.desc.nullslast&limit=1`);
+    const sort = (Number(maxRows[0]?.sort_order) || 0) + 1;
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/courses`, {
+      method: "POST", headers: { ...SVC_H, Prefer: "return=representation" },
+      body: JSON.stringify({ title: t, description: d || null, is_active: true, sort_order: sort, created_by: me.id, company_id: companyId }),
+    });
+    const made: any[] = r.ok ? ((await r.json().catch(() => [])) as any[]) : [];
+    if (!made[0]?.id) return res.status(502).json({ ok: false, error: "Couldn't create the course — try again" });
+    dba.learn_course_ids = [...dba.learn_course_ids, String(made[0].id)];
+    await saveDbaRow(companyId, dba);
+    void audit({ id: me.id, name: me.name }, "dba_course_created", dba.id, { dba: dba.name, course: t });
+    return res.json({ ok: true, courseId: String(made[0].id) });
+  });
+});
+
+router.post("/dba/lesson-save", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, courseId, lessonId, sectionTitle, title, duration, videoUrl, notes } = (req.body || {}) as Record<string, any>;
+  const t = String(title || "").trim().slice(0, 160);
+  if (!t) return res.status(400).json({ ok: false, error: "Lesson needs a title" });
+  const vid = String(videoUrl || "").trim().slice(0, 500);
+  if (vid && !/^https?:\/\//i.test(vid)) return res.status(400).json({ ok: false, error: "Video link must start with http:// or https://" });
+  return withLock("dba-write", async () => {
+    const { err, hit } = await dbaEditableCourse(me, dbaId);
+    if (err) return res.status(err).json({ ok: false, error: err === 404 ? "DBA not found" : "Not authorized" });
+    const { companyId, dba } = hit!;
+    const owned = await rest(`courses?id=eq.${encodeURIComponent(String(courseId || ""))}&company_id=eq.${encodeURIComponent(companyId)}&select=id`);
+    if (!owned[0] || !dba.learn_course_ids.includes(String(courseId)))
+      return res.status(403).json({ ok: false, error: "That course can't be edited here" });
+    const patchBody = { title: t, duration: String(duration || "").trim().slice(0, 40) || null, video_url: vid || null, admin_notes: String(notes || "").trim().slice(0, 8000) || null, updated_at: new Date().toISOString() };
+    if (lessonId) {
+      const own = await rest(`course_modules?id=eq.${encodeURIComponent(String(lessonId))}&course_id=eq.${encodeURIComponent(String(courseId))}&select=id&limit=1`);
+      if (!own[0]) return res.status(403).json({ ok: false, error: "That lesson isn't part of this course" });
+      // course_id in the predicate too, so a concurrent lesson move can't be raced
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/course_modules?id=eq.${encodeURIComponent(String(lessonId))}&course_id=eq.${encodeURIComponent(String(courseId))}`, {
+        method: "PATCH", headers: { ...SVC_H, Prefer: "return=minimal" }, body: JSON.stringify(patchBody),
+      });
+      if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+      return res.json({ ok: true, lessonId });
+    }
+    // New lesson — reuse the section if the title matches, else start a new one
+    const mods = await rest(`course_modules?course_id=eq.${encodeURIComponent(String(courseId))}&select=section_id,section_title,section_color,sort_order,module_id`);
+    const secTitle = String(sectionTitle || "").trim().slice(0, 120) || "Lessons";
+    const existing = mods.find((m: any) => String(m.section_title || "").trim().toLowerCase() === secTitle.toLowerCase());
+    const sectionId = existing ? existing.section_id : (Math.max(0, ...mods.map((m: any) => Number(m.section_id) || 0)) + 1);
+    const sortOrder = Math.max(0, ...mods.map((m: any) => Number(m.sort_order) || 0)) + 1;
+    const inSection = mods.filter((m: any) => m.section_id === sectionId).length;
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/course_modules`, {
+      method: "POST", headers: { ...SVC_H, Prefer: "return=representation" },
+      body: JSON.stringify({
+        course_id: courseId, section_id: sectionId, section_title: secTitle,
+        section_color: existing?.section_color || null,
+        module_id: `${sectionId}.${inSection + 1}`, sort_order: sortOrder, ...patchBody,
+      }),
+    });
+    const made: any[] = r.ok ? ((await r.json().catch(() => [])) as any[]) : [];
+    if (!made[0]?.id) return res.status(502).json({ ok: false, error: "Couldn't add the lesson — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_lesson_added", dba.id, { dba: dba.name, lesson: t });
+    return res.json({ ok: true, lessonId: String(made[0].id) });
+  });
+});
+
+router.post("/dba/lesson-delete", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, courseId, lessonId } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const { err, hit } = await dbaEditableCourse(me, dbaId);
+    if (err) return res.status(err).json({ ok: false, error: err === 404 ? "DBA not found" : "Not authorized" });
+    const { companyId, dba } = hit!;
+    const owned = await rest(`courses?id=eq.${encodeURIComponent(String(courseId || ""))}&company_id=eq.${encodeURIComponent(companyId)}&select=id`);
+    if (!owned[0] || !dba.learn_course_ids.includes(String(courseId)))
+      return res.status(403).json({ ok: false, error: "That course can't be edited here" });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/course_modules?id=eq.${encodeURIComponent(String(lessonId || ""))}&course_id=eq.${encodeURIComponent(String(courseId))}`, {
+      method: "DELETE", headers: { ...SVC_H, Prefer: "return=minimal" },
+    });
+    if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't delete — try again" });
+    return res.json({ ok: true });
   });
 });
 

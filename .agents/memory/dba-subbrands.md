@@ -52,3 +52,9 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 **Navigation wording:** the Eden HQ admin UI has NO "Settings" tab — tabs are Overview / Staff Access / Conversations. The DBA manager, Organizations list ("Manage →" popup with logo/colors), and all branding panels live on the **Overview** tab. Telling the user "Settings" repeatedly confused them. Also: user often views the *published* site — remind them unpublished workspace changes won't appear there.
 
 **Branding parity:** DBA editor now matches the org branding editor — typed hex + picker for primary, up to 4 palette colors (brand_colors), logo Upload Image via sbUploadLogo (org-logos bucket, `dba-<id>` path) with <400KB data-URL fallback. Uploads are draft-guarded (applied only if the same DBA draft is still open).
+
+## DBA course builder & Connect (Aug 2026)
+- DBA managers build courses from inside the DBA Learn tab: /dba/course-save, /dba/lesson-save, /dba/lesson-delete (api-server dba.ts). Courses land in the org's normal catalog (company_id = org) and auto-assign to the DBA; Eden shared courses are never editable from a DBA (`editable` flag in /dba/content).
+- dbaAccess coach branch requires the coach to still be non-client staff of the DBA's org (demotion/transfer revokes manage). PATCH predicates must carry company_id/course_id to avoid authz TOCTOU — architect review caught both.
+- Lessons live in course_modules (denormalized sections: section_id/section_title, module_id = "sec.n"); no course_sections table. Video URLs normalized client-side (dbaToEmbed) to YouTube/Vimeo/Loom/Drive embeds.
+- DBA Connect links support optional emoji; member view is a 2-col accent-gradient card grid cycling through brand_colors palette.
