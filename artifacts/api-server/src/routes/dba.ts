@@ -780,7 +780,8 @@ router.get("/dba/mine", async (req: Request, res: Response) => {
       dba.is_active &&
       (dba.members.some((m) => m.email.toLowerCase() === me.email) ||
         dba.coach_id === me.id ||
-        (me.role === "super_admin" && me.company_id === companyId) ||
+        // org admins see their org's DBAs; Eden HQ admins see every org's
+        (me.role === "super_admin" && (me.company_id === companyId || isHqAdmin(me))) ||
         // delegated staff enter the DBA space just like its coach
         (me.company_id === companyId &&
           me.role !== "client" &&
