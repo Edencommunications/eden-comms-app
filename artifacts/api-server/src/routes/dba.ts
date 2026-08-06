@@ -31,6 +31,21 @@ const SUPABASE_ANON =
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const EDEN_ID = "b0000000-0000-0000-0000-000000000001";
 
+// ── HQ cross-org scope ────────────────────────────────────────────
+// Eden (owner HQ) admins may act on any organization's DBAs by passing
+// orgId (query for GETs, body for POSTs). Every other admin is locked to
+// their own org — an orgId that isn't theirs is rejected outright.
+const isHqAdmin = (a: { company_id: string | null }) => !a.company_id || a.company_id === EDEN_ID;
+async function adminOrgScope(admin: { company_id: string | null }, req: Request): Promise<string | null> {
+  const own = admin.company_id || EDEN_ID;
+  const want = String((req.method === "GET" ? req.query.orgId : (req.body || {}).orgId) || "").trim();
+  if (!want || want === own) return own;
+  if (!isHqAdmin(admin)) return null;
+  if (!/^[0-9a-f-]{36}$/i.test(want)) return null;
+  const rows = await rest<any>(`organizations?id=eq.${encodeURIComponent(want)}&is_active=eq.true&select=id`);
+  return rows[0] ? want : null;
+}
+
 const SVC_H = {
   apikey: SERVICE_KEY,
   Authorization: `Bearer ${SERVICE_KEY}`,
@@ -309,7 +324,8 @@ router.get("/dba/manifest", async (req: Request, res: Response) => {
 router.get("/dba/list", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
   if (admin) {
-    const companyId = admin.company_id || EDEN_ID;
+    const companyId = await adminOrgScope(admin, req);
+  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
     const [allowed, dbas] = await Promise.all([dbaAllowedForOrg(companyId), loadOrgDbas(companyId)]);
     return res.json({ ok: true, allowed, scope: "org", dbas: dbas.sort((a, b) => a.created_at.localeCompare(b.created_at)) });
   }
@@ -326,6 +342,24 @@ router.get("/dba/list", async (req: Request, res: Response) => {
   return res.json({ ok: true, allowed: dbas.length > 0, scope: "mine", dbas: dbas.sort((a, b) => a.created_at.localeCompare(b.created_at)) });
 });
 
+// ── Admin: org staff/coach roster for the DBA manager UI ─────────
+// GET /dba/org-staff?orgId= — served here (service key) because frontend RLS
+// blocks Eden HQ from reading another org's user_profiles directly.
+router.get("/dba/org-staff", async (req: Request, res: Response) => {
+  const admin = await requireAdminJwt(req);
+  if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const companyId = await adminOrgScope(admin, req);
+  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
+  const rows = await rest<any>(
+    `user_profiles?company_id=eq.${encodeURIComponent(companyId)}&role=neq.client&is_active=not.is.false&select=id,name,role,email&order=name.asc`,
+  );
+  return res.json({
+    ok: true,
+    coaches: rows.filter((r: any) => ["coach", "head_coach", "super_admin"].includes(r.role)).map((r: any) => ({ id: r.id, name: r.name, role: r.role })),
+    staff: rows.filter((r: any) => r.role !== "super_admin").map((r: any) => ({ id: r.id, name: r.name, role: r.role, email: r.email })),
+  });
+});
+
 // ── Admin: delegate a staff member / VA into a DBA (or revoke) ────
 // POST /dba/delegate-set {dbaId, userId, allowed} — org admin only. The
 // person must be active org staff (any non-client role). While granted they
@@ -333,7 +367,8 @@ router.get("/dba/list", async (req: Request, res: Response) => {
 router.post("/dba/delegate-set", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
   if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const companyId = admin.company_id || EDEN_ID;
+  const companyId = await adminOrgScope(admin, req);
+  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   const { dbaId, userId, allowed } = (req.body || {}) as Record<string, any>;
   return withLock("dba-write", async () => {
     const dba = (await loadOrgDbas(companyId)).find((d) => d.id === String(dbaId || ""));
@@ -372,7 +407,8 @@ router.post("/dba/delegate-set", async (req: Request, res: Response) => {
 router.post("/dba/save", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
   if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const companyId = admin.company_id || EDEN_ID;
+  const companyId = await adminOrgScope(admin, req);
+  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   if (!(await dbaAllowedForOrg(companyId))) {
     return res.status(403).json({ ok: false, error: "DBAs aren't included in your current plan." });
   }
@@ -440,7 +476,8 @@ router.post("/dba/save", async (req: Request, res: Response) => {
 router.post("/dba/archive", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
   if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const companyId = admin.company_id || EDEN_ID;
+  const companyId = await adminOrgScope(admin, req);
+  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   const { id, active } = (req.body || {}) as Record<string, any>;
   return withLock("dba-write", async () => {
   const dba = (await loadOrgDbas(companyId)).find((d) => d.id === id);
@@ -456,7 +493,8 @@ router.post("/dba/archive", async (req: Request, res: Response) => {
 router.post("/dba/member-add", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
   if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const companyId = admin.company_id || EDEN_ID;
+  const companyId = await adminOrgScope(admin, req);
+  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   const { dbaId } = (req.body || {}) as Record<string, any>;
   const email = String((req.body || {}).email || "").trim().toLowerCase();
   const name = String((req.body || {}).name || "").trim();
@@ -548,7 +586,8 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
 router.post("/dba/member-remove", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
   if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const companyId = admin.company_id || EDEN_ID;
+  const companyId = await adminOrgScope(admin, req);
+  if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   const { dbaId } = (req.body || {}) as Record<string, any>;
   const email = String((req.body || {}).email || "").trim().toLowerCase();
   return withLock("dba-write", async () => {
@@ -584,7 +623,11 @@ function dbaAccess(me: Me, companyId: string, dba: DbaRecord): { member: boolean
     me.role !== "client" &&
     me.role !== "dba_member" &&
     (dba.delegates || []).some((d) => d.id === me.id);
-  const manage = dba.coach_id === me.id || (me.role === "super_admin" && me.company_id === companyId) || delegated;
+  // Eden HQ super_admins (owner) manage every org's DBAs.
+  const manage =
+    dba.coach_id === me.id ||
+    (me.role === "super_admin" && (me.company_id === companyId || isHqAdmin(me))) ||
+    delegated;
   return { member, manage };
 }
 const isEdenCourse = (c: any) => !c.company_id || c.company_id === EDEN_ID;
@@ -956,11 +999,17 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
   if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
   const acc = dbaAccess(me, hit.companyId, hit.dba);
   if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const [cfg, roster, voice, tierDefs] = await Promise.all([
+  const [cfg, roster, voice, tierDefs, chanRows] = await Promise.all([
     loadChatCfg(hit.companyId, hit.dba.id),
     chatRoster(hit.companyId, hit.dba),
     voiceMemosEnabled(hit.companyId),
     loadTierDefs(hit.companyId),
+    // Channel list served here (service key) so managers get it even when
+    // their own login's RLS wouldn't let them read another org's communities
+    // (Eden HQ managing a white-label org's DBA).
+    acc.manage
+      ? rest<any>(`communities?context=eq.${encodeURIComponent(`dba:${String(req.query.id || "")}`)}&is_active=not.is.false&select=id,name&order=created_at.asc`)
+      : Promise.resolve(null),
   ]);
   const priv = (id: string) => id === hit.dba.coach_id || roster.admins.some((a) => a.id === id);
   const myDm = dmSideAllowed(cfg, tierDefs, me.id, acc.manage || priv(me.id));
@@ -986,6 +1035,7 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
     my_dm: myDm,
     dm_targets: dmTargets,
     voice_memos: voice,
+    channels: Array.isArray(chanRows) ? chanRows.map((c: any) => ({ id: c.id, name: c.name })) : undefined,
   });
 });
 
@@ -1253,18 +1303,21 @@ router.get("/dba/tier-defs", async (req: Request, res: Response) => {
     if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
     companyId = hit.companyId;
   } else {
-    if (me.role !== "super_admin" || !me.company_id) return res.status(403).json({ ok: false, error: "Not authorized" });
-    companyId = me.company_id;
+    if (me.role !== "super_admin") return res.status(403).json({ ok: false, error: "Not authorized" });
+    companyId = await adminOrgScope({ company_id: me.company_id }, req);
+    if (!companyId) return res.status(403).json({ ok: false, error: "Not authorized" });
   }
   const defs = await loadTierDefs(companyId);
-  return res.json({ ok: true, defs, can_edit: me.role === "super_admin" && me.company_id === companyId });
+  return res.json({ ok: true, defs, can_edit: me.role === "super_admin" && (me.company_id === companyId || isHqAdmin(me)) });
 });
 
 // POST /dba/tier-defs {defs:[{id,name,dm,app}]} — org super_admin only
 router.post("/dba/tier-defs", async (req: Request, res: Response) => {
   const me = await requireUserJwt(req);
   if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
-  if (me.role !== "super_admin" || !me.company_id) return res.status(403).json({ ok: false, error: "Only an org admin can edit the tier ladder" });
+  if (me.role !== "super_admin") return res.status(403).json({ ok: false, error: "Only an org admin can edit the tier ladder" });
+  const tierCompanyId = await adminOrgScope({ company_id: me.company_id }, req);
+  if (!tierCompanyId) return res.status(403).json({ ok: false, error: "Not authorized for that organization" });
   const raw = (req.body || {}).defs;
   if (!Array.isArray(raw) || !raw.length || raw.length > 6) return res.status(400).json({ ok: false, error: "Provide 1–6 tiers" });
   const defs: TierDef[] = [];
@@ -1274,8 +1327,8 @@ router.post("/dba/tier-defs", async (req: Request, res: Response) => {
     defs.push({ id: String(t.id || randomUUID().slice(0, 8)), name, dm: !!t.dm, app: !!t.app });
   }
   if (new Set(defs.map((d) => d.id)).size !== defs.length) return res.status(400).json({ ok: false, error: "Duplicate tier ids" });
-  if (!(await saveTierDefs(me.company_id, defs))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
-  void audit({ id: me.id, name: me.name }, "dba_tier_defs_changed", me.company_id, { defs });
+  if (!(await saveTierDefs(tierCompanyId, defs))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+  void audit({ id: me.id, name: me.name }, "dba_tier_defs_changed", tierCompanyId, { defs });
   return res.json({ ok: true, defs });
 });
 
@@ -1497,7 +1550,7 @@ export async function dbaCanvasWriteAllowed(
   const hit = await findDbaAnywhere(ctx.slice(4));
   if (!hit || hit.companyId !== comm.company_id) return false;
   if (user.id === hit.dba.coach_id) return true;
-  if (user.role === "super_admin" && user.companyId === hit.companyId) return true;
+  if (user.role === "super_admin" && (user.companyId === hit.companyId || isHqAdmin({ company_id: user.companyId }))) return true;
   const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
   return !!(cfg.leaders[comm.id] || {})[user.id]?.canvas;
 }

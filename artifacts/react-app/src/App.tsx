@@ -4280,6 +4280,8 @@ const AdminDashboard = ({ user }:any) => {
             })()}
             {/* White-label admin: DBAs (sub-brands) — hidden unless the plan includes them */}
             {!isOwnerHQ && myOrg && <DbaManagerCard org={myOrg}/>}
+            {/* Owner HQ: manage any organization's DBAs (incl. Lifestyle of Eden) */}
+            {isOwnerHQ && <HqDbaManager orgs={dbOrgs}/>}
             {/* White-label admin: org logo */}
             {!isOwnerHQ && myOrg && (() => {
               const accent = myOrg.brand_color || B.gold;
@@ -6151,8 +6153,32 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
 // Lets a Tier-3 org admin create sub-brands (DBAs), assign a coach, brand
 // them, invite members and share each DBA's own login link. Hidden entirely
 // when the org's plan doesn't include DBAs (server decides).
-const DbaManagerCard = ({ org }: any) => {
+// Owner HQ wrapper: pick any organization (including Eden itself), then the
+// regular DBA manager runs against it — same screens, same abilities.
+const HqDbaManager = ({ orgs }: any) => {
+  const eden = { id: EDEN_ORG_ID, name: 'Lifestyle of Eden', slug: '', brand_color: B.gold, logo_url: null };
+  const list = [eden, ...(orgs || []).filter((o: any) => o.id !== EDEN_ORG_ID && o.is_active !== false)];
+  const [selId, setSelId] = useState(eden.id);
+  const sel = list.find((o: any) => o.id === selId) || eden;
+  return (
+    <Card style={{ marginBottom: 20, borderLeft: `3px solid ${B.gold}` }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: B.gold, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 6px' }}>⭐ DBAs (Sub-Brands)</p>
+      <p style={{ fontSize: 12, color: B.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+        Create and manage branded member spaces. Pick which organization you're working in — as the owner, you can manage every org's DBAs from here.
+      </p>
+      <select value={selId} onChange={e => setSelId(e.target.value)}
+        style={{ width: '100%', background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: '9px 10px', fontSize: 13, outline: 'none', marginBottom: 12 }}>
+        {list.map((o: any) => <option key={o.id} value={o.id}>{o.name}{o.id === EDEN_ORG_ID ? ' (your company)' : ''}</option>)}
+      </select>
+      <DbaManagerCard key={sel.id} org={sel} hqOrgId={sel.id}/>
+    </Card>
+  );
+};
+
+const DbaManagerCard = ({ org, hqOrgId }: any) => {
   const BASE = (import.meta.env.BASE_URL || '/');
+  // When Eden HQ manages another org's DBAs, every admin call carries orgId
+  const orgQs = hqOrgId ? `orgId=${encodeURIComponent(hqOrgId)}` : '';
   const [st, setSt] = useState<any>({ loading: true, allowed: false, dbas: [] });
   const [coaches, setCoaches] = useState<any[]>([]);
   const [form, setForm] = useState<any>(null);       // new/edit DBA draft
@@ -6172,18 +6198,19 @@ const DbaManagerCard = ({ org }: any) => {
   const [channels, setChannels] = useState<any[] | null>(null);   // openId's chat channels
   const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: sbBearer() });
   const reload = () =>
-    fetch(`${BASE}api/dba/list`, { headers: { Authorization: sbBearer() } })
+    fetch(`${BASE}api/dba/list${orgQs ? `?${orgQs}` : ''}`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
       .then(b => setSt({ loading: false, allowed: !!b?.allowed, dbas: b?.dbas || [] }))
       .catch(() => setSt((s: any) => ({ ...s, loading: false })));
   useEffect(() => {
+    setSt({ loading: true, allowed: false, dbas: [] }); setOpenId(null); setForm(null);
     reload();
-    sbGet('user_profiles', `company_id=eq.${org.id}&role=in.(coach,head_coach,super_admin)&is_active=not.is.false&select=id,name,role&order=name.asc`)
-      .then((rows: any) => { if (Array.isArray(rows)) setCoaches(rows); }).catch(() => {});
-    // Anyone on the team except clients can be delegated into a DBA (admins already manage all)
-    sbGet('user_profiles', `company_id=eq.${org.id}&role=neq.client&is_active=not.is.false&select=id,name,role,email&order=name.asc`)
-      .then((rows: any) => { if (Array.isArray(rows)) setStaff(rows.filter((r: any) => r.role !== 'super_admin')); }).catch(() => {});
-    fetch(`${BASE}api/dba/tier-defs`, { headers: { Authorization: sbBearer() } })
+    // Rosters come from the server (RLS blocks HQ from reading another org's profiles directly)
+    fetch(`${BASE}api/dba/org-staff${orgQs ? `?${orgQs}` : ''}`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => { if (b?.ok) { setCoaches(b.coaches || []); setStaff(b.staff || []); } })
+      .catch(() => {});
+    fetch(`${BASE}api/dba/tier-defs${orgQs ? `?${orgQs}` : ''}`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
       .then(b => { if (b?.ok) { setTierDefs(b.defs || []); setCanEditTiers(!!b.can_edit); } })
       .catch(() => {});
@@ -6194,17 +6221,14 @@ const DbaManagerCard = ({ org }: any) => {
     if (!openId) return;
     fetch(`${BASE}api/dba/chat-config?id=${encodeURIComponent(openId)}`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
-      .then(b => { if (b?.ok) setDbaTiers(b.tiers || {}); })
-      .catch(() => {});
-    sbGet('communities', `context=eq.${encodeURIComponent('dba:' + openId)}&is_active=not.is.false&select=id,name&order=created_at.asc`)
-      .then((rows: any) => setChannels(Array.isArray(rows) ? rows : []))
+      .then(b => { if (b?.ok) { setDbaTiers(b.tiers || {}); setChannels(Array.isArray(b.channels) ? b.channels : []); } else setChannels([]); })
       .catch(() => setChannels([]));
   }, [openId]);
 
   const post = async (path: string, body: any) => {
     setBusy(true); setErr(''); setNotice('');
     try {
-      const r = await fetch(`${BASE}api/dba/${path}`, { method: 'POST', headers: hdrs(), body: JSON.stringify(body) });
+      const r = await fetch(`${BASE}api/dba/${path}`, { method: 'POST', headers: hdrs(), body: JSON.stringify(hqOrgId ? { ...body, orgId: hqOrgId } : body) });
       const b = await r.json().catch(() => ({}));
       if (!r.ok) { setErr(b?.error || "Couldn't save — try again."); return null; }
       await reload();
@@ -6213,14 +6237,20 @@ const DbaManagerCard = ({ org }: any) => {
     finally { setBusy(false); }
   };
 
-  if (!st.loading && !st.allowed) return null; // plan doesn't include DBAs
+  if (!st.loading && !st.allowed) {
+    // Plan doesn't include DBAs — hidden for org admins; HQ gets an explanation
+    return hqOrgId
+      ? <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>This organization's plan doesn't include DBAs. You can change which plans include them in the packages editor.</p>
+      : null;
+  }
   const accent = org.brand_color || B.gold;
   const linkFor = (d: any) => `${window.location.origin}${BASE.replace(/\/+$/, '')}/${d.slug}`;
   const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
+  const Wrap = hqOrgId ? ('div' as any) : Card; // HQ picker already provides the outer card
   return (
-    <Card style={{ marginBottom: 20, borderLeft: `3px solid ${accent}` }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 6px" }}>🏷 Your DBAs (Sub-Brands)</p>
+    <Wrap style={hqOrgId ? {} : { marginBottom: 20, borderLeft: `3px solid ${accent}` }}>
+      {!hqOrgId && <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 6px" }}>🏷 Your DBAs (Sub-Brands)</p>}
       <p style={{ fontSize: 12, color: B.muted, margin: "0 0 12px", lineHeight: 1.5 }}>
         Run additional brands under {org.name} — each with its own name, colors, coach and member login link. Members you invite here only see that DBA's space, not your main app.
       </p>
@@ -6475,7 +6505,7 @@ const DbaManagerCard = ({ org }: any) => {
           {notice && <p style={{ fontSize: 11, color: notice.startsWith('✅') ? (B.success || '#4FD89A') : '#ffa600', margin: "8px 0 0" }}>{notice}</p>}
         </>
       )}
-    </Card>
+    </Wrap>
   );
 };
 
