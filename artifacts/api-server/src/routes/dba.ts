@@ -455,7 +455,7 @@ router.post("/dba/save", async (req: Request, res: Response) => {
     logo_url: typeof b.logoUrl === "string" ? b.logoUrl.trim() || null : existing?.logo_url || null,
     brand_color: b.brandColor !== undefined ? hex(b.brandColor) : existing?.brand_color || null,
     brand_colors: Array.isArray(b.brandColors)
-      ? (b.brandColors.map(hex).filter(Boolean) as string[]).slice(0, 4)
+      ? (b.brandColors.map(hex).filter(Boolean) as string[]).slice(0, 5)
       : existing?.brand_colors || [],
     is_active: existing ? existing.is_active : true,
     created_at: existing?.created_at || new Date().toISOString(),

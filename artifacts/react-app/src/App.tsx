@@ -3800,7 +3800,7 @@ const OrgBrandingEditor = ({ org, onSaved, onClose }:any) => {
             </button>
           </div>
         ))}
-        {paletteDraft.length < 4 && (
+        {paletteDraft.length < 5 && (
           <button onClick={()=>setPaletteDraft(p => [...p, '#6FB8E8'])}
             style={{ background:B.card, color:B.text, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:12 }}>
             + Add Palette Color
@@ -4363,7 +4363,7 @@ const AdminDashboard = ({ user }:any) => {
                       style={{ background:colorSaved?B.success:accent, color:"#000", border:"none", borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:800, cursor:colorSaving?"wait":"pointer", opacity:colorSaving?0.6:1 }}>
                       {colorSaved ? "✓ Saved" : colorSaving ? "Saving…" : "Save Colors"}
                     </button>
-                    {paletteDraft.length < 4 && (
+                    {paletteDraft.length < 5 && (
                       <button onClick={()=>setPaletteDraft(p => [...p, '#6FB8E8'])} disabled={colorSaving}
                         style={{ background:B.card, color:B.text, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
                         + Add Palette Color
@@ -6475,7 +6475,7 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
                   </button>
                 </div>
               ))}
-              {(form.brandColors || []).length < 4 && (
+              {(form.brandColors || []).length < 5 && (
                 <button onClick={() => setForm((p: any) => ({ ...p, brandColors: [...(p.brandColors || []), '#6FB8E8'] }))}
                   style={{ background: B.card, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginBottom: 8 }}>
                   + Add Palette Color
