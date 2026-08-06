@@ -47,3 +47,4 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 ## Branded phone installs (PWA)
 - Chrome ignores blob/data manifests for install scope — branded installs must use a real same-origin manifest endpoint, swapped into <link rel=manifest> at document-parse time (inline index.html script using Vite %BASE_URL%) before beforeinstallprompt fires.
 - A captured install prompt is bound to the manifest at capture time: discard it whenever the manifest changes after load (fall back to manual install steps), or the wrong app gets installed.
+- E2E seed scripts run by task agents have left orphaned users/DBAs in shared Supabase before (T158 residue found Aug 2026: profiles + auth logins + dba rows). Any seeded-data test must delete auth users AND profile AND admin_settings rows in a trap/always-run cleanup; sweep pattern: @example.com emails.
