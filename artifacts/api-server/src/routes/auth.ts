@@ -303,7 +303,7 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
       }
       const rows = await dbGet(
         "user_profiles",
-        `email=eq.${encodeURIComponent(emailRaw)}&select=id,name,company_id,is_active`,
+        `email=eq.${encodeURIComponent(emailRaw)}&select=id,name,role,company_id,is_active`,
       );
       const profile = rows[0];
       if (!profile || profile.is_active === false) return;
@@ -311,7 +311,16 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
       // Org branding for the email
       let orgName = "Eden Comms";
       let orgSlug: string | null = null;
-      if (profile.company_id) {
+      let dbaQueryForm = false; // DBA slugs use the ?dba= query form
+      // DBA members get their DBA's branding + destination instead of the org's
+      if (profile.role === "dba_member") {
+        try {
+          const { findDbaBrandForEmail } = await import("./dba");
+          const dba = await findDbaBrandForEmail(emailRaw);
+          if (dba) { orgName = dba.name; orgSlug = dba.slug; dbaQueryForm = true; }
+        } catch {}
+      }
+      if (!dbaQueryForm && profile.company_id) {
         const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(profile.company_id)}&select=name,slug`);
         if (orgs[0]?.name) orgName = orgs[0].name;
         if (orgs[0]?.slug) orgSlug = orgs[0].slug;
@@ -323,7 +332,7 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
       // matches Supabase's redirect allow-list while the login page brands itself.
       const baseUrl = /^https?:\/\//i.test(process.env.APP_URL || "") ? String(process.env.APP_URL) : "";
       const redirectTo = baseUrl
-        ? (orgSlug ? `${baseUrl.replace(/\/+$/, "")}/?org=${encodeURIComponent(orgSlug)}` : baseUrl)
+        ? (orgSlug ? `${baseUrl.replace(/\/+$/, "")}/?${dbaQueryForm ? "dba" : "org"}=${encodeURIComponent(orgSlug)}` : baseUrl)
         : undefined;
       const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
         method: "POST",

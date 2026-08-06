@@ -4240,6 +4240,8 @@ const AdminDashboard = ({ user }:any) => {
                 </Card>
               );
             })()}
+            {/* White-label admin: DBAs (sub-brands) — hidden unless the plan includes them */}
+            {!isOwnerHQ && myOrg && <DbaManagerCard org={myOrg}/>}
             {/* White-label admin: org logo */}
             {!isOwnerHQ && myOrg && (() => {
               const accent = myOrg.brand_color || B.gold;
@@ -5730,6 +5732,227 @@ const AppShell = ({ user, onLogout }) => {
   );
 };
 
+// ─── DBA (sub-brand) member home + switcher ──────────────────────────────────
+// DBA members don't see the main app — they land in a branded DBA space.
+// Phase 1: branded landing + switcher between their DBAs. The full member
+// experience (Connect & Learn, communities) arrives in the next phases.
+const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
+  const [activeId, setActiveId] = useState(() => {
+    const hit = initialSlug ? dbas.find((d: any) => d.slug === initialSlug) : null;
+    return (hit || dbas[0])?.id;
+  });
+  const dba = dbas.find((d: any) => d.id === activeId) || dbas[0];
+  const wl = wlPalette(dba);
+  const primary = wl?.primary || B.gold;
+  const isMobile = useIsMobile();
+  return (
+    <div style={{ minHeight: "100vh", width: "100%", background: B.black, display: "flex", flexDirection: "column" }}>
+      <div style={{ background: B.surface, borderBottom: `1px solid ${B.border}`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <OrgLogo org={dba} size={32} />
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: B.text, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
+            {dba?.org?.name && <p style={{ fontSize: 9, color: B.muted, margin: 0 }}>part of {dba.org.name}</p>}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {dbas.length > 1 && (
+            <select value={activeId} onChange={(e) => setActiveId(e.target.value)}
+              style={{ background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none" }}>
+              {dbas.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          )}
+          {onEnterApp && (
+            <button onClick={onEnterApp}
+              style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              Open the full app →
+            </button>
+          )}
+          <button onClick={onLogout}
+            style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
+            Log out
+          </button>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ maxWidth: 480, width: "100%", textAlign: "center", background: `linear-gradient(160deg, ${primary}18 0%, ${B.surface} 100%)`, border: `1px solid ${B.border}`, borderRadius: 16, padding: isMobile ? "36px 20px" : "48px 36px" }}>
+          <OrgLogo org={dba} size={84} />
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: B.text, margin: "18px 0 8px" }}>Welcome to {dba?.name}</h1>
+          <p style={{ fontSize: 13, color: B.muted, margin: "0 0 6px", lineHeight: 1.7 }}>
+            Hi {String(user?.name || "").split(" ")[0] || "there"} — you're in. This is {dba?.name}'s private member space.
+          </p>
+          <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.7 }}>
+            Your community feed, chat and courses are being set up and will appear right here.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── DBA manager card (org admin settings) ───────────────────────────────────
+// Lets a Tier-3 org admin create sub-brands (DBAs), assign a coach, brand
+// them, invite members and share each DBA's own login link. Hidden entirely
+// when the org's plan doesn't include DBAs (server decides).
+const DbaManagerCard = ({ org }: any) => {
+  const BASE = (import.meta.env.BASE_URL || '/');
+  const [st, setSt] = useState<any>({ loading: true, allowed: false, dbas: [] });
+  const [coaches, setCoaches] = useState<any[]>([]);
+  const [form, setForm] = useState<any>(null);       // new/edit DBA draft
+  const [openId, setOpenId] = useState<string | null>(null); // members panel
+  const [memberDraft, setMemberDraft] = useState({ name: '', email: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [notice, setNotice] = useState('');
+  const [copiedId, setCopiedId] = useState('');
+  const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: sbBearer() });
+  const reload = () =>
+    fetch(`${BASE}api/dba/list`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => setSt({ loading: false, allowed: !!b?.allowed, dbas: b?.dbas || [] }))
+      .catch(() => setSt((s: any) => ({ ...s, loading: false })));
+  useEffect(() => {
+    reload();
+    sbGet('user_profiles', `company_id=eq.${org.id}&role=in.(coach,head_coach,super_admin)&is_active=not.is.false&select=id,name,role&order=name.asc`)
+      .then((rows: any) => { if (Array.isArray(rows)) setCoaches(rows); }).catch(() => {});
+  }, [org.id]);
+
+  const post = async (path: string, body: any) => {
+    setBusy(true); setErr(''); setNotice('');
+    try {
+      const r = await fetch(`${BASE}api/dba/${path}`, { method: 'POST', headers: hdrs(), body: JSON.stringify(body) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) { setErr(b?.error || "Couldn't save — try again."); return null; }
+      await reload();
+      return b;
+    } catch { setErr("Couldn't reach the server — try again."); return null; }
+    finally { setBusy(false); }
+  };
+
+  if (!st.loading && !st.allowed) return null; // plan doesn't include DBAs
+  const accent = org.brand_color || B.gold;
+  const linkFor = (d: any) => `${window.location.origin}${BASE.replace(/\/+$/, '')}/${d.slug}`;
+  const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+  return (
+    <Card style={{ marginBottom: 20, borderLeft: `3px solid ${accent}` }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 6px" }}>🏷 Your DBAs (Sub-Brands)</p>
+      <p style={{ fontSize: 12, color: B.muted, margin: "0 0 12px", lineHeight: 1.5 }}>
+        Run additional brands under {org.name} — each with its own name, colors, coach and member login link. Members you invite here only see that DBA's space, not your main app.
+      </p>
+      {st.loading ? <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>Loading…</p> : (
+        <>
+          {st.dbas.map((d: any) => (
+            <div key={d.id} style={{ border: `1px solid ${B.border}`, borderLeft: `3px solid ${d.brand_color || accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10, opacity: d.is_active ? 1 : 0.55 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <OrgLogo org={d} size={30} />
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: 0 }}>{d.name}{!d.is_active && <span style={{ fontSize: 10, color: "#ffa600", fontWeight: 700 }}> · ARCHIVED</span>}</p>
+                  <p style={{ fontSize: 10, color: B.muted, margin: 0 }}>/{d.slug} · {d.coach_name ? `Coach: ${d.coach_name}` : 'No coach yet'} · {d.members.length} member{d.members.length === 1 ? '' : 's'}</p>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button onClick={async () => {
+                      try { await navigator.clipboard.writeText(linkFor(d)); } catch {}
+                      setCopiedId(d.id); setTimeout(() => setCopiedId(''), 2000);
+                    }}
+                    style={{ background: copiedId === d.id ? B.success : "none", color: copiedId === d.id ? "#000" : B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    {copiedId === d.id ? "✓ Copied" : "Copy Link"}
+                  </button>
+                  <button onClick={() => { setOpenId(openId === d.id ? null : d.id); setMemberDraft({ name: '', email: '' }); setErr(''); setNotice(''); }}
+                    style={{ background: openId === d.id ? `${accent}22` : "none", color: B.text, border: `1px solid ${openId === d.id ? accent : B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    Members
+                  </button>
+                  <button onClick={() => { setForm({ id: d.id, name: d.name, slug: d.slug, coachId: d.coach_id || '', brandColor: d.brand_color || '#ffa600', logoUrl: d.logo_url || '' }); setErr(''); setNotice(''); }}
+                    style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    Edit
+                  </button>
+                  <button disabled={busy} onClick={() => post('archive', { id: d.id, active: !d.is_active })}
+                    style={{ background: "none", color: d.is_active ? "#e05a5a" : B.success, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    {d.is_active ? 'Archive' : 'Restore'}
+                  </button>
+                </div>
+              </div>
+              {openId === d.id && (
+                <div style={{ marginTop: 10, borderTop: `1px solid ${B.border}`, paddingTop: 10 }}>
+                  {d.members.length === 0 && <p style={{ fontSize: 11, color: B.muted, margin: "0 0 8px" }}>No members yet — invite the first one below. They'll get an email with their login details and the {d.name} link.</p>}
+                  {d.members.map((m: any) => (
+                    <div key={m.email} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: `1px solid ${B.border}` }}>
+                      <span style={{ flex: 1, fontSize: 12, color: B.text, fontWeight: 600 }}>{m.name} <span style={{ color: B.muted, fontWeight: 400 }}>· {m.email}</span></span>
+                      <button disabled={busy} onClick={() => { if (confirm(`Remove ${m.name} from ${d.name}? Their login stays — they just lose access to this DBA.`)) post('member-remove', { dbaId: d.id, email: m.email }); }}
+                        style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 6, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                    <input value={memberDraft.name} onChange={e => setMemberDraft(p => ({ ...p, name: e.target.value }))} placeholder="Full name"
+                      style={{ flex: 1, minWidth: 120, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                    <input value={memberDraft.email} onChange={e => setMemberDraft(p => ({ ...p, email: e.target.value }))} placeholder="email@example.com"
+                      style={{ flex: 1.4, minWidth: 160, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                    <button disabled={busy || !memberDraft.name.trim() || !memberDraft.email.trim()}
+                      onClick={async () => {
+                        const b = await post('member-add', { dbaId: d.id, name: memberDraft.name.trim(), email: memberDraft.email.trim() });
+                        if (b) { setMemberDraft({ name: '', email: '' }); setNotice(b.emailed ? `✅ Invited — login details emailed to ${b.dba ? memberDraft.email.trim().toLowerCase() : ''}` : '⚠ Added, but the invite email could not be sent — resend from the Invites screen.'); }
+                      }}
+                      style={{ background: accent, color: "#000", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+                      {busy ? 'Working…' : 'Invite Member'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {form ? (
+            <div style={{ border: `1px dashed ${B.border}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", margin: "0 0 8px" }}>{form.id ? 'Edit DBA' : 'New DBA'}</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <input value={form.name} onChange={e => setForm((p: any) => ({ ...p, name: e.target.value, slug: p.id || p.slugTouched ? p.slug : slugify(e.target.value) }))} placeholder="Brand name (e.g. The Remnant)"
+                  style={{ flex: 1.4, minWidth: 160, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                <input value={form.slug} onChange={e => setForm((p: any) => ({ ...p, slug: slugify(e.target.value), slugTouched: true }))} placeholder="link-name"
+                  style={{ flex: 1, minWidth: 120, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", fontFamily: "monospace" }} />
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                <select value={form.coachId} onChange={e => setForm((p: any) => ({ ...p, coachId: e.target.value }))}
+                  style={{ flex: 1, minWidth: 150, background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none" }}>
+                  <option value="">No coach assigned yet</option>
+                  {coaches.map((c: any) => <option key={c.id} value={c.id}>{c.name}{c.role === 'super_admin' ? ' (admin)' : ''}</option>)}
+                </select>
+                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(form.brandColor) ? form.brandColor : '#ffa600'}
+                  onChange={e => setForm((p: any) => ({ ...p, brandColor: e.target.value }))}
+                  style={{ width: 40, height: 34, padding: 2, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, cursor: "pointer" }} />
+                <input value={form.logoUrl} onChange={e => setForm((p: any) => ({ ...p, logoUrl: e.target.value }))} placeholder="Logo URL (optional)"
+                  style={{ flex: 1.4, minWidth: 160, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+              </div>
+              <p style={{ fontSize: 10, color: B.muted, margin: "0 0 8px" }}>Login link will be: <code style={{ color: accent }}>{window.location.origin}{BASE.replace(/\/+$/, '')}/{form.slug || '…'}</code></p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button disabled={busy || !form.name.trim()}
+                  onClick={async () => {
+                    const b = await post('save', { id: form.id, name: form.name.trim(), slug: form.slug, coachId: form.coachId, brandColor: form.brandColor, logoUrl: form.logoUrl });
+                    if (b) { setForm(null); setNotice('✅ Saved'); setTimeout(() => setNotice(''), 2500); }
+                  }}
+                  style={{ background: accent, color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+                  {busy ? 'Saving…' : form.id ? 'Save Changes' : 'Create DBA'}
+                </button>
+                <button onClick={() => { setForm(null); setErr(''); }}
+                  style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 12, cursor: "pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setForm({ name: '', slug: '', coachId: '', brandColor: '#ffa600', logoUrl: '' }); setErr(''); setNotice(''); }}
+              style={{ background: "none", color: accent, border: `1px dashed ${accent}66`, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", width: "100%" }}>
+              + New DBA
+            </button>
+          )}
+          {err && <p style={{ fontSize: 11, color: "#e05a5a", margin: "8px 0 0" }}>{err}</p>}
+          {notice && <p style={{ fontSize: 11, color: notice.startsWith('✅') ? (B.success || '#4FD89A') : '#ffa600', margin: "8px 0 0" }}>{notice}</p>}
+        </>
+      )}
+    </Card>
+  );
+};
+
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 import { useRoute } from "wouter";
 import { VideoTemplate } from "./components/video/VideoTemplate";
@@ -5778,6 +6001,19 @@ export default function App() {
   const [brandOrg, setBrandOrg] = useState<any>(null);
   useEffect(() => { (async () => {
     try {
+      // DBA branding: a sub-brand's slug can arrive as ?dba=<slug>, or as a
+      // subpath that isn't an org slug (checked below as the fallback).
+      const dbaParam = new URLSearchParams(window.location.search).get('dba');
+      const loadDba = async (s: string) => {
+        try {
+          const r = await fetch(`${(import.meta.env.BASE_URL || '/')}api/dba/brand?slug=${encodeURIComponent(s)}`);
+          if (!r.ok) return false;
+          const b = await r.json();
+          if (b?.dba) { setBrandOrg(b.dba); return true; }
+        } catch {}
+        return false;
+      };
+      if (dbaParam && await loadDba(dbaParam.toLowerCase())) return;
       let slug = new URLSearchParams(window.location.search).get('org');
       if (!slug) {
         // Subpath form: first path segment is treated as an org slug
@@ -5794,7 +6030,8 @@ export default function App() {
       const rows = await sbGet('organizations',
         `slug=eq.${encodeURIComponent(slug.toLowerCase())}&select=id,name,slug,brand_color,logo_url,is_white_label,is_active&limit=1`);
       const org = Array.isArray(rows) ? rows[0] : null;
-      if (!org || org.is_active === false) return; // unknown/inactive org → Eden default
+      // Not an org slug → maybe a DBA slug (sub-brand); unknown → Eden default
+      if (!org || org.is_active === false) { await loadDba(slug.toLowerCase()); return; }
       // Palette column added later — fetch separately so a missing column can't break primary branding
       let full = org;
       const pal = await sbGet('organizations', `id=eq.${org.id}&select=brand_colors&limit=1`);
@@ -5802,6 +6039,21 @@ export default function App() {
       setBrandOrg(full);
     } catch {}
   })() }, []);
+
+  // DBA memberships: dba_member accounts live in their DBA space instead of
+  // the app; regular users who arrive via a DBA link get the DBA space first
+  // with an "Open the full app" exit.
+  const isDbaMember = user?.role === 'dba_member';
+  const cameViaDba = !!brandOrg?.__dba;
+  const [myDbas, setMyDbas] = useState<any[] | null>(null);
+  const [dbaExited, setDbaExited] = useState(false);
+  useEffect(() => {
+    if (!user?.email || user.mustChangePassword || !(isDbaMember || cameViaDba)) return;
+    fetch(`${(import.meta.env.BASE_URL || '/')}api/dba/mine`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => setMyDbas(Array.isArray(b?.dbas) ? b.dbas : []))
+      .catch(() => setMyDbas([]));
+  }, [user?.email, user?.mustChangePassword, isDbaMember, cameViaDba]);
 
   if (!user) {
     if (recovery) return <SetPasswordScreen mode="recovery"
@@ -5816,6 +6068,34 @@ export default function App() {
     return <SetPasswordScreen mode="first"
       onDone={()=>setUser({ ...user, mustChangePassword: false })}
       onCancel={fullLogout}/>;
+  }
+
+  // DBA members land in their DBA space (never the main app). Regular users
+  // arriving via a DBA link see the DBA space first with a way into the app.
+  if (isDbaMember || (cameViaDba && !dbaExited)) {
+    if (myDbas === null) {
+      return (
+        <div style={{ minHeight: "100vh", background: B.black, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ color: B.muted, fontSize: 13 }}>Loading your space…</p>
+        </div>
+      );
+    }
+    if (myDbas.length > 0) {
+      return <DbaHome user={user} dbas={myDbas}
+        initialSlug={cameViaDba ? brandOrg.slug : null}
+        onEnterApp={isDbaMember ? null : () => setDbaExited(true)}
+        onLogout={fullLogout}/>;
+    }
+    if (isDbaMember) {
+      return (
+        <div style={{ minHeight: "100vh", background: B.black, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center" }}>
+          <p style={{ color: B.text, fontSize: 15, fontWeight: 700, margin: 0 }}>Your membership isn't active yet</p>
+          <p style={{ color: B.muted, fontSize: 12, margin: 0, maxWidth: 360, lineHeight: 1.6 }}>Your login works, but you're not part of an active group right now. Please contact the person who invited you.</p>
+          <button onClick={fullLogout} style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 16px", fontSize: 12, cursor: "pointer" }}>Log out</button>
+        </div>
+      );
+    }
+    // came via a DBA link but isn't a member → straight into the app
   }
 
   return (

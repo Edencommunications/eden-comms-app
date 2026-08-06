@@ -445,6 +445,33 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
   const tierHasVoice = pkg => voiceTiers===null || voiceTiers.includes(String(pkg.id))
 
+  // ── DBA (sub-brand) tier gating — Eden-level admin_settings key `dba_tiers`
+  // null = never configured → default: only the highest-priced active tier
+  // includes DBAs (must match the API server's default).
+  const [dbaTiers, setDbaTiers] = useState(null)
+  useEffect(()=>{
+    dbGet('admin_settings','key=eq.dba_tiers&select=value').then(rows=>{
+      try { const v = rows?.[0]?.value; const arr = typeof v==='string'?JSON.parse(v):v; if (Array.isArray(arr)) setDbaTiers(arr.map(String)) } catch{}
+    }).catch(()=>{})
+  },[])
+  const tierHasDba = pkg => {
+    if (dbaTiers!==null) return dbaTiers.includes(String(pkg.id))
+    const top = packages.reduce((a,b)=>Number(b.price||0)>Number(a.price||0)?b:a, packages[0])
+    return top && String(pkg.id)===String(top.id)
+  }
+  async function toggleDbaTier(pkg) {
+    const base = dbaTiers===null ? packages.filter(tierHasDba).map(p=>String(p.id)) : dbaTiers
+    const id = String(pkg.id)
+    const next = base.includes(id) ? base.filter(x=>x!==id) : [...base, id]
+    setDbaTiers(next)
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+        method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({ company_id:adminCompanyId, key:'dba_tiers', value:JSON.stringify(next) }),
+      })
+    } catch(e) {}
+  }
+
   async function persistStaffRoles(next) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
@@ -2531,6 +2558,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                           borderRadius:6,padding:'2px 8px',fontSize:9,fontWeight:700,cursor:'pointer',
                           color:tierHasVoice(pkg)?C.gold:C.muted}}>
                         🎙️ Voice memos {tierHasVoice(pkg)?'included ✓':'off'}
+                      </button>
+                      <button onClick={()=>toggleDbaTier(pkg)}
+                        title="Toggle whether orgs on this tier can create DBAs (sub-brands with their own branding, members and login link)"
+                        style={{marginTop:4,marginLeft:6,background:tierHasDba(pkg)?`${C.gold}15`:'none',border:`1px solid ${tierHasDba(pkg)?`${C.gold}66`:C.border}`,
+                          borderRadius:6,padding:'2px 8px',fontSize:9,fontWeight:700,cursor:'pointer',
+                          color:tierHasDba(pkg)?C.gold:C.muted}}>
+                        🏷 DBAs {tierHasDba(pkg)?'included ✓':'off'}
                       </button>
                       {(()=>{ const list = edenCourses.filter(c=>Array.isArray(c.tiers)&&c.tiers.includes(pkg.id)); return (
                         <div style={{marginTop:4}}>

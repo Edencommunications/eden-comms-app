@@ -87,6 +87,41 @@ function esc(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// ── "You've been added to a DBA" email (existing logins — no password) ──
+export function dbaAddedEmail(params: {
+  name: string;
+  dbaName: string;
+  dbaSlug?: string | null;
+}): { subject: string; html: string; text: string } {
+  const { name, dbaName, dbaSlug } = params;
+  const firstName = (name || "").split(" ")[0] || "there";
+  const url = appUrl(dbaSlug);
+  const subject = `You've been added to ${dbaName}`;
+  const text = [
+    `Hi ${firstName},`,
+    ``,
+    `You've been added to ${dbaName}.`,
+    url ? `Sign in with your existing email and password here: ${url}` : `Sign in with your existing email and password.`,
+    ``,
+    `See you inside,`,
+    `The ${dbaName} Team`,
+  ].join("\n");
+  const safeUrl = /^https?:\/\//i.test(url) ? url : "";
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;background:#111111;border-radius:12px;overflow:hidden">
+    <div style="background:#1a1a1a;padding:28px 32px;border-bottom:2px solid #ffa600">
+      <h1 style="margin:0;color:#ffa600;font-size:20px;letter-spacing:1px">${esc(dbaName)}</h1>
+    </div>
+    <div style="padding:32px;color:#e8e8e8;font-size:14px;line-height:1.7">
+      <p style="margin:0 0 16px">Hi ${esc(firstName)},</p>
+      <p style="margin:0 0 20px">You've been added to <strong>${esc(dbaName)}</strong>. Sign in with the email and password you already use.</p>
+      ${safeUrl ? `<p style="margin:0 0 24px;text-align:center"><a href="${esc(safeUrl)}" style="background:#ffa600;color:#111;text-decoration:none;font-weight:bold;padding:12px 28px;border-radius:8px;display:inline-block">Sign In</a></p>` : ""}
+      <p style="margin:0">See you inside,<br/>The ${esc(dbaName)} Team</p>
+    </div>
+  </div>`;
+  return { subject, html, text };
+}
+
 // ── Branded password-reset email ─────────────────────────────────
 export function resetEmail(params: {
   name: string;

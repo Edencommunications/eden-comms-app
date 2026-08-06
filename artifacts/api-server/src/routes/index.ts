@@ -13,6 +13,7 @@ import auditLoginRouter from "./auditLogin";
 import canvasRouter from "./canvas";
 import invitesRouter from "./invites";
 import broadcastsRouter from "./broadcasts";
+import dbaRouter from "./dba";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(auditLoginRouter);
 router.use(canvasRouter);
 router.use(invitesRouter);
 router.use(broadcastsRouter);
+router.use(dbaRouter);
 
 export default router;
