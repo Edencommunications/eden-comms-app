@@ -33,3 +33,8 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 - DBA huddles are fully separate from org/Team Hub huddles: room records live in per-DBA admin_settings JSON (`dba_huddles:<id>`), never in huddle_rooms. Daily rooms reuse the org's key (Eden env fallback) and self-expire at 4h; listing lazily prunes stale records.
 - Start rights = DBA manager or any Phase-4 delegated leader; each huddle has an audience (leaders/all/pick) and members only ever see huddles they can join. Visibility is decided server-side.
 **Why (from code review):** all writes to a shared JSON array row must go through the same per-DBA lock — including "background" prune saves triggered by GETs — or concurrent starts/ends get silently overwritten. Also: if the external room is created but the save fails, delete the room (no orphaned live rooms).
+
+## DBA calendar & booking (Phase 6)
+- Shared events calendar per DBA: events in admin_settings JSON `dba_events:<id>` (per-DBA lock); calendar authority (`cal`) and per-person booking URLs (`booking`) live inside the existing `dba_chat:<id>` config, so member-removal scrubbing covers them automatically.
+- Rights model: coach/org admin OR a member with an explicit `cal` grant manages events AND may publish their own Calendly/GHL booking embed. Booking embeds shown = coach + currently-granted current members only; revoking the grant also deletes the person's booking URL.
+**Why:** authority must be re-derived from live config on every request (no cached rights), and any per-user data tied to an authority grant should be deleted when the grant goes — otherwise stale embeds/URLs resurface. No external calendar sync by design; events are in-app only.

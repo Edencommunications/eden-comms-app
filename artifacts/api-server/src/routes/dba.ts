@@ -652,6 +652,13 @@ type DbaChatCfg = {
   dm_enabled: Record<string, boolean>;
   leaders: Record<string, Record<string, LeaderCaps>>;
   tiers: Record<string, string>;
+  // Phase 6 (calendar & booking):
+  //   cal:     { [userId]: true } — members the coach allows to manage the
+  //            DBA events calendar AND show a booking embed of their own.
+  //   booking: { [userId]: url } — each authorized person's own Calendly/GHL
+  //            booking link (the coach sets one too).
+  cal: Record<string, boolean>;
+  booking: Record<string, string>;
 };
 
 // ── Org-configurable tier ladder ────────────────────────────────
@@ -707,12 +714,12 @@ async function loadChatCfg(companyId: string, dbaId: string): Promise<DbaChatCfg
   const rows = await rest<any>(
     `admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(`dba_chat:${dbaId}`)}&select=value`,
   );
-  const base: DbaChatCfg = { all: {}, dm_enabled: {}, leaders: {}, tiers: {} };
+  const base: DbaChatCfg = { all: {}, dm_enabled: {}, leaders: {}, tiers: {}, cal: {}, booking: {} };
   if (!rows[0]?.value) return base;
   try {
     const v = typeof rows[0].value === "string" ? JSON.parse(rows[0].value) : rows[0].value;
     const obj = (x: any) => (x && typeof x === "object" ? x : {});
-    return { all: obj(v?.all), dm_enabled: obj(v?.dm_enabled), leaders: obj(v?.leaders), tiers: obj(v?.tiers) };
+    return { all: obj(v?.all), dm_enabled: obj(v?.dm_enabled), leaders: obj(v?.leaders), tiers: obj(v?.tiers), cal: obj(v?.cal), booking: obj(v?.booking) };
   } catch { return base; }
 }
 async function saveChatCfg(companyId: string, dbaId: string, cfg: DbaChatCfg): Promise<boolean> {
@@ -808,6 +815,8 @@ async function revokeChatAccess(companyId: string, dbaId: string, userId: string
     }
     if (cfg.tiers[userId]) { delete cfg.tiers[userId]; changed = true; }
     if (cfg.dm_enabled[userId]) { delete cfg.dm_enabled[userId]; changed = true; }
+    if (cfg.cal[userId]) { delete cfg.cal[userId]; changed = true; }
+    if (cfg.booking[userId]) { delete cfg.booking[userId]; changed = true; }
     if (changed) await saveChatCfg(companyId, dbaId, cfg);
   } catch (e) {
     logger.warn({ err: e }, "[DBA] revokeChatAccess: config scrub failed");
@@ -1606,6 +1615,247 @@ router.post("/dba/huddle-end", async (req: Request, res: Response) => {
     h.ended_by_name = me.name || me.email;
     if (!(await saveHuddles(hit.companyId, hit.dba.id, list))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
     void audit(me, "dba_huddle_ended", hit.dba.id, { dba: hit.dba.name, title: h.title });
+    return res.json({ ok: true });
+  });
+});
+
+// ═══════════ DBA calendar & booking (Phase 6) ═══════════
+// A shared events calendar every member of the DBA can see, plus embedded
+// Calendly/GHL booking calendars for the coach and any leaders the coach
+// authorizes. Zero-DDL: events live in a per-DBA admin_settings JSON key
+// (`dba_events:<dbaId>`); calendar authority + booking URLs live in the
+// existing per-DBA chat config (cal / booking maps). No external calendar
+// sync — events are created in-app only.
+
+type DbaEvent = {
+  id: string;
+  title: string;
+  start: string;            // ISO date-time
+  end: string | null;       // optional ISO date-time
+  description: string;
+  link: string;             // optional http(s) URL members can click to join
+  created_by: string;
+  created_by_name: string;
+  created_at: string;
+  updated_at?: string;
+};
+
+const MAX_EVENTS = 500;
+
+async function loadEvents(companyId: string, dbaId: string): Promise<DbaEvent[]> {
+  const rows = await rest<any>(
+    `admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(`dba_events:${dbaId}`)}&select=value`,
+  );
+  try {
+    const v = rows[0]?.value;
+    const arr = typeof v === "string" ? JSON.parse(v) : v;
+    return Array.isArray(arr) ? arr.filter((e: any) => e && e.id && e.title && e.start) : [];
+  } catch { return []; }
+}
+async function saveEvents(companyId: string, dbaId: string, list: DbaEvent[]): Promise<boolean> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ company_id: companyId, key: `dba_events:${dbaId}`, value: JSON.stringify(list) }),
+  });
+  return r.ok;
+}
+
+const httpUrl = (v: any): string | null => {
+  const s = String(v || "").trim();
+  if (!s) return "";
+  if (s.length > 500) return null;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return u.toString();
+  } catch { return null; }
+};
+const isoOrNull = (v: any): string | null => {
+  const s = String(v || "").trim();
+  if (!s) return null;
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+};
+
+// Coach/org-admin, or a member the coach granted calendar authority.
+function canManageCalendar(meId: string, manage: boolean, cfg: DbaChatCfg, dba: DbaRecord): boolean {
+  if (manage) return true;
+  return cfg.cal[meId] === true && dba.members.some((m) => m.id === meId);
+}
+
+// GET /dba/calendar?id= — events + booking embeds + (for the manager) the
+// grant roster, all in one call.
+router.get("/dba/calendar", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const hit = await findDbaAnywhere(String(req.query.id || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const [events, cfg] = await Promise.all([
+    loadEvents(hit.companyId, hit.dba.id),
+    loadChatCfg(hit.companyId, hit.dba.id),
+  ]);
+  const canManage = canManageCalendar(me.id, acc.manage, cfg, hit.dba);
+
+  // Booking embeds: the coach plus every currently-authorized leader who has
+  // set a booking URL. Stale URLs of people no longer authorized/members
+  // simply don't show (config scrubbing on removal handles the rest).
+  const allowedBookers = new Set<string>();
+  if (hit.dba.coach_id) allowedBookers.add(hit.dba.coach_id);
+  for (const [uid, on] of Object.entries(cfg.cal)) {
+    if (on === true && hit.dba.members.some((m) => m.id === uid)) allowedBookers.add(uid);
+  }
+  const bookerIds = [...allowedBookers].filter((uid) => cfg.booking[uid]);
+  const profiles = bookerIds.length
+    ? await rest<any>(`user_profiles?id=in.(${bookerIds.join(",")})&select=id,name,full_name,email`)
+    : [];
+  const nameOf = (uid: string) => {
+    const p = profiles.find((x: any) => x.id === uid);
+    if (p) return p.name || p.full_name || p.email;
+    return uid === hit.dba.coach_id ? (hit.dba.coach_name || "Coach") : "Team member";
+  };
+  const bookings = bookerIds.map((uid) => ({
+    id: uid,
+    name: nameOf(uid),
+    url: cfg.booking[uid],
+    is_coach: uid === hit.dba.coach_id,
+  }));
+
+  // Can the caller publish their own booking embed? Coach/manager always;
+  // otherwise only with a calendar grant.
+  const canSetBooking = acc.manage || me.id === hit.dba.coach_id || canManage;
+
+  const body: any = {
+    ok: true,
+    can_manage: canManage,
+    can_set_booking: canSetBooking,
+    my_booking: cfg.booking[me.id] || "",
+    events: events
+      .slice()
+      .sort((a, b) => a.start.localeCompare(b.start))
+      .map((e) => ({ ...e, can_edit: canManage })),
+  };
+  body.bookings = bookings;
+  if (acc.manage) {
+    // Roster for the grant UI — members with profiles, excluding the coach.
+    const roster = await chatRoster(hit.companyId, hit.dba);
+    body.roster = roster.members
+      .filter((m: any) => m.id !== hit.dba.coach_id)
+      .map((m: any) => ({ id: m.id, name: m.name, allowed: cfg.cal[m.id] === true }));
+  }
+  return res.json(body);
+});
+
+// POST /dba/event-save {dbaId, event:{id?,title,start,end?,description?,link?}}
+router.post("/dba/event-save", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, event } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+  if (!canManageCalendar(me.id, acc.manage, cfg, hit.dba))
+    return res.status(403).json({ ok: false, error: "Only the coach or an authorized leader can manage the calendar" });
+
+  const title = String(event?.title || "").trim().slice(0, 120);
+  if (!title) return res.status(400).json({ ok: false, error: "Give the event a title" });
+  const start = isoOrNull(event?.start);
+  if (!start) return res.status(400).json({ ok: false, error: "Pick a valid date and time" });
+  const end = isoOrNull(event?.end);
+  if (end && end < start) return res.status(400).json({ ok: false, error: "The end time is before the start time" });
+  const link = httpUrl(event?.link);
+  if (link === null) return res.status(400).json({ ok: false, error: "The event link must be a normal https:// link" });
+  const description = String(event?.description || "").trim().slice(0, 2000);
+
+  return withLock(`dba-events:${hit.dba.id}`, async () => {
+    const list = await loadEvents(hit.companyId, hit.dba.id);
+    const existing = event?.id ? list.find((e) => e.id === String(event.id)) : null;
+    if (event?.id && !existing) return res.status(404).json({ ok: false, error: "That event no longer exists" });
+    if (existing) {
+      existing.title = title; existing.start = start; existing.end = end;
+      existing.description = description; existing.link = link;
+      existing.updated_at = new Date().toISOString();
+    } else {
+      if (list.length >= MAX_EVENTS) return res.status(400).json({ ok: false, error: "This calendar is full — delete some old events first" });
+      list.push({
+        id: randomUUID(), title, start, end, description, link,
+        created_by: me.id, created_by_name: me.name || me.email,
+        created_at: new Date().toISOString(),
+      });
+    }
+    if (!(await saveEvents(hit.companyId, hit.dba.id, list))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit(me, existing ? "dba_event_updated" : "dba_event_created", hit.dba.id, { dba: hit.dba.name, title, start });
+    return res.json({ ok: true });
+  });
+});
+
+// POST /dba/event-delete {dbaId, eventId}
+router.post("/dba/event-delete", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, eventId } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+  if (!canManageCalendar(me.id, acc.manage, cfg, hit.dba))
+    return res.status(403).json({ ok: false, error: "Only the coach or an authorized leader can manage the calendar" });
+  return withLock(`dba-events:${hit.dba.id}`, async () => {
+    const list = await loadEvents(hit.companyId, hit.dba.id);
+    const idx = list.findIndex((e) => e.id === String(eventId));
+    if (idx < 0) return res.status(404).json({ ok: false, error: "That event no longer exists" });
+    const [gone] = list.splice(idx, 1);
+    if (!(await saveEvents(hit.companyId, hit.dba.id, list))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit(me, "dba_event_deleted", hit.dba.id, { dba: hit.dba.name, title: gone.title });
+    return res.json({ ok: true });
+  });
+});
+
+// POST /dba/cal-authority-set {dbaId, userId, allowed} — manager grants or
+// revokes calendar authority (manage events + show own booking embed).
+router.post("/dba/cal-authority-set", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, userId, allowed } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    if (!hit.dba.members.some((m) => m.id === String(userId))) return res.status(404).json({ ok: false, error: "That person isn't a member of this DBA" });
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    if (allowed) cfg.cal[String(userId)] = true;
+    else { delete cfg.cal[String(userId)]; delete cfg.booking[String(userId)]; }
+    if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit(me, "dba_calendar_authority_changed", hit.dba.id, { dba: hit.dba.name, user: String(userId), allowed: !!allowed });
+    return res.json({ ok: true });
+  });
+});
+
+// POST /dba/booking-set {dbaId, url} — caller sets/clears their OWN booking
+// link. Allowed for the coach/manager and calendar-authorized leaders.
+router.post("/dba/booking-set", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, url } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+    const acc = dbaAccess(me, hit.companyId, hit.dba);
+    if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    const allowed = acc.manage || me.id === hit.dba.coach_id || canManageCalendar(me.id, acc.manage, cfg, hit.dba);
+    if (!allowed) return res.status(403).json({ ok: false, error: "Only the coach or an authorized leader can add a booking calendar" });
+    const clean = httpUrl(url);
+    if (clean === null) return res.status(400).json({ ok: false, error: "That doesn't look like a valid https:// booking link" });
+    if (clean) cfg.booking[me.id] = clean;
+    else delete cfg.booking[me.id];
+    if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit(me, "dba_booking_link_set", hit.dba.id, { dba: hit.dba.name, cleared: !clean });
     return res.json({ ok: true });
   });
 });

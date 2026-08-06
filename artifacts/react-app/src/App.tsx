@@ -27,6 +27,7 @@ import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
 import DbaChat from "./components/DbaChat";
 import DbaHuddles from "./components/DbaHuddles";
+import DbaCalendar from "./components/DbaCalendar";
 import { useTeamHubUnread } from "./lib/teamUnread";
 import Wearables from "./components/Wearables";
 import CheckinFormEditor from "./components/CheckinFormEditor";
@@ -5939,7 +5940,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const wl = wlPalette(dba);
   const primary = wl?.primary || B.gold;
   const isMobile = useIsMobile();
-  const [tab, setTab] = useState<"home" | "community" | "huddles" | "connect" | "learn">("home");
+  const [tab, setTab] = useState<"home" | "community" | "huddles" | "calendar" | "connect" | "learn">("home");
   // Light poll so the join banner shows on any tab when a huddle we're
   // allowed into goes live (the Huddles tab does its own full loading).
   const [liveHuddleCount, setLiveHuddleCount] = useState(0);
@@ -5986,10 +5987,11 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
     await postDba("progress", { dbaId: dba.id, courseId, moduleId, completed: done });
   };
 
-  const TABS: Array<{ id: "home" | "community" | "huddles" | "connect" | "learn"; icon: string; label: string }> = [
+  const TABS: Array<{ id: "home" | "community" | "huddles" | "calendar" | "connect" | "learn"; icon: string; label: string }> = [
     { id: "home", icon: "home", label: "Home" },
     { id: "community", icon: "community", label: "Community" },
     { id: "huddles", icon: "watch", label: "Huddles" },
+    { id: "calendar", icon: "calendar", label: "Calendar" },
     { id: "connect", icon: "links", label: "Connect" },
     { id: "learn", icon: "learn", label: "Learn" },
   ];
@@ -6054,6 +6056,8 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           </div>
         ) : tab === "huddles" ? (
           <DbaHuddles dba={dba} primary={primary} isMobile={isMobile} />
+        ) : tab === "calendar" ? (
+          <DbaCalendar dba={dba} primary={primary} isMobile={isMobile} />
         ) : tab === "connect" ? (
           <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} />
         ) : tab === "learn" ? (
@@ -6079,7 +6083,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
                 <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.5 }}>{courseCount ? `${courseCount} course${courseCount === 1 ? '' : 's'} available` : "Courses & lessons"}</p>
               </div>
             </div>
-            <p style={{ fontSize: 11, color: B.muted, margin: "16px 0 0", textAlign: "center", lineHeight: 1.6 }}>Huddles and calendar are coming to this space soon.</p>
+            <p style={{ fontSize: 11, color: B.muted, margin: "16px 0 0", textAlign: "center", lineHeight: 1.6 }}>Jump into a live huddle or check the calendar from the tabs above.</p>
           </div>
         )}
       </div>
