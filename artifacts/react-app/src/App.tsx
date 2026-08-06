@@ -335,7 +335,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             {brandOrg ? <>The private platform for<br/>{brandOrg.name}</> : <>The private platform for<br/>Lifestyle of Eden University</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
-            {["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
+            {["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging"].map(f => (
               <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:`${primary}11`, borderRadius:8, border:`1px solid ${primary}22` }}>
                 <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
               </div>
@@ -6750,12 +6750,19 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
           {form ? (
             <div style={{ border: `1px dashed ${B.border}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", margin: "0 0 8px" }}>{form.id ? 'Edit DBA' : 'New DBA'}</p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                <input value={form.name} onChange={e => setForm((p: any) => ({ ...p, name: e.target.value, slug: p.id || p.slugTouched ? p.slug : slugify(e.target.value) }))} placeholder="Brand name (e.g. The Remnant)"
-                  style={{ flex: 1.4, minWidth: 160, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
-                <input value={form.slug} onChange={e => setForm((p: any) => ({ ...p, slug: slugify(e.target.value), slugTouched: true }))} placeholder="link-name"
-                  style={{ flex: 1, minWidth: 120, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", fontFamily: "monospace" }} />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <div style={{ flex: 1.4, minWidth: 160 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, margin: "0 0 3px" }}>Display name — shown everywhere in the app</p>
+                  <input value={form.name} onChange={e => setForm((p: any) => ({ ...p, name: e.target.value, slug: p.id || p.slugTouched ? p.slug : slugify(e.target.value) }))} placeholder="e.g. Lifestyle of Eden University"
+                    style={{ width: "100%", boxSizing: "border-box", background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 120 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, margin: "0 0 3px" }}>Link name — only for the web address</p>
+                  <input value={form.slug} onChange={e => setForm((p: any) => ({ ...p, slug: slugify(e.target.value), slugTouched: true }))} placeholder="e.g. leu"
+                    style={{ width: "100%", boxSizing: "border-box", background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", fontFamily: "monospace" }} />
+                </div>
               </div>
+              {form.slug ? <p style={{ fontSize: 10, color: B.muted, margin: "0 0 8px" }}>Members will log in at <span style={{ fontFamily: "monospace", color: B.text }}>edencommunications.io/{form.slug}</span> — keep it short. The login page itself shows the full display name.</p> : <div style={{ marginBottom: 8 }} />}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                 <select value={form.coachId} onChange={e => setForm((p: any) => ({ ...p, coachId: e.target.value }))}
                   style={{ flex: 1, minWidth: 150, background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none" }}>
