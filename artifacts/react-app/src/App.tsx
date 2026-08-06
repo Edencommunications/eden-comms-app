@@ -25,6 +25,7 @@ import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
+import DbaChat from "./components/DbaChat";
 import { useTeamHubUnread } from "./lib/teamUnread";
 import Wearables from "./components/Wearables";
 import CheckinFormEditor from "./components/CheckinFormEditor";
@@ -5937,7 +5938,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const wl = wlPalette(dba);
   const primary = wl?.primary || B.gold;
   const isMobile = useIsMobile();
-  const [tab, setTab] = useState<"home" | "connect" | "learn">("home");
+  const [tab, setTab] = useState<"home" | "community" | "connect" | "learn">("home");
   const [content, setContent] = useState<any>(null); // null = loading
   const [busy, setBusy] = useState(false);
   const loadContent = useCallback(() => {
@@ -5968,8 +5969,9 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
     await postDba("progress", { dbaId: dba.id, courseId, moduleId, completed: done });
   };
 
-  const TABS: Array<{ id: "home" | "connect" | "learn"; icon: string; label: string }> = [
+  const TABS: Array<{ id: "home" | "community" | "connect" | "learn"; icon: string; label: string }> = [
     { id: "home", icon: "home", label: "Home" },
+    { id: "community", icon: "community", label: "Community" },
     { id: "connect", icon: "links", label: "Connect" },
     { id: "learn", icon: "learn", label: "Learn" },
   ];
@@ -6018,6 +6020,10 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
             <p style={{ color: B.muted, fontSize: 13 }}>Loading…</p>
           </div>
+        ) : tab === "community" ? (
+          <div style={{ maxWidth: 1080, margin: "0 auto", padding: isMobile ? "10px 8px 16px" : "20px 16px 30px", height: "100%", boxSizing: "border-box" }}>
+            <DbaChat dba={dba} primary={primary} isMobile={isMobile} />
+          </div>
         ) : tab === "connect" ? (
           <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} />
         ) : tab === "learn" ? (
@@ -6043,7 +6049,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
                 <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.5 }}>{courseCount ? `${courseCount} course${courseCount === 1 ? '' : 's'} available` : "Courses & lessons"}</p>
               </div>
             </div>
-            <p style={{ fontSize: 11, color: B.muted, margin: "16px 0 0", textAlign: "center", lineHeight: 1.6 }}>Community, huddles and calendar are coming to this space soon.</p>
+            <p style={{ fontSize: 11, color: B.muted, margin: "16px 0 0", textAlign: "center", lineHeight: 1.6 }}>Huddles and calendar are coming to this space soon.</p>
           </div>
         )}
       </div>

@@ -55,39 +55,83 @@ async function ensureBucket(): Promise<void> {
   throw new Error("bucket unavailable");
 }
 
+// Shared upload core — used by /team/upload here and /dba/upload in dba.ts.
+// Returns {status, body} so each route keeps its own auth.
+export async function storeChatUpload(
+  companyKey: string,
+  filename: unknown,
+  contentType: unknown,
+  dataBase64: unknown,
+): Promise<{ status: number; body: Record<string, any> }> {
+  if (!filename || !dataBase64) return { status: 400, body: { error: "filename and dataBase64 required" } };
+  let buf: Buffer;
+  try { buf = Buffer.from(String(dataBase64), "base64"); } catch { return { status: 400, body: { error: "Bad file data" } }; }
+  if (!buf.length) return { status: 400, body: { error: "Empty file" } };
+  if (buf.length > MAX_BYTES) return { status: 413, body: { error: "File too large (15 MB max)" } };
+
+  await ensureBucket();
+
+  const safe = String(filename).slice(-120).replace(/[^A-Za-z0-9._-]+/g, "_") || "file";
+  const path = `${companyKey || "eden"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+  const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+    method: "POST",
+    headers: { ...SVC_H, "Content-Type": String(contentType || "application/octet-stream") },
+    body: buf as any,
+  });
+  if (!up.ok) {
+    const body = await up.text().catch(() => "");
+    logger.error({ status: up.status, body }, "[TeamUpload] upload failed");
+    return { status: 502, body: { error: "Upload failed — please try again" } };
+  }
+  return {
+    status: 200,
+    body: { url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`, name: String(filename), type: String(contentType || "") },
+  };
+}
+
+// Shared transcription core — used by /team/transcribe here and /dba/transcribe.
+export async function transcribeChatAudio(
+  dataBase64: unknown,
+  contentType: unknown,
+): Promise<{ status: number; body: Record<string, any> }> {
+  const baseUrl = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"] || "";
+  const apiKey = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"] || "";
+  if (!baseUrl || !apiKey) return { status: 503, body: { error: "Transcription not configured" } };
+  if (!dataBase64) return { status: 400, body: { error: "dataBase64 required" } };
+  let buf: Buffer;
+  try { buf = Buffer.from(String(dataBase64), "base64"); } catch { return { status: 400, body: { error: "Bad audio data" } }; }
+  if (!buf.length || buf.length > MAX_BYTES) return { status: 400, body: { error: "Bad audio size" } };
+
+  const type = String(contentType || "audio/webm");
+  const ext = /mp4|m4a/.test(type) ? "m4a" : /wav/.test(type) ? "wav" : /mp3|mpeg/.test(type) ? "mp3" : "webm";
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(buf)], { type }), `memo.${ext}`);
+  form.append("model", "gpt-4o-mini-transcribe");
+  form.append("response_format", "json");
+
+  const r = await fetch(`${baseUrl.replace(/\/$/, "")}/audio/transcriptions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form as any,
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    logger.error({ status: r.status, body }, "[TeamTranscribe] transcription failed");
+    return { status: 502, body: { error: "Transcription failed" } };
+  }
+  const out: any = await r.json().catch(() => null);
+  return { status: 200, body: { text: String(out?.text || "").trim() } };
+}
+
 const router: IRouter = Router();
 
 router.post("/team/upload", async (req: Request, res: Response) => {
   try {
     const caller = await requireStaffJwt(req);
     if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
-
-    const { filename, contentType, dataBase64 } = (req.body || {}) as {
-      filename?: string; contentType?: string; dataBase64?: string;
-    };
-    if (!filename || !dataBase64) { res.status(400).json({ error: "filename and dataBase64 required" }); return; }
-
-    let buf: Buffer;
-    try { buf = Buffer.from(dataBase64, "base64"); } catch { res.status(400).json({ error: "Bad file data" }); return; }
-    if (!buf.length) { res.status(400).json({ error: "Empty file" }); return; }
-    if (buf.length > MAX_BYTES) { res.status(413).json({ error: "File too large (15 MB max)" }); return; }
-
-    await ensureBucket();
-
-    const safe = String(filename).slice(-120).replace(/[^A-Za-z0-9._-]+/g, "_") || "file";
-    const path = `${caller.company_id || "eden"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
-    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
-      method: "POST",
-      headers: { ...SVC_H, "Content-Type": contentType || "application/octet-stream" },
-      body: buf as any,
-    });
-    if (!up.ok) {
-      const body = await up.text().catch(() => "");
-      logger.error({ status: up.status, body }, "[TeamUpload] upload failed");
-      res.status(502).json({ error: "Upload failed — please try again" });
-      return;
-    }
-    res.json({ url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`, name: String(filename), type: contentType || "" });
+    const { filename, contentType, dataBase64 } = (req.body || {}) as Record<string, unknown>;
+    const out = await storeChatUpload(caller.company_id || "eden", filename, contentType, dataBase64);
+    res.status(out.status === 200 ? 200 : out.status).json(out.body);
   } catch (e) {
     logger.error({ err: e }, "[TeamUpload] error");
     res.status(500).json({ error: "Upload failed" });
@@ -100,7 +144,7 @@ router.post("/team/upload", async (req: Request, res: Response) => {
 // (and every org) has voice memos. Eden's own team always has them.
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
 
-async function voiceMemosEnabled(companyId: string | null): Promise<boolean> {
+export async function voiceMemosEnabled(companyId: string | null): Promise<boolean> {
   if (!companyId || companyId === EDEN_ORG_ID) return true;
   const sr = await fetch(
     `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${EDEN_ORG_ID}&key=eq.voice_memo_tiers&select=value`,
@@ -151,37 +195,9 @@ router.post("/team/transcribe", async (req: Request, res: Response) => {
       res.status(403).json({ error: "Voice memos are not included in this organization's tier" });
       return;
     }
-
-    const baseUrl = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"] || "";
-    const apiKey = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"] || "";
-    if (!baseUrl || !apiKey) { res.status(503).json({ error: "Transcription not configured" }); return; }
-
-    const { dataBase64, contentType } = (req.body || {}) as { dataBase64?: string; contentType?: string };
-    if (!dataBase64) { res.status(400).json({ error: "dataBase64 required" }); return; }
-    let buf: Buffer;
-    try { buf = Buffer.from(dataBase64, "base64"); } catch { res.status(400).json({ error: "Bad audio data" }); return; }
-    if (!buf.length || buf.length > MAX_BYTES) { res.status(400).json({ error: "Bad audio size" }); return; }
-
-    const type = contentType || "audio/webm";
-    const ext = /mp4|m4a/.test(type) ? "m4a" : /wav/.test(type) ? "wav" : /mp3|mpeg/.test(type) ? "mp3" : "webm";
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buf)], { type }), `memo.${ext}`);
-    form.append("model", "gpt-4o-mini-transcribe");
-    form.append("response_format", "json");
-
-    const r = await fetch(`${baseUrl.replace(/\/$/, "")}/audio/transcriptions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form as any,
-    });
-    if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      logger.error({ status: r.status, body }, "[TeamTranscribe] transcription failed");
-      res.status(502).json({ error: "Transcription failed" });
-      return;
-    }
-    const out: any = await r.json().catch(() => null);
-    res.json({ text: String(out?.text || "").trim() });
+    const { dataBase64, contentType } = (req.body || {}) as Record<string, unknown>;
+    const out = await transcribeChatAudio(dataBase64, contentType);
+    res.status(out.status === 200 ? 200 : out.status).json(out.body);
   } catch (e) {
     logger.error({ err: e }, "[TeamTranscribe] error");
     res.status(500).json({ error: "Transcription failed" });

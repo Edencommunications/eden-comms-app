@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { logger } from "../lib/logger";
 import { mailerConfigured, sendEmail, welcomeEmail, dbaAddedEmail } from "../lib/mailer";
 import { requireAdminJwt, provisionAuthUser } from "./auth";
+import { storeChatUpload, transcribeChatAudio, voiceMemosEnabled } from "./teamUpload";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
@@ -414,6 +415,17 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
     await recordInviteEmail(companyId, email, emailed);
   } catch {}
   void audit(admin, "dba_member_added", dba.id, { dba: dba.name, member: email });
+  // Auto-join any "everyone in this DBA" chat channels (best-effort)
+  if (profile?.id) {
+    void (async () => {
+      try {
+        const cfg = await loadChatCfg(companyId, dba.id);
+        for (const cid of Object.keys(cfg.all).filter((k) => cfg.all[k])) {
+          await ensureCommunityMembers(cid, [{ id: profile.id, name: profile.name || name }], { id: admin.id, name: admin.name || null });
+        }
+      } catch (e) { logger.warn({ err: e }, "[DBA] auto-join failed"); }
+    })();
+  }
   return res.json({ ok: true, dba, emailed, existed: existedLogin });
   });
 });
@@ -431,7 +443,10 @@ router.post("/dba/member-remove", async (req: Request, res: Response) => {
   const before = dba.members.length;
   dba.members = dba.members.filter((m) => m.email.toLowerCase() !== email);
   if (dba.members.length === before) return res.status(404).json({ ok: false, error: "Not a member" });
+  const removed = (await rest<any>(`user_profiles?email=eq.${encodeURIComponent(email)}&select=id`))[0];
   if (!(await saveDbaRow(companyId, dba))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+  // Hard-revoke chat access (channel memberships, pins, their 1v1s)
+  if (removed?.id) await revokeChatAccess(companyId, dba.id, removed.id).catch(() => {});
   void audit(admin, "dba_member_removed", dba.id, { dba: dba.name, member: email });
   return res.json({ ok: true, dba });
   });
@@ -616,6 +631,406 @@ router.get("/dba/mine", async (req: Request, res: Response) => {
 });
 
 // ── helpers ──────────────────────────────────────────────────────
+// ═══════════════ DBA chat: communities & 1v1s ═══════════════════
+// Channels are `communities` rows with context 'dba:<dbaId>' (group chats)
+// or 'dbadm:<dbaId>' (1v1 pairs — name is the sorted '<idA>_<idB>' pair key).
+// Messages/pins ride the existing community_messages / message_pins tables:
+// DBA members hold role 'client' in the owning org, so their JWT passes the
+// org-scoped RLS just like org clients do. No crossover with org communities
+// or Team Hub because every query filters on these DBA-only context values.
+// Per-DBA chat config lives in admin_settings key `dba_chat:<dbaId>`:
+//   { all: {communityId:true},        — "everyone in this DBA" channels
+//     dm_enabled: {profileId:true} }  — Phase-4 member 1v1 gating hook
+type DbaChatCfg = { all: Record<string, boolean>; dm_enabled: Record<string, boolean> };
+
+async function loadChatCfg(companyId: string, dbaId: string): Promise<DbaChatCfg> {
+  const rows = await rest<any>(
+    `admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(`dba_chat:${dbaId}`)}&select=value`,
+  );
+  const base: DbaChatCfg = { all: {}, dm_enabled: {} };
+  if (!rows[0]?.value) return base;
+  try {
+    const v = typeof rows[0].value === "string" ? JSON.parse(rows[0].value) : rows[0].value;
+    return { all: v?.all && typeof v.all === "object" ? v.all : {}, dm_enabled: v?.dm_enabled && typeof v.dm_enabled === "object" ? v.dm_enabled : {} };
+  } catch { return base; }
+}
+async function saveChatCfg(companyId: string, dbaId: string, cfg: DbaChatCfg): Promise<boolean> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ company_id: companyId, key: `dba_chat:${dbaId}`, value: JSON.stringify(cfg) }),
+  });
+  return r.ok;
+}
+
+// The people who can appear in this DBA's chat: members (with profiles),
+// the coach, and the org's super admins.
+async function chatRoster(companyId: string, dba: DbaRecord) {
+  const memberIds = dba.members.map((m) => m.id).filter(Boolean) as string[];
+  const [memberProfiles, admins] = await Promise.all([
+    memberIds.length
+      ? rest<any>(`user_profiles?id=in.(${memberIds.join(",")})&select=id,name,full_name,email,is_active`)
+      : Promise.resolve([]),
+    rest<any>(`user_profiles?company_id=eq.${companyId}&role=eq.super_admin&is_active=not.is.false&select=id,name,full_name,email`),
+  ]);
+  const members = memberProfiles
+    .filter((p: any) => p.is_active !== false)
+    .map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "member" as const }));
+  const adminList = admins.map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "admin" as const }));
+  return { members, admins: adminList };
+}
+
+async function ensureCommunityMembers(communityId: string, people: Array<{ id: string; name: string; role?: string }>, addedBy: { id: string; name: string | null }) {
+  if (!people.length) return;
+  const existing = await rest<any>(`community_members?community_id=eq.${communityId}&select=user_id`);
+  const have = new Set(existing.map((r: any) => r.user_id));
+  const rows = people
+    .filter((p) => p.id && !have.has(p.id))
+    .map((p) => ({
+      community_id: communityId, user_id: p.id, user_name: p.name, user_role: p.role || "client",
+      added_by: addedBy.id, added_by_name: addedBy.name || "Manager",
+    }));
+  if (!rows.length) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/community_members`, {
+    method: "POST", headers: { ...SVC_H, Prefer: "return=minimal" }, body: JSON.stringify(rows),
+  }).catch(() => {});
+}
+
+// Load a channel and verify it really belongs to this DBA (right org AND a
+// DBA-scoped context) — every moderation route must go through this.
+async function findDbaChannel(companyId: string, dbaId: string, communityId: string) {
+  const comm = (await rest<any>(
+    `communities?id=eq.${encodeURIComponent(String(communityId || ""))}&select=id,name,company_id,context,is_active`,
+  ))[0];
+  if (!comm) return null;
+  if (comm.company_id !== companyId) return null;
+  if (comm.context !== `dba:${dbaId}` && comm.context !== `dbadm:${dbaId}`) return null;
+  return comm;
+}
+
+// Hard-revoke a user's chat access across every channel of a DBA (called on
+// member removal — membership drives table access, so JSON-only removal
+// would leave them reading old channels/DMs).
+async function revokeChatAccess(companyId: string, dbaId: string, userId: string) {
+  const chans = await rest<any>(
+    `communities?company_id=eq.${companyId}&context=in.(${encodeURIComponent(`"dba:${dbaId}","dbadm:${dbaId}"`)})&select=id,context,name`,
+  );
+  const ids = chans.map((c: any) => c.id);
+  if (ids.length) {
+    await fetch(`${SUPABASE_URL}/rest/v1/community_members?community_id=in.(${ids.join(",")})&user_id=eq.${userId}`, {
+      method: "DELETE", headers: SVC_H,
+    }).catch(() => {});
+    await fetch(`${SUPABASE_URL}/rest/v1/message_pins?conversation_id=in.(${ids.join(",")})&user_id=eq.${userId}&context=eq.community`, {
+      method: "DELETE", headers: SVC_H,
+    }).catch(() => {});
+  }
+  // Close their 1v1s entirely — the other side shouldn't keep an open DM
+  // with someone who's no longer part of the DBA.
+  const dmIds = chans.filter((c: any) => c.context === `dbadm:${dbaId}` && String(c.name || "").split("_").includes(userId)).map((c: any) => c.id);
+  if (dmIds.length) {
+    await fetch(`${SUPABASE_URL}/rest/v1/communities?id=in.(${dmIds.join(",")})`, {
+      method: "PATCH", headers: { ...SVC_H, "Content-Type": "application/json" }, body: JSON.stringify({ is_active: false }),
+    }).catch(() => {});
+  }
+}
+
+// GET /dba/chat-config?id= — everything the chat UI needs up front
+router.get("/dba/chat-config", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const hit = await findDbaAnywhere(String(req.query.id || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const [cfg, roster, voice] = await Promise.all([
+    loadChatCfg(hit.companyId, hit.dba.id),
+    chatRoster(hit.companyId, hit.dba),
+    voiceMemosEnabled(hit.companyId),
+  ]);
+  return res.json({
+    ok: true,
+    can_manage: acc.manage,
+    me: { id: me.id, name: me.name, role: me.role },
+    coach: hit.dba.coach_id ? { id: hit.dba.coach_id, name: hit.dba.coach_name } : null,
+    members: roster.members,
+    admins: roster.admins,
+    all_flags: cfg.all,
+    dm_enabled: cfg.dm_enabled,
+    voice_memos: voice,
+  });
+});
+
+// POST /dba/channel-create {dbaId, name, allDba, memberIds[]} — manager only.
+// Created server-side (service key) so membership is materialized reliably;
+// "everyone" channels also auto-join future members via /dba/member-add.
+router.post("/dba/channel-create", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, allDba, memberIds } = (req.body || {}) as Record<string, any>;
+  const name = String((req.body || {}).name || "").trim().slice(0, 80);
+  if (!name) return res.status(400).json({ ok: false, error: "Channel name required" });
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+
+    const ins = await fetch(`${SUPABASE_URL}/rest/v1/communities`, {
+      method: "POST",
+      headers: { ...SVC_H, Prefer: "return=representation" },
+      body: JSON.stringify({
+        company_id: hit.companyId, name, context: `dba:${hit.dba.id}`,
+        created_by: me.id, created_by_name: me.name || "Manager", is_active: true,
+      }),
+    });
+    const created: any[] = ins.ok ? ((await ins.json().catch(() => [])) as any[]) : [];
+    if (!created[0]?.id) return res.status(502).json({ ok: false, error: "Couldn't create the channel — try again" });
+    const communityId = created[0].id;
+
+    const roster = await chatRoster(hit.companyId, hit.dba);
+    let people: Array<{ id: string; name: string; role?: string }> = [{ id: me.id, name: me.name || "Manager", role: me.role }];
+    if (allDba) {
+      people = people.concat(roster.members.map((m) => ({ id: m.id, name: m.name })));
+      if (hit.dba.coach_id) people.push({ id: hit.dba.coach_id, name: hit.dba.coach_name || "Coach", role: "coach" });
+      const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+      cfg.all[communityId] = true;
+      await saveChatCfg(hit.companyId, hit.dba.id, cfg);
+    } else {
+      const wanted = new Set((Array.isArray(memberIds) ? memberIds : []).map(String));
+      const eligible = [...roster.members, ...roster.admins,
+        ...(hit.dba.coach_id ? [{ id: hit.dba.coach_id, name: hit.dba.coach_name || "Coach" }] : [])];
+      people = people.concat(eligible.filter((p) => wanted.has(p.id)).map((p) => ({ id: p.id, name: p.name })));
+    }
+    await ensureCommunityMembers(communityId, people, { id: me.id, name: me.name });
+    void audit({ id: me.id, name: me.name }, "dba_channel_created", hit.dba.id, { dba: hit.dba.name, channel: name, all: !!allDba });
+    return res.json({ ok: true, id: communityId });
+  });
+});
+
+// POST /dba/channel-rename {dbaId, communityId, name} — manager only
+router.post("/dba/channel-rename", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId } = (req.body || {}) as Record<string, any>;
+  const name = String((req.body || {}).name || "").trim().slice(0, 80);
+  if (!name) return res.status(400).json({ ok: false, error: "Name required" });
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+  if (!comm || comm.context !== `dba:${hit.dba.id}`) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/communities?id=eq.${comm.id}`, {
+    method: "PATCH", headers: { ...SVC_H, "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  });
+  if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't rename — try again" });
+  void audit({ id: me.id, name: me.name }, "dba_channel_renamed", hit.dba.id, { dba: hit.dba.name, from: comm.name, to: name });
+  return res.json({ ok: true });
+});
+
+// POST /dba/channel-archive {dbaId, communityId} — manager only
+router.post("/dba/channel-archive", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+    if (!comm) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/communities?id=eq.${comm.id}`, {
+      method: "PATCH", headers: { ...SVC_H, "Content-Type": "application/json" }, body: JSON.stringify({ is_active: false }),
+    });
+    if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't archive — try again" });
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    if (cfg.all[comm.id]) { delete cfg.all[comm.id]; await saveChatCfg(hit.companyId, hit.dba.id, cfg); }
+    void audit({ id: me.id, name: me.name }, "dba_channel_archived", hit.dba.id, { dba: hit.dba.name, channel: comm.name });
+    return res.json({ ok: true });
+  });
+});
+
+// POST /dba/channel-member-add {dbaId, communityId, userId} — manager only.
+// The person must belong to this DBA (member, coach, or org admin).
+router.post("/dba/channel-member-add", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId, userId } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+  if (!comm || comm.context !== `dba:${hit.dba.id}`) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+  const roster = await chatRoster(hit.companyId, hit.dba);
+  const eligible = [...roster.members, ...roster.admins,
+    ...(hit.dba.coach_id ? [{ id: hit.dba.coach_id, name: hit.dba.coach_name || "Coach", kind: "coach" as const }] : [])];
+  const person = eligible.find((p) => p.id === String(userId));
+  if (!person) return res.status(403).json({ ok: false, error: "That person isn't part of this DBA" });
+  await ensureCommunityMembers(comm.id, [{ id: person.id, name: person.name, role: (person as any).kind === "member" ? "client" : (person as any).kind }], { id: me.id, name: me.name });
+  return res.json({ ok: true });
+});
+
+// POST /dba/channel-member-remove {dbaId, communityId, userId} — manager only
+router.post("/dba/channel-member-remove", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId, userId } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+  if (!comm || comm.context !== `dba:${hit.dba.id}`) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+  await fetch(`${SUPABASE_URL}/rest/v1/community_members?community_id=eq.${comm.id}&user_id=eq.${encodeURIComponent(String(userId || ""))}`, {
+    method: "DELETE", headers: SVC_H,
+  }).catch(() => {});
+  return res.json({ ok: true });
+});
+
+// POST /dba/chat-flags {dbaId, communityId, allDba} — manager toggles
+// "everyone in this DBA" on an existing channel.
+router.post("/dba/chat-flags", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId, allDba } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+    if (!comm || comm.context !== `dba:${hit.dba.id}`) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    if (allDba) {
+      cfg.all[comm.id] = true;
+      const roster = await chatRoster(hit.companyId, hit.dba);
+      const people = roster.members.map((m) => ({ id: m.id, name: m.name }))
+        .concat(hit.dba.coach_id ? [{ id: hit.dba.coach_id, name: hit.dba.coach_name || "Coach" }] : []);
+      await ensureCommunityMembers(comm.id, people, { id: me.id, name: me.name });
+    } else {
+      // Turning "everyone" off keeps current members (kicking everybody would
+      // be destructive) — it stops future auto-joins; managers prune the
+      // remaining list from the Members modal (server-enforced route).
+      delete cfg.all[comm.id];
+    }
+    if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    return res.json({ ok: true });
+  });
+});
+
+// POST /dba/dm-open {dbaId, otherId} — find-or-create a 1v1 inside the DBA.
+// Allowed pairs: coach ↔ org admin (always — their dedicated DBA 1v1), and
+// any pair where BOTH people have dm_enabled (Phase-4 gating hook; nobody is
+// enabled yet, so member 1v1s stay locked until then).
+router.post("/dba/dm-open", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, otherId } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+    const acc = dbaAccess(me, hit.companyId, hit.dba);
+    if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+
+    const other = (await rest<any>(`user_profiles?id=eq.${encodeURIComponent(String(otherId || ""))}&select=id,name,full_name,email,role,company_id,is_active`))[0];
+    if (!other || other.is_active === false) return res.status(404).json({ ok: false, error: "Person not found" });
+    const otherName = other.name || other.full_name || other.email;
+
+    // Which side is which? privileged = the DBA's coach or an org super_admin
+    const privileged = (id: string, role: string, companyId: string | null) =>
+      id === hit.dba.coach_id || (role === "super_admin" && companyId === hit.companyId);
+    const otherInDba = hit.dba.members.some((m) => m.id === other.id) || privileged(other.id, other.role, other.company_id);
+    if (!otherInDba) return res.status(403).json({ ok: false, error: "That person isn't part of this DBA" });
+
+    const meIsPriv = privileged(me.id, me.role, me.company_id);
+    const otherIsPriv = privileged(other.id, other.role, other.company_id);
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    const bothPriv = meIsPriv && otherIsPriv; // the dedicated coach ↔ admin 1v1
+    const gated = cfg.dm_enabled[me.id] === true && cfg.dm_enabled[other.id] === true;
+    if (!bothPriv && !gated) {
+      return res.status(403).json({ ok: false, error: "Direct messages aren't enabled for this pair yet" });
+    }
+
+    const pairKey = [me.id, other.id].sort().join("_");
+    const existing = (await rest<any>(
+      `communities?company_id=eq.${hit.companyId}&context=eq.${encodeURIComponent(`dbadm:${hit.dba.id}`)}&name=eq.${encodeURIComponent(pairKey)}&is_active=eq.true&order=created_at.asc&limit=1`,
+    ))[0];
+    let communityId = existing?.id;
+    if (!communityId) {
+      const ins = await fetch(`${SUPABASE_URL}/rest/v1/communities`, {
+        method: "POST",
+        headers: { ...SVC_H, Prefer: "return=representation" },
+        body: JSON.stringify({
+          company_id: hit.companyId, name: pairKey, context: `dbadm:${hit.dba.id}`,
+          created_by: me.id, created_by_name: me.name || "User", is_active: true,
+        }),
+      });
+      const created: any[] = ins.ok ? ((await ins.json().catch(() => [])) as any[]) : [];
+      if (!created[0]?.id) return res.status(502).json({ ok: false, error: "Couldn't open the conversation — try again" });
+      communityId = created[0].id;
+      await ensureCommunityMembers(communityId, [
+        { id: me.id, name: me.name || "User", role: me.role },
+        { id: other.id, name: otherName, role: other.role },
+      ], { id: me.id, name: me.name });
+    }
+    return res.json({ ok: true, id: communityId, other: { id: other.id, name: otherName } });
+  });
+});
+
+// POST /dba/dm-enable {dbaId, userId, enabled} — Phase-4 gating hook (manager only)
+router.post("/dba/dm-enable", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, userId, enabled } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    if (enabled) cfg.dm_enabled[String(userId)] = true;
+    else delete cfg.dm_enabled[String(userId)];
+    if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_dm_gate_changed", hit.dba.id, { dba: hit.dba.name, user: String(userId), enabled: !!enabled });
+    return res.json({ ok: true });
+  });
+});
+
+// POST /dba/upload — chat file/voice-memo upload for DBA members (they hold
+// role 'client', so the staff-only /team/upload rejects them).
+router.post("/dba/upload", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, filename, contentType, dataBase64 } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  try {
+    const out = await storeChatUpload(`dba-${hit.dba.id}`, filename, contentType, dataBase64);
+    return res.status(out.status).json(out.body);
+  } catch (e) {
+    logger.error({ err: e }, "[DBA] upload error");
+    return res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+// POST /dba/transcribe — voice memo speech-to-text for DBA chat
+router.post("/dba/transcribe", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, dataBase64, contentType } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  if (!(await voiceMemosEnabled(hit.companyId))) {
+    return res.status(403).json({ ok: false, error: "Voice memos are not included in this organization's tier" });
+  }
+  try {
+    const out = await transcribeChatAudio(dataBase64, contentType);
+    return res.status(out.status).json(out.body);
+  } catch (e) {
+    logger.error({ err: e }, "[DBA] transcribe error");
+    return res.status(500).json({ error: "Transcription failed" });
+  }
+});
+
 function genTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let out = "";
