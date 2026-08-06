@@ -23,6 +23,7 @@ import { logger } from "../lib/logger";
 import { mailerConfigured, sendEmail, welcomeEmail, dbaAddedEmail } from "../lib/mailer";
 import { requireAdminJwt, provisionAuthUser } from "./auth";
 import { storeChatUpload, transcribeChatAudio, voiceMemosEnabled } from "./teamUpload";
+import { dailyKeyForOrg } from "./huddle";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
@@ -1400,6 +1401,213 @@ router.post("/dba/transcribe", async (req: Request, res: Response) => {
     logger.error({ err: e }, "[DBA] transcribe error");
     return res.status(500).json({ error: "Transcription failed" });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// DBA huddles (Phase 5) — live Daily.co video rooms scoped to ONE
+// DBA, fully separate from org/Team Hub huddles.
+//
+// Zero-DDL storage: per-DBA admin_settings key `dba_huddles:<dbaId>`
+// holds an array of room records. Rooms self-destruct on Daily's side
+// after 4h (same as org huddles); listing lazily marks anything older
+// than 4h inactive so abandoned rooms disappear on their own.
+//
+// Who can START a huddle: the DBA's manager (coach / org admin) or any
+// Phase-4 delegated leader. Each huddle picks its audience:
+//   leaders — manager + all delegated leaders
+//   all     — everyone in the DBA
+//   pick    — an explicit list of member ids (creator always included)
+// Members only ever SEE huddles they're allowed into.
+type DbaHuddle = {
+  id: string;
+  title: string;
+  room_url: string;
+  room_name: string;
+  created_by: string;
+  created_by_name: string;
+  audience: "leaders" | "all" | "pick";
+  member_ids: string[];
+  created_at: string;
+  is_active: boolean;
+  ended_at?: string;
+  ended_by_name?: string;
+};
+const HUDDLE_TTL_MS = 4 * 3600 * 1000; // matches Daily room `exp`
+
+async function loadHuddles(companyId: string, dbaId: string): Promise<DbaHuddle[]> {
+  const rows = await rest<any>(
+    `admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(`dba_huddles:${dbaId}`)}&select=value`,
+  );
+  try {
+    const v = rows[0]?.value;
+    const arr = typeof v === "string" ? JSON.parse(v) : v;
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+async function saveHuddles(companyId: string, dbaId: string, list: DbaHuddle[]): Promise<boolean> {
+  // Keep the JSON small: drop ended rooms older than a day
+  const cutoff = Date.now() - 24 * 3600 * 1000;
+  const trimmed = list.filter((h) => h.is_active || Date.parse(h.created_at) > cutoff);
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ company_id: companyId, key: `dba_huddles:${dbaId}`, value: JSON.stringify(trimmed) }),
+  });
+  return r.ok;
+}
+// Anyone with any Phase-4 authority grant in any channel counts as a leader
+function dbaLeaderIds(cfg: DbaChatCfg): Set<string> {
+  const ids = new Set<string>();
+  for (const byUser of Object.values(cfg.leaders)) {
+    for (const [uid, caps] of Object.entries(byUser)) {
+      if (caps && (caps.del || caps.pin || caps.canvas)) ids.add(uid);
+    }
+  }
+  return ids;
+}
+function huddleVisible(h: DbaHuddle, meId: string, manage: boolean, leaders: Set<string>): boolean {
+  if (manage || h.created_by === meId) return true;
+  if (h.audience === "all") return true;
+  if (h.audience === "leaders") return leaders.has(meId);
+  return h.member_ids.includes(meId);
+}
+function pruneStale(list: DbaHuddle[]): { list: DbaHuddle[]; changed: boolean } {
+  let changed = false;
+  const out = list.map((h) => {
+    if (h.is_active && Date.now() - Date.parse(h.created_at) > HUDDLE_TTL_MS) {
+      changed = true;
+      return { ...h, is_active: false, ended_at: new Date().toISOString(), ended_by_name: "auto (room expired)" };
+    }
+    return h;
+  });
+  return { list: out, changed };
+}
+
+// GET /dba/huddles?id= — active huddles the caller may join, + start rights
+router.get("/dba/huddles", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const hit = await findDbaAnywhere(String(req.query.id || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const [cfg, rawList] = await Promise.all([
+    loadChatCfg(hit.companyId, hit.dba.id),
+    loadHuddles(hit.companyId, hit.dba.id),
+  ]);
+  const { list, changed } = pruneStale(rawList);
+  if (changed) {
+    // Persist the prune under the same per-DBA lock start/end use, and
+    // re-read inside it — a bare save here could overwrite a concurrent
+    // huddle-start/end (lost update on the JSON array).
+    void withLock(`dba-huddles:${hit.dba.id}`, async () => {
+      const fresh = pruneStale(await loadHuddles(hit.companyId, hit.dba.id));
+      if (fresh.changed) await saveHuddles(hit.companyId, hit.dba.id, fresh.list);
+    }).catch(() => {});
+  }
+  const leaders = dbaLeaderIds(cfg);
+  const canStart = acc.manage || leaders.has(me.id);
+  const visible = list.filter((h) => h.is_active && huddleVisible(h, me.id, acc.manage, leaders));
+  let roster: Array<{ id: string; name: string; leader: boolean }> = [];
+  if (canStart) {
+    const r = await chatRoster(hit.companyId, hit.dba);
+    roster = r.members.filter((m: any) => m.id !== me.id).map((m: any) => ({ id: m.id, name: m.name, leader: leaders.has(m.id) }));
+  }
+  return res.json({
+    ok: true,
+    can_start: canStart,
+    huddles: visible.map((h) => ({ ...h, can_end: acc.manage || h.created_by === me.id })),
+    roster,
+  });
+});
+
+// POST /dba/huddle-start {dbaId, title?, audience, memberIds?}
+router.post("/dba/huddle-start", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, title, audience, memberIds } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+  const leaders = dbaLeaderIds(cfg);
+  if (!acc.manage && !leaders.has(me.id)) {
+    return res.status(403).json({ ok: false, error: "Only the coach or a delegated leader can start a huddle here" });
+  }
+  const aud = String(audience || "all");
+  if (!["leaders", "all", "pick"].includes(aud)) return res.status(400).json({ ok: false, error: "Pick who this huddle is for" });
+  let ids: string[] = [];
+  if (aud === "pick") {
+    const memberSet = new Set(hit.dba.members.map((m) => String(m.id)).filter(Boolean));
+    ids = Array.isArray(memberIds) ? memberIds.map(String).filter((id) => memberSet.has(id)) : [];
+    if (!ids.length) return res.status(400).json({ ok: false, error: "Pick at least one member to invite" });
+  }
+  const DAILY_KEY = await dailyKeyForOrg(hit.companyId);
+  if (!DAILY_KEY) {
+    return res.status(400).json({ ok: false, error: "Video huddles aren't connected for this organization yet — the org admin needs to add a Daily.co key in the admin panel." });
+  }
+  const roomName = `dba-${String(hit.dba.id).replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}-${Date.now()}`;
+  const r = await fetch("https://api.daily.co/v1/rooms", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${DAILY_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: roomName,
+      privacy: "public",
+      properties: { exp: Math.floor(Date.now() / 1000) + 4 * 3600, enable_chat: true, enable_screenshare: true },
+    }),
+  });
+  const data: any = await r.json().catch(() => null);
+  if (!r.ok || !data?.url) return res.status(502).json({ ok: false, error: "Could not create the call room" });
+  const huddle: DbaHuddle = {
+    id: randomUUID(),
+    title: String(title || "").trim().slice(0, 80) || "Huddle",
+    room_url: String(data.url),
+    room_name: String(data.name || roomName),
+    created_by: me.id,
+    created_by_name: me.name || me.email,
+    audience: aud as DbaHuddle["audience"],
+    member_ids: ids,
+    created_at: new Date().toISOString(),
+    is_active: true,
+  };
+  const ok = await withLock(`dba-huddles:${hit.dba.id}`, async () => {
+    const list = pruneStale(await loadHuddles(hit.companyId, hit.dba.id)).list;
+    list.push(huddle);
+    return saveHuddles(hit.companyId, hit.dba.id, list);
+  });
+  if (!ok) {
+    // Don't orphan a live room we can't track — best-effort delete it
+    void fetch(`https://api.daily.co/v1/rooms/${encodeURIComponent(huddle.room_name)}`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${DAILY_KEY}` },
+    }).catch(() => {});
+    return res.status(502).json({ ok: false, error: "Couldn't save the huddle — try again" });
+  }
+  void audit(me, "dba_huddle_started", hit.dba.id, { dba: hit.dba.name, title: huddle.title, audience: aud, invited: ids.length });
+  return res.json({ ok: true, huddle: { ...huddle, can_end: true } });
+});
+
+// POST /dba/huddle-end {dbaId, huddleId} — creator or manager
+router.post("/dba/huddle-end", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, huddleId } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  return withLock(`dba-huddles:${hit.dba.id}`, async () => {
+    const list = await loadHuddles(hit.companyId, hit.dba.id);
+    const h = list.find((x) => x.id === String(huddleId));
+    if (!h || !h.is_active) return res.status(404).json({ ok: false, error: "That huddle is already over" });
+    if (!acc.manage && h.created_by !== me.id) return res.status(403).json({ ok: false, error: "Only the person who started it (or the coach) can end this huddle" });
+    h.is_active = false;
+    h.ended_at = new Date().toISOString();
+    h.ended_by_name = me.name || me.email;
+    if (!(await saveHuddles(hit.companyId, hit.dba.id, list))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit(me, "dba_huddle_ended", hit.dba.id, { dba: hit.dba.name, title: h.title });
+    return res.json({ ok: true });
+  });
 });
 
 function genTempPassword(): string {

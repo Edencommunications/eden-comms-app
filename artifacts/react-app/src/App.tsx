@@ -26,6 +26,7 @@ import Week5 from "./components/Week5";
 import Week6 from "./components/Week6";
 import Week7 from "./components/Week7";
 import DbaChat from "./components/DbaChat";
+import DbaHuddles from "./components/DbaHuddles";
 import { useTeamHubUnread } from "./lib/teamUnread";
 import Wearables from "./components/Wearables";
 import CheckinFormEditor from "./components/CheckinFormEditor";
@@ -5938,7 +5939,23 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const wl = wlPalette(dba);
   const primary = wl?.primary || B.gold;
   const isMobile = useIsMobile();
-  const [tab, setTab] = useState<"home" | "community" | "connect" | "learn">("home");
+  const [tab, setTab] = useState<"home" | "community" | "huddles" | "connect" | "learn">("home");
+  // Light poll so the join banner shows on any tab when a huddle we're
+  // allowed into goes live (the Huddles tab does its own full loading).
+  const [liveHuddleCount, setLiveHuddleCount] = useState(0);
+  useEffect(() => {
+    if (!dba?.id) return;
+    let stop = false;
+    const check = () => {
+      fetch(`${DBA_API('huddles')}?id=${encodeURIComponent(dba.id)}`, { headers: { Authorization: sbBearer() } })
+        .then(r => (r.ok ? r.json() : null))
+        .then(b => { if (!stop && b?.ok) setLiveHuddleCount((b.huddles || []).length); })
+        .catch(() => {});
+    };
+    check();
+    const iv = setInterval(check, 15000);
+    return () => { stop = true; clearInterval(iv); };
+  }, [dba?.id]);
   const [content, setContent] = useState<any>(null); // null = loading
   const [busy, setBusy] = useState(false);
   const loadContent = useCallback(() => {
@@ -5969,9 +5986,10 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
     await postDba("progress", { dbaId: dba.id, courseId, moduleId, completed: done });
   };
 
-  const TABS: Array<{ id: "home" | "community" | "connect" | "learn"; icon: string; label: string }> = [
+  const TABS: Array<{ id: "home" | "community" | "huddles" | "connect" | "learn"; icon: string; label: string }> = [
     { id: "home", icon: "home", label: "Home" },
     { id: "community", icon: "community", label: "Community" },
+    { id: "huddles", icon: "watch", label: "Huddles" },
     { id: "connect", icon: "links", label: "Connect" },
     { id: "learn", icon: "learn", label: "Learn" },
   ];
@@ -6015,6 +6033,16 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
         </div>
       </div>
 
+      {liveHuddleCount > 0 && tab !== "huddles" && (
+        <div onClick={() => setTab("huddles")}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: `${primary}1e`, borderBottom: `1px solid ${primary}55`, padding: "8px 14px", cursor: "pointer" }}>
+          <span style={{ width: 8, height: 8, borderRadius: 4, background: "#4FD89A", boxShadow: "0 0 8px #4FD89A" }} />
+          <span style={{ fontSize: 12, fontWeight: 800, color: primary }}>
+            {liveHuddleCount === 1 ? "A huddle is live" : `${liveHuddleCount} huddles are live`} — tap to join
+          </span>
+        </div>
+      )}
+
       <div style={{ flex: 1, overflowY: "auto" }}>
         {content === null ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
@@ -6024,6 +6052,8 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           <div style={{ maxWidth: 1080, margin: "0 auto", padding: isMobile ? "10px 8px 16px" : "20px 16px 30px", height: "100%", boxSizing: "border-box" }}>
             <DbaChat dba={dba} primary={primary} isMobile={isMobile} />
           </div>
+        ) : tab === "huddles" ? (
+          <DbaHuddles dba={dba} primary={primary} isMobile={isMobile} />
         ) : tab === "connect" ? (
           <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} />
         ) : tab === "learn" ? (

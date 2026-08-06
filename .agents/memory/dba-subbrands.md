@@ -28,3 +28,8 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 **Why (from code review):** patching user_profiles by id alone let one org's DBA manager mutate another org's user — profile writes must always filter on company_id (DBA rosters can contain other orgs' emails).
 **Why (from code review):** delegated grants must die with membership: leader caps only count while the user is a current channel member, and member/channel removal scrubs leaders/tiers/dm flags — otherwise stale grants are a broken-access-control hole.
 - Promotion to full client is tier-gated (member's tier needs `app:true`) and flips auth metadata intended_role→'client' plus the member's `pure` flag.
+
+## DBA huddles (Phase 5)
+- DBA huddles are fully separate from org/Team Hub huddles: room records live in per-DBA admin_settings JSON (`dba_huddles:<id>`), never in huddle_rooms. Daily rooms reuse the org's key (Eden env fallback) and self-expire at 4h; listing lazily prunes stale records.
+- Start rights = DBA manager or any Phase-4 delegated leader; each huddle has an audience (leaders/all/pick) and members only ever see huddles they can join. Visibility is decided server-side.
+**Why (from code review):** all writes to a shared JSON array row must go through the same per-DBA lock — including "background" prune saves triggered by GETs — or concurrent starts/ends get silently overwritten. Also: if the external room is created but the save fails, delete the room (no orphaned live rooms).

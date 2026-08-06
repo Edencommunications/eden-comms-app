@@ -23,7 +23,7 @@ const SH = {
 
 // Resolve the Daily API key for an org: own key first, Eden env fallback
 // only for Eden's own org.
-async function dailyKeyForOrg(companyId: string): Promise<string> {
+export async function dailyKeyForOrg(companyId: string): Promise<string> {
   try {
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${companyId}&key=eq.daily_api_key&select=value`,
