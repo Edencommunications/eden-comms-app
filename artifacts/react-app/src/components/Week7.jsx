@@ -186,7 +186,21 @@ export default function Week7({ currentUser, initialDm }) {
   }
 
   // ── Section tab ────────────────────────────────────────────
-  const [section, setSection] = useState('chat') // chat | calendar | huddle
+  const [section, setSection] = useState('chat') // chat | calendar | huddle | dbas
+
+  // ── My DBAs (sub-brands I coach or was delegated into) ──────
+  // The server scopes the list: admins get every org DBA, other staff only
+  // the ones they run or were granted access to. Empty → tab stays hidden.
+  const [myDbas, setMyDbas] = useState([])
+  const [dbaScope, setDbaScope] = useState('mine')
+  const [openDba, setOpenDba] = useState(null)
+  useEffect(() => {
+    if (!myUUID || myRole === 'client') return
+    fetch('/api/dba/list', { headers: { Authorization: sbBearer() } })
+      .then(r => r.ok ? r.json() : null)
+      .then(b => { if (b?.ok) { setMyDbas(Array.isArray(b.dbas) ? b.dbas : []); setDbaScope(b.scope || 'mine') } })
+      .catch(() => {})
+  }, [myUUID]) // eslint-disable-line
 
   // ── Team Chat state ────────────────────────────────────────
   // Demo seed messages removed — team chat loads live from the database.
@@ -871,6 +885,7 @@ export default function Week7({ currentUser, initialDm }) {
     { key:'communities', icon:'👥', label:'Communities' },
     { key:'calendar', icon:'🗓',  label:'My Calendar' },
     { key:'huddle',   icon:'🎙',  label:'Huddle',     badge: huddleActive || !!liveHuddle },
+    ...(myDbas.length ? [{ key:'dbas', icon:'🏷', label:'My DBAs' }] : []),
   ]
 
   // ════════════════════════════════════════════════════════════
@@ -1404,6 +1419,68 @@ export default function Week7({ currentUser, initialDm }) {
                 />
               </div>
             )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════
+            MY DBAs — sub-brands I run or was delegated into
+        ══════════════════════════════════════════════════ */}
+        {section==='dbas' && (
+          <div style={{flex:1,overflowY:'auto',padding:16}}>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:14,fontWeight:700,color:C.white}}>🏷 My DBAs</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:2,lineHeight:1.5}}>
+                {dbaScope==='org'
+                  ? 'Every sub-brand in your organization. Open one to run its chat, huddles, calendar and members.'
+                  : 'The sub-brands you run. Open one to manage its chat, huddles, calendar and members.'}
+              </div>
+            </div>
+            {myDbas.map(d => {
+              const open = openDba === d.id
+              const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/,'')
+              const link = `${window.location.origin}${base}/${d.slug}`
+              return (
+                <div key={d.id} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${d.brand_color||C.gold}`,borderRadius:10,padding:'10px 12px',marginBottom:10,opacity:d.is_active?1:0.55}}>
+                  <div onClick={() => setOpenDba(open ? null : d.id)} title={open?'Collapse':'Expand'}
+                    style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                    <span style={{fontSize:11,color:open?C.gold:C.muted,width:12,display:'inline-block',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:800,color:C.white}}>
+                        {d.name}{!d.is_active && <span style={{fontSize:10,color:C.gold,fontWeight:700}}> · ARCHIVED</span>}
+                      </div>
+                      <div style={{fontSize:10,color:C.muted}}>
+                        /{d.slug} · {d.coach_name ? `Coach: ${d.coach_name}` : 'No coach yet'} · {(d.members||[]).length} member{(d.members||[]).length===1?'':'s'}
+                      </div>
+                    </div>
+                    <button onClick={e => { e.stopPropagation(); window.open(link, '_blank') }}
+                      style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:7,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                      Open ↗
+                    </button>
+                  </div>
+                  {open && (
+                    <div style={{marginTop:10,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
+                      {(d.members||[]).length === 0 && <div style={{fontSize:11,color:C.muted}}>No members yet.</div>}
+                      {(d.members||[]).map(m => (
+                        <div key={m.email} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:`1px solid ${C.border}`}}>
+                          <span style={{flex:1,fontSize:12,color:C.white,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                            <LN>{m.name}</LN> <span style={{color:C.muted,fontWeight:400}}>· {m.email}</span>
+                            {m.pure === false && <span style={{fontSize:9,color:C.success,fontWeight:700}}> · FULL CLIENT</span>}
+                          </span>
+                        </div>
+                      ))}
+                      {(d.delegates||[]).length > 0 && (
+                        <div style={{fontSize:10,color:C.muted,marginTop:8}}>
+                          Staff with access: {(d.delegates||[]).map(g => g.name).join(', ')}
+                        </div>
+                      )}
+                      <div style={{fontSize:10,color:C.muted,marginTop:8}}>
+                        Chat, huddles, calendar and channels are managed inside the DBA space — hit <b style={{color:C.gold}}>Open ↗</b> to run it. (Inviting new members is done by your org admin.)
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 

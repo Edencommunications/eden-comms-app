@@ -3038,6 +3038,37 @@ const ACTION_LABELS:Record<string,{label:string,icon:string}> = {
   package_updated:    { label:'Package updated',    icon:'📦' },
   package_deleted:    { label:'Package removed',    icon:'📦' },
   start_date_changed: { label:'Start date changed', icon:'🗓' },
+  // DBA (sub-brand) activity — written by the API server
+  dba_created:                  { label:'DBA created',                    icon:'🏷' },
+  dba_updated:                  { label:'DBA updated',                    icon:'🏷' },
+  dba_archived:                 { label:'DBA archived',                   icon:'📦' },
+  dba_restored:                 { label:'DBA restored',                   icon:'♻️' },
+  dba_member_added:             { label:'DBA member invited',             icon:'👤' },
+  dba_member_removed:           { label:'DBA member removed',             icon:'👋' },
+  dba_member_promoted:          { label:'DBA member promoted to client',  icon:'⭐' },
+  dba_staff_access_changed:     { label:'DBA staff access changed',       icon:'🛠' },
+  dba_channel_created:          { label:'DBA channel created',            icon:'➕' },
+  dba_channel_renamed:          { label:'DBA channel renamed',            icon:'✏️' },
+  dba_channel_archived:         { label:'DBA channel archived',           icon:'📦' },
+  dba_channel_member_added:     { label:'DBA channel member added',       icon:'👤' },
+  dba_channel_member_removed:   { label:'DBA channel member removed',     icon:'👋' },
+  dba_channel_audience_changed: { label:'DBA channel audience changed',   icon:'👥' },
+  dba_dm_gate_changed:          { label:'DBA 1-on-1 messaging changed',   icon:'💬' },
+  dba_tier_defs_changed:        { label:'DBA membership tiers edited',    icon:'🎚' },
+  dba_tier_assigned:            { label:'DBA member tier changed',        icon:'🎚' },
+  dba_authority_changed:        { label:'DBA leader authority changed',   icon:'🛡' },
+  dba_calendar_authority_changed:{ label:'DBA calendar authority changed', icon:'🗓' },
+  dba_event_created:            { label:'DBA event added',                icon:'🗓' },
+  dba_event_updated:            { label:'DBA event updated',              icon:'🗓' },
+  dba_event_deleted:            { label:'DBA event deleted',              icon:'🗑' },
+  dba_booking_link_set:         { label:'DBA booking calendar updated',   icon:'📅' },
+  dba_message_deleted:          { label:'DBA message deleted',            icon:'🗑' },
+  dba_message_pinned:           { label:'DBA message pinned',             icon:'📌' },
+  dba_message_unpinned:         { label:'DBA message unpinned',           icon:'📌' },
+  dba_huddle_started:           { label:'DBA huddle started',             icon:'🎥' },
+  dba_huddle_ended:             { label:'DBA huddle ended',               icon:'🎥' },
+  dba_connect_updated:          { label:'DBA Connect links updated',      icon:'🔗' },
+  dba_learn_updated:            { label:'DBA Learn courses updated',      icon:'📚' },
 };
 const actionMeta = (a:string) => ACTION_LABELS[a] || { label:(a||'action').replace(/_/g,' '), icon:'•' };
 const centralTime = (iso:string) => {
@@ -6123,6 +6154,8 @@ const DbaManagerCard = ({ org }: any) => {
   const [tierDraft, setTierDraft] = useState<any[] | null>(null); // editing copy
   const [dbaTiers, setDbaTiers] = useState<any>({});              // openId's { userId: tierId }
   const [promoteFor, setPromoteFor] = useState('');               // member id showing coach picker
+  const [staff, setStaff] = useState<any[]>([]);                  // org staff/VAs for delegation
+  const [channels, setChannels] = useState<any[] | null>(null);   // openId's chat channels
   const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: sbBearer() });
   const reload = () =>
     fetch(`${BASE}api/dba/list`, { headers: { Authorization: sbBearer() } })
@@ -6133,6 +6166,9 @@ const DbaManagerCard = ({ org }: any) => {
     reload();
     sbGet('user_profiles', `company_id=eq.${org.id}&role=in.(coach,head_coach,super_admin)&is_active=not.is.false&select=id,name,role&order=name.asc`)
       .then((rows: any) => { if (Array.isArray(rows)) setCoaches(rows); }).catch(() => {});
+    // Anyone on the team except clients can be delegated into a DBA (admins already manage all)
+    sbGet('user_profiles', `company_id=eq.${org.id}&role=neq.client&is_active=not.is.false&select=id,name,role,email&order=name.asc`)
+      .then((rows: any) => { if (Array.isArray(rows)) setStaff(rows.filter((r: any) => r.role !== 'super_admin')); }).catch(() => {});
     fetch(`${BASE}api/dba/tier-defs`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
       .then(b => { if (b?.ok) { setTierDefs(b.defs || []); setCanEditTiers(!!b.can_edit); } })
@@ -6140,12 +6176,15 @@ const DbaManagerCard = ({ org }: any) => {
   }, [org.id]);
   // Load the open DBA's member-tier assignments (they live in its chat config)
   useEffect(() => {
-    setDbaTiers({}); setPromoteFor('');
+    setDbaTiers({}); setPromoteFor(''); setChannels(null);
     if (!openId) return;
     fetch(`${BASE}api/dba/chat-config?id=${encodeURIComponent(openId)}`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
       .then(b => { if (b?.ok) setDbaTiers(b.tiers || {}); })
       .catch(() => {});
+    sbGet('communities', `context=eq.${encodeURIComponent('dba:' + openId)}&is_active=not.is.false&select=id,name&order=created_at.asc`)
+      .then((rows: any) => setChannels(Array.isArray(rows) ? rows : []))
+      .catch(() => setChannels([]));
   }, [openId]);
 
   const post = async (path: string, body: any) => {
@@ -6175,41 +6214,81 @@ const DbaManagerCard = ({ org }: any) => {
         <>
           {st.dbas.map((d: any) => (
             <div key={d.id} style={{ border: `1px solid ${B.border}`, borderLeft: `3px solid ${d.brand_color || accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10, opacity: d.is_active ? 1 : 0.55 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div onClick={() => { setOpenId(openId === d.id ? null : d.id); setMemberDraft({ name: '', email: '' }); setErr(''); setNotice(''); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", cursor: "pointer" }}
+                title={openId === d.id ? 'Collapse' : 'Expand to manage this DBA'}>
+                <span style={{ fontSize: 12, color: openId === d.id ? accent : B.muted, width: 12, display: "inline-block", transition: "transform .15s", transform: openId === d.id ? 'rotate(90deg)' : 'none' }}>▶</span>
                 <OrgLogo org={d} size={30} />
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: 0 }}>{d.name}{!d.is_active && <span style={{ fontSize: 10, color: "#ffa600", fontWeight: 700 }}> · ARCHIVED</span>}</p>
-                  <p style={{ fontSize: 10, color: B.muted, margin: 0 }}>/{d.slug} · {d.coach_name ? `Coach: ${d.coach_name}` : 'No coach yet'} · {d.members.length} member{d.members.length === 1 ? '' : 's'}</p>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button onClick={async () => {
-                      try { await navigator.clipboard.writeText(linkFor(d)); } catch {}
-                      setCopiedId(d.id); setTimeout(() => setCopiedId(''), 2000);
-                    }}
-                    style={{ background: copiedId === d.id ? B.success : "none", color: copiedId === d.id ? "#000" : B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    {copiedId === d.id ? "✓ Copied" : "Copy Link"}
-                  </button>
-                  <button onClick={() => window.open(linkFor(d), '_blank')}
-                    title="See exactly what this DBA's members see (opens in a new tab)"
-                    style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    Preview
-                  </button>
-                  <button onClick={() => { setOpenId(openId === d.id ? null : d.id); setMemberDraft({ name: '', email: '' }); setErr(''); setNotice(''); }}
-                    style={{ background: openId === d.id ? `${accent}22` : "none", color: B.text, border: `1px solid ${openId === d.id ? accent : B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    Members
-                  </button>
-                  <button onClick={() => { setForm({ id: d.id, name: d.name, slug: d.slug, coachId: d.coach_id || '', brandColor: d.brand_color || '#ffa600', logoUrl: d.logo_url || '' }); setErr(''); setNotice(''); }}
-                    style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    Edit
-                  </button>
-                  <button disabled={busy} onClick={() => post('archive', { id: d.id, active: !d.is_active })}
-                    style={{ background: "none", color: d.is_active ? "#e05a5a" : B.success, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    {d.is_active ? 'Archive' : 'Restore'}
-                  </button>
+                  <p style={{ fontSize: 10, color: B.muted, margin: 0 }}>
+                    /{d.slug} · {d.coach_name ? `Coach: ${d.coach_name}` : 'No coach yet'} · {d.members.length} member{d.members.length === 1 ? '' : 's'}
+                    {(d.delegates || []).length > 0 && ` · ${(d.delegates || []).length} staff`}
+                  </p>
                 </div>
               </div>
               {openId === d.id && (
                 <div style={{ marginTop: 10, borderTop: `1px solid ${B.border}`, paddingTop: 10 }}>
+                  {/* Quick actions */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                    <button onClick={async () => {
+                        try { await navigator.clipboard.writeText(linkFor(d)); } catch {}
+                        setCopiedId(d.id); setTimeout(() => setCopiedId(''), 2000);
+                      }}
+                      style={{ background: copiedId === d.id ? B.success : "none", color: copiedId === d.id ? "#000" : B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      {copiedId === d.id ? "✓ Copied" : "Copy Link"}
+                    </button>
+                    <button onClick={() => window.open(linkFor(d), '_blank')}
+                      title="Jump into this DBA's space (opens in a new tab — you're a manager there)"
+                      style={{ background: `${accent}22`, color: accent, border: `1px solid ${accent}55`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      Open DBA ↗
+                    </button>
+                    <button onClick={() => { setForm({ id: d.id, name: d.name, slug: d.slug, coachId: d.coach_id || '', brandColor: d.brand_color || '#ffa600', logoUrl: d.logo_url || '' }); setErr(''); setNotice(''); }}
+                      style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      Edit
+                    </button>
+                    <button disabled={busy} onClick={() => post('archive', { id: d.id, active: !d.is_active })}
+                      style={{ background: "none", color: d.is_active ? "#e05a5a" : B.success, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      {d.is_active ? 'Archive' : 'Restore'}
+                    </button>
+                  </div>
+                  {/* Coach assignment */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase" }}>Coach</span>
+                    <select disabled={busy} value={d.coach_id || ''}
+                      onChange={e => post('save', { id: d.id, name: d.name, slug: d.slug, coachId: e.target.value, brandColor: d.brand_color || '#ffa600', logoUrl: d.logo_url || '' })}
+                      style={{ background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 6, padding: "4px 8px", fontSize: 11, outline: "none" }}>
+                      <option value="">No coach assigned yet</option>
+                      {coaches.map((c: any) => <option key={c.id} value={c.id}>{c.name}{c.role === 'super_admin' ? ' (admin)' : ''}</option>)}
+                    </select>
+                    {channels !== null && (
+                      <span style={{ fontSize: 11, color: B.muted }}>
+                        · Channels: {channels.length ? channels.map((ch: any) => `#${ch.name}`).join('  ') : 'none yet'}
+                      </span>
+                    )}
+                  </div>
+                  {/* Staff / VA delegation */}
+                  {staff.length > 0 && (
+                    <div style={{ border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", margin: "0 0 4px" }}>Staff access</p>
+                      <p style={{ fontSize: 10, color: B.muted, margin: "0 0 6px", lineHeight: 1.5 }}>Give a teammate or VA management access to this DBA — they can run its chat, huddles, calendar and members just like the coach. Untick to take it back instantly.</p>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                        {staff.map((s: any) => {
+                          const isCoachHere = d.coach_id === s.id;
+                          const granted = isCoachHere || (d.delegates || []).some((g: any) => g.id === s.id);
+                          return (
+                            <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: granted ? B.text : B.muted, cursor: isCoachHere ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                              <input type="checkbox" checked={granted} disabled={busy || isCoachHere}
+                                onChange={e => post('delegate-set', { dbaId: d.id, userId: s.id, allowed: e.target.checked })}
+                                style={{ accentColor: accent }} />
+                              {s.name}{isCoachHere ? ' (coach)' : s.role === 'va' ? ' (VA)' : ''}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", margin: "0 0 4px" }}>Members</p>
                   {d.members.length === 0 && <p style={{ fontSize: 11, color: B.muted, margin: "0 0 8px" }}>No members yet — invite the first one below. They'll get an email with their login details and the {d.name} link.</p>}
                   {d.members.map((m: any) => (
                     <div key={m.email} style={{ padding: "5px 0", borderBottom: `1px solid ${B.border}` }}>

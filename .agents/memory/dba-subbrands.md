@@ -38,3 +38,8 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 - Shared events calendar per DBA: events in admin_settings JSON `dba_events:<id>` (per-DBA lock); calendar authority (`cal`) and per-person booking URLs (`booking`) live inside the existing `dba_chat:<id>` config, so member-removal scrubbing covers them automatically.
 - Rights model: coach/org admin OR a member with an explicit `cal` grant manages events AND may publish their own Calendly/GHL booking embed. Booking embeds shown = coach + currently-granted current members only; revoking the grant also deletes the person's booking URL.
 **Why:** authority must be re-derived from live config on every request (no cached rights), and any per-user data tied to an authority grant should be deleted when the grant goes — otherwise stale embeds/URLs resurface. No external calendar sync by design; events are in-app only.
+
+## Admin oversight & staff delegation (Phase 7)
+- Staff delegation lives in `delegates` inside the dba:<id> JSON record; dbaAccess re-derives manage rights live from it on every request (same-org, non-client roles only). GET /dba/list now serves non-admin staff too (scope "mine" = coached + delegated DBAs); admins keep org-wide scope.
+- Delegates get coach-equivalent rights only — DBA member invites remain org-admin-only by design.
+- Audit-log labels for all dba_* actions live in the App.tsx ACTION_LABELS map; new server audit actions need a matching entry there or they render as fallback text.

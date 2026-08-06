@@ -54,6 +54,9 @@ async function rest<T = any>(path: string): Promise<T[]> {
 // these member entries). pure=false/absent → an existing app user who was
 // additionally given access to this DBA.
 export type DbaMember = { id: string | null; email: string; name: string; added_at: string; pure?: boolean };
+// Org staff/VAs the admin delegated into this DBA — they get full manage
+// rights inside it (Phase 7 "admin oversight & staff delegation").
+export type DbaDelegate = { id: string; name: string; email: string; granted_at: string; granted_by: string | null };
 export type DbaLink = { id: string; title: string; url: string; desc: string | null };
 export type DbaRecord = {
   id: string;
@@ -67,6 +70,7 @@ export type DbaRecord = {
   is_active: boolean;
   created_at: string;
   members: DbaMember[];
+  delegates: DbaDelegate[]; // org staff/VAs granted manage access into this DBA
   connect: DbaLink[]; // per-DBA Connect tab links
   learn_course_ids: string[]; // org/Eden course ids assigned to this DBA's Learn tab
 };
@@ -87,6 +91,7 @@ function parseDba(value: any): DbaRecord | null {
       is_active: v.is_active !== false,
       created_at: v.created_at || new Date().toISOString(),
       members: Array.isArray(v.members) ? v.members : [],
+      delegates: Array.isArray(v.delegates) ? v.delegates.filter((d: any) => d && d.id) : [],
       connect: Array.isArray(v.connect) ? v.connect : [],
       learn_course_ids: Array.isArray(v.learn_course_ids) ? v.learn_course_ids.map(String) : [],
     };
@@ -250,10 +255,64 @@ router.get("/dba/brand", async (req: Request, res: Response) => {
 // ── Admin: list org DBAs ──────────────────────────────────────────
 router.get("/dba/list", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
+  if (admin) {
+    const companyId = admin.company_id || EDEN_ID;
+    const [allowed, dbas] = await Promise.all([dbaAllowedForOrg(companyId), loadOrgDbas(companyId)]);
+    return res.json({ ok: true, allowed, scope: "org", dbas: dbas.sort((a, b) => a.created_at.localeCompare(b.created_at)) });
+  }
+  // Non-admin staff (coach, head coach, VA…): only the DBAs they run or were
+  // delegated into. Clients / DBA-member logins get nothing here.
+  const me = await requireUserJwt(req);
+  if (!me || me.role === "client" || me.role === "dba_member") {
+    return res.status(403).json({ ok: false, error: "Not authorized" });
+  }
+  const companyId = me.company_id || EDEN_ID;
+  const dbas = (await loadOrgDbas(companyId)).filter(
+    (d) => d.coach_id === me.id || (d.delegates || []).some((g) => g.id === me.id),
+  );
+  return res.json({ ok: true, allowed: dbas.length > 0, scope: "mine", dbas: dbas.sort((a, b) => a.created_at.localeCompare(b.created_at)) });
+});
+
+// ── Admin: delegate a staff member / VA into a DBA (or revoke) ────
+// POST /dba/delegate-set {dbaId, userId, allowed} — org admin only. The
+// person must be active org staff (any non-client role). While granted they
+// can manage that DBA exactly like its coach.
+router.post("/dba/delegate-set", async (req: Request, res: Response) => {
+  const admin = await requireAdminJwt(req);
   if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
   const companyId = admin.company_id || EDEN_ID;
-  const [allowed, dbas] = await Promise.all([dbaAllowedForOrg(companyId), loadOrgDbas(companyId)]);
-  return res.json({ ok: true, allowed, dbas: dbas.sort((a, b) => a.created_at.localeCompare(b.created_at)) });
+  const { dbaId, userId, allowed } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const dba = (await loadOrgDbas(companyId)).find((d) => d.id === String(dbaId || ""));
+    if (!dba) return res.status(404).json({ ok: false, error: "DBA not found" });
+    const rows = await rest<any>(
+      `user_profiles?id=eq.${encodeURIComponent(String(userId || ""))}&company_id=eq.${encodeURIComponent(companyId)}&role=neq.client&is_active=not.is.false&select=id,name,full_name,email,role`,
+    );
+    const person = rows[0];
+    if (!person) return res.status(404).json({ ok: false, error: "That person isn't on your team" });
+    const name = person.name || person.full_name || "Staff member";
+    const had = (dba.delegates || []).some((g) => g.id === person.id);
+    if (allowed && !had) {
+      dba.delegates = [
+        ...(dba.delegates || []),
+        { id: person.id, name, email: String(person.email || "").toLowerCase(), granted_at: new Date().toISOString(), granted_by: admin.id },
+      ];
+    } else if (!allowed && had) {
+      dba.delegates = (dba.delegates || []).filter((g) => g.id !== person.id);
+    } else {
+      return res.json({ ok: true, delegates: dba.delegates || [] }); // nothing to change
+    }
+    if (!(await saveDbaRow(companyId, dba))) {
+      return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    }
+    await audit(admin, "dba_staff_access_changed", dba.id, {
+      dba: dba.name,
+      staff: name,
+      access: allowed ? "granted" : "revoked",
+      summary: allowed ? `Gave ${name} management access to ${dba.name}` : `Removed ${name}'s management access to ${dba.name}`,
+    });
+    return res.json({ ok: true, delegates: dba.delegates });
+  });
 });
 
 // ── Admin: create / update a DBA ─────────────────────────────────
@@ -299,6 +358,7 @@ router.post("/dba/save", async (req: Request, res: Response) => {
   const hex = (v: any) => (typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim()) ? v.trim() : null);
   const dba: DbaRecord = {
     id: existing?.id || randomUUID(),
+    delegates: existing?.delegates || [],
     name,
     slug,
     coach_id: coachId,
@@ -464,7 +524,14 @@ async function findDbaAnywhere(dbaId: string): Promise<{ companyId: string; dba:
 type Me = NonNullable<Awaited<ReturnType<typeof requireUserJwt>>>;
 function dbaAccess(me: Me, companyId: string, dba: DbaRecord): { member: boolean; manage: boolean } {
   const member = dba.members.some((m) => m.email.toLowerCase() === me.email);
-  const manage = dba.coach_id === me.id || (me.role === "super_admin" && me.company_id === companyId);
+  // Delegated staff/VAs manage too — but only same-org, non-client logins,
+  // and the grant is re-checked live from the DBA record on every request.
+  const delegated =
+    me.company_id === companyId &&
+    me.role !== "client" &&
+    me.role !== "dba_member" &&
+    (dba.delegates || []).some((d) => d.id === me.id);
+  const manage = dba.coach_id === me.id || (me.role === "super_admin" && me.company_id === companyId) || delegated;
   return { member, manage };
 }
 const isEdenCourse = (c: any) => !c.company_id || c.company_id === EDEN_ID;
@@ -617,7 +684,12 @@ router.get("/dba/mine", async (req: Request, res: Response) => {
       dba.is_active &&
       (dba.members.some((m) => m.email.toLowerCase() === me.email) ||
         dba.coach_id === me.id ||
-        (me.role === "super_admin" && me.company_id === companyId)),
+        (me.role === "super_admin" && me.company_id === companyId) ||
+        // delegated staff enter the DBA space just like its coach
+        (me.company_id === companyId &&
+          me.role !== "client" &&
+          me.role !== "dba_member" &&
+          (dba.delegates || []).some((g) => g.id === me.id))),
   );
   // Org names for context (small set)
   const orgIds = [...new Set(mine.map((m) => m.companyId))];
@@ -969,6 +1041,7 @@ router.post("/dba/channel-member-add", async (req: Request, res: Response) => {
   const person = eligible.find((p) => p.id === String(userId));
   if (!person) return res.status(403).json({ ok: false, error: "That person isn't part of this DBA" });
   await ensureCommunityMembers(comm.id, [{ id: person.id, name: person.name, role: (person as any).kind === "member" ? "client" : (person as any).kind }], { id: me.id, name: me.name });
+  await audit(me, "dba_channel_member_added", hit.dba.id, { dba: hit.dba.name, channel: comm.name, person: person.name });
   return res.json({ ok: true });
 });
 
@@ -996,6 +1069,7 @@ router.post("/dba/channel-member-remove", async (req: Request, res: Response) =>
   } catch (e) {
     logger.warn({ err: e }, "[DBA] channel-member-remove: leader scrub failed");
   }
+  await audit(me, "dba_channel_member_removed", hit.dba.id, { dba: hit.dba.name, channel: comm.name, userId: String(userId || "") });
   return res.json({ ok: true });
 });
 
@@ -1025,6 +1099,7 @@ router.post("/dba/chat-flags", async (req: Request, res: Response) => {
       delete cfg.all[comm.id];
     }
     if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    await audit(me, "dba_channel_audience_changed", hit.dba.id, { dba: hit.dba.name, channel: comm.name, everyone: !!allDba });
     return res.json({ ok: true });
   });
 });
@@ -1262,6 +1337,7 @@ router.post("/dba/pin-all", async (req: Request, res: Response) => {
     await fetch(`${SUPABASE_URL}/rest/v1/message_pins?message_id=eq.${msg.id}&conversation_id=eq.${comm.id}&context=eq.community`, {
       method: "DELETE", headers: SVC_H,
     }).catch(() => {});
+    await audit(me, "dba_message_unpinned", hit.dba.id, { dba: hit.dba.name, channel: comm.name });
     return res.json({ ok: true });
   }
   const [rows, existing] = await Promise.all([
@@ -1279,6 +1355,7 @@ router.post("/dba/pin-all", async (req: Request, res: Response) => {
     });
     if (!r2.ok) return res.status(502).json({ ok: false, error: "Couldn't pin — try again" });
   }
+  await audit(me, "dba_message_pinned", hit.dba.id, { dba: hit.dba.name, channel: comm.name });
   return res.json({ ok: true });
 });
 
