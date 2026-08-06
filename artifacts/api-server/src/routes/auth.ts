@@ -312,14 +312,15 @@ router.post("/auth/reset-request", async (req: Request, res: Response) => {
       let orgName = "Eden Comms";
       let orgSlug: string | null = null;
       let dbaQueryForm = false; // DBA slugs use the ?dba= query form
-      // DBA members get their DBA's branding + destination instead of the org's
-      if (profile.role === "dba_member") {
-        try {
-          const { findDbaBrandForEmail } = await import("./dba");
-          const dba = await findDbaBrandForEmail(emailRaw);
-          if (dba) { orgName = dba.name; orgSlug = dba.slug; dbaQueryForm = true; }
-        } catch {}
-      }
+      // Pure DBA members (login exists only for their DBA) get the DBA's
+      // branding + destination instead of the org's. findDbaBrandForEmail
+      // only matches member entries flagged pure, so regular org users who
+      // were merely added to a DBA keep their org branding.
+      try {
+        const { findDbaBrandForEmail } = await import("./dba");
+        const dba = await findDbaBrandForEmail(emailRaw);
+        if (dba) { orgName = dba.name; orgSlug = dba.slug; dbaQueryForm = true; }
+      } catch {}
       if (!dbaQueryForm && profile.company_id) {
         const orgs = await dbGet("organizations", `id=eq.${encodeURIComponent(profile.company_id)}&select=name,slug`);
         if (orgs[0]?.name) orgName = orgs[0].name;

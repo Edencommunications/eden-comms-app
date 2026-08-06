@@ -263,6 +263,9 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             email: emailNorm,
             name: p?.name || p?.full_name || authUser?.user_metadata?.name || emailNorm,
             role: p?.role || 'client',
+            // Pure DBA members (login created by a DBA invite) are marked in
+            // auth metadata — user_profiles can't hold a dba_member role.
+            dbaMember: authUser?.user_metadata?.intended_role === 'dba_member',
             communityOnly: p?.is_active === false && p?.community_only === true,
             mustChangePassword: authUser?.user_metadata?.must_change_password === true,
           });
@@ -5732,10 +5735,199 @@ const AppShell = ({ user, onLogout }) => {
   );
 };
 
-// ─── DBA (sub-brand) member home + switcher ──────────────────────────────────
-// DBA members don't see the main app — they land in a branded DBA space.
-// Phase 1: branded landing + switcher between their DBAs. The full member
-// experience (Connect & Learn, communities) arrives in the next phases.
+// ─── DBA (sub-brand) member space ───────────────────────────────────────────
+// DBA members don't see the main app — they land in a branded DBA shell with
+// only: Home, Connect (per-DBA links) and Learn (per-DBA courses). The DBA's
+// coach and the org admin see the same shell with inline manage controls, so
+// they can preview exactly what members see. Communities/Huddles/Calendar
+// tabs arrive in later phases.
+const DBA_API = (p: string) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`;
+
+// Connect tab — member view + manager editing of the per-DBA link list
+const DbaConnect = ({ primary, content, saveConnect, busy }: any) => {
+  const canManage = content?.can_manage;
+  const links = content?.connect || [];
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<any[]>([]);
+  const startEdit = () => { setDraft(links.map((l: any) => ({ ...l }))); setEditing(true); };
+  const setD = (i: number, k: string, v: string) => setDraft(p => p.map((l, j) => j === i ? { ...l, [k]: v } : l));
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "20px 16px 40px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: B.text, margin: 0 }}>Connect</h2>
+        {canManage && !editing && (
+          <button onClick={startEdit} style={{ background: "none", color: primary, border: `1px solid ${primary}55`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Edit links</button>
+        )}
+      </div>
+      {!editing && links.length === 0 && (
+        <Card><p style={{ fontSize: 13, color: B.muted, margin: 0, lineHeight: 1.7 }}>
+          {canManage ? "No links yet — add your community, socials, booking page or anything members should reach fast." : "Nothing here yet — links from your coach will appear here."}
+        </p></Card>
+      )}
+      {!editing && links.map((l: any) => (
+        <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block", marginBottom: 10 }}>
+          <div style={{ background: B.card, border: `1px solid ${B.border}`, borderLeft: `3px solid ${primary}`, borderRadius: 12, padding: "14px 16px" }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: B.text, margin: 0 }}>{l.title} <span style={{ color: primary }}>↗</span></p>
+            {l.desc && <p style={{ fontSize: 12, color: B.muted, margin: "4px 0 0", lineHeight: 1.5 }}>{l.desc}</p>}
+          </div>
+        </a>
+      ))}
+      {editing && (
+        <Card>
+          {draft.map((l, i) => (
+            <div key={l.id || i} style={{ borderBottom: `1px solid ${B.border}`, paddingBottom: 10, marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                <input value={l.title} onChange={e => setD(i, "title", e.target.value)} placeholder="Title (e.g. Our Instagram)"
+                  style={{ flex: 1, minWidth: 140, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                <button onClick={() => setDraft(p => p.filter((_, j) => j !== i))}
+                  style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 11, cursor: "pointer" }}>Remove</button>
+              </div>
+              <input value={l.url} onChange={e => setD(i, "url", e.target.value)} placeholder="https://…"
+                style={{ width: "100%", boxSizing: "border-box", background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", marginBottom: 6, fontFamily: "monospace" }} />
+              <input value={l.desc || ""} onChange={e => setD(i, "desc", e.target.value)} placeholder="Short description (optional)"
+                style={{ width: "100%", boxSizing: "border-box", background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+            </div>
+          ))}
+          <button onClick={() => setDraft(p => [...p, { id: "", title: "", url: "", desc: "" }])}
+            style={{ background: "none", color: primary, border: `1px dashed ${primary}66`, borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 10 }}>+ Add link</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button disabled={busy} onClick={async () => { if (await saveConnect(draft)) setEditing(false); }}
+              style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "Saving…" : "Save"}</button>
+            <button onClick={() => setEditing(false)} style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+          </div>
+          <p style={{ fontSize: 10, color: B.muted, margin: "8px 0 0" }}>Links must start with http:// or https://. Rows without a valid link are dropped on save.</p>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+// Learn tab — assigned courses; simple section/lesson viewer with progress
+const DbaLearn = ({ primary, content, dba, saveLearn, markLesson, busy }: any) => {
+  const canManage = content?.can_manage;
+  const courses = content?.courses || [];
+  const completed: Set<string> = useMemo(() => new Set(content?.completed || []), [content?.completed]);
+  const [openCourse, setOpenCourse] = useState<any>(null);
+  const [openLesson, setOpenLesson] = useState<any>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [picks, setPicks] = useState<Set<string>>(new Set());
+  const course = openCourse ? courses.find((c: any) => c.id === openCourse) : null;
+  useEffect(() => { if (openCourse && !course) { setOpenCourse(null); setOpenLesson(null); } }, [openCourse, course]);
+  const sections = useMemo(() => {
+    if (!course) return [];
+    const by: any[] = [];
+    for (const m of course.modules) {
+      let s = by.find(x => x.id === (m.section_id ?? 0));
+      if (!s) { s = { id: m.section_id ?? 0, title: m.section_title || "Lessons", color: m.section_color || primary, mods: [] }; by.push(s); }
+      s.mods.push(m);
+    }
+    return by.sort((a, b) => a.id - b.id);
+  }, [course, primary]);
+  const pct = (c: any) => {
+    const total = (c.modules || []).length;
+    if (!total) return 0;
+    return Math.round((c.modules.filter((m: any) => completed.has(String(m.id))).length / total) * 100);
+  };
+  const lesson = openLesson && course ? course.modules.find((m: any) => m.id === openLesson) : null;
+
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 40px" }}>
+      {!course && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: B.text, margin: 0 }}>Learn</h2>
+            {canManage && !assigning && (
+              <button onClick={() => { setPicks(new Set(courses.map((c: any) => String(c.id)))); setAssigning(true); }}
+                style={{ background: "none", color: primary, border: `1px solid ${primary}55`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Choose courses</button>
+            )}
+          </div>
+          {assigning && (
+            <Card style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 12, color: B.muted, margin: "0 0 10px", lineHeight: 1.5 }}>Pick which courses {dba?.name} members can see. Only your organization's courses (and Eden's) can be assigned.</p>
+              {(content?.available_courses || []).length === 0 && <p style={{ fontSize: 12, color: B.muted, margin: "0 0 10px" }}>Your organization has no courses yet — build one in the main app's Learn section first.</p>}
+              {(content?.available_courses || []).map((c: any) => (
+                <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${B.border}`, cursor: "pointer" }}>
+                  <input type="checkbox" checked={picks.has(String(c.id))}
+                    onChange={() => setPicks(p => { const n = new Set(p); n.has(String(c.id)) ? n.delete(String(c.id)) : n.add(String(c.id)); return n; })} />
+                  <span style={{ fontSize: 13, color: B.text, fontWeight: 600 }}>{c.title}</span>
+                </label>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button disabled={busy} onClick={async () => { if (await saveLearn([...picks])) setAssigning(false); }}
+                  style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "Saving…" : "Save"}</button>
+                <button onClick={() => setAssigning(false)} style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </Card>
+          )}
+          {courses.length === 0 && !assigning && (
+            <Card><p style={{ fontSize: 13, color: B.muted, margin: 0, lineHeight: 1.7 }}>
+              {canManage ? "No courses assigned yet — use “Choose courses” to pick what members see here." : "No courses yet — content from your coach will appear here."}
+            </p></Card>
+          )}
+          {courses.map((c: any) => (
+            <div key={c.id} onClick={() => setOpenCourse(c.id)}
+              style={{ background: B.card, border: `1px solid ${B.border}`, borderLeft: `3px solid ${primary}`, borderRadius: 12, padding: "16px", marginBottom: 12, cursor: "pointer" }}>
+              <p style={{ fontSize: 15, fontWeight: 800, color: B.text, margin: 0 }}>{c.title}</p>
+              {c.description && <p style={{ fontSize: 12, color: B.muted, margin: "5px 0 0", lineHeight: 1.5 }}>{c.description}</p>}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                <div style={{ flex: 1, height: 5, background: B.dim, borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: `${pct(c)}%`, height: "100%", background: primary }} />
+                </div>
+                <span style={{ fontSize: 11, color: B.muted, fontWeight: 700 }}>{pct(c)}%</span>
+              </div>
+              <p style={{ fontSize: 10, color: B.muted, margin: "6px 0 0" }}>{(c.modules || []).length} lesson{(c.modules || []).length === 1 ? "" : "s"}</p>
+            </div>
+          ))}
+        </>
+      )}
+      {course && !lesson && (
+        <>
+          <button onClick={() => setOpenCourse(null)} style={{ background: "none", border: "none", color: B.muted, fontSize: 12, cursor: "pointer", padding: 0, marginBottom: 12 }}>← All courses</button>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>{course.title}</h2>
+          {course.description && <p style={{ fontSize: 12, color: B.muted, margin: "0 0 16px", lineHeight: 1.6 }}>{course.description}</p>}
+          {sections.map((s: any) => (
+            <div key={s.id} style={{ marginBottom: 18 }}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: s.color || primary, letterSpacing: 0.8, textTransform: "uppercase", margin: "0 0 8px" }}>{s.title}</p>
+              {s.mods.map((m: any) => {
+                const done = completed.has(String(m.id));
+                return (
+                  <div key={m.id} onClick={() => setOpenLesson(m.id)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, background: B.card, border: `1px solid ${B.border}`, borderRadius: 10, padding: "11px 14px", marginBottom: 8, cursor: "pointer" }}>
+                    <span style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: done ? primary : B.dim, color: done ? "#000" : B.muted, fontSize: 11, fontWeight: 800 }}>{done ? "✓" : ""}</span>
+                    <span style={{ flex: 1, fontSize: 13, color: B.text, fontWeight: 600 }}>{m.title}</span>
+                    {m.duration && <span style={{ fontSize: 10, color: B.muted }}>{m.duration}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </>
+      )}
+      {lesson && (
+        <>
+          <button onClick={() => setOpenLesson(null)} style={{ background: "none", border: "none", color: B.muted, fontSize: 12, cursor: "pointer", padding: 0, marginBottom: 12 }}>← {course.title}</button>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: B.text, margin: "0 0 12px" }}>{lesson.title}</h2>
+          {lesson.video_url && (
+            <div style={{ position: "relative", paddingBottom: "56.25%", height: 0, marginBottom: 16, borderRadius: 12, overflow: "hidden", border: `1px solid ${B.border}` }}>
+              <iframe src={lesson.video_url} title={lesson.title} allowFullScreen
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} />
+            </div>
+          )}
+          {lesson.admin_notes && (
+            <Card style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, color: B.text, margin: 0, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{lesson.admin_notes}</p>
+            </Card>
+          )}
+          <button disabled={busy} onClick={() => markLesson(course.id, lesson.id, !completed.has(String(lesson.id)))}
+            style={{ background: completed.has(String(lesson.id)) ? B.dim : primary, color: completed.has(String(lesson.id)) ? B.muted : "#000", border: "none", borderRadius: 10, padding: "11px 20px", fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+            {completed.has(String(lesson.id)) ? "✓ Completed — tap to undo" : "Mark lesson complete"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+};
+
 const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const [activeId, setActiveId] = useState(() => {
     const hit = initialSlug ? dbas.find((d: any) => d.slug === initialSlug) : null;
@@ -5745,8 +5937,47 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const wl = wlPalette(dba);
   const primary = wl?.primary || B.gold;
   const isMobile = useIsMobile();
+  const [tab, setTab] = useState<"home" | "connect" | "learn">("home");
+  const [content, setContent] = useState<any>(null); // null = loading
+  const [busy, setBusy] = useState(false);
+  const loadContent = useCallback(() => {
+    if (!dba?.id) return;
+    fetch(`${DBA_API('content')}?id=${encodeURIComponent(dba.id)}`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => setContent(b?.ok ? b : { connect: [], courses: [], completed: [], can_manage: false }))
+      .catch(() => setContent({ connect: [], courses: [], completed: [], can_manage: false }));
+  }, [dba?.id]);
+  useEffect(() => { setContent(null); setTab("home"); loadContent(); }, [dba?.id, loadContent]);
+
+  const postDba = async (path: string, body: any) => {
+    setBusy(true);
+    try {
+      const r = await fetch(DBA_API(path), { method: "POST", headers: { "Content-Type": "application/json", Authorization: sbBearer() }, body: JSON.stringify(body) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(b?.error || "Couldn't save — try again."); return false; }
+      loadContent();
+      return true;
+    } catch { alert("Couldn't reach the server — try again."); return false; }
+    finally { setBusy(false); }
+  };
+  const saveConnect = (links: any[]) => postDba("connect-save", { dbaId: dba.id, connect: links });
+  const saveLearn = (courseIds: string[]) => postDba("learn-save", { dbaId: dba.id, courseIds });
+  const markLesson = async (courseId: string, moduleId: string, done: boolean) => {
+    // Optimistic update so the checkmark feels instant
+    setContent((p: any) => p ? { ...p, completed: done ? [...p.completed, String(moduleId)] : p.completed.filter((x: string) => x !== String(moduleId)) } : p);
+    await postDba("progress", { dbaId: dba.id, courseId, moduleId, completed: done });
+  };
+
+  const TABS: Array<{ id: "home" | "connect" | "learn"; icon: string; label: string }> = [
+    { id: "home", icon: "home", label: "Home" },
+    { id: "connect", icon: "links", label: "Connect" },
+    { id: "learn", icon: "learn", label: "Learn" },
+  ];
+  const linkCount = content?.connect?.length || 0;
+  const courseCount = content?.courses?.length || 0;
+
   return (
-    <div style={{ minHeight: "100vh", width: "100%", background: B.black, display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100vh", width: "100%", background: B.black, display: "flex", flexDirection: "column" }}>
       <div style={{ background: B.surface, borderBottom: `1px solid ${B.border}`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <OrgLogo org={dba} size={32} />
@@ -5754,8 +5985,15 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
             <p style={{ fontSize: 14, fontWeight: 800, color: B.text, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
             {dba?.org?.name && <p style={{ fontSize: 9, color: B.muted, margin: 0 }}>part of {dba.org.name}</p>}
           </div>
+          {content?.can_manage && <span style={{ fontSize: 9, fontWeight: 800, color: primary, border: `1px solid ${primary}55`, borderRadius: 20, padding: "2px 8px", letterSpacing: 0.6 }}>MANAGER VIEW</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {!isMobile && TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ background: tab === t.id ? `${primary}22` : "none", color: tab === t.id ? primary : B.muted, border: `1px solid ${tab === t.id ? primary + "55" : "transparent"}`, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              {t.label}
+            </button>
+          ))}
           {dbas.length > 1 && (
             <select value={activeId} onChange={(e) => setActiveId(e.target.value)}
               style={{ background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none" }}>
@@ -5774,18 +6012,52 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           </button>
         </div>
       </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ maxWidth: 480, width: "100%", textAlign: "center", background: `linear-gradient(160deg, ${primary}18 0%, ${B.surface} 100%)`, border: `1px solid ${B.border}`, borderRadius: 16, padding: isMobile ? "36px 20px" : "48px 36px" }}>
-          <OrgLogo org={dba} size={84} />
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: B.text, margin: "18px 0 8px" }}>Welcome to {dba?.name}</h1>
-          <p style={{ fontSize: 13, color: B.muted, margin: "0 0 6px", lineHeight: 1.7 }}>
-            Hi {String(user?.name || "").split(" ")[0] || "there"} — you're in. This is {dba?.name}'s private member space.
-          </p>
-          <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.7 }}>
-            Your community feed, chat and courses are being set up and will appear right here.
-          </p>
-        </div>
+
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {content === null ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
+            <p style={{ color: B.muted, fontSize: 13 }}>Loading…</p>
+          </div>
+        ) : tab === "connect" ? (
+          <DbaConnect primary={primary} content={content} saveConnect={saveConnect} busy={busy} />
+        ) : tab === "learn" ? (
+          <DbaLearn primary={primary} content={content} dba={dba} saveLearn={saveLearn} markLesson={markLesson} busy={busy} />
+        ) : (
+          <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px 40px" }}>
+            <div style={{ textAlign: "center", background: `linear-gradient(160deg, ${primary}18 0%, ${B.surface} 100%)`, border: `1px solid ${B.border}`, borderRadius: 16, padding: isMobile ? "32px 20px" : "42px 32px", marginBottom: 18 }}>
+              <OrgLogo org={dba} size={76} />
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: B.text, margin: "16px 0 6px" }}>Welcome to {dba?.name}</h1>
+              <p style={{ fontSize: 13, color: B.muted, margin: 0, lineHeight: 1.7 }}>
+                Hi {String(user?.name || "").split(" ")[0] || "there"} — this is {dba?.name}'s private member space.
+              </p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+              <div onClick={() => setTab("connect")} style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer" }}>
+                <Ic n="links" size={22} c={primary} />
+                <p style={{ fontSize: 15, fontWeight: 800, color: B.text, margin: "10px 0 2px" }}>Connect</p>
+                <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.5 }}>{linkCount ? `${linkCount} link${linkCount === 1 ? '' : 's'} from your coach` : "Links & resources"}</p>
+              </div>
+              <div onClick={() => setTab("learn")} style={{ background: B.card, border: `1px solid ${B.border}`, borderRadius: 14, padding: "18px 16px", cursor: "pointer" }}>
+                <Ic n="learn" size={22} c={primary} />
+                <p style={{ fontSize: 15, fontWeight: 800, color: B.text, margin: "10px 0 2px" }}>Learn</p>
+                <p style={{ fontSize: 12, color: B.muted, margin: 0, lineHeight: 1.5 }}>{courseCount ? `${courseCount} course${courseCount === 1 ? '' : 's'} available` : "Courses & lessons"}</p>
+              </div>
+            </div>
+            <p style={{ fontSize: 11, color: B.muted, margin: "16px 0 0", textAlign: "center", lineHeight: 1.6 }}>Community, huddles and calendar are coming to this space soon.</p>
+          </div>
+        )}
       </div>
+
+      {isMobile && (
+        <div style={{ display: "flex", background: B.surface, borderTop: `1px solid ${B.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "8px 0 10px" }}>
+              <Ic n={t.icon} size={20} c={tab === t.id ? primary : B.muted} />
+              <span style={{ fontSize: 9, fontWeight: 600, color: tab === t.id ? primary : B.muted, letterSpacing: 0.5, textTransform: "uppercase" }}>{t.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -5857,6 +6129,11 @@ const DbaManagerCard = ({ org }: any) => {
                     }}
                     style={{ background: copiedId === d.id ? B.success : "none", color: copiedId === d.id ? "#000" : B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                     {copiedId === d.id ? "✓ Copied" : "Copy Link"}
+                  </button>
+                  <button onClick={() => window.open(linkFor(d), '_blank')}
+                    title="See exactly what this DBA's members see (opens in a new tab)"
+                    style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    Preview
                   </button>
                   <button onClick={() => { setOpenId(openId === d.id ? null : d.id); setMemberDraft({ name: '', email: '' }); setErr(''); setNotice(''); }}
                     style={{ background: openId === d.id ? `${accent}22` : "none", color: B.text, border: `1px solid ${openId === d.id ? accent : B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
@@ -6043,7 +6320,7 @@ export default function App() {
   // DBA memberships: dba_member accounts live in their DBA space instead of
   // the app; regular users who arrive via a DBA link get the DBA space first
   // with an "Open the full app" exit.
-  const isDbaMember = user?.role === 'dba_member';
+  const isDbaMember = user?.role === 'dba_member' || user?.dbaMember === true;
   const cameViaDba = !!brandOrg?.__dba;
   const [myDbas, setMyDbas] = useState<any[] | null>(null);
   const [dbaExited, setDbaExited] = useState(false);

@@ -46,7 +46,13 @@ async function rest<T = any>(path: string): Promise<T[]> {
 }
 
 // ── DBA record shape ─────────────────────────────────────────────
-export type DbaMember = { id: string | null; email: string; name: string; added_at: string };
+// pure=true → the profile was created BY the DBA invite (a member-only login,
+// role 'client' in user_profiles since the role check constraint has no
+// dba_member value; their "DBA member" identity lives in auth metadata +
+// these member entries). pure=false/absent → an existing app user who was
+// additionally given access to this DBA.
+export type DbaMember = { id: string | null; email: string; name: string; added_at: string; pure?: boolean };
+export type DbaLink = { id: string; title: string; url: string; desc: string | null };
 export type DbaRecord = {
   id: string;
   name: string;
@@ -59,6 +65,8 @@ export type DbaRecord = {
   is_active: boolean;
   created_at: string;
   members: DbaMember[];
+  connect: DbaLink[]; // per-DBA Connect tab links
+  learn_course_ids: string[]; // org/Eden course ids assigned to this DBA's Learn tab
 };
 
 function parseDba(value: any): DbaRecord | null {
@@ -77,6 +85,8 @@ function parseDba(value: any): DbaRecord | null {
       is_active: v.is_active !== false,
       created_at: v.created_at || new Date().toISOString(),
       members: Array.isArray(v.members) ? v.members : [],
+      connect: Array.isArray(v.connect) ? v.connect : [],
+      learn_course_ids: Array.isArray(v.learn_course_ids) ? v.learn_course_ids.map(String) : [],
     };
   } catch {
     return null;
@@ -193,14 +203,16 @@ async function requireUserJwt(req: Request): Promise<{ id: string; email: string
   return { id: p.id, email, name: p.name || null, role: p.role || "client", company_id: p.company_id || null };
 }
 
-/** Used by auth.ts reset-request: the first active DBA an email belongs to. */
+/** Used by auth.ts reset-request: the first active DBA an email belongs to
+ *  as a PURE member (their login exists only for the DBA). Existing app
+ *  users who were merely added to a DBA keep their org's reset branding. */
 export async function findDbaBrandForEmail(
   email: string,
 ): Promise<{ name: string; slug: string } | null> {
   const norm = email.toLowerCase();
   const all = await loadAllDbas();
   const hit = all.find(
-    (x) => x.dba.is_active && x.dba.members.some((m) => m.email.toLowerCase() === norm),
+    (x) => x.dba.is_active && x.dba.members.some((m) => m.pure === true && m.email.toLowerCase() === norm),
   );
   return hit ? { name: hit.dba.name, slug: hit.dba.slug } : null;
 }
@@ -297,6 +309,8 @@ router.post("/dba/save", async (req: Request, res: Response) => {
     is_active: existing ? existing.is_active : true,
     created_at: existing?.created_at || new Date().toISOString(),
     members: existing?.members || [],
+    connect: existing?.connect || [],
+    learn_course_ids: existing?.learn_course_ids || [],
   };
   if (!(await saveDbaRow(companyId, dba))) {
     return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
@@ -358,7 +372,10 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
     const ins = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles`, {
       method: "POST",
       headers: { ...SVC_H, Prefer: "return=representation" },
-      body: JSON.stringify({ email, name, role: "dba_member", company_id: companyId }),
+      // user_profiles.id has no DB default — must supply one. Role must be
+      // 'client' (the table's check constraint has no dba_member value);
+      // their DBA-member identity lives in auth metadata + the member entry.
+      body: JSON.stringify({ id: randomUUID(), email, name, role: "client", company_id: companyId }),
     });
     const created: any[] = ins.ok ? ((await ins.json().catch(() => [])) as any[]) : [];
     if (!created[0]) return res.status(502).json({ ok: false, error: "Couldn't create the member profile — try again" });
@@ -390,7 +407,7 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
     if (!sent.ok) logger.warn({ email, error: sent.error }, "[DBA] added email failed");
   }
 
-  dba.members.push({ id: profile?.id || null, email, name: profile?.name || name, added_at: new Date().toISOString() });
+  dba.members.push({ id: profile?.id || null, email, name: profile?.name || name, added_at: new Date().toISOString(), pure: !existedLogin });
   if (!(await saveDbaRow(companyId, dba))) return res.status(502).json({ ok: false, error: "Couldn't save the membership — try again" });
   try {
     const { recordInviteEmail } = await import("./invites");
@@ -418,6 +435,160 @@ router.post("/dba/member-remove", async (req: Request, res: Response) => {
   void audit(admin, "dba_member_removed", dba.id, { dba: dba.name, member: email });
   return res.json({ ok: true, dba });
   });
+});
+
+// ── DBA member content: Connect links + Learn courses ────────────
+// Access: DBA member, the DBA's coach, or a super_admin of the DBA's org.
+// Managers (coach / org admin) also get the org's course catalog so they can
+// assign/unassign courses, plus edit rights on Connect links.
+async function findDbaAnywhere(dbaId: string): Promise<{ companyId: string; dba: DbaRecord } | null> {
+  const all = await loadAllDbas();
+  return all.find((x) => x.dba.id === dbaId) || null;
+}
+type Me = NonNullable<Awaited<ReturnType<typeof requireUserJwt>>>;
+function dbaAccess(me: Me, companyId: string, dba: DbaRecord): { member: boolean; manage: boolean } {
+  const member = dba.members.some((m) => m.email.toLowerCase() === me.email);
+  const manage = dba.coach_id === me.id || (me.role === "super_admin" && me.company_id === companyId);
+  return { member, manage };
+}
+const isEdenCourse = (c: any) => !c.company_id || c.company_id === EDEN_ID;
+
+router.get("/dba/content", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const hit = await findDbaAnywhere(String(req.query.id || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const { companyId, dba } = hit;
+  const acc = dbaAccess(me, companyId, dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+
+  // Assigned courses (strictly limited to this DBA's assignment list)
+  const ids = dba.learn_course_ids.filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+  let courses: any[] = [];
+  let modules: any[] = [];
+  if (ids.length) {
+    courses = await rest(
+      `courses?id=in.(${ids.join(",")})&is_active=eq.true&select=id,title,description,company_id,sort_order&order=sort_order.asc`,
+    );
+    // Only courses of the DBA's own org or Eden can ever be served
+    courses = courses.filter((c) => c.company_id === companyId || isEdenCourse(c));
+    if (courses.length) {
+      modules = await rest(
+        `course_modules?course_id=in.(${courses.map((c) => c.id).join(",")})&select=id,course_id,module_id,title,duration,video_url,admin_notes,section_id,section_title,section_color,sort_order&order=sort_order.asc`,
+      );
+    }
+  }
+  // My completion state (server-side so dba_members never touch REST directly)
+  let completed: string[] = [];
+  if (courses.length) {
+    const prog = await rest(
+      `course_progress?user_id=eq.${encodeURIComponent(me.id)}&course_id=in.(${courses.map((c) => c.id).join(",")})&completed=eq.true&select=module_id`,
+    );
+    completed = prog.map((p: any) => String(p.module_id));
+  }
+  // Managers also get the assignable catalog (own org + Eden courses)
+  let available: any[] | undefined;
+  if (acc.manage) {
+    const all = await rest(`courses?is_active=eq.true&select=id,title,company_id,sort_order&order=sort_order.asc`);
+    available = all
+      .filter((c) => c.company_id === companyId || isEdenCourse(c))
+      .map((c) => ({ id: c.id, title: c.title }));
+  }
+  return res.json({
+    ok: true,
+    connect: dba.connect,
+    courses: courses.map((c) => ({
+      id: c.id,
+      title: c.title,
+      description: c.description || "",
+      modules: modules.filter((m) => m.course_id === c.id),
+    })),
+    completed,
+    can_manage: acc.manage,
+    available_courses: available,
+  });
+});
+
+// ── Manager (DBA coach or org admin): save Connect links ─────────
+router.post("/dba/connect-save", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, connect } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const clean: DbaLink[] = (Array.isArray(connect) ? connect : [])
+      .map((l: any) => ({
+        id: typeof l?.id === "string" && l.id ? l.id : randomUUID(),
+        title: String(l?.title || "").trim().slice(0, 120),
+        url: String(l?.url || "").trim().slice(0, 500),
+        desc: l?.desc ? String(l.desc).trim().slice(0, 300) : null,
+      }))
+      .filter((l) => l.title && /^https?:\/\//i.test(l.url))
+      .slice(0, 50);
+    hit.dba.connect = clean;
+    if (!(await saveDbaRow(hit.companyId, hit.dba))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_connect_updated", hit.dba.id, { dba: hit.dba.name, links: clean.length });
+    return res.json({ ok: true, connect: clean });
+  });
+});
+
+// ── Manager: assign/unassign Learn courses ───────────────────────
+router.post("/dba/learn-save", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, courseIds } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const want = (Array.isArray(courseIds) ? courseIds : []).map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+    let valid: string[] = [];
+    if (want.length) {
+      const rows = await rest(`courses?id=in.(${want.join(",")})&is_active=eq.true&select=id,company_id`);
+      valid = rows.filter((c) => c.company_id === hit.companyId || isEdenCourse(c)).map((c) => String(c.id));
+    }
+    hit.dba.learn_course_ids = valid;
+    if (!(await saveDbaRow(hit.companyId, hit.dba))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_learn_updated", hit.dba.id, { dba: hit.dba.name, courses: valid.length });
+    return res.json({ ok: true, learn_course_ids: valid });
+  });
+});
+
+// ── Member: mark a lesson complete/incomplete ────────────────────
+router.post("/dba/progress", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, courseId, moduleId, completed } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  if (!hit.dba.learn_course_ids.includes(String(courseId))) {
+    return res.status(403).json({ ok: false, error: "That course isn't part of this DBA" });
+  }
+  // The module must actually belong to that course — never trust a raw id
+  const modCheck = await fetch(
+    `${SUPABASE_URL}/rest/v1/course_modules?id=eq.${encodeURIComponent(String(moduleId || ""))}&course_id=eq.${encodeURIComponent(String(courseId))}&select=id&limit=1`,
+    { headers: SVC_H },
+  );
+  const modRows: any[] = modCheck.ok ? ((await modCheck.json().catch(() => [])) as any[]) : [];
+  if (!modRows[0]) return res.status(403).json({ ok: false, error: "That lesson isn't part of this course" });
+  // Same upsert shape Week5 uses — relies on the table's existing unique key
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/course_progress`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      user_id: me.id,
+      course_id: courseId,
+      module_id: moduleId,
+      completed: completed !== false,
+      completed_at: new Date().toISOString(),
+    }),
+  });
+  if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't save your progress — try again" });
+  return res.json({ ok: true });
 });
 
 // ── Any signed-in user: my DBAs (member, coach, or org admin) ────
