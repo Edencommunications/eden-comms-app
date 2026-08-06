@@ -5123,7 +5123,7 @@ function BookingScreen({ currentUser }: { currentUser: any }) {
 const IDLE_MS      = 14 * 60 * 1000;  // 14 min idle → show warning
 const WARNING_SECS = 60;               // 60 s to respond before forced logout
 
-const AppShell = ({ user, onLogout }) => {
+const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
   // Change-password is only possible with a real Supabase Auth session
   // (hardcoded demo logins don't have one).
   const [hasAuthSession, setHasAuthSession] = useState(false);
@@ -5517,6 +5517,19 @@ const AppShell = ({ user, onLogout }) => {
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
+          {/* Switch into a DBA space — shown to coaches/admins/delegates with DBA access */}
+          {myDbas.length > 0 && onOpenDba && (
+            <button onClick={onOpenDba}
+              title={myDbas.length === 1 ? `Switch to ${myDbas[0]?.name}` : "Switch to one of your DBA spaces"}
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
+                background:"transparent", border:`1.5px solid ${B.border}`,
+                borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
+              <span style={{ fontSize:15 }}>↪</span>
+              <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase", color:B.muted }}>
+                {myDbas.length === 1 ? "DBA" : "DBAs"}
+              </span>
+            </button>
+          )}
           {/* Split View toggle — coach/admin */}
           {(user.role === "coach" || user.role === "super_admin") && (
             <button onClick={() => setSplitView(v => {
@@ -6697,8 +6710,12 @@ export default function App() {
   const [dbaExited, setDbaExited] = useState(false);
   // Staff who exit a DBA back into the main app: restore the Eden install target
   useEffect(() => { if (dbaExited) resetPwaBrand(); }, [dbaExited]);
+  // Staff can flip into their DBA space from inside the app (top-bar button)
+  const [dbaEntered, setDbaEntered] = useState(false);
   useEffect(() => {
-    if (!user?.email || user.mustChangePassword || !(isDbaMember || cameViaDba)) return;
+    // Load DBA memberships for everyone — members need it to land in their
+    // space, and coaches/admins need it for the in-app "My DBAs" switch.
+    if (!user?.email || user.mustChangePassword) return;
     fetch(`${(import.meta.env.BASE_URL || '/')}api/dba/mine`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
       .then(b => setMyDbas(Array.isArray(b?.dbas) ? b.dbas : []))
@@ -6722,7 +6739,7 @@ export default function App() {
 
   // DBA members land in their DBA space (never the main app). Regular users
   // arriving via a DBA link see the DBA space first with a way into the app.
-  if (isDbaMember || (cameViaDba && !dbaExited)) {
+  if (isDbaMember || (cameViaDba && !dbaExited) || dbaEntered) {
     if (myDbas === null) {
       return (
         <div style={{ minHeight: "100vh", background: B.black, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -6733,9 +6750,10 @@ export default function App() {
     if (myDbas.length > 0) {
       return <DbaHome user={user} dbas={myDbas}
         initialSlug={cameViaDba ? brandOrg.slug : null}
-        onEnterApp={isDbaMember ? null : () => setDbaExited(true)}
+        onEnterApp={isDbaMember ? null : () => { setDbaExited(true); setDbaEntered(false); }}
         onLogout={fullLogout}/>;
     }
+    if (dbaEntered) setDbaEntered(false); // entered but no DBAs (revoked) — fall through to the app
     if (isDbaMember) {
       return (
         <div style={{ minHeight: "100vh", background: B.black, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center" }}>
@@ -6750,7 +6768,9 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ user, logout: fullLogout }}>
-      <AppShell user={user} onLogout={fullLogout}/>
+      <AppShell user={user} onLogout={fullLogout}
+        myDbas={user.role === 'client' ? [] : (myDbas || [])}
+        onOpenDba={() => { setDbaExited(false); setDbaEntered(true); }}/>
       <InstallBanner />
     </AuthContext.Provider>
   );
