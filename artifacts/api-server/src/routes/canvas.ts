@@ -17,6 +17,7 @@
 // because RLS on admin_settings is staff/org scoped.
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+import { dbaCanvasWriteAllowed } from "./dba";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
@@ -168,6 +169,13 @@ router.post("/canvas/:scope/:id", async (req: Request, res: Response) => {
   try {
     const g = await guard(req, res, true);
     if (!g) return;
+    // DBA group channels: canvas create/edit is restricted to the DBA's
+    // coach, org admins, and members explicitly granted `canvas` authority
+    // on that channel (dba.ts owns the rule).
+    if (g.scope.startsWith("community:")) {
+      const allowed = await dbaCanvasWriteAllowed(g.scope.slice("community:".length), g.caller);
+      if (!allowed) return res.status(403).json({ error: "Only the coach or an authorized leader can edit canvases here" });
+    }
     const existing = await fetchDoc(g.companyId, g.scope, g.id);
     const content = String(req.body?.content ?? "");
     const title = String(req.body?.title ?? "").slice(0, 200);

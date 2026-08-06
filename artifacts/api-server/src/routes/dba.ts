@@ -641,17 +641,77 @@ router.get("/dba/mine", async (req: Request, res: Response) => {
 // Per-DBA chat config lives in admin_settings key `dba_chat:<dbaId>`:
 //   { all: {communityId:true},        — "everyone in this DBA" channels
 //     dm_enabled: {profileId:true} }  — Phase-4 member 1v1 gating hook
-type DbaChatCfg = { all: Record<string, boolean>; dm_enabled: Record<string, boolean> };
+// Phase-4 additions ("Exodus 18" delegated authority + configurable tiers):
+//   leaders: { [communityId]: { [userId]: {del,pin,canvas} } } — per-CHANNEL
+//     authority grants. Authority in one channel never implies another.
+//   tiers:   { [userId]: tierId } — which org-defined tier each member holds.
+type LeaderCaps = { del?: boolean; pin?: boolean; canvas?: boolean };
+type DbaChatCfg = {
+  all: Record<string, boolean>;
+  dm_enabled: Record<string, boolean>;
+  leaders: Record<string, Record<string, LeaderCaps>>;
+  tiers: Record<string, string>;
+};
+
+// ── Org-configurable tier ladder ────────────────────────────────
+// Per-org admin_settings key `dba_tier_defs` = [{id,name,dm,app}].
+// Every tier includes all "everyone" channels (the ladder is additive):
+//   dm  → may open 1v1s (with coach/admins/leaders or other dm-capable people)
+//   app → eligible for promotion to full client app access
+export type TierDef = { id: string; name: string; dm: boolean; app: boolean };
+const DEFAULT_TIER_DEFS: TierDef[] = [
+  { id: "t1", name: "Tier 1 — Community", dm: false, app: false },
+  { id: "t2", name: "Tier 2 — 1v1 Access", dm: true, app: false },
+  { id: "t3", name: "Tier 3 — Full App", dm: true, app: true },
+];
+async function loadTierDefs(companyId: string): Promise<TierDef[]> {
+  const rows = await rest<any>(
+    `admin_settings?company_id=eq.${companyId}&key=eq.dba_tier_defs&select=value`,
+  );
+  try {
+    const v = rows[0]?.value;
+    const arr = typeof v === "string" ? JSON.parse(v) : v;
+    if (Array.isArray(arr) && arr.length) {
+      return arr
+        .filter((t: any) => t && t.id && String(t.name || "").trim())
+        .map((t: any) => ({ id: String(t.id), name: String(t.name).trim().slice(0, 60), dm: !!t.dm, app: !!t.app }));
+    }
+  } catch {}
+  return DEFAULT_TIER_DEFS;
+}
+async function saveTierDefs(companyId: string, defs: TierDef[]): Promise<boolean> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ company_id: companyId, key: "dba_tier_defs", value: JSON.stringify(defs) }),
+  });
+  return r.ok;
+}
+
+// Does this user's side of a 1v1 qualify? Privileged (coach/org admin),
+// dm-capable tier, explicit dm_enabled grant, or delegated leader of any
+// channel in this DBA (members should be able to reach their leaders).
+function dmSideAllowed(cfg: DbaChatCfg, defs: TierDef[], userId: string, isPrivileged: boolean): boolean {
+  if (isPrivileged) return true;
+  if (cfg.dm_enabled[userId] === true) return true;
+  const tier = defs.find((t) => t.id === cfg.tiers[userId]);
+  if (tier?.dm) return true;
+  return Object.values(cfg.leaders).some((byUser) => {
+    const caps = byUser[userId];
+    return !!(caps && (caps.del || caps.pin || caps.canvas));
+  });
+}
 
 async function loadChatCfg(companyId: string, dbaId: string): Promise<DbaChatCfg> {
   const rows = await rest<any>(
     `admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(`dba_chat:${dbaId}`)}&select=value`,
   );
-  const base: DbaChatCfg = { all: {}, dm_enabled: {} };
+  const base: DbaChatCfg = { all: {}, dm_enabled: {}, leaders: {}, tiers: {} };
   if (!rows[0]?.value) return base;
   try {
     const v = typeof rows[0].value === "string" ? JSON.parse(rows[0].value) : rows[0].value;
-    return { all: v?.all && typeof v.all === "object" ? v.all : {}, dm_enabled: v?.dm_enabled && typeof v.dm_enabled === "object" ? v.dm_enabled : {} };
+    const obj = (x: any) => (x && typeof x === "object" ? x : {});
+    return { all: obj(v?.all), dm_enabled: obj(v?.dm_enabled), leaders: obj(v?.leaders), tiers: obj(v?.tiers) };
   } catch { return base; }
 }
 async function saveChatCfg(companyId: string, dbaId: string, cfg: DbaChatCfg): Promise<boolean> {
@@ -732,6 +792,25 @@ async function revokeChatAccess(companyId: string, dbaId: string, userId: string
       method: "PATCH", headers: { ...SVC_H, "Content-Type": "application/json" }, body: JSON.stringify({ is_active: false }),
     }).catch(() => {});
   }
+  // Scrub any delegated authority + tier assignment so nothing stale lingers
+  // (channelPower also re-checks membership, but orphaned grants shouldn't
+  // survive in the config at all).
+  try {
+    const cfg = await loadChatCfg(companyId, dbaId);
+    let changed = false;
+    for (const chanId of Object.keys(cfg.leaders)) {
+      if (cfg.leaders[chanId]?.[userId]) {
+        delete cfg.leaders[chanId][userId];
+        if (!Object.keys(cfg.leaders[chanId]).length) delete cfg.leaders[chanId];
+        changed = true;
+      }
+    }
+    if (cfg.tiers[userId]) { delete cfg.tiers[userId]; changed = true; }
+    if (cfg.dm_enabled[userId]) { delete cfg.dm_enabled[userId]; changed = true; }
+    if (changed) await saveChatCfg(companyId, dbaId, cfg);
+  } catch (e) {
+    logger.warn({ err: e }, "[DBA] revokeChatAccess: config scrub failed");
+  }
 }
 
 // GET /dba/chat-config?id= — everything the chat UI needs up front
@@ -742,11 +821,21 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
   if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
   const acc = dbaAccess(me, hit.companyId, hit.dba);
   if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const [cfg, roster, voice] = await Promise.all([
+  const [cfg, roster, voice, tierDefs] = await Promise.all([
     loadChatCfg(hit.companyId, hit.dba.id),
     chatRoster(hit.companyId, hit.dba),
     voiceMemosEnabled(hit.companyId),
+    loadTierDefs(hit.companyId),
   ]);
+  const priv = (id: string) => id === hit.dba.coach_id || roster.admins.some((a) => a.id === id);
+  const myDm = dmSideAllowed(cfg, tierDefs, me.id, acc.manage || priv(me.id));
+  // Which people the caller could open a 1v1 with (both sides must qualify)
+  const everyone = [...roster.members, ...roster.admins,
+    ...(hit.dba.coach_id && !roster.admins.some((a) => a.id === hit.dba.coach_id)
+      ? [{ id: hit.dba.coach_id, name: hit.dba.coach_name || "Coach", email: "", kind: "coach" as const }] : [])];
+  const dmTargets = myDm
+    ? everyone.filter((p) => p.id !== me.id && dmSideAllowed(cfg, tierDefs, p.id, priv(p.id))).map((p) => p.id)
+    : [];
   return res.json({
     ok: true,
     can_manage: acc.manage,
@@ -756,6 +845,11 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
     admins: roster.admins,
     all_flags: cfg.all,
     dm_enabled: cfg.dm_enabled,
+    leaders: cfg.leaders,
+    tiers: cfg.tiers,
+    tier_defs: tierDefs,
+    my_dm: myDm,
+    dm_targets: dmTargets,
     voice_memos: voice,
   });
 });
@@ -881,6 +975,17 @@ router.post("/dba/channel-member-remove", async (req: Request, res: Response) =>
   await fetch(`${SUPABASE_URL}/rest/v1/community_members?community_id=eq.${comm.id}&user_id=eq.${encodeURIComponent(String(userId || ""))}`, {
     method: "DELETE", headers: SVC_H,
   }).catch(() => {});
+  // Leaving a channel also drops any leader authority granted on it
+  try {
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    if (cfg.leaders[comm.id]?.[String(userId)]) {
+      delete cfg.leaders[comm.id][String(userId)];
+      if (!Object.keys(cfg.leaders[comm.id]).length) delete cfg.leaders[comm.id];
+      await saveChatCfg(hit.companyId, hit.dba.id, cfg);
+    }
+  } catch (e) {
+    logger.warn({ err: e }, "[DBA] channel-member-remove: leader scrub failed");
+  }
   return res.json({ ok: true });
 });
 
@@ -940,10 +1045,13 @@ router.post("/dba/dm-open", async (req: Request, res: Response) => {
 
     const meIsPriv = privileged(me.id, me.role, me.company_id);
     const otherIsPriv = privileged(other.id, other.role, other.company_id);
-    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
-    const bothPriv = meIsPriv && otherIsPriv; // the dedicated coach ↔ admin 1v1
-    const gated = cfg.dm_enabled[me.id] === true && cfg.dm_enabled[other.id] === true;
-    if (!bothPriv && !gated) {
+    const [cfg, tierDefs] = await Promise.all([
+      loadChatCfg(hit.companyId, hit.dba.id),
+      loadTierDefs(hit.companyId),
+    ]);
+    // BOTH sides must qualify: privileged (coach/org admin), a dm-capable
+    // tier, an explicit grant, or delegated leadership in this DBA.
+    if (!dmSideAllowed(cfg, tierDefs, me.id, meIsPriv) || !dmSideAllowed(cfg, tierDefs, other.id, otherIsPriv)) {
       return res.status(403).json({ ok: false, error: "Direct messages aren't enabled for this pair yet" });
     }
 
@@ -990,6 +1098,269 @@ router.post("/dba/dm-enable", async (req: Request, res: Response) => {
     return res.json({ ok: true });
   });
 });
+
+// ═══════════ Delegated authority & configurable tiers (Phase 4) ═══════════
+
+// GET /dba/tier-defs?dbaId= (or none: org admin's own org) — the org's tier
+// ladder. can_edit = org super_admin only (coaches assign tiers, admins
+// define them).
+router.get("/dba/tier-defs", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const dbaId = String(req.query.dbaId || "");
+  let companyId: string | null = null;
+  if (dbaId) {
+    const hit = await findDbaAnywhere(dbaId);
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    companyId = hit.companyId;
+  } else {
+    if (me.role !== "super_admin" || !me.company_id) return res.status(403).json({ ok: false, error: "Not authorized" });
+    companyId = me.company_id;
+  }
+  const defs = await loadTierDefs(companyId);
+  return res.json({ ok: true, defs, can_edit: me.role === "super_admin" && me.company_id === companyId });
+});
+
+// POST /dba/tier-defs {defs:[{id,name,dm,app}]} — org super_admin only
+router.post("/dba/tier-defs", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  if (me.role !== "super_admin" || !me.company_id) return res.status(403).json({ ok: false, error: "Only an org admin can edit the tier ladder" });
+  const raw = (req.body || {}).defs;
+  if (!Array.isArray(raw) || !raw.length || raw.length > 6) return res.status(400).json({ ok: false, error: "Provide 1–6 tiers" });
+  const defs: TierDef[] = [];
+  for (const t of raw) {
+    const name = String(t?.name || "").trim().slice(0, 60);
+    if (!name) return res.status(400).json({ ok: false, error: "Every tier needs a name" });
+    defs.push({ id: String(t.id || randomUUID().slice(0, 8)), name, dm: !!t.dm, app: !!t.app });
+  }
+  if (new Set(defs.map((d) => d.id)).size !== defs.length) return res.status(400).json({ ok: false, error: "Duplicate tier ids" });
+  if (!(await saveTierDefs(me.company_id, defs))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+  void audit({ id: me.id, name: me.name }, "dba_tier_defs_changed", me.company_id, { defs });
+  return res.json({ ok: true, defs });
+});
+
+// POST /dba/tier-set {dbaId, userId, tierId} — manager assigns a member's tier
+// (empty tierId clears back to the base tier).
+router.post("/dba/tier-set", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, userId, tierId } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    if (!hit.dba.members.some((m) => m.id === String(userId))) return res.status(404).json({ ok: false, error: "That person isn't a member of this DBA" });
+    const defs = await loadTierDefs(hit.companyId);
+    const tid = String(tierId || "");
+    if (tid && !defs.some((d) => d.id === tid)) return res.status(400).json({ ok: false, error: "Unknown tier" });
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    if (tid) cfg.tiers[String(userId)] = tid;
+    else delete cfg.tiers[String(userId)];
+    if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_tier_assigned", hit.dba.id, { dba: hit.dba.name, user: String(userId), tier: tid || "(base)" });
+    return res.json({ ok: true });
+  });
+});
+
+// POST /dba/authority-set {dbaId, communityId, userId, caps:{del,pin,canvas}}
+// Manager grants/revokes per-CHANNEL leader authority. Scoped strictly to
+// that one channel — never implies authority anywhere else.
+router.post("/dba/authority-set", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId, userId, caps } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+    if (!comm || comm.context !== `dba:${hit.dba.id}`) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+    if (!hit.dba.members.some((m) => m.id === String(userId))) return res.status(404).json({ ok: false, error: "That person isn't a member of this DBA" });
+    const clean: LeaderCaps = { del: !!caps?.del, pin: !!caps?.pin, canvas: !!caps?.canvas };
+    const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+    if (!clean.del && !clean.pin && !clean.canvas) {
+      if (cfg.leaders[comm.id]) { delete cfg.leaders[comm.id][String(userId)]; if (!Object.keys(cfg.leaders[comm.id]).length) delete cfg.leaders[comm.id]; }
+    } else {
+      cfg.leaders[comm.id] = { ...(cfg.leaders[comm.id] || {}), [String(userId)]: clean };
+    }
+    if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+    void audit({ id: me.id, name: me.name }, "dba_authority_changed", hit.dba.id, { dba: hit.dba.name, channel: comm.name, user: String(userId), caps: clean });
+    return res.json({ ok: true });
+  });
+});
+
+// Caller's moderation power on one channel: manager, or leader caps there.
+// Leader caps only count while the caller is a CURRENT member of that
+// channel — stale grants (e.g. after removal) confer nothing.
+async function channelPower(me: { id: string; email: string; name: string | null; role: string; company_id: string | null }, hit: { companyId: string; dba: DbaRecord }, comm: any) {
+  const manage = dbaAccess(me as any, hit.companyId, hit.dba).manage;
+  const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+  let caps: LeaderCaps = {};
+  const granted = (cfg.leaders[comm.id] || {})[me.id];
+  if (granted && (granted.del || granted.pin || granted.canvas)) {
+    const inChan = await rest<any>(`community_members?community_id=eq.${comm.id}&user_id=eq.${me.id}&select=id&limit=1`);
+    if (inChan.length) caps = granted;
+  }
+  return { manage, caps, cfg };
+}
+
+// POST /dba/msg-delete {dbaId, communityId, messageId} — soft delete.
+// Allowed: manager, the sender themselves, or a leader with `del` on THIS channel.
+router.post("/dba/msg-delete", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId, messageId } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+  if (!comm) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+  const msg = (await rest<any>(`community_messages?id=eq.${encodeURIComponent(String(messageId || ""))}&community_id=eq.${comm.id}&select=id,sender_id,deleted_at`))[0];
+  if (!msg) return res.status(404).json({ ok: false, error: "Message not found" });
+  const { manage, caps } = await channelPower(me, hit, comm);
+  if (!manage && msg.sender_id !== me.id && !caps.del) return res.status(403).json({ ok: false, error: "You can't delete this message" });
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/community_messages?id=eq.${msg.id}`, {
+    method: "PATCH", headers: { ...SVC_H, Prefer: "return=minimal" },
+    body: JSON.stringify({ deleted_at: new Date().toISOString(), deleted_by: me.id, deleted_by_name: me.name || "User" }),
+  });
+  if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't delete — try again" });
+  void audit({ id: me.id, name: me.name }, "dba_message_deleted", hit.dba.id, { dba: hit.dba.name, channel: comm.name, message_id: String(msg.id), sender_id: msg.sender_id });
+  return res.json({ ok: true });
+});
+
+// POST /dba/pin-all {dbaId, communityId, messageId, unpin} — pin for every
+// channel member. Allowed: manager or a leader with `pin` on THIS channel.
+router.post("/dba/pin-all", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, communityId, messageId, unpin } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.member && !acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+  if (!comm) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+  const { manage, caps } = await channelPower(me, hit, comm);
+  if (!manage && !caps.pin) return res.status(403).json({ ok: false, error: "You can't pin for everyone here" });
+  const msgId = String(messageId || "");
+  const msg = (await rest<any>(`community_messages?id=eq.${encodeURIComponent(msgId)}&community_id=eq.${comm.id}&select=id`))[0];
+  if (!msg) return res.status(404).json({ ok: false, error: "Message not found" });
+  if (unpin) {
+    await fetch(`${SUPABASE_URL}/rest/v1/message_pins?message_id=eq.${msg.id}&conversation_id=eq.${comm.id}&context=eq.community`, {
+      method: "DELETE", headers: SVC_H,
+    }).catch(() => {});
+    return res.json({ ok: true });
+  }
+  const [rows, existing] = await Promise.all([
+    rest<any>(`community_members?community_id=eq.${comm.id}&select=user_id`),
+    rest<any>(`message_pins?message_id=eq.${msg.id}&conversation_id=eq.${comm.id}&context=eq.community&select=user_id`),
+  ]);
+  const have = new Set(existing.map((r: any) => r.user_id));
+  const inserts = rows.filter((r: any) => !have.has(r.user_id)).map((r: any) => ({
+    message_id: msg.id, conversation_id: String(comm.id), context: "community",
+    user_id: r.user_id, pinned_by: me.id, pinned_by_name: me.name || "User",
+  }));
+  if (inserts.length) {
+    const r2 = await fetch(`${SUPABASE_URL}/rest/v1/message_pins`, {
+      method: "POST", headers: { ...SVC_H, Prefer: "return=minimal" }, body: JSON.stringify(inserts),
+    });
+    if (!r2.ok) return res.status(502).json({ ok: false, error: "Couldn't pin — try again" });
+  }
+  return res.json({ ok: true });
+});
+
+// POST /dba/promote {dbaId, userId, coachId} — turn a DBA member into a full
+// client under the chosen coach WITHOUT losing DBA membership. Flips the
+// member entry's pure flag and the auth metadata so the app routes them to
+// the full client experience on next login.
+router.post("/dba/promote", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, userId, coachId } = (req.body || {}) as Record<string, any>;
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(String(dbaId || ""));
+    if (!hit || !hit.dba.is_active) return res.status(404).json({ ok: false, error: "DBA not found" });
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+    const member = hit.dba.members.find((m) => m.id === String(userId));
+    if (!member) return res.status(404).json({ ok: false, error: "That person isn't a member of this DBA" });
+    // Tier policy: only members on a tier that includes full app access can
+    // be promoted (org admins configure which tiers carry `app`).
+    const [cfg, tierDefs] = await Promise.all([
+      loadChatCfg(hit.companyId, hit.dba.id),
+      loadTierDefs(hit.companyId),
+    ]);
+    const memberTier = tierDefs.find((t) => t.id === cfg.tiers[String(member.id)]) || tierDefs[0];
+    if (!memberTier?.app) {
+      return res.status(403).json({ ok: false, error: `Their tier (${memberTier?.name || "base"}) doesn't include full app access — move them to an app-access tier first` });
+    }
+    const coach = (await rest<any>(
+      `user_profiles?id=eq.${encodeURIComponent(String(coachId || ""))}&company_id=eq.${hit.companyId}&role=in.(coach,head_coach,super_admin)&is_active=not.is.false&select=id,name,full_name,email`,
+    ))[0];
+    if (!coach) return res.status(400).json({ ok: false, error: "Pick a coach from this organization" });
+    // 1) Profile: assign the coach (role stays 'client' — that IS full app
+    //    access). The company_id filter is a hard tenant boundary: a DBA can
+    //    contain emails from other orgs, and we must never mutate those.
+    const pr = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${member.id}&company_id=eq.${hit.companyId}`,
+      {
+        method: "PATCH", headers: { ...SVC_H, Prefer: "return=representation" },
+        body: JSON.stringify({ coach_id: coach.id }),
+      },
+    );
+    const updated = pr.ok ? await pr.json().catch(() => []) : [];
+    if (!Array.isArray(updated) || !updated.length) {
+      return res.status(403).json({ ok: false, error: "They don't have a profile in your organization, so they can't be promoted here" });
+    }
+    // 2) Auth metadata: clear intended_role=dba_member so App.tsx routes them
+    //    to the full client app (they keep DBA access via /dba/mine).
+    try {
+      const lookup = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1&filter=${encodeURIComponent(member.email)}`, { headers: SVC_H });
+      const found: any = lookup.ok ? await lookup.json().catch(() => null) : null;
+      const authUser = found?.users?.find((u: any) => String(u.email || "").toLowerCase() === member.email.toLowerCase());
+      if (authUser?.id) {
+        await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authUser.id}`, {
+          method: "PUT", headers: SVC_H,
+          body: JSON.stringify({ user_metadata: { ...(authUser.user_metadata || {}), intended_role: "client" } }),
+        });
+      }
+    } catch (e) {
+      logger.warn({ err: e }, "[DBA] promote: auth metadata update failed (profile already updated)");
+    }
+    // 3) DBA record: no longer a pure member — they're a real app client now
+    if (member.pure) {
+      member.pure = false;
+      await saveDbaRow(hit.companyId, hit.dba);
+    }
+    void audit({ id: me.id, name: me.name }, "dba_member_promoted", hit.dba.id, {
+      dba: hit.dba.name, member: member.email, coach: coach.name || coach.full_name || coach.email,
+    });
+    return res.json({ ok: true, coach: { id: coach.id, name: coach.name || coach.full_name || coach.email } });
+  });
+});
+
+// Exported for canvas.ts: in DBA GROUP channels, canvas create/edit is
+// restricted to the coach/org admin and members with the `canvas` grant on
+// that channel. (DBA 1v1 canvases stay open to both participants; non-DBA
+// scopes are untouched.)
+export async function dbaCanvasWriteAllowed(
+  communityId: string,
+  user: { id: string; role: string; companyId: string | null },
+): Promise<boolean> {
+  const comm = (await rest<any>(
+    `communities?id=eq.${encodeURIComponent(communityId)}&select=id,company_id,context`,
+  ))[0];
+  const ctx = String(comm?.context || "");
+  if (!ctx.startsWith("dba:")) return true; // non-DBA scopes untouched
+  const hit = await findDbaAnywhere(ctx.slice(4));
+  if (!hit || hit.companyId !== comm.company_id) return false;
+  if (user.id === hit.dba.coach_id) return true;
+  if (user.role === "super_admin" && user.companyId === hit.companyId) return true;
+  const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
+  return !!(cfg.leaders[comm.id] || {})[user.id]?.canvas;
+}
 
 // POST /dba/upload — chat file/voice-memo upload for DBA members (they hold
 // role 'client', so the staff-only /team/upload rejects them).

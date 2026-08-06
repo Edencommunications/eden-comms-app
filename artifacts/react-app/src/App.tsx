@@ -6083,6 +6083,12 @@ const DbaManagerCard = ({ org }: any) => {
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState('');
   const [copiedId, setCopiedId] = useState('');
+  // Tier ladder (org-wide) + per-DBA member tiers (Phase 4)
+  const [tierDefs, setTierDefs] = useState<any[]>([]);
+  const [canEditTiers, setCanEditTiers] = useState(false);
+  const [tierDraft, setTierDraft] = useState<any[] | null>(null); // editing copy
+  const [dbaTiers, setDbaTiers] = useState<any>({});              // openId's { userId: tierId }
+  const [promoteFor, setPromoteFor] = useState('');               // member id showing coach picker
   const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: sbBearer() });
   const reload = () =>
     fetch(`${BASE}api/dba/list`, { headers: { Authorization: sbBearer() } })
@@ -6093,7 +6099,20 @@ const DbaManagerCard = ({ org }: any) => {
     reload();
     sbGet('user_profiles', `company_id=eq.${org.id}&role=in.(coach,head_coach,super_admin)&is_active=not.is.false&select=id,name,role&order=name.asc`)
       .then((rows: any) => { if (Array.isArray(rows)) setCoaches(rows); }).catch(() => {});
+    fetch(`${BASE}api/dba/tier-defs`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => { if (b?.ok) { setTierDefs(b.defs || []); setCanEditTiers(!!b.can_edit); } })
+      .catch(() => {});
   }, [org.id]);
+  // Load the open DBA's member-tier assignments (they live in its chat config)
+  useEffect(() => {
+    setDbaTiers({}); setPromoteFor('');
+    if (!openId) return;
+    fetch(`${BASE}api/dba/chat-config?id=${encodeURIComponent(openId)}`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => { if (b?.ok) setDbaTiers(b.tiers || {}); })
+      .catch(() => {});
+  }, [openId]);
 
   const post = async (path: string, body: any) => {
     setBusy(true); setErr(''); setNotice('');
@@ -6159,12 +6178,52 @@ const DbaManagerCard = ({ org }: any) => {
                 <div style={{ marginTop: 10, borderTop: `1px solid ${B.border}`, paddingTop: 10 }}>
                   {d.members.length === 0 && <p style={{ fontSize: 11, color: B.muted, margin: "0 0 8px" }}>No members yet — invite the first one below. They'll get an email with their login details and the {d.name} link.</p>}
                   {d.members.map((m: any) => (
-                    <div key={m.email} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: `1px solid ${B.border}` }}>
-                      <span style={{ flex: 1, fontSize: 12, color: B.text, fontWeight: 600 }}>{m.name} <span style={{ color: B.muted, fontWeight: 400 }}>· {m.email}</span></span>
-                      <button disabled={busy} onClick={() => { if (confirm(`Remove ${m.name} from ${d.name}? Their login stays — they just lose access to this DBA.`)) post('member-remove', { dbaId: d.id, email: m.email }); }}
-                        style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 6, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                        Remove
-                      </button>
+                    <div key={m.email} style={{ padding: "5px 0", borderBottom: `1px solid ${B.border}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ flex: 1, minWidth: 150, fontSize: 12, color: B.text, fontWeight: 600 }}>
+                          {m.name} <span style={{ color: B.muted, fontWeight: 400 }}>· {m.email}</span>
+                          {m.pure === false && <span style={{ fontSize: 9, color: B.success || '#4FD89A', fontWeight: 700 }}> · FULL CLIENT</span>}
+                        </span>
+                        {tierDefs.length > 0 && (
+                          <select disabled={busy} value={dbaTiers[m.id] || tierDefs[0]?.id || ''} title="Membership tier"
+                            onChange={async e => {
+                              const tid = e.target.value;
+                              const b = await post('tier-set', { dbaId: d.id, userId: m.id, tierId: tid });
+                              if (b) setDbaTiers((p: any) => ({ ...p, [m.id]: tid }));
+                            }}
+                            style={{ background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 6, padding: "3px 6px", fontSize: 10, outline: "none" }}>
+                            {tierDefs.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                          </select>
+                        )}
+                        {m.pure !== false && (
+                          <button disabled={busy} onClick={() => { setPromoteFor(promoteFor === m.id ? '' : m.id); }}
+                            title="Turn them into a full client of your app (they keep this DBA)"
+                            style={{ background: promoteFor === m.id ? `${accent}22` : "none", color: accent, border: `1px solid ${promoteFor === m.id ? accent : B.border}`, borderRadius: 6, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                            Promote
+                          </button>
+                        )}
+                        <button disabled={busy} onClick={() => { if (confirm(`Remove ${m.name} from ${d.name}? Their login stays — they just lose access to this DBA.`)) post('member-remove', { dbaId: d.id, email: m.email }); }}
+                          style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 6, padding: "3px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                          Remove
+                        </button>
+                      </div>
+                      {promoteFor === m.id && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 11, color: B.muted }}>Make {m.name} a full client under:</span>
+                          <select defaultValue="" disabled={busy}
+                            onChange={async e => {
+                              const cid = e.target.value; if (!cid) return;
+                              const cName = coaches.find((c: any) => c.id === cid)?.name || 'this coach';
+                              if (!confirm(`Promote ${m.name} to a full client under ${cName}? They keep their ${d.name} membership and get the full app on their next login.`)) { e.target.value = ''; return; }
+                              const b = await post('promote', { dbaId: d.id, userId: m.id, coachId: cid });
+                              if (b) { setPromoteFor(''); setNotice(`✅ ${m.name} is now a full client under ${b.coach?.name || cName}.`); }
+                            }}
+                            style={{ background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 6, padding: "4px 8px", fontSize: 11, outline: "none" }}>
+                            <option value="">Pick a coach…</option>
+                            {coaches.map((c: any) => <option key={c.id} value={c.id}>{c.name}{c.role === 'super_admin' ? ' (admin)' : ''}</option>)}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -6227,6 +6286,63 @@ const DbaManagerCard = ({ org }: any) => {
               style={{ background: "none", color: accent, border: `1px dashed ${accent}66`, borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", width: "100%" }}>
               + New DBA
             </button>
+          )}
+          {canEditTiers && tierDefs.length > 0 && (
+            <div style={{ border: `1px solid ${B.border}`, borderRadius: 10, padding: 12, marginTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <p style={{ flex: 1, fontSize: 11, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", margin: 0 }}>Membership tiers (all DBAs)</p>
+                {!tierDraft && (
+                  <button onClick={() => setTierDraft(tierDefs.map((t: any) => ({ ...t })))}
+                    style={{ background: "none", color: accent, border: `1px solid ${B.border}`, borderRadius: 7, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Edit</button>
+                )}
+              </div>
+              <p style={{ fontSize: 10, color: B.muted, margin: "0 0 8px", lineHeight: 1.5 }}>
+                Every tier includes all of a DBA's group chats. Higher tiers can add 1-on-1 messaging and full app access.
+              </p>
+              {!tierDraft ? (
+                tierDefs.map((t: any) => (
+                  <p key={t.id} style={{ fontSize: 12, color: B.text, margin: "3px 0" }}>
+                    <b>{t.name}</b> <span style={{ color: B.muted, fontSize: 10 }}>— group chats{t.dm ? ' + 1-on-1 messages' : ''}{t.app ? ' + full app access' : ''}</span>
+                  </p>
+                ))
+              ) : (
+                <>
+                  {tierDraft.map((t: any, i: number) => (
+                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                      <input value={t.name} onChange={e => setTierDraft(p => (p || []).map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                        style={{ flex: 1, minWidth: 120, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "6px 10px", color: B.text, fontSize: 12, outline: "none" }} />
+                      <label style={{ fontSize: 10, color: B.muted, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                        <input type="checkbox" checked={!!t.dm} onChange={e => setTierDraft(p => (p || []).map((x, j) => j === i ? { ...x, dm: e.target.checked } : x))} /> 1-on-1s
+                      </label>
+                      <label style={{ fontSize: 10, color: B.muted, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                        <input type="checkbox" checked={!!t.app} onChange={e => setTierDraft(p => (p || []).map((x, j) => j === i ? { ...x, app: e.target.checked } : x))} /> Full app
+                      </label>
+                      {tierDraft.length > 1 && (
+                        <button onClick={() => setTierDraft(p => (p || []).filter((_, j) => j !== i))}
+                          style={{ background: "none", color: "#e05a5a", border: "none", fontSize: 12, cursor: "pointer", padding: 2 }}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    {tierDraft.length < 6 && (
+                      <button onClick={() => setTierDraft(p => [...(p || []), { id: `t${Date.now().toString(36)}`, name: `Tier ${(p || []).length + 1}`, dm: true, app: false }])}
+                        style={{ background: "none", color: accent, border: `1px dashed ${accent}66`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add tier</button>
+                    )}
+                    <div style={{ flex: 1 }} />
+                    <button onClick={() => setTierDraft(null)}
+                      style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                    <button disabled={busy || tierDraft.some((t: any) => !t.name.trim())}
+                      onClick={async () => {
+                        const b = await post('tier-defs', { defs: tierDraft });
+                        if (b) { setTierDefs(b.defs || tierDraft); setTierDraft(null); setNotice('✅ Tier ladder saved'); setTimeout(() => setNotice(''), 2500); }
+                      }}
+                      style={{ background: accent, color: "#000", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+                      {busy ? 'Saving…' : 'Save tiers'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
           {err && <p style={{ fontSize: 11, color: "#e05a5a", margin: "8px 0 0" }}>{err}</p>}
           {notice && <p style={{ fontSize: 11, color: notice.startsWith('✅') ? (B.success || '#4FD89A') : '#ffa600', margin: "8px 0 0" }}>{notice}</p>}

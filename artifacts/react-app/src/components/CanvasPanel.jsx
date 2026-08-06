@@ -15,7 +15,7 @@ const C = {
 
 const newId = () => (crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`)
 
-export default function CanvasPanel({ scope, label, onClose, isMobile = false, myId = null, isAdmin = false }) {
+export default function CanvasPanel({ scope, label, onClose, isMobile = false, myId = null, isAdmin = false, readOnly = false }) {
   const [view,     setView]     = useState('list')   // 'list' | 'edit'
   const [canvases, setCanvases] = useState(null)     // null = loading
   const [error,    setError]    = useState(null)
@@ -115,10 +115,12 @@ export default function CanvasPanel({ scope, label, onClose, isMobile = false, m
             <span style={{fontSize:16}}>📝</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{color:C.white,fontSize:15,fontWeight:700}}>Canvases — {label}</div>
-              <div style={{fontSize:10,color:C.dim,marginTop:2}}>Shared docs everyone in this conversation can open and edit</div>
+              <div style={{fontSize:10,color:C.dim,marginTop:2}}>{readOnly ? 'View only — your coach can grant canvas editing' : 'Shared docs everyone in this conversation can open and edit'}</div>
             </div>
-            <button onClick={() => openCanvas(newId(), true)}
-              style={{background:C.gold,border:'none',borderRadius:8,padding:'7px 14px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer',flexShrink:0}}>+ New canvas</button>
+            {!readOnly && (
+              <button onClick={() => openCanvas(newId(), true)}
+                style={{background:C.gold,border:'none',borderRadius:8,padding:'7px 14px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer',flexShrink:0}}>+ New canvas</button>
+            )}
             <button onClick={onClose} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',color:C.muted,fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0}}>Close</button>
           </div>
           {/* ── List body ── */}
@@ -127,7 +129,7 @@ export default function CanvasPanel({ scope, label, onClose, isMobile = false, m
             {!error && canvases === null && <div style={{padding:12,fontSize:12,color:C.muted}}>Loading canvases…</div>}
             {!error && canvases && canvases.length === 0 && (
               <div style={{textAlign:'center',padding:'50px 20px',color:C.muted,fontSize:13,lineHeight:1.8}}>
-                No canvases here yet.<br/>Click <b style={{color:C.gold}}>+ New canvas</b> to start the first one — notes, plans, checklists, anything.
+                {readOnly ? 'No canvases here yet.' : (<>No canvases here yet.<br/>Click <b style={{color:C.gold}}>+ New canvas</b> to start the first one — notes, plans, checklists, anything.</>)}
               </div>
             )}
             {!error && canvases && canvases.map(cv => (
@@ -153,8 +155,8 @@ export default function CanvasPanel({ scope, label, onClose, isMobile = false, m
               style={{background:'none',border:'none',color:C.muted,fontSize:16,cursor:'pointer',padding:0,flexShrink:0}}>←</button>
             <div style={{flex:1,minWidth:0}}>
               <input
-                value={doc?.title ?? ''} disabled={!doc}
-                onChange={e => queueSave({ title:e.target.value })}
+                value={doc?.title ?? ''} disabled={!doc} readOnly={readOnly}
+                onChange={e => { if (!readOnly) queueSave({ title:e.target.value }) }}
                 placeholder="Untitled canvas — give it a name"
                 style={{width:'100%',background:'none',border:'none',outline:'none',color:C.white,fontSize:15,fontWeight:700}}/>
               <div style={{fontSize:10,color:C.dim,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastEdit}</div>
@@ -166,15 +168,15 @@ export default function CanvasPanel({ scope, label, onClose, isMobile = false, m
           {!doc && <div style={{padding:24,fontSize:12,color:C.muted}}>Loading canvas…</div>}
           {doc && (
             <textarea
-              value={doc.content ?? ''}
-              onChange={e => queueSave({ content:e.target.value })}
-              placeholder={'Write anything here — notes, plans, checklists, links…\nEveryone in this conversation can see and edit this canvas. No length limit.'}
+              value={doc.content ?? ''} readOnly={readOnly}
+              onChange={e => { if (!readOnly) queueSave({ content:e.target.value }) }}
+              placeholder={readOnly ? 'Nothing written here yet.' : 'Write anything here — notes, plans, checklists, links…\nEveryone in this conversation can see and edit this canvas. No length limit.'}
               style={{flex:1,background:C.surface,border:'none',outline:'none',resize:'none',padding:18,color:C.white,fontSize:13,lineHeight:1.7,fontFamily:'inherit'}}/>
           )}
           {/* ── Footer note ── */}
           {doc && (
             <div style={{padding:'8px 18px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'flex-end',flexShrink:0}}>
-              <span style={{fontSize:10,color:C.dim}}>Autosaves as you type — closing also saves</span>
+              <span style={{fontSize:10,color:C.dim}}>{readOnly ? 'View only' : 'Autosaves as you type — closing also saves'}</span>
             </div>
           )}
         </>)}

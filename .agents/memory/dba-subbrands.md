@@ -21,3 +21,10 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 - All moderation (channel create/rename/archive, channel member add/remove, chat-flags, dm-open/dm-enable, upload/transcribe) is server-side in dba.ts — every route validates via findDbaChannel (company_id + exact dba:/dbadm: context). **Why:** RLS is only org-level; DBA boundaries must be app-enforced.
 - DBA member-remove hard-revokes chat: deletes their community_members + pins across the DBA's channels and deactivates their 1v1s. JSON-only removal would leave table access intact.
 - Member 1v1s stay locked until dm_enabled (Phase 4 hook); coach↔org-admin DM always allowed.
+
+## Delegated authority & tiers (Phase 4)
+- Leader authority (delete/pin/canvas) is strictly per-channel and lives in the DBA chat config JSON; the org-wide tier ladder lives in per-org `dba_tier_defs`. Only the org super_admin edits the ladder; DBA managers assign tiers and grants.
+- All moderation and DM-pair decisions are server-side; the frontend only renders what chat-config returns (`my_dm`, `dm_targets`, `leaders`, `tiers`). Never gate these client-side.
+**Why (from code review):** patching user_profiles by id alone let one org's DBA manager mutate another org's user — profile writes must always filter on company_id (DBA rosters can contain other orgs' emails).
+**Why (from code review):** delegated grants must die with membership: leader caps only count while the user is a current channel member, and member/channel removal scrubs leaders/tiers/dm flags — otherwise stale grants are a broken-access-control hole.
+- Promotion to full client is tier-gated (member's tier needs `app:true`) and flips auth metadata intended_role→'client' plus the member's `pure` flag.

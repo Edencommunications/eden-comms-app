@@ -128,6 +128,13 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
   const allFlags  = cfg?.all_flags || {}
   const dmEnabled = cfg?.dm_enabled || {}
   const voiceOn   = cfg?.voice_memos !== false
+  // Per-channel delegated authority + tiers (Phase 4)
+  const leaders   = cfg?.leaders || {}          // { [communityId]: { [userId]: {del,pin,canvas} } }
+  const tiers     = cfg?.tiers || {}            // { [userId]: tierId }
+  const tierDefs  = cfg?.tier_defs || []
+  const myDm      = !!cfg?.my_dm                // server-computed: can I open 1v1s at all?
+  const dmTargets = new Set(cfg?.dm_targets || [])
+  const capsFor   = (channelId, userId) => (leaders[channelId] || {})[userId] || {}
 
   // Everyone who can appear in this DBA's chat (for DMs & pickers)
   const people = cfg ? [
@@ -136,7 +143,9 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
     ...(cfg.members || []),
   ].filter(p => p.id !== myId) : []
   const isPriv = (id) => id === cfg?.coach?.id || (cfg?.admins || []).some(a => a.id === id)
-  const dmUnlocked = (p) => (canManage && isPriv(p.id)) || (dmEnabled[myId] === true && dmEnabled[p.id] === true)
+  // The server decides who can DM whom (tier, explicit grant, leadership,
+  // or privilege — BOTH sides must qualify); we just render its answer.
+  const dmUnlocked = (p) => myDm && dmTargets.has(p.id)
 
   // ── Channels & open conversation ────────────────────────────
   const [channels,   setChannels]   = useState([])
@@ -245,6 +254,9 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
 
   const amMember = members.some(m => m.user_id === myId)
   const canPost  = amMember || canManage || (active && active.created_by === myId)
+  // My delegated authority on the OPEN channel only (never carries over)
+  const activeCaps  = activeId ? capsFor(activeId, myId) : {}
+  const canvasWrite = canManage || activeIsDm || !!activeCaps.canvas
 
   // ── Create / rename / archive channels (managers only) ──────
   async function createChannel() {
@@ -506,17 +518,13 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
     }
     loadMessages()
   }
-  function mayDelete(m) { return canManage || m.sender_id === myId }
+  function mayDelete(m) { return canManage || m.sender_id === myId || !!activeCaps.del }
   async function deleteMsg(m) {
     if (!window.confirm('Delete this message for everyone?\nIt stays permanently visible in the admin audit log.')) return
-    const ok = await dbUpdate('community_messages', `id=eq.${m.id}`, {
-      deleted_at: new Date().toISOString(), deleted_by: myId, deleted_by_name: myName,
-    })
-    if (!ok) { alert('Could not delete — please try again.'); return }
-    dbInsert('audit_logs', { action:'message_deleted', actor_id:myId, actor_name:myName, actor_role:myRole,
-      target_type:'community_message', target_id:String(m.id),
-      details:{ content:m.content, sender_id:m.sender_id, sender_name:m.sender_name, sent_at:m.created_at||null,
-        community_id:activeId, community_name: activeIsDm ? 'DBA direct message' : active?.name, context:`dba:${dbaId}` } })
+    // Server-enforced: manager, the sender, or a leader with delete authority
+    // on THIS channel (audit row written server-side).
+    const r = await apiPost('msg-delete', { dbaId, communityId: activeId, messageId: m.id })
+    if (!r.ok) { alert(r.error || 'Could not delete — please try again.'); return }
     broadcastLive('message-deleted', activeId)
     loadMessages()
   }
@@ -544,14 +552,37 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
     loadPins()
   }
   async function pinForAll(m) {
-    for (const mem of members) {
-      await dbInsert('message_pins', {
-        message_id: m.id, conversation_id: activeId, context: 'community',
-        user_id: mem.user_id, pinned_by: myId, pinned_by_name: myName,
-      })
-    }
+    // Server-enforced: manager or a leader with pin authority on THIS channel
+    const r = await apiPost('pin-all', { dbaId, communityId: activeId, messageId: m.id })
+    if (!r.ok) { alert(r.error || 'Could not pin — please try again.'); return }
     loadPins()
     alert('Pinned for everyone in this conversation.')
+  }
+  // Manager toggles one leader capability for a member on the open channel
+  async function toggleAuthority(userId, key) {
+    const cur = capsFor(activeId, userId)
+    const next = { ...cur, [key]: !cur[key] }
+    const r = await apiPost('authority-set', { dbaId, communityId: activeId, userId, caps: next })
+    if (!r.ok) { alert(r.error || "Couldn't update authority — try again."); return }
+    setCfg(prev => {
+      if (!prev) return prev
+      const ld = { ...(prev.leaders || {}) }
+      const chan = { ...(ld[activeId] || {}) }
+      if (!next.del && !next.pin && !next.canvas) delete chan[userId]
+      else chan[userId] = next
+      if (Object.keys(chan).length) ld[activeId] = chan; else delete ld[activeId]
+      return { ...prev, leaders: ld }
+    })
+  }
+  async function setMemberTier(userId, tierId) {
+    const r = await apiPost('tier-set', { dbaId, userId, tierId })
+    if (!r.ok) { alert(r.error || "Couldn't change their tier — try again."); return }
+    setCfg(prev => {
+      if (!prev) return prev
+      const t = { ...(prev.tiers || {}) }
+      if (tierId) t[userId] = tierId; else delete t[userId]
+      return { ...prev, tiers: t }
+    })
   }
 
   // ── Grouping ────────────────────────────────────────────────
@@ -601,7 +632,7 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
               )}
               <button onClick={() => togglePin(m)} title={pinnedIds.has(m.id)?'Unpin':'Pin (only for you)'}
                 style={{ background:'none', border:'none', color: pinnedIds.has(m.id)?C.gold:C.muted, fontSize:10, cursor:'pointer', padding:0 }}>📌</button>
-              {canManage && (
+              {(canManage || activeCaps.pin) && !activeIsDm && (
                 <button onClick={() => pinForAll(m)} title="Pin for everyone here"
                   style={{ background:'none', border:'none', color:C.muted, fontSize:9, fontWeight:700, cursor:'pointer', padding:0 }}>📌ALL</button>
               )}
@@ -710,13 +741,14 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
                   {activeIsDm ? 'Private conversation' : `${members.length} member${members.length===1?'':'s'}${allFlags[active.id] ? ' · everyone in this community' : ''}`}
                 </div>
               </div>
-              <button onClick={() => setCanvasOpen(true)} title="Open the shared canvas — a live doc everyone here can edit"
+              <button onClick={() => setCanvasOpen(true)}
+                title={canvasWrite ? 'Open the shared canvas — a live doc' : 'Open the shared canvas (view only — the coach can grant editing)'}
                 style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', color:C.white, fontSize:11, fontWeight:700, cursor:'pointer' }}>
                 📝 Canvas
               </button>
               {canvasOpen && active && (
                 <CanvasPanel scope={`community:${active.id}`} label={activeIsDm ? `💬 ${dmPartnerName(active)}` : `# ${active.name}`}
-                  isMobile={isMobile} myId={myId} isAdmin={canManage} onClose={() => setCanvasOpen(false)}/>
+                  isMobile={isMobile} myId={myId} isAdmin={canManage} readOnly={!canvasWrite} onClose={() => setCanvasOpen(false)}/>
               )}
               {canManage && !activeIsDm && (
                 <button onClick={() => setShowMembers(true)}
@@ -880,16 +912,34 @@ export default function DbaChat({ dba, primary = '#ffa600', isMobile = false }) 
             </div>
 
             <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:6 }}>Current ({members.length})</div>
-            <div style={{ maxHeight:160, overflowY:'auto', marginBottom:14 }}>
-              {members.map(m => (
-                <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', borderBottom:`1px solid ${C.border}` }}>
-                  <div style={{ flex:1, fontSize:12, color:C.white }}>{m.user_name}</div>
-                  {m.user_id !== myId && (
-                    <button onClick={() => removeMember(m)}
-                      style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, padding:'3px 8px', color:C.danger, fontSize:10, cursor:'pointer' }}>Remove</button>
-                  )}
-                </div>
-              ))}
+            <div style={{ fontSize:10, color:C.muted, marginBottom:6, lineHeight:1.5 }}>
+              Leader authority applies to <b style={{ color:C.white }}>this group only</b>: 🗑 delete messages · 📌 pin for everyone · 🎨 edit the canvas.
+            </div>
+            <div style={{ maxHeight:200, overflowY:'auto', marginBottom:14 }}>
+              {members.map(m => {
+                const mc = capsFor(activeId, m.user_id)
+                const privMember = isPriv(m.user_id)
+                const authBtn = (key, icon, label, on) => (
+                  <button key={key} onClick={() => toggleAuthority(m.user_id, key)} title={`${on ? 'Revoke' : 'Grant'}: ${label} (this group only)`}
+                    style={{ background: on ? `${C.gold}22` : 'none', border:`1px solid ${on ? C.gold : C.border}`,
+                      borderRadius:6, padding:'3px 6px', color: on ? C.gold : C.muted, fontSize:10, cursor:'pointer' }}>{icon}</button>
+                )
+                return (
+                  <div key={m.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 0', borderBottom:`1px solid ${C.border}` }}>
+                    <div style={{ flex:1, fontSize:12, color:C.white, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {m.user_name}
+                      {(mc.del || mc.pin || mc.canvas) && <span style={{ fontSize:8, background:`${C.gold}22`, color:C.gold, padding:'1px 5px', borderRadius:4, fontWeight:700, marginLeft:5 }}>LEADER</span>}
+                    </div>
+                    {m.user_id !== myId && !privMember && (<>
+                      {authBtn('del', '🗑', 'delete messages', !!mc.del)}
+                      {authBtn('pin', '📌', 'pin for everyone', !!mc.pin)}
+                      {authBtn('canvas', '🎨', 'edit the canvas', !!mc.canvas)}
+                      <button onClick={() => removeMember(m)}
+                        style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, padding:'3px 8px', color:C.danger, fontSize:10, cursor:'pointer', flexShrink:0 }}>Remove</button>
+                    </>)}
+                  </div>
+                )
+              })}
               {members.length === 0 && <div style={{ fontSize:11, color:C.muted, padding:'6px 0' }}>No members yet.</div>}
             </div>
 
