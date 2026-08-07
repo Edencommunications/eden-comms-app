@@ -625,8 +625,8 @@ const HomeScreen = ({ user, wlOrg = null }) => {
           { label:"Weekly Check-In", status:"Due Wednesday", color:"#ffa600" },
           { label:"Diet Adherence", status:"On track", color:B.success },
         ].map(({ label, status, color }, i) => {
-          // White-label orgs with a saved palette: badges cycle through it
-          if (hasPalette) color = hp.nth(i);
+          // White-label orgs: badges use the single primary brand color
+          if (hasPalette) color = hp.primary;
           return (
           <div key={label} style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <span style={{ fontSize:13, color:B.text, fontWeight:500 }}>{label}</span>
@@ -866,9 +866,9 @@ const CommunityScreen = ({ user }:any) => {
         )}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           {socials.filter((s:any)=> s.url || isAdmin).map(({ emoji, label, sub, url, accent, bg }:any, i:number) => {
-            // White-label: the org's palette always wins over stored per-link colors,
-            // cycling through primary/secondary/accent so cards feel branded.
-            const cardAccent = myCompany ? wlPalette(myCompany).nth(i) : (accent || B.gold);
+            // White-label: the org's primary brand color always wins over stored
+            // per-link colors so cards feel branded without cycling extra colors.
+            const cardAccent = myCompany ? wlPalette(myCompany).primary : (accent || B.gold);
             const cardBg     = myCompany ? `${cardAccent}18` : (bg || `${cardAccent}18`);
             return (
             <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
@@ -5621,8 +5621,8 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
               <p style={{ fontSize:13, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {visibleTabs.map((t, ti) => {
-              // White-label orgs with extra palette colors: each tab gets its own accent
-              const tc = wlOrg && wp.extra.length > 0 ? wp.nth(ti) : shellPrimary;
+              // White-label orgs: tabs use the single primary brand color
+              const tc = shellPrimary;
               return (
               <button key={t.key}
                 onClick={() => { navTab(t.key); setMenuOpen(false); }}
@@ -5654,8 +5654,8 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
               <p style={{ fontSize:12, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {visibleTabs.map((t, ti) => {
-              // White-label orgs with extra palette colors: each tab gets its own accent
-              const tc = wlOrg && wp.extra.length > 0 ? wp.nth(ti) : shellPrimary;
+              // White-label orgs: tabs use the single primary brand color
+              const tc = shellPrimary;
               return (
               <button key={t.key} onClick={() => navTab(t.key)}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${tc}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?tc:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>

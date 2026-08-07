@@ -57,8 +57,8 @@ const toLocalInput = (iso) => {
 const EMPTY_FORM = { id:null, title:'', start:'', end:'', description:'', link:'' }
 
 export default function DbaCalendar({ dba, primary, palette = null, isMobile }) {
-  // Event dots cycle through the DBA's saved palette so extra colors show up
-  const eventColor = (i) => (palette?.extra?.length ? palette.nth(i) : primary)
+  // Event dots use the single primary brand color (no palette cycling)
+  const eventColor = (_i) => primary
   const [data, setData]   = useState(null)  // {can_manage, can_set_booking, my_booking, events, bookings, roster?}
   const [busy, setBusy]   = useState(false)
   const [view, setView]   = useState(() => { const n = new Date(); return { y:n.getFullYear(), m:n.getMonth() } })
