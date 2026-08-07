@@ -1199,10 +1199,13 @@ async function chatRoster(companyId: string, dba: DbaRecord) {
       : Promise.resolve([]),
     rest<any>(`user_profiles?company_id=eq.${companyId}&role=eq.super_admin&is_active=not.is.false&select=id,name,full_name,email`),
   ]);
-  const members = memberProfiles
-    .filter((p: any) => p.is_active !== false)
-    .map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "member" as const }));
   const adminList = admins.map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "admin" as const }));
+  const adminIds = new Set(adminList.map((a) => a.id));
+  // A person can be BOTH an org admin and a DBA member (e.g. an admin added
+  // to the roster) — list them once, as admin, so pickers don't show doubles.
+  const members = memberProfiles
+    .filter((p: any) => p.is_active !== false && !adminIds.has(p.id) && p.id !== dba.coach_id)
+    .map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "member" as const }));
   return { members, admins: adminList };
 }
 
