@@ -19,4 +19,5 @@
 - [weekly_checkins live schema](weekly-checkins-schema.md) — live columns ≠ .sql files; stress/mood/habits/notes ride in protocol_durations.__extra; probe schema before trusting repo SQL.
 - [Branded login links](branded-login-links.md) — orgs get `/<slug>` subpath + `?org=` login branding; all emails must pass org slug to appUrl; reserved segments video/api/__mockup.
 - [DBA sub-brands](dba-subbrands.md) — DBAs live in admin_settings JSON via /dba/* routes; globally-unique slugs, dba_member role lands in DbaHome, tier-gated via dba_tiers (default = top-priced package).
+- [Oura Ring integration](oura-integration.md) — one platform-wide Oura OAuth app covers all orgs; per-client tokens in admin_settings `oura:<id>`; Whoop should copy this pattern.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.

@@ -77,7 +77,7 @@ function TrendBar({ label, values, color, max }) {
   )
 }
 
-function NotConnected({ device, icon, clientName, isCoach }) {
+function NotConnected({ device, icon, clientName, isCoach, onConnect, connecting, error }) {
   return (
     <Card>
       <div style={{ textAlign:'center', padding:'30px 20px' }}>
@@ -92,12 +92,21 @@ function NotConnected({ device, icon, clientName, isCoach }) {
           }
         </div>
         {!isCoach && (
-          <button style={{
-            marginTop:16, background:C.gold, border:'none', borderRadius:8,
-            padding:'10px 24px', fontWeight:700, fontSize:13, color:C.black, cursor:'pointer',
-          }}>
-            Connect {device}
-          </button>
+          <>
+            <button
+              onClick={onConnect}
+              disabled={connecting || !onConnect}
+              style={{
+                marginTop:16, background:connecting ? '#333' : C.gold, border:'none', borderRadius:8,
+                padding:'10px 24px', fontWeight:700, fontSize:13, color:connecting ? C.muted : C.black,
+                cursor: onConnect ? 'pointer' : 'default',
+              }}>
+              {connecting ? 'Opening…' : `Connect ${device}`}
+            </button>
+            {error && (
+              <div style={{ marginTop:10, fontSize:11, color:C.danger }}>{error}</div>
+            )}
+          </>
         )}
       </div>
     </Card>
@@ -377,9 +386,65 @@ export default function Wearables({ currentUser }) {
   // Derive next id from current max so it never collides after deletions
   const nextIdRef = useRef(Math.max(0, ...foodEntries.map(e => e.id ?? 0)) + 1)
 
-  const wearableData = {}
-  const oura  = wearableData.oura  || { connected: false }
-  const whoop = wearableData.whoop || { connected: false }
+  // ── Oura Ring connection + synced data ──────────────────────
+  const [oura, setOura] = useState({ connected: false, readings: [], loading: true })
+  const [ouraConnecting, setOuraConnecting] = useState(false)
+  const [ouraError, setOuraError] = useState('')
+  const [ouraBanner, setOuraBanner] = useState('')
+  const [ouraRefresh, setOuraRefresh] = useState(0)
+
+  // Pick up ?oura= result after the OAuth redirect and clean the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const result = params.get('oura')
+    if (!result) return
+    if (result === 'connected') { setOuraBanner('✓ Oura Ring connected — syncing your data…'); setOuraRefresh(n => n + 1) }
+    else if (result === 'denied') setOuraError('Connection cancelled — you declined access on Oura\'s page.')
+    else setOuraError('Something went wrong connecting your Oura Ring. Please try again.')
+    params.delete('oura')
+    const qs = params.toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
+    setTimeout(() => setOuraBanner(''), 6000)
+  }, [])
+
+  // Load connection status + last 7 days of data from the server
+  useEffect(() => {
+    if (!clientUUID) return
+    let cancelled = false
+    fetch(`/api/oura/data?clientId=${clientUUID}`, { headers: { Authorization: sbBearer() } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => { if (!cancelled) setOura({ connected: !!d.connected, readings: Array.isArray(d.readings) ? d.readings : [], loading: false }) })
+      .catch(() => { if (!cancelled) setOura(prev => ({ ...prev, loading: false })) })
+    return () => { cancelled = true }
+  }, [clientUUID, ouraRefresh])
+
+  function connectOura() {
+    setOuraConnecting(true)
+    setOuraError('')
+    fetch('/api/oura/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      body: JSON.stringify({ origin: window.location.origin, returnPath: window.location.pathname }),
+    })
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (ok && d.url) { window.location.href = d.url; return }
+        setOuraConnecting(false)
+        setOuraError(d.error || 'Could not start the Oura connection. Please try again.')
+      })
+      .catch(() => {
+        setOuraConnecting(false)
+        setOuraError('Could not reach the server. Please try again.')
+      })
+  }
+
+  function disconnectOura() {
+    if (!window.confirm('Disconnect your Oura Ring? Your coach will no longer see new ring data.')) return
+    fetch('/api/oura/disconnect', { method: 'POST', headers: { Authorization: sbBearer() } }).catch(() => {})
+    setOura({ connected: false, readings: [], loading: false })
+  }
+
+  const whoop = { connected: false }
 
   const latest = oura.readings?.[0]
 
@@ -459,7 +524,34 @@ export default function Wearables({ currentUser }) {
         </div>
 
         {/* ── OURA ─────────────────────────────────────────── */}
-        {activeDevice==='oura' && (
+        {activeDevice==='oura' && ouraBanner && (
+          <div style={{ background:`${C.success}15`, border:`1px solid ${C.success}44`, borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:C.success, fontWeight:700 }}>
+            {ouraBanner}
+          </div>
+        )}
+        {activeDevice==='oura' && oura.loading && (
+          <Card>
+            <div style={{ textAlign:'center', padding:'30px 0', color:C.muted, fontSize:12 }}>Checking Oura connection…</div>
+          </Card>
+        )}
+        {activeDevice==='oura' && !oura.loading && oura.connected && !latest && (
+          <Card>
+            <div style={{ textAlign:'center', padding:'30px 20px' }}>
+              <div style={{ fontSize:44, marginBottom:12 }}>💍</div>
+              <div style={{ fontSize:14, fontWeight:700, color:C.white, marginBottom:6 }}>Oura Ring Connected</div>
+              <div style={{ fontSize:12, color:C.muted, lineHeight:1.6, maxWidth:280, margin:'0 auto' }}>
+                No data has synced yet. Oura data appears after the ring syncs with the Oura app — check back after your next sync.
+              </div>
+              {!isCoach && (
+                <button onClick={disconnectOura}
+                  style={{ marginTop:16, background:'transparent', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 20px', fontSize:12, color:C.muted, cursor:'pointer' }}>
+                  Disconnect
+                </button>
+              )}
+            </div>
+          </Card>
+        )}
+        {activeDevice==='oura' && !oura.loading && (
           oura.connected && latest ? (
             <>
               <Card sx={{ marginBottom:12 }}>
@@ -475,7 +567,7 @@ export default function Wearables({ currentUser }) {
                   <StatTile label="Sleep Score" value={latest.sleepScore}  unit="/100" color="#6FB8E8"/>
                   <StatTile label="Sleep"       value={latest.sleepHours}  unit=" hrs" color="#D4A8F0"/>
                   <StatTile label="Steps"       value={latest.steps?.toLocaleString()} unit="" color={C.gold}/>
-                  <StatTile label="Body Temp"   value={latest.bodyTemp}    unit="°F"  color="#E8B86D"/>
+                  <StatTile label="Readiness"   value={latest.readinessScore} unit="/100" color="#E8B86D"/>
                 </div>
               </Card>
 
@@ -510,15 +602,25 @@ export default function Wearables({ currentUser }) {
               <div style={{ background:`${C.gold}0a`, border:`1px solid ${C.gold}22`, borderRadius:10, padding:'10px 14px', marginBottom:12 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:C.gold, marginBottom:4 }}>💡 {isCoach ? 'Coach Insight' : 'Your Trends'}</div>
                 <div style={{ fontSize:11, color:C.muted, lineHeight:1.6 }}>
-                  HRV averaging <strong style={{ color:C.white }}>{Math.round(oura.readings.reduce((s,r)=>s+r.hrv,0)/oura.readings.length)} ms</strong> over 7 days.{' '}
-                  Sleep score trending <strong style={{ color:C.white }}>{oura.readings[0].sleepScore > oura.readings[oura.readings.length-1].sleepScore ? '▲ up' : '▼ down'}</strong> vs. last week.
+                  HRV averaging <strong style={{ color:C.white }}>{Math.round(oura.readings.reduce((s,r)=>s+(r.hrv||0),0)/Math.max(oura.readings.filter(r=>r.hrv!=null).length,1))} ms</strong> over 7 days.{' '}
+                  Sleep score trending <strong style={{ color:C.white }}>{(oura.readings[0].sleepScore||0) >= (oura.readings[oura.readings.length-1].sleepScore||0) ? '▲ up' : '▼ down'}</strong> vs. last week.
                   {isCoach ? ' Compare with check-in energy scores for protocol adjustments.' : ' Keep it up — consistent sleep is key to recovery.'}
                 </div>
               </div>
+
+              {!isCoach && (
+                <div style={{ textAlign:'center', marginBottom:12 }}>
+                  <button onClick={disconnectOura}
+                    style={{ background:'transparent', border:'none', fontSize:11, color:C.dim, cursor:'pointer', textDecoration:'underline' }}>
+                    Disconnect Oura Ring
+                  </button>
+                </div>
+              )}
             </>
-          ) : (
-            <NotConnected device="Oura Ring" icon="💍" clientName={clientName} isCoach={isCoach}/>
-          )
+          ) : !oura.connected ? (
+            <NotConnected device="Oura Ring" icon="💍" clientName={clientName} isCoach={isCoach}
+              onConnect={connectOura} connecting={ouraConnecting} error={ouraError}/>
+          ) : null
         )}
 
         {/* ── WHOOP ────────────────────────────────────────── */}

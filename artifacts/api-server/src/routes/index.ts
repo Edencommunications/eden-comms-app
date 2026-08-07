@@ -14,6 +14,7 @@ import canvasRouter from "./canvas";
 import invitesRouter from "./invites";
 import broadcastsRouter from "./broadcasts";
 import dbaRouter from "./dba";
+import ouraRouter from "./oura";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(canvasRouter);
 router.use(invitesRouter);
 router.use(broadcastsRouter);
 router.use(dbaRouter);
+router.use(ouraRouter);
 
 export default router;

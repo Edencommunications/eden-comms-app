@@ -335,7 +335,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             {brandOrg ? <>The private platform for<br/>{brandOrg.name}</> : <>The private platform for<br/>Lifestyle of Eden University</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
-            {["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging"].map(f => (
+            {["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
               <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:`${primary}11`, borderRadius:8, border:`1px solid ${primary}22` }}>
                 <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
               </div>
@@ -5571,7 +5571,9 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
                 background:"transparent", border:`1.5px solid ${B.border}`,
                 borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
-              <span style={{ fontSize:15, color:B.text, lineHeight:1 }}>↪</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={B.text} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>
+              </svg>
               <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase", color:B.muted }}>
                 {myDbas.length === 1 ? "DBA" : "DBAs"}
               </span>
@@ -5591,7 +5593,9 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
                 background: splitView ? `${B.gold}22` : "transparent",
                 border:`1.5px solid ${splitView ? B.gold : B.border}`,
                 borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
-              <span style={{ fontSize:15, color: splitView ? B.gold : B.text, lineHeight:1 }}>⊟</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={splitView ? B.gold : B.text} strokeWidth="2.2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/>
+              </svg>
               <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase",
                 color: splitView ? B.gold : B.muted }}>
                 {splitView ? "Split ON" : "Split"}
