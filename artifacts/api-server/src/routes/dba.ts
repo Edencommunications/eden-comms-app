@@ -36,6 +36,8 @@ const EDEN_ID = "b0000000-0000-0000-0000-000000000001";
 // orgId (query for GETs, body for POSTs). Every other admin is locked to
 // their own org — an orgId that isn't theirs is rejected outright.
 const isHqAdmin = (a: { company_id: string | null }) => !a.company_id || a.company_id === EDEN_ID;
+// The platform owner's login — has access to everything, hidden from pickers
+const OWNER_EMAIL = "info@edencommunications.io";
 async function adminOrgScope(admin: { company_id: string | null }, req: Request): Promise<string | null> {
   const own = admin.company_id || EDEN_ID;
   const want = String((req.method === "GET" ? req.query.orgId : (req.body || {}).orgId) || "").trim();
@@ -1199,14 +1201,19 @@ async function chatRoster(companyId: string, dba: DbaRecord) {
       : Promise.resolve([]),
     rest<any>(`user_profiles?company_id=eq.${companyId}&role=eq.super_admin&is_active=not.is.false&select=id,name,full_name,email`),
   ]);
-  const adminList = admins.map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "admin" as const }));
+  // The platform owner (Eden HQ login) already has access to everything and
+  // is never shown as a pickable person — no chat or course can exclude them.
+  const ownerIds = new Set(admins.filter((p: any) => String(p.email || "").toLowerCase() === OWNER_EMAIL).map((p: any) => String(p.id)));
+  const adminList = admins
+    .filter((p: any) => !ownerIds.has(String(p.id)))
+    .map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "admin" as const }));
   const adminIds = new Set(adminList.map((a) => a.id));
   // A person can be BOTH an org admin and a DBA member (e.g. an admin added
   // to the roster) — list them once, as admin, so pickers don't show doubles.
   const members = memberProfiles
-    .filter((p: any) => p.is_active !== false && !adminIds.has(p.id) && p.id !== dba.coach_id)
+    .filter((p: any) => p.is_active !== false && !adminIds.has(p.id) && p.id !== dba.coach_id && !ownerIds.has(String(p.id)))
     .map((p: any) => ({ id: p.id, name: p.name || p.full_name || p.email, email: p.email, kind: "member" as const }));
-  return { members, admins: adminList };
+  return { members, admins: adminList, ownerIds };
 }
 
 async function ensureCommunityMembers(communityId: string, people: Array<{ id: string; name: string; role?: string }>, addedBy: { id: string; name: string | null }) {
@@ -1308,7 +1315,7 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
   const myDm = dmSideAllowed(cfg, tierDefs, me.id, acc.manage || priv(me.id));
   // Which people the caller could open a 1v1 with (both sides must qualify)
   const everyone = [...roster.members, ...roster.admins,
-    ...(hit.dba.coach_id && !roster.admins.some((a) => a.id === hit.dba.coach_id)
+    ...(hit.dba.coach_id && !roster.admins.some((a) => a.id === hit.dba.coach_id) && !roster.ownerIds.has(String(hit.dba.coach_id))
       ? [{ id: hit.dba.coach_id, name: hit.dba.coach_name || "Coach", email: "", kind: "coach" as const }] : [])];
   // Staff-grade callers (manager/coach/admin/delegated leader) can open a
   // 1v1 with anyone; plain members only with people who have DM access too.
@@ -1320,7 +1327,7 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
     ok: true,
     can_manage: acc.manage,
     me: { id: me.id, name: me.name, role: me.role },
-    coach: hit.dba.coach_id ? { id: hit.dba.coach_id, name: hit.dba.coach_name } : null,
+    coach: hit.dba.coach_id && !roster.ownerIds.has(String(hit.dba.coach_id)) ? { id: hit.dba.coach_id, name: hit.dba.coach_name } : null,
     members: roster.members,
     admins: roster.admins,
     all_flags: cfg.all,
