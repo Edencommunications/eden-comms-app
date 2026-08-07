@@ -5925,7 +5925,7 @@ const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson
   const [picks, setPicks] = useState<Set<string>>(new Set());
   // Builder state (managers only)
   const [creating, setCreating] = useState(false);
-  const [cTitle, setCTitle] = useState(""); const [cDesc, setCDesc] = useState("");
+  const [cTitle, setCTitle] = useState(""); const [cDesc, setCDesc] = useState(""); const [cSeq, setCSeq] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [lForm, setLForm] = useState<any>(null); // {lessonId?, sectionTitle, title, duration, videoUrl, notes}
   const inp = { width: "100%", boxSizing: "border-box" as const, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", marginBottom: 6 };
@@ -5947,6 +5947,18 @@ const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson
     return Math.round((c.modules.filter((m: any) => completed.has(String(m.id))).length / total) * 100);
   };
   const lesson = openLesson && course ? course.modules.find((m: any) => m.id === openLesson) : null;
+  // Sequential courses lock each lesson until every earlier one is done
+  // (in the same order the sections render). Managers are never locked.
+  const lockedIds: Set<string> = useMemo(() => {
+    const locked = new Set<string>();
+    if (!course?.sequential || canManage) return locked;
+    let blocked = false;
+    for (const s of sections) for (const m of s.mods) {
+      if (blocked) locked.add(String(m.id));
+      if (!completed.has(String(m.id))) blocked = true;
+    }
+    return locked;
+  }, [course, sections, completed, canManage]);
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 40px" }}>
@@ -5956,7 +5968,7 @@ const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson
             <h2 style={{ fontSize: 18, fontWeight: 800, color: B.text, margin: 0 }}>Learn</h2>
             {canManage && !assigning && !creating && (
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => { setCTitle(""); setCDesc(""); setCreating(true); }}
+                <button onClick={() => { setCTitle(""); setCDesc(""); setCSeq(false); setCreating(true); }}
                   style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>+ New course</button>
                 <button onClick={() => { setPicks(new Set(courses.map((c: any) => String(c.id)))); setAssigning(true); }}
                   style={{ background: "none", color: primary, border: `1px solid ${primary}55`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✎ Choose courses</button>
@@ -5968,8 +5980,12 @@ const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson
               <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 8px" }}>New course for {dba?.name}</p>
               <input value={cTitle} onChange={e => setCTitle(e.target.value)} placeholder="Course title" style={inp} />
               <textarea value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Short description (optional)" rows={2} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: B.muted, cursor: "pointer", margin: "2px 0 6px" }}>
+                <input type="checkbox" checked={cSeq} onChange={e => setCSeq(e.target.checked)} />
+                Lessons unlock in order (untick to let members jump to any lesson)
+              </label>
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button disabled={busy || !cTitle.trim()} onClick={async () => { if (await saveCourse(null, cTitle, cDesc)) setCreating(false); }}
+                <button disabled={busy || !cTitle.trim()} onClick={async () => { if (await saveCourse(null, cTitle, cDesc, cSeq)) setCreating(false); }}
                   style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy || !cTitle.trim() ? 0.6 : 1 }}>{busy ? "Creating…" : "Create course"}</button>
                 <button onClick={() => setCreating(false)} style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 12, cursor: "pointer" }}>Cancel</button>
               </div>
@@ -6027,6 +6043,14 @@ const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>{course.title}</h2>
           {course.description && <p style={{ fontSize: 12, color: B.muted, margin: "0 0 16px", lineHeight: 1.6 }}>{course.description}</p>}
+          {course.sequential && !canManage && <p style={{ fontSize: 10, color: B.muted, margin: "0 0 12px" }}>🔒 Lessons in this course unlock in order.</p>}
+          {editMode && (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: B.text, cursor: "pointer", background: B.card, border: `1px solid ${B.border}`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
+              <input type="checkbox" checked={!!course.sequential} disabled={busy}
+                onChange={e => saveCourse(course.id, course.title, course.description, e.target.checked)} />
+              <span><b>Lessons unlock in order</b> — members must complete each lesson before the next opens. Unticked: they can jump to any lesson anytime.</span>
+            </label>
+          )}
           {editMode && !lForm && (
             <button onClick={() => setLForm({ lessonId: null, sectionTitle: sections[sections.length - 1]?.title || "", title: "", duration: "", videoUrl: "", notes: "" })}
               style={{ background: "none", color: primary, border: `1px dashed ${primary}66`, borderRadius: 10, padding: "10px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 14 }}>+ Add a lesson</button>
@@ -6058,11 +6082,13 @@ const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson
               <p style={{ fontSize: 11, fontWeight: 800, color: s.color || primary, letterSpacing: 0.8, textTransform: "uppercase", margin: "0 0 8px" }}>{s.title}</p>
               {s.mods.map((m: any) => {
                 const done = completed.has(String(m.id));
+                const locked = lockedIds.has(String(m.id));
                 return (
-                  <div key={m.id} onClick={() => { if (!editMode) setOpenLesson(m.id); }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, background: B.card, border: `1px solid ${B.border}`, borderRadius: 10, padding: "11px 14px", marginBottom: 8, cursor: editMode ? "default" : "pointer" }}>
-                    <span style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: done ? primary : B.dim, color: done ? "#000" : B.muted, fontSize: 11, fontWeight: 800 }}>{done ? "✓" : ""}</span>
+                  <div key={m.id} onClick={() => { if (!editMode && !locked) setOpenLesson(m.id); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, background: B.card, border: `1px solid ${B.border}`, borderRadius: 10, padding: "11px 14px", marginBottom: 8, cursor: editMode || locked ? "default" : "pointer", opacity: locked ? 0.55 : 1 }}>
+                    <span style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: done ? primary : B.dim, color: done ? "#000" : B.muted, fontSize: 11, fontWeight: 800 }}>{done ? "✓" : locked ? "🔒" : ""}</span>
                     <span style={{ flex: 1, fontSize: 13, color: B.text, fontWeight: 600 }}>{m.title}</span>
+                    {locked && <span style={{ fontSize: 9, color: B.muted, fontWeight: 700 }}>Finish earlier lessons</span>}
                     {m.duration && <span style={{ fontSize: 10, color: B.muted }}>{m.duration}</span>}
                     {editMode && (
                       <>
@@ -6319,7 +6345,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   };
   const saveConnect = (links: any[]) => postDba("connect-save", { dbaId: dba.id, connect: links });
   const saveLearn = (courseIds: string[]) => postDba("learn-save", { dbaId: dba.id, courseIds });
-  const saveCourse = (courseId: string | null, title: string, description: string) => postDba("course-save", { dbaId: dba.id, courseId, title, description });
+  const saveCourse = (courseId: string | null, title: string, description: string, sequential?: boolean) => postDba("course-save", { dbaId: dba.id, courseId, title, description, ...(sequential !== undefined ? { sequential } : {}) });
   const saveLesson = (body: any) => postDba("lesson-save", { dbaId: dba.id, ...body });
   const deleteLesson = (courseId: string, lessonId: string) => postDba("lesson-delete", { dbaId: dba.id, courseId, lessonId });
   const markLesson = async (courseId: string, moduleId: string, done: boolean) => {
@@ -6353,8 +6379,8 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           {content?.can_manage && <span style={{ fontSize: 9, fontWeight: 800, color: accent, border: `1px solid ${accent}55`, borderRadius: 20, padding: "2px 8px", letterSpacing: 0.6 }}>MANAGER VIEW</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {!isMobile && TABS.map((t, i) => {
-            const tc = hasPalette ? wl.nth(i) : primary; // each tab picks up a palette color
+          {!isMobile && TABS.map((t) => {
+            const tc = primary; // one brand color for every active tab
             return (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ background: tab === t.id ? `${tc}22` : "none", color: tab === t.id ? tc : B.muted, border: `1px solid ${tab === t.id ? tc + "55" : "transparent"}`, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -6445,8 +6471,8 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
 
       {isMobile && (
         <div style={{ display: "flex", background: B.surface, borderTop: `1px solid ${B.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
-          {TABS.map((t, i) => {
-            const tc = hasPalette ? wl.nth(i) : primary; // mobile tabs cycle the palette too
+          {TABS.map((t) => {
+            const tc = primary; // one brand color for every active tab (matches desktop)
             return (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "8px 0 10px" }}>
               <Ic n={t.icon} size={20} c={tab === t.id ? tc : B.muted} />

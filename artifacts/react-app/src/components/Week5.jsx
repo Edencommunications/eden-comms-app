@@ -229,6 +229,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [activeCourse, setActiveCourse] = useState(null)
   const [modules,      setModules]      = useState([])
   const [completed,    setCompleted]    = useState(new Set())
+  const [seqSet,       setSeqSet]       = useState(new Set()) // course ids whose lessons unlock in order
   const [courseView,   setCourseView]   = useState('catalog')
   const [activeSection,setActiveSection]= useState(null)
   const [activeModule, setActiveModule] = useState(null)
@@ -319,6 +320,15 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
         (isEdenCourse(c)&&Array.isArray(c.tiers)&&companyCtx.packageId&&c.tiers.includes(companyCtx.packageId)))
     }
     setCourses(data||[])
+    // Per-course lesson-order mode, served by the API so shared Eden courses
+    // report their mode to every org (RLS blocks the direct read cross-org)
+    if (data?.length) {
+      try {
+        const r=await fetch(`${import.meta.env.BASE_URL||'/'}api/course-modes?ids=${data.map(c=>c.id).join(',')}`,{headers:{Authorization:sbBearer()}})
+        const b=r.ok?await r.json():null
+        setSeqSet(new Set(Object.keys(b?.modes||{}).filter(id=>b.modes[id])))
+      } catch { setSeqSet(new Set()) }
+    } else setSeqSet(new Set())
     if (data?.length>0) {
       // Keep the open course only if it's still in the visible list
       if (!activeCourse || !data.some(c=>c.id===activeCourse.id)) openCourse(data[0])
@@ -399,8 +409,23 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     const title = courseEdit.title.trim()
     const description = courseEdit.description?.trim() || ''
     const ok = await dbUpdate('courses',`id=eq.${activeCourse.id}`,{ title, description })
+    // Lesson-order mode lives in an admin_settings row under the course's org
+    let modeOk = true
+    if (!!courseEdit.sequential !== seqSet.has(activeCourse.id)) {
+      const orgId = activeCourse.company_id || EDEN_ORG_ID
+      if (courseEdit.sequential) {
+        const ins = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`,
+          { method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'}, body:JSON.stringify({ company_id:orgId, key:`course_mode:${activeCourse.id}`, value:JSON.stringify('sequential') }) })
+        modeOk = ins.ok
+      } else {
+        const del = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?key=eq.${encodeURIComponent(`course_mode:${activeCourse.id}`)}`,
+          { method:'DELETE', headers:H })
+        modeOk = del.ok
+      }
+      if (modeOk) setSeqSet(prev=>{ const n=new Set(prev); courseEdit.sequential?n.add(activeCourse.id):n.delete(activeCourse.id); return n })
+    }
     setSavingCourseEdit(false)
-    if (!ok) { alert('Could not save the course details — please check your connection and try again.'); return }
+    if (!ok || !modeOk) { alert('Could not save the course details — please check your connection and try again.'); return }
     setCourses(prev=>prev.map(c=>c.id===activeCourse.id?{...c,title,description}:c))
     setActiveCourse(prev=>prev?{...prev,title,description}:prev)
     setCourseEdit(null)
@@ -957,15 +982,19 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   {activeSection.modules.map((m,mi)=>{
                     const isDone=completed.has(m.module_id)
                     const isNext=!isDone&&activeSection.modules.slice(0,mi).every(p=>completed.has(p.module_id))
+                    // Sequential courses: lock a lesson until every earlier one
+                    // (across ALL sections, in course order) is complete. Admins exempt.
+                    const flatIdx=modules.findIndex(x=>x.id===m.id)
+                    const isLocked=!isAdmin&&seqSet.has(activeCourse?.id)&&!isDone&&modules.slice(0,flatIdx).some(p=>!completed.has(p.module_id))
                     return (
-                      <button key={m.id} onClick={()=>{setActiveModule(m);setCourseView('module')}}
-                        style={{width:'100%',textAlign:'left',background:isNext?`${C.gold}12`:C.card,border:`1px solid ${isNext?C.gold+'44':C.border}`,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',marginBottom:6}}>
+                      <button key={m.id} onClick={()=>{if(isLocked)return; setActiveModule(m);setCourseView('module')}}
+                        style={{width:'100%',textAlign:'left',background:isNext?`${C.gold}12`:C.card,border:`1px solid ${isNext?C.gold+'44':C.border}`,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,cursor:isLocked?'default':'pointer',marginBottom:6,opacity:isLocked?.55:1}}>
                         <div style={{width:32,height:32,borderRadius:8,background:isDone?`${C.success}22`:isNext?`${C.gold}22`:C.surface,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:`1px solid ${isDone?C.success+'44':isNext?C.gold+'44':C.border}`}}>
-                          {isDone?<span style={{color:C.success}}>✓</span>:isNext?<span style={{color:C.gold}}>▶</span>:<span style={{fontSize:10,color:C.muted}}>{m.module_id}</span>}
+                          {isDone?<span style={{color:C.success}}>✓</span>:isLocked?<span style={{fontSize:12}}>🔒</span>:isNext?<span style={{color:C.gold}}>▶</span>:<span style={{fontSize:10,color:C.muted}}>{m.module_id}</span>}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:10,fontWeight:700,color:isDone?C.success:isNext?C.gold:C.muted,letterSpacing:.5,marginBottom:2}}>
-                            {isDone?'COMPLETE':isNext?'UP NEXT':`MODULE ${m.module_id}`}
+                            {isDone?'COMPLETE':isLocked?'LOCKED — FINISH EARLIER LESSONS':isNext?'UP NEXT':`MODULE ${m.module_id}`}
                           </div>
                           <div style={{fontSize:13,fontWeight:600,color:isDone?C.muted:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.title}</div>
                         </div>
@@ -1390,6 +1419,10 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   <textarea value={courseEdit.description||''} onChange={e=>setCourseEdit({...courseEdit,description:e.target.value})}
                     placeholder="Course description…" rows={2}
                     style={{width:'100%',marginTop:7,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 11px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                  <label style={{display:'flex',alignItems:'center',gap:8,marginTop:8,fontSize:11,color:C.muted,cursor:'pointer',lineHeight:1.5}}>
+                    <input type="checkbox" checked={!!courseEdit.sequential} onChange={e=>setCourseEdit({...courseEdit,sequential:e.target.checked})}/>
+                    <span><b style={{color:C.white}}>Lessons unlock in order</b> — learners must complete each lesson before the next opens. Unticked: they can jump to any lesson anytime.</span>
+                  </label>
                   <div style={{display:'flex',gap:8,marginTop:8}}>
                     <button onClick={saveCourseEdit} disabled={savingCourseEdit||!courseEdit.title.trim()}
                       style={{background:C.gold,border:'none',borderRadius:7,padding:'7px 14px',color:C.black,fontSize:11,fontWeight:800,cursor:'pointer',opacity:savingCourseEdit||!courseEdit.title.trim()?.5:1}}>
@@ -1407,7 +1440,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                       Build the course like the CEO course: sections, each with its own lessons. Changes save instantly. Add videos by opening a lesson from the course view.
                     </div>
                   </div>
-                  <button onClick={()=>setCourseEdit({title:activeCourse.title||'',description:activeCourse.description||''})}
+                  <button onClick={()=>setCourseEdit({title:activeCourse.title||'',description:activeCourse.description||'',sequential:seqSet.has(activeCourse.id)})}
                     style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 10px',color:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>
                     Edit Details
                   </button>

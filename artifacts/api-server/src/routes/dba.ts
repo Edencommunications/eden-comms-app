@@ -736,6 +736,7 @@ router.get("/dba/content", async (req: Request, res: Response) => {
       .filter((c) => c.company_id === companyId || isEdenCourse(c))
       .map((c) => ({ id: c.id, title: c.title }));
   }
+  const seqModes = await loadCourseModes(courses.map((c) => String(c.id)));
   return res.json({
     ok: true,
     connect: dba.connect,
@@ -745,6 +746,7 @@ router.get("/dba/content", async (req: Request, res: Response) => {
       description: c.description || "",
       // Managers may edit courses owned by the DBA's org (never Eden's shared ones)
       editable: acc.manage && c.company_id === companyId,
+      sequential: !!seqModes[String(c.id)],
       modules: modules.filter((m) => m.course_id === c.id),
     })),
     completed,
@@ -814,7 +816,7 @@ async function dbaEditableCourse(me: Me, dbaId: string) {
 router.post("/dba/course-save", async (req: Request, res: Response) => {
   const me = await requireUserJwt(req);
   if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const { dbaId, courseId, title, description } = (req.body || {}) as Record<string, any>;
+  const { dbaId, courseId, title, description, sequential } = (req.body || {}) as Record<string, any>;
   const t = String(title || "").trim().slice(0, 160);
   const d = String(description || "").trim().slice(0, 1000);
   if (!t) return res.status(400).json({ ok: false, error: "Course needs a title" });
@@ -833,6 +835,8 @@ router.post("/dba/course-save", async (req: Request, res: Response) => {
         body: JSON.stringify({ title: t, description: d || null }),
       });
       if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
+      if (sequential !== undefined && !(await saveCourseMode(companyId, String(courseId), !!sequential)))
+        return res.status(502).json({ ok: false, error: "Couldn't save the lesson-order setting — try again" });
       void audit({ id: me.id, name: me.name }, "dba_course_updated", dba.id, { dba: dba.name, course: t });
       return res.json({ ok: true, courseId });
     }
@@ -847,6 +851,9 @@ router.post("/dba/course-save", async (req: Request, res: Response) => {
     if (!made[0]?.id) return res.status(502).json({ ok: false, error: "Couldn't create the course — try again" });
     dba.learn_course_ids = [...dba.learn_course_ids, String(made[0].id)];
     await saveDbaRow(companyId, dba);
+    if (sequential && !(await saveCourseMode(companyId, String(made[0].id), true))) {
+      return res.status(502).json({ ok: false, error: "The course was created, but the lesson-order setting didn't save — open the course and set it again from ✎ Edit course" });
+    }
     void audit({ id: me.id, name: me.name }, "dba_course_created", dba.id, { dba: dba.name, course: t });
     return res.json({ ok: true, courseId: String(made[0].id) });
   });
@@ -942,6 +949,24 @@ router.post("/dba/progress", async (req: Request, res: Response) => {
   );
   const modRows: any[] = modCheck.ok ? ((await modCheck.json().catch(() => [])) as any[]) : [];
   if (!modRows[0]) return res.status(403).json({ ok: false, error: "That lesson isn't part of this course" });
+  // Sequential courses: members must complete lessons in order (managers exempt)
+  if (!acc.manage && completed !== false) {
+    const modes = await loadCourseModes([String(courseId)]);
+    if (modes[String(courseId)]) {
+      const [allModsRaw, myDone] = await Promise.all([
+        rest<any>(`course_modules?course_id=eq.${encodeURIComponent(String(courseId))}&select=id,section_id,sort_order`),
+        rest<any>(`course_progress?user_id=eq.${encodeURIComponent(me.id)}&course_id=eq.${encodeURIComponent(String(courseId))}&completed=eq.true&select=module_id`),
+      ]);
+      // Canonical lesson order = the render order everywhere: section first,
+      // then sort_order, id as deterministic tie-breaker.
+      const allMods = [...allModsRaw].sort((a: any, b: any) =>
+        ((a.section_id ?? 0) - (b.section_id ?? 0)) || ((a.sort_order ?? 0) - (b.sort_order ?? 0)) || String(a.id).localeCompare(String(b.id)));
+      const doneSet = new Set(myDone.map((p: any) => String(p.module_id)));
+      const idx = allMods.findIndex((m: any) => String(m.id) === String(moduleId));
+      const blocked = idx > 0 && allMods.slice(0, idx).some((m: any) => !doneSet.has(String(m.id)));
+      if (blocked) return res.status(403).json({ ok: false, error: "Finish the earlier lessons first — this course unlocks in order" });
+    }
+  }
   // Same upsert shape Week5 uses — relies on the table's existing unique key
   const r = await fetch(`${SUPABASE_URL}/rest/v1/course_progress`, {
     method: "POST",
@@ -1053,6 +1078,53 @@ async function saveTierDefs(companyId: string, defs: TierDef[]): Promise<boolean
   return r.ok;
 }
 
+// ── Per-course lesson-order mode ────────────────────────────────
+// Stored as admin_settings rows `course_mode:<courseId>` under the course's
+// owning org (the courses table itself can't grow columns; admin_settings
+// requires a company_id). Value "sequential" means lessons unlock in order;
+// absent/anything else = free navigation. Reads go through the API (service
+// key) so cross-org viewers of shared Eden courses still see the flag.
+async function loadCourseModes(courseIds: string[]): Promise<Record<string, boolean>> {
+  if (!courseIds.length) return {};
+  const keys = courseIds.map((id) => `course_mode:${id}`);
+  const rows = await rest<any>(
+    `admin_settings?key=in.(${keys.map((k) => `"${k}"`).join(",")})&select=key,value`,
+  );
+  const out: Record<string, boolean> = {};
+  for (const r of rows) {
+    const id = String(r.key).slice("course_mode:".length);
+    const v = typeof r.value === "string" ? r.value.replace(/^"|"$/g, "") : r.value;
+    if (v === "sequential") out[id] = true;
+  }
+  return out;
+}
+async function saveCourseMode(companyId: string, courseId: string, sequential: boolean): Promise<boolean> {
+  if (!sequential) {
+    // company_id predicate as defense in depth — never touch another org's row
+    const del = await fetch(
+      `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${encodeURIComponent(companyId)}&key=eq.${encodeURIComponent(`course_mode:${courseId}`)}`,
+      { method: "DELETE", headers: { ...SVC_H, Prefer: "return=minimal" } },
+    );
+    return del.ok;
+  }
+  const ins = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ company_id: companyId, key: `course_mode:${courseId}`, value: JSON.stringify("sequential") }),
+  });
+  return ins.ok;
+}
+
+// GET /course-modes?ids=a,b,c — which courses unlock lessons in order.
+// Any logged-in user may ask (it's presentation state, not private data);
+// served here because RLS blocks cross-org reads of shared Eden courses.
+router.get("/course-modes", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const ids = String(req.query.ids || "").split(",").map((s) => s.trim()).filter((s) => /^[0-9a-f-]{36}$/i.test(s)).slice(0, 100);
+  return res.json({ ok: true, modes: await loadCourseModes(ids) });
+});
+
 // Single source of truth for "can this member see/touch this course?"
 // Managers bypass upstream; here we only judge plain members.
 async function courseOpenToMember(companyId: string, dba: DbaRecord, userId: string, courseId: string): Promise<boolean> {
@@ -1074,6 +1146,17 @@ async function effectiveTierDefs(companyId: string, dba: DbaRecord): Promise<Tie
 // Does this user's side of a 1v1 qualify? Privileged (coach/org admin),
 // dm-capable tier, explicit dm_enabled grant, or delegated leader of any
 // channel in this DBA (members should be able to reach their leaders).
+// Staff-grade side: coach/org admin or a delegated channel leader. These
+// people may open a 1v1 with ANYONE in the DBA — the other side's own DM
+// access is not required (members without access can reply, not initiate).
+function dmStaffSide(cfg: DbaChatCfg, userId: string, isPrivileged: boolean): boolean {
+  if (isPrivileged) return true;
+  return Object.values(cfg.leaders).some((byUser) => {
+    const caps = byUser[userId];
+    return !!(caps && (caps.del || caps.pin || caps.canvas));
+  });
+}
+
 function dmSideAllowed(cfg: DbaChatCfg, defs: TierDef[], userId: string, isPrivileged: boolean): boolean {
   if (isPrivileged) return true;
   if (cfg.dm_enabled[userId] === true) return true;
@@ -1224,8 +1307,11 @@ router.get("/dba/chat-config", async (req: Request, res: Response) => {
   const everyone = [...roster.members, ...roster.admins,
     ...(hit.dba.coach_id && !roster.admins.some((a) => a.id === hit.dba.coach_id)
       ? [{ id: hit.dba.coach_id, name: hit.dba.coach_name || "Coach", email: "", kind: "coach" as const }] : [])];
+  // Staff-grade callers (manager/coach/admin/delegated leader) can open a
+  // 1v1 with anyone; plain members only with people who have DM access too.
+  const meStaff = acc.manage || dmStaffSide(cfg, me.id, priv(me.id));
   const dmTargets = myDm
-    ? everyone.filter((p) => p.id !== me.id && dmSideAllowed(cfg, tierDefs, p.id, priv(p.id))).map((p) => p.id)
+    ? everyone.filter((p) => p.id !== me.id && (meStaff || dmSideAllowed(cfg, tierDefs, p.id, priv(p.id)))).map((p) => p.id)
     : [];
   return res.json({
     ok: true,
@@ -1444,9 +1530,13 @@ router.post("/dba/dm-open", async (req: Request, res: Response) => {
       loadChatCfg(hit.companyId, hit.dba.id),
       effectiveTierDefs(hit.companyId, hit.dba),
     ]);
-    // BOTH sides must qualify: privileged (coach/org admin), a dm-capable
-    // tier, an explicit grant, or delegated leadership in this DBA.
-    if (!dmSideAllowed(cfg, tierDefs, me.id, meIsPriv) || !dmSideAllowed(cfg, tierDefs, other.id, otherIsPriv)) {
+    // The initiator must have DM ability. Staff-grade initiators (coach,
+    // org admins, delegated leaders) may open a 1v1 with anyone; between
+    // plain members BOTH sides still need DM access (tier gate holds).
+    if (!dmSideAllowed(cfg, tierDefs, me.id, meIsPriv)) {
+      return res.status(403).json({ ok: false, error: "Direct messages aren't enabled for you yet" });
+    }
+    if (!dmStaffSide(cfg, me.id, meIsPriv) && !dmSideAllowed(cfg, tierDefs, other.id, otherIsPriv)) {
       return res.status(403).json({ ok: false, error: "Direct messages aren't enabled for this pair yet" });
     }
 
