@@ -5914,8 +5914,8 @@ const dbaToEmbed = (raw: string) => {
 
 // Learn tab — assigned courses; viewer with progress + manager course builder
 const DbaLearn = ({ primary, palette = null, content, dba, saveLearn, markLesson, busy, saveCourse, saveLesson, deleteLesson }: any) => {
-  // Course cards cycle through the DBA's saved palette so extra colors show up
-  const courseColor = (i: number) => (palette?.extra?.length ? palette.nth(i) : primary);
+  // Course cards always use the brand's primary color — no palette cycling
+  const courseColor = (_i: number) => primary;
   const canManage = content?.can_manage;
   const courses = content?.courses || [];
   const completed: Set<string> = useMemo(() => new Set(content?.completed || []), [content?.completed]);
