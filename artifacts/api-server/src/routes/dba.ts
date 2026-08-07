@@ -1764,13 +1764,21 @@ router.get("/dba/hq", async (req: Request, res: Response) => {
   if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
   const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
   const defs = await effectiveTierDefs(hit.companyId, hit.dba);
+  // Group channels + the full authority picture, so HQ can render an
+  // at-a-glance "who has what powers where" roster (delete/pin/canvas per
+  // group + the per-person DM override).
+  const chans = await rest<any>(
+    `communities?company_id=eq.${hit.companyId}&context=eq.${encodeURIComponent(`dba:${hit.dba.id}`)}&is_active=eq.true&select=id,name&order=created_at.asc`,
+  );
   return res.json({
     ok: true,
-    members: hit.dba.members.map((m) => ({ id: m.id, email: m.email, name: m.name, added_at: m.added_at, tier: (m.id && cfg.tiers[m.id]) || null })),
+    members: hit.dba.members.map((m) => ({ id: m.id, email: m.email, name: m.name, added_at: m.added_at, tier: (m.id && cfg.tiers[m.id]) || null, dm: !!(m.id && cfg.dm_enabled[m.id]) })),
     tier_defs: hit.dba.tier_defs, // the DBA's own ladder ([] = using org default)
     effective_defs: defs, // what's actually in force right now
     custom: hit.dba.tier_defs.length > 0,
     learn_tiers: hit.dba.learn_tiers,
+    channels: chans.map((c: any) => ({ id: String(c.id), name: c.name })),
+    leaders: cfg.leaders, // { [communityId]: { [userId]: {del,pin,canvas} } }
   });
 });
 

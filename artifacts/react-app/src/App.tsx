@@ -6249,6 +6249,63 @@ const DbaHq = ({ dba, primary, content }: any) => {
         ))}
       </Card>
 
+      {/* ── Authorities at a glance ── */}
+      <Card style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>Authorities</p>
+        <p style={{ fontSize: 11, color: B.muted, margin: "0 0 10px", lineHeight: 1.5 }}>Every member's chat powers in one place — delete, pin and canvas per group, plus their direct-message override. Tick to grant, untick to revoke.</p>
+        {(hq.channels || []).length === 0 && <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>No group chats yet — create one in the Community tab first.</p>}
+        {hq.members.filter((m: any) => m.id).map((m: any, mi: number) => {
+          const memberCaps = (hq.channels || []).map((ch: any) => ({ ch, caps: (hq.leaders?.[ch.id] || {})[m.id] || {} }));
+          const hasAny = m.dm || memberCaps.some(({ caps }: any) => caps.del || caps.pin || caps.canvas);
+          const setCap = async (chId: string, key: string, val: boolean) => {
+            // Optimistic so rapid toggles feel instant; post() reloads on success
+            const prev = hq.leaders;
+            setHq((h: any) => ({ ...h, leaders: { ...h.leaders, [chId]: { ...(h.leaders?.[chId] || {}), [m.id]: { ...((h.leaders?.[chId] || {})[m.id] || {}), [key]: val } } } }));
+            if (!(await post("authority-set", { userId: m.id, patch: { [key]: val }, communityIds: [chId] }))) setHq((h: any) => ({ ...h, leaders: prev }));
+          };
+          const setAllCap = async (key: string, val: boolean) => {
+            if (!(hq.channels || []).length) return;
+            await post("authority-set", { userId: m.id, patch: { [key]: val }, all: true });
+          };
+          return (
+            <div key={m.id} style={{ padding: "10px 0", borderBottom: mi < hq.members.filter((x: any) => x.id).length - 1 ? `1px solid ${B.border}` : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: hasAny || (hq.channels || []).length ? 6 : 0 }}>
+                <div style={{ flex: 1, minWidth: 150 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: B.text, margin: 0 }}>{m.name || m.email}
+                    {!hasAny && <span style={{ fontSize: 9, color: B.muted, fontWeight: 600 }}> · no powers</span>}</p>
+                </div>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: m.dm ? primary : B.muted, cursor: "pointer", fontWeight: m.dm ? 700 : 400 }}>
+                  <input type="checkbox" checked={!!m.dm} disabled={busy}
+                    onChange={e => post("dm-enable", { userId: m.id, enabled: e.target.checked })} /> Direct messages
+                </label>
+              </div>
+              {(hq.channels || []).length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(90px, 1fr) auto auto auto", gap: "3px 14px", alignItems: "center" }}>
+                  <span />
+                  {["del", "pin", "canvas"].map(k => (
+                    <button key={k} disabled={busy} title={`Toggle ${k === "del" ? "delete" : k} in every group`}
+                      onClick={() => setAllCap(k, !(hq.channels || []).every((ch: any) => !!((hq.leaders?.[ch.id] || {})[m.id] || {})[k]))}
+                      style={{ background: "none", border: "none", color: B.muted, fontSize: 9, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", cursor: "pointer", padding: 0, textAlign: "center" }}>
+                      {k === "del" ? "Delete" : k === "pin" ? "Pin" : "Canvas"} ⇅
+                    </button>
+                  ))}
+                  {memberCaps.map(({ ch, caps }: any) => [
+                    <span key={`${ch.id}-n`} style={{ fontSize: 11, color: (caps.del || caps.pin || caps.canvas) ? B.text : B.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ch.name}</span>,
+                    ...["del", "pin", "canvas"].map(k => (
+                      <span key={`${ch.id}-${k}`} style={{ textAlign: "center" }}>
+                        <input type="checkbox" checked={!!caps[k]} disabled={busy}
+                          onChange={e => setCap(ch.id, k, e.target.checked)} style={{ cursor: "pointer" }} />
+                      </span>
+                    )),
+                  ])}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {hq.members.filter((m: any) => m.id).length === 0 && <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>No members yet — invite one above.</p>}
+      </Card>
+
       {/* ── Course access by tier ── */}
       <Card>
         <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>Course access by tier</p>
