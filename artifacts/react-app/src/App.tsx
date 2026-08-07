@@ -5571,7 +5571,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
                 background:"transparent", border:`1.5px solid ${B.border}`,
                 borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
-              <span style={{ fontSize:15 }}>↪</span>
+              <span style={{ fontSize:15, color:B.text, lineHeight:1 }}>↪</span>
               <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase", color:B.muted }}>
                 {myDbas.length === 1 ? "DBA" : "DBAs"}
               </span>
@@ -5591,7 +5591,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
                 background: splitView ? `${B.gold}22` : "transparent",
                 border:`1.5px solid ${splitView ? B.gold : B.border}`,
                 borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
-              <span style={{ fontSize:15 }}>⊟</span>
+              <span style={{ fontSize:15, color: splitView ? B.gold : B.text, lineHeight:1 }}>⊟</span>
               <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase",
                 color: splitView ? B.gold : B.muted }}>
                 {splitView ? "Split ON" : "Split"}
