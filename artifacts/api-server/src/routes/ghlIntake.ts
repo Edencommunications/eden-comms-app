@@ -22,6 +22,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { sendEmail, welcomeEmail } from "../lib/mailer";
 import { logger } from "../lib/logger";
 import { provisionAuthUser } from "./auth";
+import { requireStaff } from "./checkinForm";
 
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
 
@@ -92,19 +93,14 @@ function webhookAuthorized(req: Request, companyId: string): boolean {
 }
 
 // Admin auth for the config/troubleshooting endpoints: the caller must present
-// the profile id of a super_admin (x-admin-id header). The role and org
-// membership are verified server-side against user_profiles — the admin must
-// belong to this org, or to Eden (the platform owner manages all orgs).
+// a valid Supabase JWT (Authorization: Bearer) belonging to a super_admin of
+// this org, or of Eden (the platform owner manages all orgs). The old
+// x-admin-id header is no longer accepted — it was spoofable (any caller who
+// learned an admin's profile UUID could read the webhook secret).
 async function requireAdmin(req: Request, companyId: string): Promise<boolean> {
-  const adminId = String(req.get("x-admin-id") || "").trim();
-  if (!/^[0-9a-f-]{36}$/i.test(adminId)) return false;
-  const rows = await dbGet(
-    "user_profiles",
-    `id=eq.${encodeURIComponent(adminId)}&role=eq.super_admin&is_active=not.is.false&select=id,company_id`,
-  );
-  const admin = rows[0];
-  if (!admin) return false;
-  return admin.company_id === companyId || admin.company_id === EDEN_ORG_ID;
+  const caller = await requireStaff(req);
+  if (!caller || caller.role !== "super_admin") return false;
+  return caller.company_id === companyId || caller.company_id === EDEN_ORG_ID;
 }
 
 // ── Recent webhook log (in-memory ring buffer for troubleshooting) ─

@@ -23,7 +23,7 @@ import { logger } from "../lib/logger";
 import { mailerConfigured, sendEmail, welcomeEmail, dbaAddedEmail } from "../lib/mailer";
 import { requireAdminJwt, provisionAuthUser } from "./auth";
 import { storeChatUpload, transcribeChatAudio, voiceMemosEnabled } from "./teamUpload";
-import { dailyKeyForOrg } from "./huddle";
+import { dailyKeyForOrg, validDailyKey } from "./huddle";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON =
@@ -2142,6 +2142,74 @@ async function saveHuddles(companyId: string, dbaId: string, list: DbaHuddle[]):
   });
   return r.ok;
 }
+// ── Per-DBA Daily.co accounts ───────────────────────────────────
+// Each DBA can connect its OWN Daily.co key (billing/minutes separation
+// from the parent org), stored zero-DDL in admin_settings as
+// `dba_daily_key:<dbaId>` under the owning org. Falls back to the org's
+// key when the DBA hasn't connected one.
+async function dailyKeyForDbaScope(companyId: string, dbaId: string): Promise<{ key: string; source: "dba" | "org" | "none" }> {
+  const rows = await rest<any>(
+    `admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(`dba_daily_key:${dbaId}`)}&select=value`,
+  );
+  const own = String(rows[0]?.value || "").trim();
+  if (own) return { key: own, source: "dba" };
+  const org = await dailyKeyForOrg(companyId);
+  return { key: org, source: org ? "org" : "none" };
+}
+
+// GET /dba/daily-status?id= — managers only: how is video connected here?
+router.get("/dba/daily-status", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const hit = await findDbaAnywhere(String(req.query.id || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { key, source } = await dailyKeyForDbaScope(hit.companyId, hit.dba.id);
+  return res.json({ ok: true, connected: Boolean(key), source });
+});
+
+// POST /dba/daily-key {dbaId, key} — managers only; validates the key first
+router.post("/dba/daily-key", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, key } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const k = String(key || "").trim();
+  if (!k) return res.status(400).json({ ok: false, error: "Paste the Daily.co API key" });
+  if (!(await validDailyKey(k))) {
+    return res.status(400).json({ ok: false, error: "That key didn't work — copy it again from dashboard.daily.co → Developers" });
+  }
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ company_id: hit.companyId, key: `dba_daily_key:${hit.dba.id}`, value: k }),
+  });
+  if (!r.ok) return res.status(502).json({ ok: false, error: "Could not save the key" });
+  void audit(me, "dba_daily_connected", hit.dba.id, { dba: hit.dba.name });
+  return res.json({ ok: true });
+});
+
+// POST /dba/daily-key-remove {dbaId} — managers only
+router.post("/dba/daily-key-remove", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const hit = await findDbaAnywhere(String((req.body || {}).dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${hit.companyId}&key=eq.${encodeURIComponent(`dba_daily_key:${hit.dba.id}`)}`,
+    { method: "DELETE", headers: SVC_H },
+  );
+  if (!r.ok) return res.status(502).json({ ok: false, error: "Could not disconnect" });
+  void audit(me, "dba_daily_disconnected", hit.dba.id, { dba: hit.dba.name });
+  return res.json({ ok: true });
+});
+
 // Anyone with any Phase-4 authority grant in any channel counts as a leader
 function dbaLeaderIds(cfg: DbaChatCfg): Set<string> {
   const ids = new Set<string>();
@@ -2230,9 +2298,9 @@ router.post("/dba/huddle-start", async (req: Request, res: Response) => {
     ids = Array.isArray(memberIds) ? memberIds.map(String).filter((id) => memberSet.has(id)) : [];
     if (!ids.length) return res.status(400).json({ ok: false, error: "Pick at least one member to invite" });
   }
-  const DAILY_KEY = await dailyKeyForOrg(hit.companyId);
+  const { key: DAILY_KEY } = await dailyKeyForDbaScope(hit.companyId, hit.dba.id);
   if (!DAILY_KEY) {
-    return res.status(400).json({ ok: false, error: "Video huddles aren't connected for this organization yet — the org admin needs to add a Daily.co key in the admin panel." });
+    return res.status(400).json({ ok: false, error: "Video calls aren't connected here yet — connect a Daily.co key for this DBA (or the organization) in the admin panel." });
   }
   const roomName = `dba-${String(hit.dba.id).replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}-${Date.now()}`;
   const r = await fetch("https://api.daily.co/v1/rooms", {

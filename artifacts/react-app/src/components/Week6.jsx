@@ -295,7 +295,7 @@ function GhlWebhookSection({ companyId, adminId }) {
   useEffect(() => {
     let alive = true
     setCfg(null); setErr(false)
-    fetch(`/api/webhooks/ghl-intake/${companyId}/config`, { headers: { 'x-admin-id': adminId || '' } })
+    fetch(`/api/webhooks/ghl-intake/${companyId}/config`, { headers: { Authorization: sbBearer() } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => { if (alive) setCfg(d) })
       .catch(() => { if (alive) setErr(true) })

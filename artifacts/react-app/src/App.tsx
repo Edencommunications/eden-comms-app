@@ -3845,6 +3845,7 @@ const AdminDashboard = ({ user }:any) => {
   const [myCompanyId, setMyCompanyId] = useState<string|null>(null);
   const [planPrices, setPlanPrices] = useState<Record<string,number>>(FALLBACK_PLAN_PRICES);
   const [myOrg, setMyOrg] = useState<any>(null);        // white-label admin's own org (for branded login link)
+  const [myProfileId, setMyProfileId] = useState('');   // caller's profile id (webhook config auth)
   const [manageOrg, setManageOrg] = useState<any>(null); // Eden HQ: org being edited via "Manage →"
   const [linkCopied, setLinkCopied] = useState(false);
   // Upcoming contract starts (org-wide, admin view)
@@ -3943,8 +3944,9 @@ const AdminDashboard = ({ user }:any) => {
 
   useEffect(() => { (async () => {
     try {
-      const meRows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=company_id`);
+      const meRows = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id,company_id`);
       const cid = meRows?.[0]?.company_id || null;
+      if (meRows?.[0]?.id) setMyProfileId(meRows[0].id);
       setMyCompanyId(cid);
       const ownerHQ = !cid || cid === EDEN_COMPANY_ID;
       setIsOwnerHQ(ownerHQ);
@@ -4009,6 +4011,19 @@ const AdminDashboard = ({ user }:any) => {
       else setDailyMsg(`⚠️ ${d?.error || 'Could not save the key'}`);
     } catch { setDailyMsg('⚠️ Could not save the key'); }
     setDailySaving(false);
+  };
+  // GHL intake webhook — white-label admins can grab their own URL + secret
+  const [ghlCfg, setGhlCfg] = useState<any>(null);      // null loading · false error · {url, secret}
+  const [ghlCopied, setGhlCopied] = useState('');
+  useEffect(() => {
+    if (!myOrg?.id) return;
+    fetch(`/api/webhooks/ghl-intake/${myOrg.id}/config`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setGhlCfg(d && d.url ? d : false))
+      .catch(() => setGhlCfg(false));
+  }, [myOrg?.id]);
+  const ghlCopy = async (what: string, val: string) => {
+    try { await navigator.clipboard.writeText(val); setGhlCopied(what); setTimeout(() => setGhlCopied(''), 2000); } catch {}
   };
   // Automated welcome messages (admin-configurable, per org + per coach)
   const [welcomeCfg, setWelcomeCfg] = useState<any>(null); // null = loading
@@ -4189,6 +4204,33 @@ const AdminDashboard = ({ user }:any) => {
               )}
               {dailyMsg && <p style={{ fontSize:12, color:dailyMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{dailyMsg}</p>}
             </Card>
+            {/* GHL intake webhook — white-label self-serve */}
+            {myOrg && (
+              <Card style={{ marginBottom:20 }}>
+                <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>🔗 GHL / Zapier Intake Webhook</p>
+                <p style={{ fontSize:11, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
+                  Paste this webhook into a GHL workflow (trigger: <strong>Document/Contract Signed</strong>) or Zapier. When a contract is signed,
+                  the client is created here automatically. Send the client's <strong>first_name</strong>, <strong>last_name</strong>, <strong>email</strong>,
+                  and the coach's email as <strong>coach_email</strong>. Include the secret as an <strong>x-webhook-secret</strong> header on the request.
+                </p>
+                {ghlCfg === null && <p style={{ fontSize:12, color:B.muted, margin:0 }}>Loading…</p>}
+                {ghlCfg === false && <p style={{ fontSize:12, color:"#ffa600", margin:0 }}>Couldn't load the webhook details — refresh the page or contact Eden support.</p>}
+                {ghlCfg && ghlCfg.url && (
+                  <>
+                    {[['Webhook URL', ghlCfg.url], ['Secret', ghlCfg.secret]].map(([label, val]: any) => (
+                      <div key={label} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:10, fontWeight:700, color:B.muted, width:90, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</span>
+                        <code style={{ flex:1, minWidth:180, fontSize:10, color:B.text, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 8px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{val}</code>
+                        <button onClick={() => ghlCopy(label, val)}
+                          style={{ background: ghlCopied === label ? (B.success || '#4FD89A') : 'none', color: ghlCopied === label ? '#000' : B.gold, border:`1px solid ${B.border}`, borderRadius:6, padding:"5px 10px", fontSize:10, fontWeight:700, cursor:"pointer" }}>
+                          {ghlCopied === label ? '✓ Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </Card>
+            )}
             {/* Automated welcome messages */}
             <Card style={{ marginBottom:20 }}>
               <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>👋 Automated Welcome Message</p>
@@ -6644,10 +6686,26 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
       .then(b => { if (b?.ok) { setTierDefs(b.defs || []); setCanEditTiers(!!b.can_edit); } })
       .catch(() => {});
   }, [org.id]);
+  // Per-DBA Daily.co connection (video calls for this sub-brand)
+  const [dbaDaily, setDbaDaily] = useState<any>(null);  // null loading · {connected, source}
+  const [dbaDailyIn, setDbaDailyIn] = useState('');
+  const [dbaDailyMsg, setDbaDailyMsg] = useState('');
+  const dbaDailyReq = useRef('');                       // guards against stale responses when switching DBAs
+  const loadDbaDaily = (id: string) => {
+    setDbaDaily(null);
+    dbaDailyReq.current = id;
+    fetch(`${BASE}api/dba/daily-status?id=${encodeURIComponent(id)}`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => { if (dbaDailyReq.current === id) setDbaDaily(b?.ok ? b : { connected: false, source: 'none' }); })
+      .catch(() => { if (dbaDailyReq.current === id) setDbaDaily({ connected: false, source: 'none' }); });
+  };
   // Load the open DBA's member-tier assignments (they live in its chat config)
   useEffect(() => {
     setDbaTiers({}); setPromoteFor(''); setChannels(null);
+    setDbaDaily(null); setDbaDailyIn(''); setDbaDailyMsg('');
+    dbaDailyReq.current = '';
     if (!openId) return;
+    loadDbaDaily(openId);
     fetch(`${BASE}api/dba/chat-config?id=${encodeURIComponent(openId)}`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
       .then(b => { if (b?.ok) { setDbaTiers(b.tiers || {}); setChannels(Array.isArray(b.channels) ? b.channels : []); } else setChannels([]); })
@@ -6761,6 +6819,49 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
                       </div>
                     </div>
                   )}
+                  {/* Per-DBA Daily.co (video calls) */}
+                  <div style={{ border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", margin: "0 0 4px" }}>🎥 Video Calls (Daily.co)</p>
+                    {dbaDaily === null ? (
+                      <p style={{ fontSize: 11, color: B.muted, margin: 0 }}>Checking connection…</p>
+                    ) : dbaDaily.source === 'dba' ? (
+                      <>
+                        <p style={{ fontSize: 11, color: B.success || '#4FD89A', margin: "0 0 6px", lineHeight: 1.5 }}>✅ This DBA runs calls on its own Daily.co account.</p>
+                        <button disabled={busy} onClick={async () => {
+                            if (!window.confirm(`Disconnect ${d.name}'s own Daily.co account? Calls will fall back to the organization's account (if connected).`)) return;
+                            const b = await post('daily-key-remove', { dbaId: d.id });
+                            if (b) { setDbaDailyMsg(''); loadDbaDaily(d.id); }
+                          }}
+                          style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          Disconnect
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p style={{ fontSize: 11, color: B.muted, margin: "0 0 6px", lineHeight: 1.6 }}>
+                          {dbaDaily.source === 'org'
+                            ? 'Calls currently run on the organization\u2019s Daily.co account. Give this DBA its own account to keep its call minutes and billing separate:'
+                            : 'No video account connected yet — huddles here won\u2019t work until one is. Connect a free Daily.co account for this DBA:'}
+                          <br/>1. Sign up at <a href="https://dashboard.daily.co/signup" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>dashboard.daily.co</a> (free — 1,000 call minutes/month)
+                          <br/>2. Open <strong>Developers</strong> in the left menu, copy the API key, paste it here:
+                        </p>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <input type="password" value={dbaDailyIn} onChange={e => setDbaDailyIn(e.target.value)}
+                            placeholder="Paste the Daily.co API key"
+                            style={{ flex: 1, minWidth: 180, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 7, padding: "6px 10px", color: B.text, fontSize: 11, outline: "none" }}/>
+                          <button disabled={busy || !dbaDailyIn.trim()} onClick={async () => {
+                              setDbaDailyMsg('');
+                              const b = await post('daily-key', { dbaId: d.id, key: dbaDailyIn.trim() });
+                              if (b) { setDbaDailyIn(''); setDbaDailyMsg('✅ Connected — this DBA now runs calls on its own account.'); loadDbaDaily(d.id); }
+                            }}
+                            style={{ background: accent, color: "#000", border: "none", borderRadius: 7, padding: "6px 12px", fontSize: 11, fontWeight: 800, cursor: "pointer", opacity: (busy || !dbaDailyIn.trim()) ? 0.5 : 1 }}>
+                            {busy ? 'Checking…' : 'Connect'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    {dbaDailyMsg && <p style={{ fontSize: 11, color: '#4FD89A', margin: "6px 0 0" }}>{dbaDailyMsg}</p>}
+                  </div>
                   <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: 0.6, textTransform: "uppercase", margin: "0 0 4px" }}>Members</p>
                   {d.members.length === 0 && <p style={{ fontSize: 11, color: B.muted, margin: "0 0 8px" }}>No members yet — invite the first one below. They'll get an email with their login details and the {d.name} link.</p>}
                   {d.members.map((m: any) => (

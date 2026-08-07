@@ -36,7 +36,7 @@ export async function dailyKeyForOrg(companyId: string): Promise<string> {
   return companyId === EDEN_ORG_ID ? EDEN_DAILY_KEY : "";
 }
 
-async function validDailyKey(key: string): Promise<boolean> {
+export async function validDailyKey(key: string): Promise<boolean> {
   try {
     const r = await fetch("https://api.daily.co/v1/rooms?limit=1", {
       headers: { Authorization: `Bearer ${key}` },

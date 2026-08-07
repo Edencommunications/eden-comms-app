@@ -9,6 +9,8 @@ description: How team huddle video calls work (Daily.co, per-org keys, live-room
 
 **Per-org accounts (white-label):** each org connects its OWN Daily.co account; the key is stored in `admin_settings` (key `daily_api_key`, managed only through admin-gated api-server routes). Eden's own org falls back to the `DAILY_API_KEY` workspace secret. Orgs without a key get a friendly "ask your admin to connect" error.
 
+**Per-DBA accounts:** a DBA can connect its own key (`admin_settings` key `dba_daily_key:<dbaId>` under the owning org), managed via /dba/daily-status, /dba/daily-key, /dba/daily-key-remove (manage-gated). DBA huddle-start resolves DBA key → org key → none. UI lives in the admin DBA card ("Video Calls" block).
+
 **Why:** the user explicitly required white-label orgs to not run calls on Eden's Daily account (billing/minutes separation).
 
 **Accepted risk:** admin_settings is org-scoped RLS, so an org's own coaches could technically read their org's Daily key via REST. No DDL available to lock it down further; deemed low harm.
