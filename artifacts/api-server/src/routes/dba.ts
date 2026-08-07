@@ -1747,24 +1747,47 @@ router.post("/dba/tier-set", async (req: Request, res: Response) => {
 router.post("/dba/authority-set", async (req: Request, res: Response) => {
   const me = await requireUserJwt(req);
   if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const { dbaId, communityId, userId, caps } = (req.body || {}) as Record<string, any>;
+  // Two shapes:
+  //  legacy: { dbaId, communityId, userId, caps:{del,pin,canvas} } — replace caps on ONE channel
+  //  scoped: { dbaId, userId, patch:{del?|pin?|canvas?}, communityIds:[...] | all:true }
+  //          — merge one capability change into each listed channel (or every group)
+  const { dbaId, communityId, userId, caps, patch, communityIds, all } = (req.body || {}) as Record<string, any>;
   return withLock("dba-write", async () => {
     const hit = await findDbaAnywhere(String(dbaId || ""));
     if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
     if (!dbaAccess(me, hit.companyId, hit.dba).manage) return res.status(403).json({ ok: false, error: "Not authorized" });
-    const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
-    if (!comm || comm.context !== `dba:${hit.dba.id}`) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
     if (!hit.dba.members.some((m) => m.id === String(userId))) return res.status(404).json({ ok: false, error: "That person isn't a member of this DBA" });
-    const clean: LeaderCaps = { del: !!caps?.del, pin: !!caps?.pin, canvas: !!caps?.canvas };
     const cfg = await loadChatCfg(hit.companyId, hit.dba.id);
-    if (!clean.del && !clean.pin && !clean.canvas) {
-      if (cfg.leaders[comm.id]) { delete cfg.leaders[comm.id][String(userId)]; if (!Object.keys(cfg.leaders[comm.id]).length) delete cfg.leaders[comm.id]; }
+
+    // Resolve target channels (all validated as THIS DBA's group channels)
+    let targets: any[] = [];
+    if (patch && (all || Array.isArray(communityIds))) {
+      const chans = await rest<any>(`communities?context=eq.${encodeURIComponent(`dba:${hit.dba.id}`)}&is_active=eq.true&select=id,name`);
+      targets = all ? chans : chans.filter((c: any) => communityIds.map(String).includes(String(c.id)));
+      if (!targets.length) return res.status(400).json({ ok: false, error: "No matching groups" });
     } else {
-      cfg.leaders[comm.id] = { ...(cfg.leaders[comm.id] || {}), [String(userId)]: clean };
+      const comm = await findDbaChannel(hit.companyId, hit.dba.id, communityId);
+      if (!comm || comm.context !== `dba:${hit.dba.id}`) return res.status(404).json({ ok: false, error: "Channel not found in this DBA" });
+      targets = [comm];
+    }
+
+    const applied: Record<string, LeaderCaps> = {};
+    for (const comm of targets) {
+      const cur = (cfg.leaders[String(comm.id)] || {})[String(userId)] || {};
+      const next: LeaderCaps = patch
+        ? { del: patch.del !== undefined ? !!patch.del : !!cur.del, pin: patch.pin !== undefined ? !!patch.pin : !!cur.pin, canvas: patch.canvas !== undefined ? !!patch.canvas : !!cur.canvas }
+        : { del: !!caps?.del, pin: !!caps?.pin, canvas: !!caps?.canvas };
+      const cid = String(comm.id);
+      if (!next.del && !next.pin && !next.canvas) {
+        if (cfg.leaders[cid]) { delete cfg.leaders[cid][String(userId)]; if (!Object.keys(cfg.leaders[cid]).length) delete cfg.leaders[cid]; }
+      } else {
+        cfg.leaders[cid] = { ...(cfg.leaders[cid] || {}), [String(userId)]: next };
+      }
+      applied[cid] = next;
     }
     if (!(await saveChatCfg(hit.companyId, hit.dba.id, cfg))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
-    void audit({ id: me.id, name: me.name }, "dba_authority_changed", hit.dba.id, { dba: hit.dba.name, channel: comm.name, user: String(userId), caps: clean });
-    return res.json({ ok: true });
+    void audit({ id: me.id, name: me.name }, "dba_authority_changed", hit.dba.id, { dba: hit.dba.name, channels: targets.map((t) => t.name), user: String(userId), caps: applied });
+    return res.json({ ok: true, leaders: cfg.leaders });
   });
 });
 

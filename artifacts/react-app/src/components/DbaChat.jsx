@@ -166,6 +166,8 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   const [newAll,     setNewAll]     = useState(true)
   const [newMembers, setNewMembers] = useState([])
   const [showMembers,setShowMembers]= useState(false)
+  const [authPrompt, setAuthPrompt] = useState(null) // {userId,key,grant,userName} — pending scope choice
+  const [authPick,   setAuthPick]   = useState(null) // Set of communityIds when "choose groups" is open
   const [dmBusy,     setDmBusy]     = useState(null)
   const bottomRef = useRef(null)
   const listRef = useRef(null)
@@ -560,20 +562,35 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     loadPins()
     alert('Pinned for everyone in this conversation.')
   }
-  // Manager toggles one leader capability for a member on the open channel
-  async function toggleAuthority(userId, key) {
-    const cur = capsFor(activeId, userId)
-    const next = { ...cur, [key]: !cur[key] }
-    const r = await apiPost('authority-set', { dbaId, communityId: activeId, userId, caps: next })
+  // Manager clicks a leader capability → pick the scope (this group, all, or chosen groups)
+  function toggleAuthority(userId, key, userName) {
+    const grant = !capsFor(activeId, userId)[key]
+    setAuthPick(null)
+    setAuthPrompt({ userId, key, grant, userName })
+  }
+  async function applyAuthority(scope) {
+    if (!authPrompt) return
+    const { userId, key, grant } = authPrompt
+    const body = { dbaId, userId, patch: { [key]: grant } }
+    if (scope === 'all') body.all = true
+    else if (scope === 'pick') body.communityIds = [...(authPick || [])]
+    else body.communityIds = [activeId]
+    if (scope === 'pick' && !body.communityIds.length) { alert('Tick at least one group first.'); return }
+    const r = await apiPost('authority-set', body)
     if (!r.ok) { alert(r.error || "Couldn't update authority — try again."); return }
+    setCfg(prev => prev ? { ...prev, leaders: r.leaders || prev.leaders } : prev)
+    setAuthPrompt(null); setAuthPick(null)
+  }
+  // Manager toggles someone's DBA-wide direct-message access
+  async function toggleDm(userId) {
+    const enabled = !dmEnabled[userId]
+    const r = await apiPost('dm-enable', { dbaId, userId, enabled })
+    if (!r.ok) { alert(r.error || "Couldn't update DM access — try again."); return }
     setCfg(prev => {
       if (!prev) return prev
-      const ld = { ...(prev.leaders || {}) }
-      const chan = { ...(ld[activeId] || {}) }
-      if (!next.del && !next.pin && !next.canvas) delete chan[userId]
-      else chan[userId] = next
-      if (Object.keys(chan).length) ld[activeId] = chan; else delete ld[activeId]
-      return { ...prev, leaders: ld }
+      const d = { ...(prev.dm_enabled || {}) }
+      if (enabled) d[userId] = true; else delete d[userId]
+      return { ...prev, dm_enabled: d }
     })
   }
   async function setMemberTier(userId, tierId) {
@@ -923,10 +940,11 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                 const mc = capsFor(activeId, m.user_id)
                 const privMember = isPriv(m.user_id)
                 const authBtn = (key, icon, label, on) => (
-                  <button key={key} onClick={() => toggleAuthority(m.user_id, key)} title={`${on ? 'Revoke' : 'Grant'}: ${label} (this group only)`}
+                  <button key={key} onClick={() => toggleAuthority(m.user_id, key, m.user_name)} title={`${on ? 'Revoke' : 'Grant'}: ${label}`}
                     style={{ background: on ? `${C.gold}22` : 'none', border:`1px solid ${on ? C.gold : C.border}`,
                       borderRadius:6, padding:'3px 6px', color: on ? C.gold : C.muted, fontSize:10, cursor:'pointer' }}>{icon}</button>
                 )
+                const dmOn = !!dmEnabled[m.user_id]
                 return (
                   <div key={m.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 0', borderBottom:`1px solid ${C.border}` }}>
                     <div style={{ flex:1, fontSize:12, color:C.white, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -937,6 +955,9 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                       {authBtn('del', '🗑', 'delete messages', !!mc.del)}
                       {authBtn('pin', '📌', 'pin for everyone', !!mc.pin)}
                       {authBtn('canvas', '🎨', 'edit the canvas', !!mc.canvas)}
+                      <button onClick={() => toggleDm(m.user_id)} title={dmOn ? 'Revoke direct-message access (whole DBA)' : 'Grant direct-message access (whole DBA)'}
+                        style={{ background: dmOn ? `${C.gold}22` : 'none', border:`1px solid ${dmOn ? C.gold : C.border}`,
+                          borderRadius:6, padding:'3px 6px', color: dmOn ? C.gold : C.muted, fontSize:10, cursor:'pointer' }}>💬</button>
                       <button onClick={() => removeMember(m)}
                         style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, padding:'3px 8px', color:C.danger, fontSize:10, cursor:'pointer', flexShrink:0 }}>Remove</button>
                     </>)}
@@ -945,6 +966,49 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
               })}
               {members.length === 0 && <div style={{ fontSize:11, color:C.muted, padding:'6px 0' }}>No members yet.</div>}
             </div>
+
+            {/* Scope picker: apply an authority change to this group, all groups, or chosen groups */}
+            {authPrompt && (
+              <div style={{ background:C.card, border:`1px solid ${C.gold}55`, borderRadius:10, padding:12, marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:C.white, marginBottom:8 }}>
+                  {authPrompt.grant ? 'Grant' : 'Remove'} {authPrompt.key === 'del' ? '🗑 delete messages' : authPrompt.key === 'pin' ? '📌 pin for everyone' : '🎨 edit the canvas'} — {authPrompt.userName}
+                </div>
+                {authPick === null ? (
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    <button onClick={() => applyAuthority('this')}
+                      style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 10px', color:C.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>This group only</button>
+                    <button onClick={() => applyAuthority('all')}
+                      style={{ background:'none', border:`1px solid ${C.gold}`, borderRadius:7, padding:'6px 10px', color:C.gold, fontSize:11, fontWeight:700, cursor:'pointer' }}>All groups</button>
+                    <button onClick={() => setAuthPick(new Set([activeId]))}
+                      style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, padding:'6px 10px', color:C.white, fontSize:11, cursor:'pointer' }}>Choose groups…</button>
+                    <button onClick={() => setAuthPrompt(null)}
+                      style={{ background:'none', border:'none', color:C.muted, fontSize:11, cursor:'pointer' }}>Cancel</button>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ maxHeight:120, overflowY:'auto', marginBottom:8 }}>
+                      {channels.map(c => {
+                        const on = authPick.has(c.id)
+                        return (
+                          <div key={c.id} onClick={() => setAuthPick(prev => { const n = new Set(prev); on ? n.delete(c.id) : n.add(c.id); return n })}
+                            style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0', cursor:'pointer' }}>
+                            <span style={{ width:14, height:14, borderRadius:4, border:`1px solid ${on ? C.gold : C.border}`, background: on ? C.gold : 'transparent',
+                              color:C.black, fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{on ? '✓' : ''}</span>
+                            <span style={{ fontSize:12, color:C.white }}>{c.name}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button onClick={() => applyAuthority('pick')}
+                        style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 12px', color:C.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>Apply</button>
+                      <button onClick={() => { setAuthPrompt(null); setAuthPick(null) }}
+                        style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, padding:'6px 10px', color:C.muted, fontSize:11, cursor:'pointer' }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:6 }}>Add people</div>
             <div style={{ flex:1, overflowY:'auto', minHeight:80 }}>
