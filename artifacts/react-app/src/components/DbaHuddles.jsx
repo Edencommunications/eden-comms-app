@@ -66,6 +66,49 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
   const visibleRef = useRef(visible)
   visibleRef.current = visible
 
+  // ── Draggable shrunk call window (same behavior as org huddles) ──
+  // winPos = null → default pinned position. Once dragged, we keep x/y.
+  const [winPos, setWinPos] = useState(null)
+  const winRef  = useRef(null)
+  const dragRef = useRef(null) // { startX, startY, origX, origY, moved }
+
+  const clampPos = (x, y) => {
+    const el = winRef.current
+    const w = el ? el.offsetWidth  : 320
+    const h = el ? el.offsetHeight : 280
+    const maxX = Math.max(0, window.innerWidth  - w)
+    const maxY = Math.max(0, window.innerHeight - h)
+    return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) }
+  }
+  const onHeaderPointerDown = (e) => {
+    if (expanded) return                    // only the shrunk window drags
+    if (e.target.closest('button')) return  // don't hijack Expand/End/Leave
+    const el = winRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: rect.left, origY: rect.top, moved: false }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    e.preventDefault()
+  }
+  const onHeaderPointerMove = (e) => {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.startX, dy = e.clientY - d.startY
+    if (!d.moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return
+    d.moved = true
+    setWinPos(clampPos(d.origX + dx, d.origY + dy))
+  }
+  const onHeaderPointerUp = () => { dragRef.current = null }
+  // Keep the window on-screen when the viewport shrinks / rotates
+  useEffect(() => {
+    if (!winPos) return
+    const onResize = () => setWinPos(p => (p ? clampPos(p.x, p.y) : p))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [winPos !== null]) // eslint-disable-line
+  // Reset custom position when leaving a call
+  useEffect(() => { if (!joined) setWinPos(null) }, [joined])
+
   async function load() {
     if (!dba?.id) return
     const b = await apiGet(`huddles?id=${encodeURIComponent(dba.id)}`)
@@ -196,19 +239,22 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
 
       {/* ── Call window (floating, survives across ALL DBA tabs) ── */}
       {joined && (
-        <div style={expanded ? {
+        <div ref={winRef} style={expanded ? {
           position:'fixed', inset: isMobile ? 0 : '4vh 4vw', zIndex:2000, background:C.black,
           border:`1px solid ${primary}66`, borderRadius: isMobile ? 0 : 14, overflow:'hidden', display:'flex', flexDirection:'column',
           boxShadow:'0 20px 60px rgba(0,0,0,.7)',
         } : {
           // On mobile, sit above the bottom tab bar (~64px + safe area) so tab
-          // taps still land while a call is minimized.
-          position:'fixed', right:14, bottom: isMobile ? 'calc(78px + env(safe-area-inset-bottom))' : 14,
-          width: isMobile ? 'calc(100vw - 28px)' : 380, height:280, zIndex:2000,
+          // taps still land while a call is minimized. Once dragged, use x/y.
+          position:'fixed', zIndex:2000,
+          ...(winPos ? { left:winPos.x, top:winPos.y } : { right:14, bottom: isMobile ? 'calc(78px + env(safe-area-inset-bottom))' : 14 }),
+          width: isMobile ? 'calc(100vw - 28px)' : 380, height:280,
           background:C.black, border:`1px solid ${primary}66`, borderRadius:12, overflow:'hidden', display:'flex', flexDirection:'column',
           boxShadow:'0 12px 40px rgba(0,0,0,.6)',
         }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+          <div onPointerDown={onHeaderPointerDown} onPointerMove={onHeaderPointerMove} onPointerUp={onHeaderPointerUp}
+            style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', background:C.surface, borderBottom:`1px solid ${C.border}`,
+              cursor: expanded ? 'default' : 'grab', touchAction: expanded ? 'auto' : 'none' }}>
             <span style={{ width:8, height:8, borderRadius:4, background:C.success }} />
             <span style={{ fontSize:12, fontWeight:800, color:C.white, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{joined.title}</span>
             <button onClick={() => setExpanded(e => !e)} style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, fontSize:11, padding:'3px 8px', cursor:'pointer' }}>
