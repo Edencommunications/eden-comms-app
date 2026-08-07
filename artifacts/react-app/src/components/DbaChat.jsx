@@ -102,7 +102,8 @@ function safeUrl(u) { try { const p = new URL(u).protocol; return p === 'https:'
 // ════════════════════════════════════════════════════════════════
 export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMobile = false }) {
   // Channel rows cycle through the DBA's saved palette so extra colors show up
-  const channelColor = (i) => (palette?.extra?.length ? palette.nth(i) : primary)
+  // Channels always use the brand's primary color — no palette cycling
+  const channelColor = (_i) => primary
   const C = {
     gold: primary, black: '#000000', white: '#ffffff',
     surface: '#111111', card: '#1a1a1a', border: '#2a2a2a',
