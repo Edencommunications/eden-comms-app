@@ -148,6 +148,9 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   // The server decides who can DM whom (tier, explicit grant, leadership,
   // or privilege — BOTH sides must qualify); we just render its answer.
   const dmUnlocked = (p) => myDm && dmTargets.has(p.id)
+  // Admins & the coach see every channel automatically, so they are never
+  // pickable when creating a group or adding people — only regular members are.
+  const pickable = people.filter(p => !p.kind)
 
   // ── Channels & open conversation ────────────────────────────
   const [channels,   setChannels]   = useState([])
@@ -889,7 +892,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                 Pick members {newMembers.length > 0 && `(${newMembers.length} selected)`}
               </div>
               <div style={{ maxHeight:180, overflowY:'auto', marginBottom:14, border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 8px' }}>
-                {people.map(p => {
+                {pickable.map(p => {
                   const picked = newMembers.some(x => x.id === p.id)
                   return (
                     <div key={p.id}
@@ -1012,7 +1015,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
 
             <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:6 }}>Add people</div>
             <div style={{ flex:1, overflowY:'auto', minHeight:80 }}>
-              {people.filter(p => !members.some(m => m.user_id === p.id)).map(p => (
+              {pickable.filter(p => !members.some(m => m.user_id === p.id)).map(p => (
                 <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', borderBottom:`1px solid ${C.border}` }}>
                   <div style={{ flex:1, fontSize:12, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                     {p.name} <span style={{ fontSize:9, color:C.muted }}>({p.kind === 'coach' ? 'coach' : p.kind === 'admin' ? 'admin' : 'member'})</span>
@@ -1021,7 +1024,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                     style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.black, fontSize:10, fontWeight:800, cursor:'pointer' }}>Add</button>
                 </div>
               ))}
-              {people.filter(p => !members.some(m => m.user_id === p.id)).length === 0 &&
+              {pickable.filter(p => !members.some(m => m.user_id === p.id)).length === 0 &&
                 <div style={{ fontSize:11, color:C.muted, padding:'8px 0' }}>Nobody left to add.</div>}
             </div>
             <div style={{ display:'flex', justifyContent:'flex-end', marginTop:12 }}>
