@@ -48,7 +48,10 @@ function timeAgo(ts) {
 
 const AUD_LABEL = { leaders:'Leaders only', all:'Everyone', pick:'Invited members' }
 
-export default function DbaHuddles({ dba, primary, isMobile }) {
+// `visible` — whether the Huddles tab itself is showing. The component stays
+// mounted across all DBA tabs so an active call keeps running; when the user
+// is on another tab we render ONLY the floating call window.
+export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
   const [data, setData] = useState(null)     // {can_start, huddles, roster}
   const [joined, setJoined] = useState(null) // huddle currently in the call window
   const [expanded, setExpanded] = useState(false)
@@ -60,6 +63,8 @@ export default function DbaHuddles({ dba, primary, isMobile }) {
   const [picked, setPicked] = useState({})
   const joinedRef = useRef(null)
   joinedRef.current = joined
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
 
   async function load() {
     if (!dba?.id) return
@@ -74,9 +79,15 @@ export default function DbaHuddles({ dba, primary, isMobile }) {
   useEffect(() => {
     setData(null); setJoined(null); setShowStart(false)
     load()
-    const iv = setInterval(load, 10000)
+    const iv = setInterval(() => {
+      // Only poll while the list is on screen or we're in a call (to catch a
+      // room being ended elsewhere) — no permanent background polling.
+      if (visibleRef.current || joinedRef.current) load()
+    }, 10000)
     return () => clearInterval(iv)
   }, [dba?.id]) // eslint-disable-line
+  // Refresh the list when the user returns to the Huddles tab
+  useEffect(() => { if (visible) load() }, [visible]) // eslint-disable-line
 
   async function startHuddle() {
     const memberIds = Object.keys(picked).filter(k => picked[k])
@@ -103,6 +114,8 @@ export default function DbaHuddles({ dba, primary, isMobile }) {
   const btn = (bg, fg = C.black) => ({ background:bg, color:fg, border:'none', borderRadius:8, padding:'9px 16px', fontSize:12, fontWeight:800, cursor:'pointer' })
 
   return (
+    <>
+    {visible && (
     <div style={{ maxWidth: 760, margin:'0 auto', padding: isMobile ? '14px 10px 30px' : '24px 16px 40px' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:14 }}>
         <div>
@@ -178,14 +191,20 @@ export default function DbaHuddles({ dba, primary, isMobile }) {
         </div>
       )}
 
-      {/* ── Call window (floating, survives while on this tab) ── */}
+    </div>
+    )}
+
+      {/* ── Call window (floating, survives across ALL DBA tabs) ── */}
       {joined && (
         <div style={expanded ? {
           position:'fixed', inset: isMobile ? 0 : '4vh 4vw', zIndex:2000, background:C.black,
           border:`1px solid ${primary}66`, borderRadius: isMobile ? 0 : 14, overflow:'hidden', display:'flex', flexDirection:'column',
           boxShadow:'0 20px 60px rgba(0,0,0,.7)',
         } : {
-          position:'fixed', right:14, bottom:14, width: isMobile ? 'calc(100vw - 28px)' : 380, height:280, zIndex:2000,
+          // On mobile, sit above the bottom tab bar (~64px + safe area) so tab
+          // taps still land while a call is minimized.
+          position:'fixed', right:14, bottom: isMobile ? 'calc(78px + env(safe-area-inset-bottom))' : 14,
+          width: isMobile ? 'calc(100vw - 28px)' : 380, height:280, zIndex:2000,
           background:C.black, border:`1px solid ${primary}66`, borderRadius:12, overflow:'hidden', display:'flex', flexDirection:'column',
           boxShadow:'0 12px 40px rgba(0,0,0,.6)',
         }}>
@@ -204,6 +223,6 @@ export default function DbaHuddles({ dba, primary, isMobile }) {
             style={{ flex:1, width:'100%', border:'none', background:C.black }} />
         </div>
       )}
-    </div>
+    </>
   )
 }

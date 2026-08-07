@@ -6525,7 +6525,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
             <DbaChat dba={dba} primary={primary} palette={wl} isMobile={isMobile} />
           </div>
         ) : tab === "huddles" ? (
-          <DbaHuddles dba={dba} primary={primary} isMobile={isMobile} />
+          null /* DbaHuddles is mounted below (always), so an active call survives tab switches */
         ) : tab === "calendar" ? (
           <DbaCalendar dba={dba} primary={primary} palette={wl} isMobile={isMobile} />
         ) : tab === "connect" ? (
@@ -6567,6 +6567,9 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
           </div>
         )}
       </div>
+
+      {/* Always mounted so an active DBA call survives switching tabs (Learn, Community, etc.) */}
+      <DbaHuddles dba={dba} primary={primary} isMobile={isMobile} visible={tab === "huddles"} />
 
       {isMobile && (
         <div style={{ display: "flex", background: B.surface, borderTop: `1px solid ${B.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
