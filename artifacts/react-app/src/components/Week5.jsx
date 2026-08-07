@@ -352,18 +352,27 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── Mark module complete ───────────────────────────────────
+  // Completions go through the api-server so "lessons unlock in order" is
+  // enforced server-side (a direct REST write could skip locked lessons).
   async function markComplete(moduleId) {
     if (!myUUID||!activeCourse) return
     setCompleted(prev=>new Set([...prev,moduleId]))
-    await fetch(`${SUPABASE_URL}/rest/v1/course_progress`,{
-      method:'POST',
-      headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({
-        user_id:myUUID, course_id:activeCourse.id,
-        module_id:moduleId, completed:true,
-        completed_at:new Date().toISOString(),
-      }),
-    })
+    try {
+      const r = await fetch(`${import.meta.env.BASE_URL||'/'}api/course-progress`,{
+        method:'POST',
+        headers:{Authorization:sbBearer(),'Content-Type':'application/json'},
+        body:JSON.stringify({ courseId:activeCourse.id, moduleId, completed:true }),
+      })
+      if (!r.ok) {
+        // Roll back the optimistic tick — the server refused (e.g. locked lesson)
+        setCompleted(prev=>{ const n=new Set(prev); n.delete(moduleId); return n })
+        const b = await r.json().catch(()=>null)
+        alert(b?.error || 'Could not save your progress — please try again.')
+      }
+    } catch {
+      setCompleted(prev=>{ const n=new Set(prev); n.delete(moduleId); return n })
+      alert('Could not save your progress — please check your connection and try again.')
+    }
   }
 
   // ── ADMIN: Save video URL ─────────────────────────────────

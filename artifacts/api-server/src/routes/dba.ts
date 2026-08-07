@@ -1127,6 +1127,74 @@ router.get("/course-modes", async (req: Request, res: Response) => {
   return res.json({ ok: true, modes: await loadCourseModes(ids) });
 });
 
+// ── Main app (Week5) lesson completion ──────────────────────────
+// POST /course-progress {courseId, moduleId, completed?} — the Learn tab
+// used to write course_progress straight to Supabase, so the "lessons
+// unlock in order" rule was only visual. This endpoint enforces it
+// server-side, same rule as /dba/progress.
+// IMPORTANT data semantics: the main app keys course_progress.module_id by
+// the legacy DISPLAY id (course_modules.module_id, e.g. "1.2") — NOT the
+// module row UUID that /dba/progress uses. Don't mix them.
+router.post("/course-progress", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { courseId, moduleId, completed } = (req.body || {}) as Record<string, any>;
+  const cid = String(courseId || "");
+  const mid = String(moduleId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(cid) || !mid || mid.length > 40) {
+    return res.status(400).json({ ok: false, error: "courseId and moduleId required" });
+  }
+  const isAdmin = me.role === "super_admin";
+  // The lesson must actually belong to that course — never trust raw ids
+  const modRows = await rest<any>(
+    `course_modules?course_id=eq.${encodeURIComponent(cid)}&module_id=eq.${encodeURIComponent(mid)}&select=id&limit=1`,
+  );
+  if (!modRows[0]) return res.status(403).json({ ok: false, error: "That lesson isn't part of this course" });
+  // Non-admins need a live access grant to the course (same rule the UI uses)
+  if (!isAdmin) {
+    const [access, courseRows] = await Promise.all([
+      rest<any>(`course_access?user_id=eq.${encodeURIComponent(me.id)}&course_id=eq.${encodeURIComponent(cid)}&revoked=eq.false&select=id&limit=1`),
+      rest<any>(`courses?id=eq.${encodeURIComponent(cid)}&is_active=eq.true&select=id&limit=1`),
+    ]);
+    if (!access[0] || !courseRows[0]) {
+      return res.status(403).json({ ok: false, error: "You don't have access to that course" });
+    }
+  }
+  // Sequential courses: complete lessons in order (admins exempt, like the UI)
+  if (!isAdmin && completed !== false) {
+    const modes = await loadCourseModes([cid]);
+    if (modes[cid]) {
+      const [allModsRaw, myDone] = await Promise.all([
+        rest<any>(`course_modules?course_id=eq.${encodeURIComponent(cid)}&select=id,module_id,section_id,sort_order`),
+        rest<any>(`course_progress?user_id=eq.${encodeURIComponent(me.id)}&course_id=eq.${encodeURIComponent(cid)}&completed=eq.true&select=module_id`),
+      ]);
+      // Canonical lesson order = the render order everywhere: section first,
+      // then sort_order, id as deterministic tie-breaker.
+      const allMods = [...allModsRaw].sort((a: any, b: any) =>
+        ((a.section_id ?? 0) - (b.section_id ?? 0)) || ((a.sort_order ?? 0) - (b.sort_order ?? 0)) || String(a.id).localeCompare(String(b.id)));
+      // Progress rows are keyed by the display id here
+      const doneSet = new Set(myDone.map((p: any) => String(p.module_id)));
+      const idx = allMods.findIndex((m: any) => String(m.module_id) === mid);
+      const blocked = idx > 0 && allMods.slice(0, idx).some((m: any) => !doneSet.has(String(m.module_id)));
+      if (blocked) return res.status(403).json({ ok: false, error: "Finish the earlier lessons first — this course unlocks in order" });
+    }
+  }
+  // Same upsert shape Week5 used — user_id always the caller's own profile
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/course_progress`, {
+    method: "POST",
+    headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      user_id: me.id,
+      course_id: cid,
+      module_id: mid,
+      completed: completed !== false,
+      completed_at: new Date().toISOString(),
+    }),
+  });
+  if (!r.ok) return res.status(502).json({ ok: false, error: "Couldn't save your progress — try again" });
+  return res.json({ ok: true });
+});
+
 // Single source of truth for "can this member see/touch this course?"
 // Managers bypass upstream; here we only judge plain members.
 async function courseOpenToMember(companyId: string, dba: DbaRecord, userId: string, courseId: string): Promise<boolean> {
