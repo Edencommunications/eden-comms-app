@@ -4058,6 +4058,74 @@ const AdminDashboard = ({ user }:any) => {
       setDailyMsg(''); loadHuddleStatus();
     } catch {}
   };
+  // Meta ads recaps — per-org connection + destination community + cadences
+  const [metaAds, setMetaAds] = useState<any>(null);       // null loading · {connected,...}
+  const [metaToken, setMetaToken] = useState('');
+  const [metaAcct, setMetaAcct] = useState('');
+  const [metaBusy, setMetaBusy] = useState(false);
+  const [metaMsg, setMetaMsg] = useState('');
+  const [metaCommunities, setMetaCommunities] = useState<any[]>([]);
+  const loadMetaAds = async () => {
+    try {
+      const r = await fetch('/api/meta-ads/status', { headers: { Authorization: sbBearer() } });
+      const d = await r.json().catch(() => null);
+      setMetaAds(r.ok && d?.ok ? d : { connected:false });
+    } catch { setMetaAds({ connected:false }); }
+  };
+  useEffect(() => { loadMetaAds(); }, []);
+  useEffect(() => {
+    const cid = isOwnerHQ ? EDEN_COMPANY_ID : (myOrg?.id || EDEN_COMPANY_ID);
+    sbGet('communities', `company_id=eq.${cid}&is_active=eq.true&select=id,name,context&order=name`)
+      .then((rows:any[]) => setMetaCommunities(Array.isArray(rows) ? rows : []))
+      .catch(() => setMetaCommunities([]));
+  }, [myOrg?.id]);
+  const metaConnect = async () => {
+    setMetaBusy(true); setMetaMsg('');
+    try {
+      const r = await fetch('/api/meta-ads/connect', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ token: metaToken, adAccountId: metaAcct }),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) { setMetaMsg(`✅ Connected to ${d?.account_name || 'your ad account'}! Now pick a community below.`); setMetaToken(''); setMetaAcct(''); loadMetaAds(); }
+      else setMetaMsg(`⚠️ ${d?.error || 'Could not connect'}`);
+    } catch { setMetaMsg('⚠️ Could not connect'); }
+    setMetaBusy(false);
+  };
+  const metaDisconnect = async () => {
+    if (!window.confirm('Disconnect Meta Ads? Recaps will stop posting.')) return;
+    try {
+      await fetch('/api/meta-ads/disconnect', { method:'POST', headers:{ Authorization: sbBearer() } });
+      setMetaMsg(''); loadMetaAds();
+    } catch {}
+  };
+  const metaSaveSettings = async (patch:any) => {
+    setMetaBusy(true); setMetaMsg('');
+    try {
+      const r = await fetch('/api/meta-ads/settings', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify(patch),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) { setMetaMsg('✅ Saved'); loadMetaAds(); }
+      else setMetaMsg(`⚠️ ${d?.error || 'Could not save'}`);
+    } catch { setMetaMsg('⚠️ Could not save'); }
+    setMetaBusy(false);
+    setTimeout(() => setMetaMsg(m => m === '✅ Saved' ? '' : m), 3000);
+  };
+  const metaRunNow = async (period:string) => {
+    setMetaBusy(true); setMetaMsg('');
+    try {
+      const r = await fetch('/api/meta-ads/run-now', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ period }),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) setMetaMsg('✅ Recap posted! Check the community.');
+      else setMetaMsg(`⚠️ ${d?.error || 'Could not post the recap'}`);
+    } catch { setMetaMsg('⚠️ Could not post the recap'); }
+    setMetaBusy(false);
+  };
   useEffect(() => {
     sbGet('user_profiles', `role=in.(coach,head_coach)&is_active=not.is.false&select=id,name,timezone,deadline_time&order=name`)
       .then((rows:any[]) => {
@@ -4203,6 +4271,61 @@ const AdminDashboard = ({ user }:any) => {
                 </>
               )}
               {dailyMsg && <p style={{ fontSize:12, color:dailyMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{dailyMsg}</p>}
+            </Card>
+            {/* Meta ads recaps — per-org connection, community + cadences */}
+            <Card style={{ marginBottom:20 }}>
+              <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>📊 Meta Ads Recaps</p>
+              {metaAds === null ? (
+                <p style={{ fontSize:12, color:B.muted, margin:0 }}>Checking connection…</p>
+              ) : !metaAds.connected ? (
+                <>
+                  <p style={{ fontSize:12, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
+                    Post automatic ad recaps (spend, leads, cost per lead — plus <strong>who changed what</strong> in Ads Manager) into a community of your choice. Daily, weekly, and monthly.
+                    <br/>1. Go to <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener noreferrer" style={{ color:B.gold }}>Meta Business Settings → System Users</a> — create one (or use an existing) and generate a token with <strong>ads_read</strong> permission for your ad account
+                    <br/>2. Find your <strong>Ad Account ID</strong> in Ads Manager (the number after "act_" in the URL, or under Ad Account Settings)
+                    <br/>3. Paste both here:
+                  </p>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    <input type="password" value={metaToken} onChange={e => setMetaToken(e.target.value)}
+                      placeholder="Paste your Meta access token"
+                      style={{ flex:2, minWidth:200, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px", color:B.text, fontSize:12, outline:"none" }}/>
+                    <input value={metaAcct} onChange={e => setMetaAcct(e.target.value)}
+                      placeholder="Ad account ID (numbers)"
+                      style={{ flex:1, minWidth:140, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px", color:B.text, fontSize:12, outline:"none" }}/>
+                    <Btn onClick={metaConnect} disabled={metaBusy || !metaToken.trim() || !metaAcct.trim()}>{metaBusy ? "Checking…" : "Connect"}</Btn>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize:12, color:"#4FD89A", margin:"0 0 10px", lineHeight:1.5 }}>
+                    ✅ Connected to <strong>{metaAds.account_name || `account ${metaAds.ad_account_id}`}</strong>.
+                  </p>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post recaps into</span>
+                    <select value={metaAds.community_id || ''} disabled={metaBusy}
+                      onChange={e => e.target.value && metaSaveSettings({ communityId: e.target.value })}
+                      style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:metaAds.community_id ? B.gold : B.text, fontSize:12, outline:"none", cursor:"pointer", maxWidth:"100%" }}>
+                      <option value="">Choose a community…</option>
+                      {metaCommunities.map((c:any) => <option key={c.id} value={c.id}>{c.context === 'team' ? '👥' : '💬'} {c.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:10 }}>
+                    {[['daily','Daily'],['weekly','Weekly (Mondays)'],['monthly','Monthly (1st)']].map(([k, label]) => (
+                      <label key={k} style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
+                        <input type="checkbox" checked={!!metaAds[k]} disabled={metaBusy || !metaAds.community_id}
+                          onChange={e => metaSaveSettings({ [k]: e.target.checked })}/>
+                        <span style={{ fontSize:12, color: metaAds[k] ? "#4FD89A" : B.muted, fontWeight:700 }}>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {!metaAds.community_id && <p style={{ fontSize:11, color:"#ffa600", margin:"0 0 10px" }}>Pick a community above to turn recaps on.</p>}
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    <Btn variant="secondary" onClick={() => metaRunNow('daily')} disabled={metaBusy || !metaAds.community_id}>Post a test recap now</Btn>
+                    <Btn variant="secondary" onClick={metaDisconnect} disabled={metaBusy}>Disconnect</Btn>
+                  </div>
+                </>
+              )}
+              {metaMsg && <p style={{ fontSize:12, color:metaMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{metaMsg}</p>}
             </Card>
             {/* GHL intake webhook — white-label self-serve */}
             {myOrg && (

@@ -15,6 +15,7 @@ import invitesRouter from "./invites";
 import broadcastsRouter from "./broadcasts";
 import dbaRouter from "./dba";
 import ouraRouter from "./oura";
+import metaAdsRouter from "./metaAds";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(invitesRouter);
 router.use(broadcastsRouter);
 router.use(dbaRouter);
 router.use(ouraRouter);
+router.use(metaAdsRouter);
 
 export default router;
