@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { startBroadcastScheduler } from "./lib/broadcastScheduler";
 import { startStartDateReminders } from "./lib/startDateReminders";
 import { startMetaAdsScheduler } from "./routes/metaAds";
+import { startPushWatcher } from "./routes/push";
 
 const rawPort = process.env["PORT"];
 
@@ -28,4 +29,5 @@ app.listen(port, (err) => {
   startBroadcastScheduler();
   startStartDateReminders();
   startMetaAdsScheduler();
+  startPushWatcher();
 });

@@ -16,6 +16,7 @@ import broadcastsRouter from "./broadcasts";
 import dbaRouter from "./dba";
 import ouraRouter from "./oura";
 import metaAdsRouter from "./metaAds";
+import pushRouter from "./push";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(broadcastsRouter);
 router.use(dbaRouter);
 router.use(ouraRouter);
 router.use(metaAdsRouter);
+router.use(pushRouter);
 
 export default router;

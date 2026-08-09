@@ -105,6 +105,67 @@ export default function Notifications({ currentUser, onNavigate }) {
 
   const unreadCount = notifs.filter(n => !n.is_read).length
 
+  // ── Phone push notifications (Web Push) ─────────────────────
+  const [pushState, setPushState] = useState(null)   // null loading · {enabled, devices, supported, needsInstall}
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushMsg, setPushMsg] = useState('')
+  const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
+  useEffect(() => {
+    if (!myUUID) return
+    fetch('/api/push/prefs', { headers: { Authorization: sbBearer() } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setPushState({ enabled: !!d?.enabled, devices: d?.devices || 0 }))
+      .catch(() => setPushState({ enabled: false, devices: 0 }))
+  }, [myUUID])
+
+  async function enablePush() {
+    setPushBusy(true); setPushMsg('')
+    try {
+      if (!pushSupported) { setPushMsg('This browser does not support notifications.'); setPushBusy(false); return }
+      if (isIOS && !isStandalone) {
+        setPushMsg('On iPhone: first add this app to your Home Screen (Share button → "Add to Home Screen"), then open it from there and turn this on.')
+        setPushBusy(false); return
+      }
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') { setPushMsg('Notifications were blocked — allow them in your browser/phone settings, then try again.'); setPushBusy(false); return }
+      const kr = await fetch('/api/push/public-key', { headers: { Authorization: sbBearer() } })
+      const kd = await kr.json().catch(() => null)
+      if (!kr.ok || !kd?.publicKey) { setPushMsg('Could not reach the notification server — try again in a minute.'); setPushBusy(false); return }
+      const reg = await navigator.serviceWorker.ready
+      // Convert base64url VAPID key to the byte array subscribe() expects
+      const pad = '='.repeat((4 - kd.publicKey.length % 4) % 4)
+      const raw = atob((kd.publicKey + pad).replace(/-/g, '+').replace(/_/g, '/'))
+      const appKey = new Uint8Array([...raw].map(ch => ch.charCodeAt(0)))
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey })
+      const sr = await fetch('/api/push/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ subscription: sub.toJSON() }),
+      })
+      const sd = await sr.json().catch(() => null)
+      if (!sr.ok) { setPushMsg(sd?.error || 'Could not turn on notifications.'); setPushBusy(false); return }
+      setPushState({ enabled: true, devices: sd?.devices || 1 })
+      setPushMsg('✅ Phone notifications are on for this device.')
+    } catch (e) {
+      setPushMsg('Could not turn on notifications — ' + (e?.message || 'unknown error'))
+    }
+    setPushBusy(false)
+  }
+
+  async function disablePush() {
+    setPushBusy(true); setPushMsg('')
+    try {
+      const r = await fetch('/api/push/prefs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ enabled: false }),
+      })
+      if (r.ok) { setPushState(p => ({ ...(p || {}), enabled: false })); setPushMsg('Phone notifications are off (all devices).') }
+      else setPushMsg('Could not turn off — try again.')
+    } catch { setPushMsg('Could not turn off — try again.') }
+    setPushBusy(false)
+  }
+
   // ── Load notifications on mount; realtime pushes new ones instantly,
   //    the 15s poll only fires while the websocket channel is down ─────
   useEffect(() => {
@@ -328,12 +389,36 @@ export default function Notifications({ currentUser, onNavigate }) {
             })}
           </div>
 
-          {/* Footer */}
+          {/* Footer — phone push toggle */}
           <div style={{
             padding:'10px 16px', borderTop:`1px solid ${C.border}`,
-            flexShrink:0, textAlign:'center',
+            flexShrink:0,
           }}>
-            <div style={{ fontSize:10, color:C.muted }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color:C.white }}>📱 Phone notifications</div>
+                <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
+                  {pushState === null ? 'Checking…'
+                    : pushState.enabled ? `On${pushState.devices ? ` · ${pushState.devices} device${pushState.devices > 1 ? 's' : ''}` : ''}`
+                    : 'Get alerts even when the app is closed'}
+                </div>
+              </div>
+              <button
+                onClick={() => pushState?.enabled ? disablePush() : enablePush()}
+                disabled={pushBusy || pushState === null}
+                style={{
+                  width:44, height:24, borderRadius:12, border:'none', cursor:'pointer', flexShrink:0,
+                  background: pushState?.enabled ? C.gold : C.border, position:'relative', transition:'background .2s',
+                  opacity: pushBusy ? 0.6 : 1,
+                }}>
+                <span style={{
+                  position:'absolute', top:2, left: pushState?.enabled ? 22 : 2,
+                  width:20, height:20, borderRadius:10, background:C.white, transition:'left .2s', display:'block',
+                }}/>
+              </button>
+            </div>
+            {pushMsg && <div style={{ fontSize:10, color: pushMsg.startsWith('✅') ? C.success : '#ffa600', marginTop:6, lineHeight:1.5 }}>{pushMsg}</div>}
+            <div style={{ fontSize:9, color:C.muted, marginTop:6, textAlign:'center' }}>
               🔒 Notifications are private and encrypted
             </div>
           </div>
