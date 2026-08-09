@@ -2147,14 +2147,19 @@ async function saveHuddles(companyId: string, dbaId: string, list: DbaHuddle[]):
 // from the parent org), stored zero-DDL in admin_settings as
 // `dba_daily_key:<dbaId>` under the owning org. Falls back to the org's
 // key when the DBA hasn't connected one.
-async function dailyKeyForDbaScope(companyId: string, dbaId: string): Promise<{ key: string; source: "dba" | "org" | "none" }> {
+// A manager can also opt a DBA OUT of the org fallback entirely
+// (`dba_daily_mode:<dbaId>` = "own"): calls then only work once the DBA
+// connects its own key — keeps the org's minutes/billing fully separate.
+async function dailyKeyForDbaScope(companyId: string, dbaId: string): Promise<{ key: string; source: "dba" | "org" | "none"; mode: "org" | "own" }> {
   const rows = await rest<any>(
-    `admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(`dba_daily_key:${dbaId}`)}&select=value`,
+    `admin_settings?company_id=eq.${companyId}&key=in.(${encodeURIComponent(`"dba_daily_key:${dbaId}","dba_daily_mode:${dbaId}"`)})&select=key,value`,
   );
-  const own = String(rows[0]?.value || "").trim();
-  if (own) return { key: own, source: "dba" };
+  const own = String(rows.find((r: any) => r.key === `dba_daily_key:${dbaId}`)?.value || "").trim();
+  const mode = String(rows.find((r: any) => r.key === `dba_daily_mode:${dbaId}`)?.value || "").trim() === "own" ? "own" : "org";
+  if (own) return { key: own, source: "dba", mode };
+  if (mode === "own") return { key: "", source: "none", mode }; // org fallback switched off
   const org = await dailyKeyForOrg(companyId);
-  return { key: org, source: org ? "org" : "none" };
+  return { key: org, source: org ? "org" : "none", mode };
 }
 
 // GET /dba/daily-status?id= — managers only: how is video connected here?
@@ -2165,8 +2170,38 @@ router.get("/dba/daily-status", async (req: Request, res: Response) => {
   if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
   const acc = dbaAccess(me, hit.companyId, hit.dba);
   if (!acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
-  const { key, source } = await dailyKeyForDbaScope(hit.companyId, hit.dba.id);
-  return res.json({ ok: true, connected: Boolean(key), source });
+  const { key, source, mode } = await dailyKeyForDbaScope(hit.companyId, hit.dba.id);
+  return res.json({ ok: true, connected: Boolean(key), source, mode });
+});
+
+// POST /dba/daily-mode {dbaId, useOrg} — managers only. useOrg=false cuts the
+// DBA off from the organization's Daily.co account: its calls stop working
+// until the DBA connects its own key (org admin or DBA manager can paste it).
+router.post("/dba/daily-mode", async (req: Request, res: Response) => {
+  const me = await requireUserJwt(req);
+  if (!me) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const { dbaId, useOrg } = (req.body || {}) as Record<string, any>;
+  const hit = await findDbaAnywhere(String(dbaId || ""));
+  if (!hit) return res.status(404).json({ ok: false, error: "DBA not found" });
+  const acc = dbaAccess(me, hit.companyId, hit.dba);
+  if (!acc.manage) return res.status(403).json({ ok: false, error: "Not authorized" });
+  const modeKey = `dba_daily_mode:${hit.dba.id}`;
+  if (useOrg) {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${hit.companyId}&key=eq.${encodeURIComponent(modeKey)}`,
+      { method: "DELETE", headers: SVC_H },
+    );
+    if (!r.ok) return res.status(502).json({ ok: false, error: "Could not save" });
+  } else {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+      method: "POST",
+      headers: { ...SVC_H, Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ company_id: hit.companyId, key: modeKey, value: "own" }),
+    });
+    if (!r.ok) return res.status(502).json({ ok: false, error: "Could not save" });
+  }
+  void audit(me, useOrg ? "dba_daily_use_org" : "dba_daily_own_only", hit.dba.id, { dba: hit.dba.name });
+  return res.json({ ok: true, mode: useOrg ? "org" : "own" });
 });
 
 // POST /dba/daily-key {dbaId, key} — managers only; validates the key first

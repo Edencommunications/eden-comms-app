@@ -6343,6 +6343,18 @@ const DbaHq = ({ dba, primary, content }: any) => {
     finally { setBusy(false); }
   };
   const inp = { width: "100%", boxSizing: "border-box" as const, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none", marginBottom: 6 };
+  // Video calls (Daily.co) — this DBA's own connection, managed right here
+  const [daily, setDaily] = useState<any>(null);       // null loading · {connected, source, mode}
+  const [dailyIn, setDailyIn] = useState('');
+  const [dailyMsg, setDailyMsg] = useState('');
+  const loadDaily = useCallback(() => {
+    setDaily(null);
+    fetch(`${DBA_API('daily-status')}?id=${encodeURIComponent(dba.id)}`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => setDaily(b?.ok ? b : { connected: false, source: 'none', mode: 'org' }))
+      .catch(() => setDaily({ connected: false, source: 'none', mode: 'org' }));
+  }, [dba.id]);
+  useEffect(() => { setDailyIn(''); setDailyMsg(''); loadDaily(); }, [loadDaily]);
   const defs = hq?.effective_defs || [];
   const courses = (content?.courses || []);
   if (hq === null) return <div style={{ padding: 60, textAlign: "center" }}><p style={{ color: B.muted, fontSize: 13 }}>Loading…</p></div>;
@@ -6413,6 +6425,52 @@ const DbaHq = ({ dba, primary, content }: any) => {
             style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: busy || !invite.name.trim() || !invite.email.trim() ? 0.6 : 1, alignSelf: "flex-start" }}>Invite</button>
         </div>
         <p style={{ fontSize: 10, color: B.muted, margin: "6px 0 0", lineHeight: 1.5 }}>New people get a {dba?.name}-branded welcome email with their login. Assign their tier below once they appear.</p>
+      </Card>
+
+      {/* ── Video calls (Daily.co) ── */}
+      <Card style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 8px" }}>🎥 Video calls</p>
+        {daily === null ? (
+          <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>Checking connection…</p>
+        ) : daily.source === 'dba' ? (
+          <>
+            <p style={{ fontSize: 12, color: '#4FD89A', margin: "0 0 8px", lineHeight: 1.5 }}>✅ {dba?.name} runs huddles on its own Daily.co account.</p>
+            <button disabled={busy} onClick={async () => {
+                const fallback = daily.mode === 'own'
+                  ? 'Calls will STOP working until a new key is connected.'
+                  : 'Calls will fall back to the organization\u2019s account (if connected).';
+                if (!window.confirm(`Disconnect this Daily.co account? ${fallback}`)) return;
+                if (await post('daily-key-remove', {})) { setDailyMsg(''); loadDaily(); }
+              }}
+              style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              Disconnect
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 12, color: daily.mode === 'own' ? '#ffa600' : B.muted, margin: "0 0 8px", lineHeight: 1.6 }}>
+              {daily.mode === 'own'
+                ? '⛔ Huddles here won\u2019t work yet — this space is set to use its OWN video account, and none is connected. Connect one below:'
+                : daily.source === 'org'
+                ? 'Huddles currently run on the parent organization\u2019s Daily.co account. Connect your own to keep this space\u2019s call minutes and billing separate:'
+                : 'No video account connected yet — huddles here won\u2019t work until one is. Connect a free Daily.co account:'}
+              <br/>1. Sign up at <a href="https://dashboard.daily.co/signup" target="_blank" rel="noopener noreferrer" style={{ color: primary }}>dashboard.daily.co</a> (free — 1,000 call minutes/month)
+              <br/>2. Open <strong>Developers</strong> in the left menu, copy the API key, paste it here:
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input type="password" value={dailyIn} onChange={e => setDailyIn(e.target.value)} placeholder="Paste the Daily.co API key"
+                style={{ ...inp, flex: 1, minWidth: 180, marginBottom: 0, width: 'auto' }} />
+              <button disabled={busy || !dailyIn.trim()} onClick={async () => {
+                  setDailyMsg('');
+                  if (await post('daily-key', { key: dailyIn.trim() })) { setDailyIn(''); setDailyMsg('✅ Connected — huddles now run on this space\u2019s own account.'); loadDaily(); }
+                }}
+                style={{ background: primary, color: "#000", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: (busy || !dailyIn.trim()) ? 0.5 : 1 }}>
+                {busy ? 'Checking…' : 'Connect'}
+              </button>
+            </div>
+          </>
+        )}
+        {dailyMsg && <p style={{ fontSize: 11, color: '#4FD89A', margin: "8px 0 0" }}>{dailyMsg}</p>}
       </Card>
 
       {/* ── Members & tiers ── */}
@@ -7012,7 +7070,10 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
                       <>
                         <p style={{ fontSize: 11, color: B.success || '#4FD89A', margin: "0 0 6px", lineHeight: 1.5 }}>✅ This DBA runs calls on its own Daily.co account.</p>
                         <button disabled={busy} onClick={async () => {
-                            if (!window.confirm(`Disconnect ${d.name}'s own Daily.co account? Calls will fall back to the organization's account (if connected).`)) return;
+                            const fallback = dbaDaily.mode === 'own'
+                              ? 'Calls will STOP working until a new key is connected (org fallback is switched off for this DBA).'
+                              : 'Calls will fall back to the organization\u2019s account (if connected).';
+                            if (!window.confirm(`Disconnect ${d.name}'s own Daily.co account? ${fallback}`)) return;
                             const b = await post('daily-key-remove', { dbaId: d.id });
                             if (b) { setDbaDailyMsg(''); loadDbaDaily(d.id); }
                           }}
@@ -7022,8 +7083,10 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
                       </>
                     ) : (
                       <>
-                        <p style={{ fontSize: 11, color: B.muted, margin: "0 0 6px", lineHeight: 1.6 }}>
-                          {dbaDaily.source === 'org'
+                        <p style={{ fontSize: 11, color: dbaDaily.mode === 'own' ? '#ffa600' : B.muted, margin: "0 0 6px", lineHeight: 1.6 }}>
+                          {dbaDaily.mode === 'own'
+                            ? '⛔ This DBA is disconnected from the organization\u2019s account — video calls won\u2019t work here until its own Daily.co key is connected (by you, or by the DBA in its HQ tab).'
+                            : dbaDaily.source === 'org'
                             ? 'Calls currently run on the organization\u2019s Daily.co account. Give this DBA its own account to keep its call minutes and billing separate:'
                             : 'No video account connected yet — huddles here won\u2019t work until one is. Connect a free Daily.co account for this DBA:'}
                           <br/>1. Sign up at <a href="https://dashboard.daily.co/signup" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>dashboard.daily.co</a> (free — 1,000 call minutes/month)
@@ -7043,6 +7106,18 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
                           </button>
                         </div>
                       </>
+                    )}
+                    {/* Org-account choice: allow / block the fallback to the org's Daily.co */}
+                    {dbaDaily !== null && dbaDaily.source !== 'dba' && (
+                      <button disabled={busy} onClick={async () => {
+                          const toOrg = dbaDaily.mode === 'own';
+                          if (!toOrg && !window.confirm(`Stop ${d.name} from using the organization\u2019s video account? Its calls will stop working until it connects its OWN Daily.co key (you or the DBA can paste it).`)) return;
+                          const b = await post('daily-mode', { dbaId: d.id, useOrg: toOrg });
+                          if (b) { setDbaDailyMsg(toOrg ? '✅ This DBA now uses the organization\u2019s account again.' : ''); loadDbaDaily(d.id); }
+                        }}
+                        style={{ background: "none", color: dbaDaily.mode === 'own' ? (B.success || '#4FD89A') : '#ffa600', border: `1px solid ${B.border}`, borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", marginTop: 6 }}>
+                        {dbaDaily.mode === 'own' ? 'Use the organization\u2019s account instead' : 'Stop using the organization\u2019s account'}
+                      </button>
                     )}
                     {dbaDailyMsg && <p style={{ fontSize: 11, color: '#4FD89A', margin: "6px 0 0" }}>{dbaDailyMsg}</p>}
                   </div>
