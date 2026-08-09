@@ -7381,6 +7381,21 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // ── Session keep-alive ──────────────────────────────────────
+  // On phones the app can sleep for hours; when it wakes, the stored
+  // access token may be expired and every save silently fails under RLS
+  // ("Could not save…"). getSession() forces supabase-js to refresh an
+  // expired token. We kick it whenever the app becomes visible again and
+  // on a slow interval as a safety net.
+  useEffect(() => {
+    const kick = () => { supabase.auth.getSession().catch(() => {}); };
+    const onVis = () => { if (document.visibilityState === "visible") kick(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", kick);
+    const iv = setInterval(kick, 5 * 60 * 1000);
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", kick); clearInterval(iv); };
+  }, []);
+
   const fullLogout = () => {
     setUser(null);
     supabase.auth.signOut().catch(()=>{});

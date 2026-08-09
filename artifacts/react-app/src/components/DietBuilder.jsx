@@ -119,6 +119,18 @@ const H = {
   'Content-Type':'application/json',
   'Prefer':'return=representation',
 }
+// Write a row to the audit trail after a successful plan save.
+// Goes through the server, which derives the actor from the caller's JWT —
+// the browser never supplies (and can't forge) actor identity.
+function auditPlanSave(action, clientId, clientName) {
+  try {
+    fetch('/api/audit/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      body: JSON.stringify({ action, target_type: 'client', target_id: clientId, details: { client: clientName || '' } }),
+    }).catch(() => {})
+  } catch {}
+}
 async function dbInsert(table, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
@@ -1178,6 +1190,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       updated_at: new Date().toISOString(),
     },'company_id,key')
     if (!ok) { alert('Could not save the supplement protocol — please try again.'); return }
+    auditPlanSave('supp_protocol_saved', myUUID, info?.name||currentUser?.name, role)
     await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your supplement protocol — check your Supplements tab', 'supplements')
     alert('Supplement protocol saved!')
   }
@@ -1892,7 +1905,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           })}
 
           {isCoach&&(
-            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
+            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>

@@ -632,6 +632,15 @@ Training Principles:
       alert('Could not save the workout plan — please try again.')
       return
     }
+    // Audit trail: record who saved this client's workout/cardio plan.
+    // The server derives the actor from the JWT — identity can't be forged.
+    try {
+      fetch('/api/audit/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ action: 'workout_plan_saved', target_type: 'client', target_id: CLIENT_UUID, details: { client: info?.name || '' } }),
+      }).catch(() => {})
+    } catch {}
     // Alert the client their plan changed (skip self — clients can't save, but be safe)
     if (CLIENT_UUID && CLIENT_UUID !== myUUID) {
       await sendNotification({

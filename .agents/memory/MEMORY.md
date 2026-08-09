@@ -23,4 +23,5 @@
 - [Meta Ads recaps](meta-ads-recaps.md) — per-org token AES-encrypted in admin_settings (org-readable under RLS!); scheduler claims periods via CAS to prevent double-posts.
 - [Web Push notifications](web-push.md) — VAPID + subs in admin_settings (private key encrypted); push endpoint allow-list prevents SSRF; durable CAS-leased watcher mirrors bell notifications.
 - [Emoji reactions](emoji-reactions.md) — per-user admin_settings rows `rx:<msg>:<user>` (no CAS needed); read AND write must authz per message; shared ReactionBar across all 4 chat surfaces.
+- [Session-expiry save failures](session-expiry-saves.md) — cross-tool "Could not save" = stale JWT under RLS; keep-alive refresh in App root; audit_logs writes must go via /audit/event, never direct.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.

@@ -98,7 +98,13 @@ router.post("/audit/login-failed", async (req: Request, res: Response) => {
 // submitting their check-in) using the service key, since RLS blocks clients
 // from inserting audit rows directly. Identity always comes from the caller's
 // JWT, never the body.
-const EVENT_WHITELIST = new Set(["checkin_submitted", "notification_send_failed"]);
+const EVENT_WHITELIST = new Set([
+  "checkin_submitted",
+  "notification_send_failed",
+  "diet_plan_saved",
+  "supp_protocol_saved",
+  "workout_plan_saved",
+]);
 router.post("/audit/event", async (req: Request, res: Response) => {
   try {
     const auth = String(req.get("authorization") || "");
