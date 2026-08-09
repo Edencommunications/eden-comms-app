@@ -10,7 +10,8 @@
 //     reactions={rx[m.id]} accent="#ffa600"
 //     onChange={map => setRx(p => ({ ...p, [m.id]: map }))} />
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { sbBearer } from '../lib/sbAuth'
 
 const API = (p) => `${(import.meta.env.BASE_URL || '/')}api/${p}`
@@ -62,7 +63,12 @@ export function ReactionBar({ table, messageId, reactions, myId, onChange, accen
 
   useEffect(() => {
     if (!open) return
-    const close = (e) => { if (popRef.current && !popRef.current.contains(e.target)) setOpen(false) }
+    const close = (e) => {
+      // Ignore clicks inside the anchor OR inside the portal-rendered picker
+      if (popRef.current?.contains(e.target)) return
+      if (e.target?.closest?.('[data-rx-picker]')) return
+      setOpen(false)
+    }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [open])
@@ -88,7 +94,7 @@ export function ReactionBar({ table, messageId, reactions, myId, onChange, accen
           onMouseLeave={e => { e.currentTarget.style.opacity = 0.7 }}>
           ☺+
         </button>
-        {open && <Picker onPick={react} accent={accent} alignRight={alignRight} />}
+        {open && <Picker onPick={react} accent={accent} anchorRef={popRef} />}
       </div>
     )
   }
@@ -116,39 +122,76 @@ export function ReactionBar({ table, messageId, reactions, myId, onChange, accen
         style={{ background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: '1px 7px', cursor: 'pointer', fontSize: 11, color: '#888', lineHeight: '18px' }}>
         ☺+
       </button>
-      {open && <Picker onPick={react} accent={accent} alignRight={alignRight} />}
+      {open && <Picker onPick={react} accent={accent} anchorRef={popRef} />}
     </div>
   )
 }
 
-function Picker({ onPick, accent, alignRight }) {
+// Full searchable picker (every emoji) — loaded on demand so the app bundle stays lean
+const FullPicker = lazy(() => import('emoji-picker-react'))
+
+// Rendered in a portal with fixed positioning so it can never be clipped by
+// a chat scroll container, and always clamped inside the visible screen.
+function Picker({ onPick, accent, anchorRef }) {
   const ref = useRef(null)
-  const [below, setBelow] = useState(false)
+  const [full, setFull] = useState(false)
+  const [pos, setPos] = useState(null)   // {top, left} — null until measured
+
   useEffect(() => {
-    // Not enough room above? Flip the picker downward so it stays on screen.
-    const el = ref.current
-    if (el) {
-      const r = el.getBoundingClientRect()
-      if (r.top < 8) setBelow(true)
+    const place = () => {
+      const btn = anchorRef?.current?.getBoundingClientRect()
+      const pk = ref.current?.getBoundingClientRect()
+      if (!btn || !pk) return
+      const vw = window.innerWidth, vh = window.innerHeight
+      const w = pk.width || 260, h = pk.height || 180
+      // Prefer above the button; go below when there isn't room above
+      let top = btn.top - h - 6
+      if (top < 8) top = Math.min(btn.bottom + 6, vh - h - 8)
+      if (top < 8) top = 8
+      let left = Math.min(Math.max(8, btn.left), vw - w - 8)
+      if (left < 8) left = 8
+      setPos({ top, left })
     }
-  }, [])
-  return (
-    <div ref={ref} style={{
-      position: 'absolute',
-      ...(below ? { top: 'calc(100% + 6px)' } : { bottom: 'calc(100% + 6px)' }),
-      [alignRight ? 'right' : 'left']: 0,
+    place()
+    // Re-place once the full picker (much taller) has rendered
+    const t = setTimeout(place, 30)
+    window.addEventListener('resize', place)
+    return () => { clearTimeout(t); window.removeEventListener('resize', place) }
+  }, [full, anchorRef])
+
+  return createPortal(
+    <div ref={ref} data-rx-picker style={{
+      position: 'fixed',
+      top: pos ? pos.top : -9999, left: pos ? pos.left : -9999,
+      visibility: pos ? 'visible' : 'hidden',
+      maxHeight: 'calc(100vh - 16px)', overflowY: 'auto',
       background: '#1a1a1a', border: '1px solid #333', borderRadius: 12,
-      padding: 8, zIndex: 1000, boxShadow: '0 8px 28px rgba(0,0,0,.6)',
-      display: 'grid', gridTemplateColumns: 'repeat(8, 30px)', gap: 2,
+      padding: full ? 0 : 8, zIndex: 100000, boxShadow: '0 8px 28px rgba(0,0,0,.6)',
+      overflowX: 'hidden',
     }}>
-      {EMOJIS.map(e => (
-        <button key={e} onClick={() => onPick(e)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, borderRadius: 8, padding: 2, lineHeight: '24px' }}
-          onMouseEnter={ev => { ev.currentTarget.style.background = `${accent}22` }}
-          onMouseLeave={ev => { ev.currentTarget.style.background = 'none' }}>
-          {e}
-        </button>
-      ))}
+      {full ? (
+        <Suspense fallback={<div style={{ width: 300, height: 380, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 12 }}>Loading emojis…</div>}>
+          <FullPicker onEmojiClick={(e) => onPick(e.emoji)} theme="dark" width={Math.min(300, window.innerWidth - 40)} height={380}
+            lazyLoadEmojis previewConfig={{ showPreview: false }} skinTonesDisabled={false} />
+        </Suspense>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 30px)', gap: 2 }}>
+            {EMOJIS.map(e => (
+              <button key={e} onClick={() => onPick(e)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, borderRadius: 8, padding: 2, lineHeight: '24px' }}
+                onMouseEnter={ev => { ev.currentTarget.style.background = `${accent}22` }}
+                onMouseLeave={ev => { ev.currentTarget.style.background = 'none' }}>
+                {e}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setFull(true)}
+            style={{ width: '100%', marginTop: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid #333', borderRadius: 8, padding: '5px 0', fontSize: 11, fontWeight: 700, color: '#bbb', cursor: 'pointer' }}>
+            🔍 All emojis…
+          </button>
+        </>
+      )}
     </div>
   )
 }

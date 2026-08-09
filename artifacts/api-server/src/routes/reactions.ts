@@ -130,6 +130,27 @@ async function readReactions(messageIds: string[]): Promise<Record<string, RxMap
   return out;
 }
 
+// Tell the message author someone reacted (never yourself; never spam —
+// one unread reaction notification per sender+message at a time).
+async function notifyAuthor(me: Profile, table: string, messageId: string, emoji: string) {
+  const m = (await rest<any>(`${table}?id=eq.${encodeURIComponent(messageId)}&select=sender_id,content`))[0];
+  if (!m?.sender_id || m.sender_id === me.id) return;
+  // Skip if they already have an unread reaction ping from me for this message
+  const linkTo = `reaction:${table}:${messageId}`;
+  const dup = await rest<any>(`notifications?recipient_id=eq.${encodeURIComponent(m.sender_id)}&sender_id=eq.${encodeURIComponent(me.id)}&type=eq.reaction&link_to=eq.${encodeURIComponent(linkTo)}&is_read=eq.false&select=id&limit=1`);
+  if (dup.length) return;
+  const snippet = String(m.content || "").replace(/\[\[file\|[^\]]*\]\]/g, "📎").replace(/\s+/g, " ").trim().slice(0, 80);
+  await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+    method: "POST", headers: SH,
+    body: JSON.stringify({
+      recipient_id: m.sender_id, sender_id: me.id,
+      sender_name: String(me.name || "Someone").slice(0, 60),
+      type: "reaction", is_read: false, link_to: linkTo,
+      body: `${String(me.name || "Someone").slice(0, 60)} reacted ${emoji} to your message${snippet ? `: “${snippet}${String(m.content || "").length > 80 ? "…" : ""}”` : ""}`,
+    }),
+  });
+}
+
 const router: IRouter = Router();
 
 // GET /reactions?table=<table>&ids=<id,id,...> — reactions for messages the caller can see.
@@ -169,6 +190,7 @@ router.post("/reactions/toggle", async (req: Request, res: Response) => {
     let mine: string[] = [];
     try { const v = rows[0] ? JSON.parse(rows[0].value) : null; if (Array.isArray(v?.e)) mine = v.e; } catch {}
     const idx = mine.indexOf(emoji);
+    const adding = idx < 0;
     if (idx >= 0) mine.splice(idx, 1); else mine.push(emoji);
     if (mine.length > 25) { res.status(400).json({ error: "That's plenty of reactions for one message 🙂" }); return; }
 
@@ -183,6 +205,10 @@ router.post("/reactions/toggle", async (req: Request, res: Response) => {
     }
     const all = await readReactions([String(messageId)]);
     res.json({ ok: true, reactions: all[String(messageId)] || {} });
+
+    // Notify the message author (fire-and-forget; the push watcher mirrors
+    // bell notifications to phones automatically).
+    if (adding) notifyAuthor(me, String(table), String(messageId), emoji).catch(() => {});
   } catch (e) {
     logger.warn({ err: String(e) }, "[Reactions] toggle failed");
     res.status(500).json({ error: "Could not save reaction" });
