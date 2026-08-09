@@ -5689,8 +5689,8 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
     <HuddleProvider currentUser={{ email: user.email, name: user.name, role: user.role }}>
     <div style={{ display:"flex", flexDirection:"column", height:"100vh", width:"100%", background:B.black, overflow:"hidden" }}>
       {/* Top bar */}
-      <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding:"8px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+      <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding: isMobile ? "8px 10px" : "8px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, flexWrap: isMobile ? "wrap" : "nowrap", rowGap:6 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
           {/* Hamburger menu — mobile only */}
           {isMobile && (
             <button onClick={() => setMenuOpen(v => !v)} aria-label="Menu"
@@ -5705,7 +5705,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
             {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>{wlOrg ? "🔒 Encrypted" : "🔒 Encrypted · edencommunications.io"}</p>}
           </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:isMobile?8:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:isMobile?6:12, flexWrap: isMobile ? "wrap" : "nowrap", justifyContent:"flex-end", rowGap:6, minWidth:0 }}>
           {/* Switch into a DBA space — shown to coaches/admins/delegates with DBA access */}
           {myDbas.length > 0 && onOpenDba && (
             <button onClick={onOpenDba}
