@@ -2078,6 +2078,7 @@ function isMissingCheckin(c: any, dl?: { time: string; tz: string }): boolean {
 
 // ── Upcoming contract starts (shared by coach + admin views) ────────────────
 const UpcomingStartsSection = ({ clients, loomMode = false }: { clients: any[]; loomMode?: boolean }) => {
+  const [open, setOpen] = useState(false);
   const upcoming = (clients || []).filter(hasNotStarted)
     .sort((a,b) => String(a.startDate).localeCompare(String(b.startDate)));
   if (upcoming.length === 0) return null;
@@ -2086,9 +2087,14 @@ const UpcomingStartsSection = ({ clients, loomMode = false }: { clients: any[]; 
   return (
     <div style={{ marginBottom:16 }}>
       <div style={{ background:B.card, border:`1px solid ${B.gold}44`, borderRadius:10, padding:"12px 14px" }}>
-        <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>
-          🗓️ Upcoming Contract Starts ({upcoming.length})
-        </p>
+        <div onClick={() => setOpen(o => !o)} title={open ? 'Collapse' : 'Expand'}
+          style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+          <span style={{ fontSize:12, color:open ? B.gold : B.muted, width:12, display:"inline-block", transition:"transform .15s", transform:open ? 'rotate(90deg)' : 'none' }}>▶</span>
+          <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:0, flex:1 }}>
+            🗓️ Upcoming Contract Starts ({upcoming.length})
+          </p>
+        </div>
+        {open && <div style={{ marginTop:10 }}>
         {upcoming.map((c:any, i:number) => {
           const d = daysUntilStart(c);
           const col = tierColor(d);
@@ -2113,6 +2119,7 @@ const UpcomingStartsSection = ({ clients, loomMode = false }: { clients: any[]; 
         <p style={{ fontSize:10, color:B.muted, margin:"6px 0 0" }}>
           These clients aren't counted late on updates until their start date.
         </p>
+        </div>}
       </div>
     </div>
   );
@@ -6739,18 +6746,25 @@ const HqDbaManager = ({ orgs }: any) => {
   const eden = { id: EDEN_ORG_ID, name: 'Lifestyle of Eden University', slug: '', brand_color: B.gold, logo_url: null };
   const list = [eden, ...(orgs || []).filter((o: any) => o.id !== EDEN_ORG_ID && o.is_active !== false)];
   const [selId, setSelId] = useState(eden.id);
+  const [open, setOpen] = useState(false);
   const sel = list.find((o: any) => o.id === selId) || eden;
   return (
     <Card style={{ marginBottom: 20, borderLeft: `3px solid ${B.gold}` }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: B.gold, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 6px' }}>⭐ DBAs (Sub-Brands)</p>
-      <p style={{ fontSize: 12, color: B.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
-        Create and manage branded member spaces. Pick which organization you're working in — as the owner, you can manage every org's DBAs from here.
-      </p>
-      <select value={selId} onChange={e => setSelId(e.target.value)}
-        style={{ width: '100%', background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: '9px 10px', fontSize: 13, outline: 'none', marginBottom: 12 }}>
-        {list.map((o: any) => <option key={o.id} value={o.id}>{o.name}{o.id === EDEN_ORG_ID ? ' (your company)' : ''}</option>)}
-      </select>
-      <DbaManagerCard key={sel.id} org={sel} hqOrgId={sel.id}/>
+      <div onClick={() => setOpen(o => !o)} title={open ? 'Collapse' : 'Expand'}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        <span style={{ fontSize: 12, color: open ? B.gold : B.muted, width: 12, display: 'inline-block', transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
+        <p style={{ fontSize: 11, fontWeight: 700, color: B.gold, letterSpacing: 1, textTransform: 'uppercase', margin: 0, flex: 1 }}>⭐ DBAs (Sub-Brands)</p>
+      </div>
+      {open && <div style={{ marginTop: 8 }}>
+        <p style={{ fontSize: 12, color: B.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+          Create and manage branded member spaces. Pick which organization you're working in — as the owner, you can manage every org's DBAs from here.
+        </p>
+        <select value={selId} onChange={e => setSelId(e.target.value)}
+          style={{ width: '100%', background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: '9px 10px', fontSize: 13, outline: 'none', marginBottom: 12 }}>
+          {list.map((o: any) => <option key={o.id} value={o.id}>{o.name}{o.id === EDEN_ORG_ID ? ' (your company)' : ''}</option>)}
+        </select>
+        <DbaManagerCard key={sel.id} org={sel} hqOrgId={sel.id}/>
+      </div>}
     </Card>
   );
 };
@@ -6768,6 +6782,8 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState('');
   const [copiedId, setCopiedId] = useState('');
+  const [sectionOpen, setSectionOpen] = useState(false); // collapsed by default (org-admin view)
+  const [dbaQuery, setDbaQuery] = useState('');          // search box to find a DBA fast
   // Tier ladder (org-wide) + per-DBA member tiers (Phase 4)
   const [tierDefs, setTierDefs] = useState<any[]>([]);
   const [canEditTiers, setCanEditTiers] = useState(false);
@@ -6876,16 +6892,42 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
   const linkFor = (d: any) => `${window.location.origin}${BASE.replace(/\/+$/, '')}/${d.slug}`;
   const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
+  // Alphabetical order + live search (name or link slug)
+  const q = dbaQuery.trim().toLowerCase();
+  const shownDbas = [...st.dbas]
+    .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }))
+    .filter((d: any) => !q || String(d.name || '').toLowerCase().includes(q) || String(d.slug || '').toLowerCase().includes(q));
+
+  const SectionHeader = !hqOrgId && (
+    <div onClick={() => setSectionOpen(o => !o)} title={sectionOpen ? 'Collapse' : 'Expand'}
+      style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+      <span style={{ fontSize: 12, color: sectionOpen ? accent : B.muted, width: 12, display: "inline-block", transition: "transform .15s", transform: sectionOpen ? 'rotate(90deg)' : 'none' }}>▶</span>
+      <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, textTransform: "uppercase", margin: 0, flex: 1 }}>
+        🏷 Your DBAs (Sub-Brands){!st.loading && st.dbas.length ? ` (${st.dbas.length})` : ''}
+      </p>
+    </div>
+  );
+  if (!hqOrgId && !sectionOpen) {
+    return <Card style={{ marginBottom: 20, borderLeft: `3px solid ${accent}` }}>{SectionHeader}</Card>;
+  }
+
   const Wrap = hqOrgId ? ('div' as any) : Card; // HQ picker already provides the outer card
   return (
     <Wrap style={hqOrgId ? {} : { marginBottom: 20, borderLeft: `3px solid ${accent}` }}>
-      {!hqOrgId && <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 6px" }}>🏷 Your DBAs (Sub-Brands)</p>}
-      <p style={{ fontSize: 12, color: B.muted, margin: "0 0 12px", lineHeight: 1.5 }}>
+      {SectionHeader}
+      <p style={{ fontSize: 12, color: B.muted, margin: hqOrgId ? "0 0 12px" : "8px 0 12px", lineHeight: 1.5 }}>
         Run additional brands under {org.name} — each with its own name, colors, coach and member login link. Members you invite here only see that DBA's space, not your main app.
       </p>
       {st.loading ? <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>Loading…</p> : (
         <>
-          {st.dbas.map((d: any) => (
+          {st.dbas.length > 0 && (
+            <input value={dbaQuery} onChange={e => setDbaQuery(e.target.value)} placeholder="🔍 Search DBAs by name or link…"
+              style={{ width: "100%", boxSizing: "border-box", background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", marginBottom: 10 }} />
+          )}
+          {st.dbas.length > 0 && shownDbas.length === 0 && (
+            <p style={{ fontSize: 12, color: B.muted, margin: "0 0 10px" }}>No DBAs match "{dbaQuery.trim()}".</p>
+          )}
+          {shownDbas.map((d: any) => (
             <div key={d.id} style={{ border: `1px solid ${B.border}`, borderLeft: `3px solid ${d.brand_color || accent}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10, opacity: d.is_active ? 1 : 0.55 }}>
               <div onClick={() => { setOpenId(openId === d.id ? null : d.id); setMemberDraft({ name: '', email: '' }); setErr(''); setNotice(''); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", cursor: "pointer" }}
