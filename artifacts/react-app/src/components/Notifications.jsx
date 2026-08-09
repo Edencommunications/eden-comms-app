@@ -287,9 +287,21 @@ export default function Notifications({ currentUser, onNavigate }) {
         )}
       </button>
 
-      {/* ── Notification panel ────────────────────────────── */}
+      {/* ── Notification panel ──────────────────────────────
+          On phones the bell can sit anywhere in the (wrapped) top bar, so an
+          absolute right-anchored panel could hang off the left edge. Pin it
+          to the screen instead on small displays. */}
       {open && (
-        <div style={{
+        <div style={window.innerWidth <= 600 ? {
+          position:'fixed',
+          top: Math.min((panelRef.current?.getBoundingClientRect?.().bottom || 60) + 8, 120),
+          right:12, left:12, width:'auto',
+          maxHeight:'calc(100vh - 160px)',
+          background:C.card, border:`1px solid ${C.border}`,
+          borderRadius:14, boxShadow:'0 8px 32px rgba(0,0,0,.6)',
+          display:'flex', flexDirection:'column',
+          zIndex:9999, overflow:'hidden',
+        } : {
           position:'absolute', top:'calc(100% + 8px)', right:0,
           width:'min(340px, calc(100vw - 24px))',
           maxHeight:'min(480px, calc(100vh - 140px))',
