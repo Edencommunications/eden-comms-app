@@ -159,6 +159,13 @@ async function validateAccount(token: string, adAccountId: string): Promise<{ ok
   return { ok: true, name: b.name || `Account ${adAccountId}` };
 }
 
+// "2026-08-07" → "August 7, 2026"
+const fmtDate = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  return `${months[(m || 1) - 1]} ${d}, ${y}`;
+};
+
 const fmtUsd = (n: any) => {
   const v = Number(n);
   return Number.isFinite(v) ? `$${v.toFixed(2)}` : "—";
@@ -240,7 +247,7 @@ async function pullChanges(cfg: MetaCfg, since: string, until: string) {
 async function writeRecap(period: "daily" | "weekly" | "monthly", orgName: string, since: string, until: string,
   cur: any, prev: any | null, changes: any[]): Promise<string> {
   const label = period === "daily" ? "DAILY" : period === "weekly" ? "WEEKLY" : "MONTHLY";
-  const header = `📊 ${label} ADS RECAP\n${since === until ? since : `${since} → ${until}`}\n━━━━━━━━━━━━━━━`;
+  const header = `📊 ${label} ADS RECAP\n${since === until ? fmtDate(since) : `${fmtDate(since)} → ${fmtDate(until)}`}\n━━━━━━━━━━━━━━━`;
   const ranked = rankAds(cur.ads || []);
   const facts = JSON.stringify({
     period, orgName, window: { since, until }, performance: { ...cur, ads: undefined },

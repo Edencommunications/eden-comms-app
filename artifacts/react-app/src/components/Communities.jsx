@@ -429,7 +429,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
               {isAdmin ? <>🗑 Deleted by {m.deleted_by_name||'staff'} (admins only): <span style={{ fontStyle:'normal' }}>{m.content}</span></> : <>Message deleted{m.deleted_by_name?` by ${m.deleted_by_name}`:''}</>}
             </div>
           ) : (
-            <div style={{ fontSize:12, lineHeight:1.55, background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 11px', wordBreak:'break-word' }}>
+            <div style={{ fontSize:12, lineHeight:1.55, background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 11px', wordBreak:'break-word', whiteSpace:'pre-wrap' }}>
               {renderMentions(m.content, C.white)}
             </div>
           )}
