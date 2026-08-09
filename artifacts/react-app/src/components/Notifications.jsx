@@ -291,7 +291,8 @@ export default function Notifications({ currentUser, onNavigate }) {
       {open && (
         <div style={{
           position:'absolute', top:'calc(100% + 8px)', right:0,
-          width:340, maxHeight:480,
+          width:'min(340px, calc(100vw - 24px))',
+          maxHeight:'min(480px, calc(100vh - 140px))',
           background:C.card, border:`1px solid ${C.border}`,
           borderRadius:14, boxShadow:'0 8px 32px rgba(0,0,0,.6)',
           display:'flex', flexDirection:'column',
