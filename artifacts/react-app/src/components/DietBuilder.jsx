@@ -867,7 +867,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // Targets from the last saved plan — kept separate from the calculator's
   // `results` (which also carries bmr/maintenance the saved shape lacks).
   const [savedTargets, setSavedTargets] = useState(null)
-  const targets = results||savedTargets||{cal:2100,pro:175,fat:70,carb:200,fib:30}
+  // No fallback numbers: if nothing was calculated/saved, meal totals render
+  // without target lines (MacroBar hides the "/target" when target is missing).
+  const targets = results||savedTargets||{}
 
   // Check-in — client owned
   const [ci, setCi] = useState({
@@ -2103,6 +2105,18 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   Total: {calc.protPct+calc.fatPct+calc.carbPct}% {(calc.protPct+calc.fatPct+calc.carbPct)===100?'✓ Perfect':'← must equal 100%'}
                 </div>
               </Card>
+              <button onClick={async()=>{
+                  if(!window.confirm('Reset the calculated macros? This clears the calorie & macro targets here AND removes them from the client\'s diet view.'))return
+                  setResults(null);setSavedTargets(null)
+                  if(isCoach&&myUUID){
+                    const ok=await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify({}),updated_at:new Date().toISOString()})
+                    if(!ok){alert('Could not clear the saved targets — please try again.');return}
+                    auditPlanSave('diet_targets_reset', myUUID, info?.name||currentUser?.name)
+                  }
+                }}
+                style={{width:'100%',background:'transparent',border:`1px solid ${C.border}`,borderRadius:10,padding:10,fontWeight:700,color:C.muted,fontSize:12,cursor:'pointer',marginBottom:10}}>
+                ↺ Reset Calculator & Targets
+              </button>
               <button onClick={runCalc}
                 style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:12}}>
                 Calculate Macros
