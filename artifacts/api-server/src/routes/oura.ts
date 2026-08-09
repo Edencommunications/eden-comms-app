@@ -24,6 +24,11 @@ const OURA_CLIENT_SECRET = process.env.OURA_CLIENT_SECRET || "";
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
 
 const OURA_AUTH_URL = "https://cloud.ouraring.com/oauth/authorize";
+// Must exactly match the Redirect URL registered in the Oura developer
+// portal (developer.ouraring.com). Sent in BOTH the authorize URL and the
+// token exchange — Oura's newer apps reject exchanges without it.
+const OURA_REDIRECT_URI =
+  process.env.OURA_REDIRECT_URI || "https://edencommunications.io/api/oura/callback";
 const OURA_TOKEN_URL = "https://api.ouraring.com/oauth/token";
 const OURA_API = "https://api.ouraring.com/v2/usercollection";
 
@@ -162,7 +167,11 @@ async function tokenRequest(params: Record<string, string>): Promise<any | null>
       ...params,
     }).toString(),
   });
-  if (!r.ok) return null;
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    console.error(`[oura] token request failed (${r.status}): ${detail.slice(0, 300)}`);
+    return null;
+  }
   return await r.json().catch(() => null);
 }
 
@@ -219,14 +228,14 @@ router.post("/oura/connect", async (req: Request, res: Response) => {
     const origin = String(req.body?.origin || "");
     if (!/^https:\/\/[a-z0-9.-]+$/i.test(origin)) { res.status(400).json({ error: "Invalid origin" }); return; }
     const returnPath = String(req.body?.returnPath || "/").slice(0, 200);
-    // NOTE: redirect_uri is intentionally omitted from the authorize URL so
-    // Oura uses whichever URI is registered in the developer portal without
-    // needing an exact string match.  The return destination is carried in
-    // the signed `state` parameter instead.
+    // The return destination (origin + path the user came from) is carried
+    // in the signed `state` parameter; redirect_uri is the fixed registered
+    // callback and must match the Oura developer portal exactly.
     const state = makeState({ uid: caller.id, cid: caller.company_id, origin, rp: returnPath, ts: Date.now() });
     const url =
       `${OURA_AUTH_URL}?response_type=code` +
       `&client_id=${encodeURIComponent(OURA_CLIENT_ID)}` +
+      `&redirect_uri=${encodeURIComponent(OURA_REDIRECT_URI)}` +
       `&scope=${encodeURIComponent("email personal daily heartrate")}` +
       `&state=${encodeURIComponent(state)}`;
     res.json({ url });
@@ -247,11 +256,12 @@ router.get("/oura/callback", async (req: Request, res: Response) => {
     if (req.query["error"]) { back("oura=denied"); return; }
     const code = String(req.query["code"] || "");
     if (!code) { back("oura=error"); return; }
-    // redirect_uri is omitted from the token exchange to match the authorize
-    // request (which also omits it — see /oura/connect above).
+    // redirect_uri must be present and identical to the one sent in the
+    // authorize request, per OAuth2 — Oura rejects the exchange otherwise.
     const tokens = await tokenRequest({
       grant_type: "authorization_code",
       code,
+      redirect_uri: OURA_REDIRECT_URI,
     });
     if (!tokens?.access_token) { back("oura=error"); return; }
     const ok = await saveTokens(data.cid, data.uid, {
