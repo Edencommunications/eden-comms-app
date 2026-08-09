@@ -192,6 +192,7 @@ function Picker({ onPick, accent, anchorRef }) {
           </button>
         </>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
