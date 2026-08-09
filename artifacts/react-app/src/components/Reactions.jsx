@@ -122,9 +122,21 @@ export function ReactionBar({ table, messageId, reactions, myId, onChange, accen
 }
 
 function Picker({ onPick, accent, alignRight }) {
+  const ref = useRef(null)
+  const [below, setBelow] = useState(false)
+  useEffect(() => {
+    // Not enough room above? Flip the picker downward so it stays on screen.
+    const el = ref.current
+    if (el) {
+      const r = el.getBoundingClientRect()
+      if (r.top < 8) setBelow(true)
+    }
+  }, [])
   return (
-    <div style={{
-      position: 'absolute', bottom: 'calc(100% + 6px)', [alignRight ? 'right' : 'left']: 0,
+    <div ref={ref} style={{
+      position: 'absolute',
+      ...(below ? { top: 'calc(100% + 6px)' } : { bottom: 'calc(100% + 6px)' }),
+      [alignRight ? 'right' : 'left']: 0,
       background: '#1a1a1a', border: '1px solid #333', borderRadius: 12,
       padding: 8, zIndex: 1000, boxShadow: '0 8px 28px rgba(0,0,0,.6)',
       display: 'grid', gridTemplateColumns: 'repeat(8, 30px)', gap: 2,
