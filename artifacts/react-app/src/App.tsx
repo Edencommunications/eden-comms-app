@@ -4319,6 +4319,18 @@ const AdminDashboard = ({ user }:any) => {
                     ))}
                   </div>
                   {!metaAds.community_id && <p style={{ fontSize:11, color:"#ffa600", margin:"0 0 10px" }}>Pick a community above to turn recaps on.</p>}
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post time</span>
+                    <select disabled={metaBusy}
+                      value={(() => { const utc = Number.isFinite(Number(metaAds.hour)) ? Number(metaAds.hour) : 12; return ((utc - Math.round(new Date().getTimezoneOffset() / 60) % 24) + 48) % 24; })()}
+                      onChange={e => { const local = Number(e.target.value); const utc = ((local + Math.round(new Date().getTimezoneOffset() / 60)) + 48) % 24; metaSaveSettings({ hour: utc }); }}
+                      style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <option key={h} value={h}>{h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`}</option>
+                      ))}
+                    </select>
+                    <span style={{ fontSize:11, color:B.muted }}>your local time · daily = yesterday's numbers · weekly = Mondays · monthly = the 1st</span>
+                  </div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     <Btn variant="secondary" onClick={() => metaRunNow('daily')} disabled={metaBusy || !metaAds.community_id}>Post a test recap now</Btn>
                     <Btn variant="secondary" onClick={metaDisconnect} disabled={metaBusy}>Disconnect</Btn>

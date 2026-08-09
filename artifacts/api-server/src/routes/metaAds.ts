@@ -164,8 +164,9 @@ const fmtUsd = (n: any) => {
   return Number.isFinite(v) ? `$${v.toFixed(2)}` : "—";
 };
 
-// Pull performance numbers for a date window (account level + top campaigns).
-async function pullInsights(cfg: MetaCfg, since: string, until: string) {
+// Pull performance numbers for a date window (account level + top campaigns
+// + per-ad numbers so weekly/monthly recaps can rank best & worst ads).
+async function pullInsights(cfg: MetaCfg, since: string, until: string, withAds = false) {
   const tr = encodeURIComponent(JSON.stringify({ since, until }));
   const acct = await metaGet(
     `act_${cfg.ad_account_id}/insights?time_range=${tr}&fields=spend,impressions,clicks,ctr,cpc,actions`,
@@ -175,6 +176,10 @@ async function pullInsights(cfg: MetaCfg, since: string, until: string) {
     `act_${cfg.ad_account_id}/insights?time_range=${tr}&level=campaign&fields=campaign_name,spend,actions&limit=25`,
     cfg.token,
   );
+  const ads = withAds ? await metaGet(
+    `act_${cfg.ad_account_id}/insights?time_range=${tr}&level=ad&fields=ad_name,campaign_name,spend,actions,clicks&limit=100`,
+    cfg.token,
+  ) : null;
   if (!acct) return null;
   const row = acct.data?.[0] || {};
   const leadCount = (actions: any[]) => {
@@ -195,7 +200,27 @@ async function pullInsights(cfg: MetaCfg, since: string, until: string) {
     campaigns: (camps?.data || []).map((c: any) => ({
       name: c.campaign_name, spend: Number(c.spend) || 0, leads: leadCount(c.actions),
     })).sort((a: any, b: any) => b.spend - a.spend),
+    ads: (ads?.data || []).map((a: any) => {
+      const sp = Number(a.spend) || 0, ld = leadCount(a.actions);
+      return { name: a.ad_name, campaign: a.campaign_name, spend: sp, leads: ld,
+        clicks: Number(a.clicks) || 0, cpl: ld > 0 ? sp / ld : null };
+    }).filter((a: any) => a.spend > 0).sort((x: any, y: any) => y.spend - x.spend),
   };
+}
+
+// Rank ads for best/worst callouts: best = lowest cost per lead among ads
+// that got leads; worst = highest spend with no (or expensive) leads.
+function rankAds(ads: any[]) {
+  if (!ads?.length) return { best: [], worst: [] };
+  const withLeads = ads.filter(a => a.cpl != null).sort((a, b) => a.cpl - b.cpl);
+  const best = withLeads.slice(0, 3);
+  const worstPool = ads.filter(a => !best.includes(a));
+  const worst = worstPool.sort((a, b) => {
+    const aBad = a.cpl == null ? a.spend * 1000 : a.cpl;
+    const bBad = b.cpl == null ? b.spend * 1000 : b.cpl;
+    return bBad - aBad;
+  }).slice(0, 3);
+  return { best, worst };
 }
 
 // Pull the change-history log (who changed what) for a date window.
@@ -214,9 +239,14 @@ async function pullChanges(cfg: MetaCfg, since: string, until: string) {
 
 async function writeRecap(period: "daily" | "weekly" | "monthly", orgName: string, since: string, until: string,
   cur: any, prev: any | null, changes: any[]): Promise<string> {
-  const label = period === "daily" ? "Daily" : period === "weekly" ? "Weekly" : "Monthly";
-  const header = `📊 ${label} Ads Recap — ${since === until ? since : `${since} → ${until}`}`;
-  const facts = JSON.stringify({ period, orgName, window: { since, until }, performance: cur, previous_period: prev, changes: changes.slice(0, 40) });
+  const label = period === "daily" ? "DAILY" : period === "weekly" ? "WEEKLY" : "MONTHLY";
+  const header = `📊 ${label} ADS RECAP\n${since === until ? since : `${since} → ${until}`}\n━━━━━━━━━━━━━━━`;
+  const ranked = rankAds(cur.ads || []);
+  const facts = JSON.stringify({
+    period, orgName, window: { since, until }, performance: { ...cur, ads: undefined },
+    previous_period: prev ? { ...prev, ads: undefined, campaigns: undefined } : null,
+    best_ads: ranked.best, worst_ads: ranked.worst, changes: changes.slice(0, 40),
+  });
 
   const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
@@ -228,7 +258,29 @@ async function writeRecap(period: "daily" | "weekly" | "monthly", orgName: strin
         body: JSON.stringify({
           model: "gpt-5.6-luna",
           messages: [
-            { role: "system", content: "You write short, friendly ad-performance recaps for a coaching team's group chat. Plain language, no jargon. Structure: 1) headline numbers (spend, leads/results, cost per lead, clicks), 2) comparison to the previous period if provided (better/worse and by how much), 3) 'What changed' — list who made which changes to which campaigns/ads, grouped by person, with times only if notable, 4) one-line takeaway. Use a few emojis for scanability. If there were no changes, say so. Never invent numbers not in the data. Keep it under 220 words." },
+            { role: "system", content: `You write ad-performance recaps for a coaching team's group chat. Plain language, no jargon. CRITICAL: output PLAIN TEXT only — no markdown (**, ##, tables render literally). Use this exact section layout, with a blank line between sections and "• " bullets:
+
+💰 THE NUMBERS
+• Spend: $X
+• Leads: N ($X per lead)
+• Clicks: N · Impressions: N
+
+📈 VS ${period === "daily" ? "YESTERDAY" : period === "weekly" ? "LAST WEEK" : "LAST MONTH"}
+• one bullet per meaningful change (spend, leads, cost per lead), each stating up/down and by how much (% or $). Say "about the same" when flat. Omit section if no previous data.
+
+${period !== "daily" ? `🏆 BEST PERFORMERS
+• up to 3 ads from best_ads: name — $cpl per lead ($spend spent)
+
+⚠️ NEEDS ATTENTION
+• up to 3 ads from worst_ads: name — why (no leads despite $X spend, or high cost per lead)
+
+` : ""}🛠 WHAT CHANGED
+• group by person: Name — what they changed (which campaign/ad). If none: "• No changes were made this period."
+
+💡 TAKEAWAY
+one sentence, actionable.
+
+Never invent numbers not in the data. Round sensibly. Keep it under 250 words.` },
             { role: "user", content: facts },
           ],
         }),
@@ -240,20 +292,37 @@ async function writeRecap(period: "daily" | "weekly" | "monthly", orgName: strin
     } catch (e) { logger.warn({ err: String(e) }, "[MetaAds] AI recap failed — using plain format"); }
   }
 
-  // Plain-format fallback — real data, no AI required.
+  // Plain-format fallback — same section layout, real data, no AI required.
+  const pct = (a: number, b: number) => (b > 0 ? `${a >= b ? "up" : "down"} ${Math.abs(Math.round(((a - b) / b) * 100))}%` : null);
   const lines = [
     header, "",
-    `💰 Spend: ${fmtUsd(cur.spend)} · 🎯 Leads/results: ${cur.leads}` + (cur.cpl != null ? ` · 📈 Cost per lead: ${fmtUsd(cur.cpl)}` : ""),
-    `👀 Impressions: ${cur.impressions.toLocaleString()} · 🖱 Clicks: ${cur.clicks.toLocaleString()}`,
+    "💰 THE NUMBERS",
+    `• Spend: ${fmtUsd(cur.spend)}`,
+    `• Leads: ${cur.leads}${cur.cpl != null ? ` (${fmtUsd(cur.cpl)} per lead)` : ""}`,
+    `• Clicks: ${cur.clicks.toLocaleString()} · Impressions: ${cur.impressions.toLocaleString()}`,
   ];
-  if (prev) lines.push(`Previous period: ${fmtUsd(prev.spend)} spend, ${prev.leads} leads.`);
-  if (cur.campaigns?.length) {
-    lines.push("", "Top campaigns:");
-    for (const c of cur.campaigns.slice(0, 5)) lines.push(`• ${c.name}: ${fmtUsd(c.spend)}, ${c.leads} leads`);
+  if (prev) {
+    const vsLabel = period === "daily" ? "YESTERDAY" : period === "weekly" ? "LAST WEEK" : "LAST MONTH";
+    lines.push("", `📈 VS ${vsLabel}`);
+    const sp = pct(cur.spend, prev.spend);
+    lines.push(`• Spend ${sp || "—"} (${fmtUsd(prev.spend)} → ${fmtUsd(cur.spend)})`);
+    lines.push(`• Leads: ${prev.leads} → ${cur.leads}`);
+    if (cur.cpl != null && prev.cpl != null) lines.push(`• Cost per lead ${pct(cur.cpl, prev.cpl) || "about the same"} (${fmtUsd(prev.cpl)} → ${fmtUsd(cur.cpl)})`);
   }
-  lines.push("", changes.length ? "🛠 What changed:" : "🛠 No changes were made this period.");
+  if (period !== "daily") {
+    if (ranked.best.length) {
+      lines.push("", "🏆 BEST PERFORMERS");
+      for (const a of ranked.best) lines.push(`• ${a.name} — ${fmtUsd(a.cpl)} per lead (${fmtUsd(a.spend)} spent)`);
+    }
+    if (ranked.worst.length) {
+      lines.push("", "⚠️ NEEDS ATTENTION");
+      for (const a of ranked.worst) lines.push(`• ${a.name} — ${a.cpl == null ? `no leads despite ${fmtUsd(a.spend)} spent` : `${fmtUsd(a.cpl)} per lead`}`);
+    }
+  }
+  lines.push("", "🛠 WHAT CHANGED");
+  if (!changes.length) lines.push("• No changes were made this period.");
   for (const ch of changes.slice(0, 15)) lines.push(`• ${ch.who} — ${ch.what}${ch.on ? ` (${ch.on})` : ""}`);
-  if (changes.length > 15) lines.push(`…and ${changes.length - 15} more changes.`);
+  if (changes.length > 15) lines.push(`• …and ${changes.length - 15} more changes.`);
   return lines.join("\n");
 }
 
@@ -299,7 +368,7 @@ async function runRecap(companyId: string, cfg: MetaCfg, period: "daily" | "week
     pSince = day(prevPrevFirst); pUntil = day(new Date(prevFirst.getTime() - 86400_000));
   }
 
-  const cur = await pullInsights(cfg, since, until);
+  const cur = await pullInsights(cfg, since, until, period !== "daily");
   if (!cur) {
     await notifyAdmins(companyId, "⚠️ The ads recap could not pull numbers from Meta — the access token may have expired. Reconnect Meta Ads in the admin panel (Overview → Ads Recaps).");
     return { ok: false, error: "Could not pull numbers from Meta — the token may have expired." };
