@@ -5417,6 +5417,8 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
   const idleTimerRef   = useRef<any>(null);
   const countIntervalRef = useRef<any>(null);
   const warningActiveRef = useRef(false);   // mirrors idleWarning but readable inside callbacks
+  const lastActiveRef  = useRef(Date.now()); // wall-clock of last user activity (survives phone sleep)
+  const logoutStartedRef = useRef(false);    // one-shot guard: forced logout may only fire once
   const onLogoutRef    = useRef(onLogout);
   useEffect(() => { onLogoutRef.current = onLogout; }, [onLogout]);
 
@@ -5424,6 +5426,17 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
     clearTimeout(idleTimerRef.current);
     clearInterval(countIntervalRef.current);
   }, []);
+
+  // Single forced-logout path: guards against double-fire (visibilitychange +
+  // focus both firing on wake, or a queued expired countdown tick racing it).
+  const forceLogout = useCallback(() => {
+    if (logoutStartedRef.current) return;
+    logoutStartedRef.current = true;
+    clearAllTimers();
+    onLogoutRef.current();
+  }, [clearAllTimers]);
+  const forceLogoutRef = useRef(forceLogout);
+  useEffect(() => { forceLogoutRef.current = forceLogout; }, [forceLogout]);
 
   const startIdleTimer = useCallback(() => {
     clearAllTimers();
@@ -5436,8 +5449,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
         c -= 1;
         setCountdown(c);
         if (c <= 0) {
-          clearAllTimers();
-          onLogoutRef.current();
+          forceLogoutRef.current();
         }
       }, 1000);
     }, IDLE_MS);
@@ -5446,6 +5458,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
   // Stable event handler — created once, ref-based reads so no stale closure
   const activityHandler = useRef(() => {
     if (warningActiveRef.current) return;  // ignore activity while warning is showing
+    lastActiveRef.current = Date.now();
     clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => {
       warningActiveRef.current = true;
@@ -5456,8 +5469,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
         c -= 1;
         setCountdown(c);
         if (c <= 0) {
-          clearInterval(countIntervalRef.current);
-          onLogoutRef.current();
+          forceLogoutRef.current();
         }
       }, 1000);
     }, IDLE_MS);
@@ -5466,6 +5478,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
   const stayLoggedIn = useCallback(() => {
     clearAllTimers();
     warningActiveRef.current = false;
+    lastActiveRef.current = Date.now();
     setIdleWarning(false);
     startIdleTimer();
   }, [clearAllTimers, startIdleTimer]);
@@ -5475,9 +5488,24 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
     const events = ["mousemove","mousedown","keydown","touchstart","scroll","click"];
     const handler = activityHandler.current;
     events.forEach(e => window.addEventListener(e, handler, { passive: true }));
+    // Wake-up check: phones freeze JS timers while the app is backgrounded/asleep,
+    // so the idle timeout can't fire. On wake, compare wall-clock time since last
+    // activity — if the full idle window (14 min + 60 s grace) has already passed,
+    // sign out immediately instead of resuming the session.
+    const wakeCheck = () => {
+      if (document.visibilityState !== "visible") return;
+      const elapsed = Date.now() - lastActiveRef.current;
+      if (elapsed >= IDLE_MS + WARNING_SECS * 1000) {
+        forceLogoutRef.current();
+      }
+    };
+    document.addEventListener("visibilitychange", wakeCheck);
+    window.addEventListener("focus", wakeCheck);
     startIdleTimer();
     return () => {
       events.forEach(e => window.removeEventListener(e, handler));
+      document.removeEventListener("visibilitychange", wakeCheck);
+      window.removeEventListener("focus", wakeCheck);
       clearAllTimers();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -5978,7 +6006,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
                   fontWeight:800, fontSize:14, color:B.black, cursor:"pointer", width:"100%" }}>
                 Stay Signed In
               </button>
-              <button onClick={() => { clearAllTimers(); onLogout(); }}
+              <button onClick={() => forceLogout()}
                 style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:10,
                   padding:"11px 0", fontWeight:600, fontSize:13, color:B.muted, cursor:"pointer", width:"100%" }}>
                 Sign Out Now
