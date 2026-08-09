@@ -864,7 +864,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     protPct:40,fatPct:30,carbPct:30,
   })
   const [results, setResults] = useState(null)
-  const targets = results||{cal:2100,pro:175,fat:70,carb:200,fib:30}
+  // Targets from the last saved plan — kept separate from the calculator's
+  // `results` (which also carries bmr/maintenance the saved shape lacks).
+  const [savedTargets, setSavedTargets] = useState(null)
+  const targets = results||savedTargets||{cal:2100,pro:175,fat:70,carb:200,fib:30}
 
   // Check-in — client owned
   const [ci, setCi] = useState({
@@ -1182,6 +1185,35 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       }).catch(()=>{})
     return ()=>{stale=true}
   },[myUUID,myCompanyId])
+  // Hydrate the meal-plan builder from the latest saved diet plan so both the
+  // client and the coach see what was last saved (saves are INSERTs — one row
+  // per save — so pick the newest by updated_at).
+  useEffect(()=>{
+    if (!myUUID) return
+    let stale=false
+    dbGet('diet_plans',`client_id=eq.${myUUID}&order=updated_at.desc&limit=1&select=protocol,high_day_meals,low_day_meals,targets`)
+      .then(rows=>{
+        if (stale) return
+        const row = rows?.[0]
+        if (!row) return
+        try {
+          // Functional updates double as a dirty guard: if the user already
+          // started editing (any food added / protocol changed) by the time
+          // this response lands, keep their in-progress work.
+          if (typeof row.protocol==='string' && row.protocol)
+            setProtocol(cur => cur!=='Base Diet Protocol Male' ? cur : row.protocol)
+          const hi = typeof row.high_day_meals==='string' ? JSON.parse(row.high_day_meals) : row.high_day_meals
+          const lo = typeof row.low_day_meals==='string'  ? JSON.parse(row.low_day_meals)  : row.low_day_meals
+          if (Array.isArray(hi) && hi.length)
+            setHighMeals(cur => cur.some(m=>m.foods&&m.foods.length) ? cur : hi)
+          if (Array.isArray(lo) && lo.length)
+            setLowMeals(cur => cur.some(m=>m.foods&&m.foods.length) ? cur : lo)
+          const tg = typeof row.targets==='string' ? JSON.parse(row.targets) : row.targets
+          if (tg && typeof tg==='object' && tg.cal) setSavedTargets(tg)
+        } catch(e){}
+      }).catch(()=>{})
+    return ()=>{stale=true}
+  },[myUUID])
   async function saveSuppProtocol() {
     if (!myUUID || !myCompanyId) { alert('Still loading this client\'s profile — try again in a second.'); return }
     const ok = await dbUpsert('admin_settings',{
