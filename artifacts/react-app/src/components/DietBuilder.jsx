@@ -3491,7 +3491,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}/>
                         </div>
                       </div>
-                      {s.code&&<div style={{marginTop:6,fontSize:10,color:C.muted}}>Code: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span>{s.link&&<> · <a href={s.link} target="_blank" rel="noreferrer" style={{color:C.gold}}>Purchase →</a></>}</div>}
+                      {(s.code||s.link)&&<div style={{marginTop:6,fontSize:10,color:C.muted}}>{s.code&&<>Code: <span style={{color:C.gold,fontWeight:700}}>{s.code}</span></>}{s.code&&s.link&&<> · </>}{s.link&&<a href={s.link} target="_blank" rel="noreferrer" style={{color:C.gold}}>Purchase →</a>}</div>}
                     </div>
                   )
                   return(<>
