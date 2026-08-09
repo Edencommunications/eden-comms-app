@@ -16,6 +16,7 @@ import Communities from './Communities'
 import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
 import { useHuddle } from './HuddleHub'
+import { ReactionBar, fetchReactions } from './Reactions'
 import { LN } from './LoomPrivacy'
 
 function useIsMobile(bp = 768) {
@@ -210,11 +211,14 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Live team chat: load real messages from the DB (demo rows stay as fallback) ──
   const liveLoadedRef = useRef(false)
+  const [reactions, setReactions] = useState({})   // { msgId: { '👍': [{id,n}] } }
+  const setRx = (id) => (map) => setReactions(p => ({ ...p, [id]: map }))
   async function loadTeamChat() {
     try {
       const rows = await dbGet('team_messages', `org_id=eq.${orgId}&order=created_at.asc&limit=500`)
       if (!Array.isArray(rows) || !rows.length) return
       liveLoadedRef.current = true
+      fetchReactions('team_messages', rows.map(r => r.id)).then(setReactions).catch(() => {})
       const roots = [], reps = {}, dms = {}
       for (const r of rows) {
         const m = { id:r.id, senderId:r.sender_id, senderName:r.sender_name, senderRole:r.sender_role,
@@ -1102,6 +1106,10 @@ export default function Week7({ currentUser, initialDm }) {
                                 {renderBody(msg.content, C.white)}
                               </div>
                             )}
+                            {!msg.deletedAt && liveLoadedRef.current && (
+                              <ReactionBar table="team_messages" messageId={msg.id} myId={myUUID}
+                                reactions={reactions[msg.id]} accent={C.gold} onChange={setRx(msg.id)} />
+                            )}
                             <div style={{display:'flex',gap:8,marginTop:5,alignItems:'center'}}>
                               <PinBtns m={msg} ctx="team_general"/>
                               {!msg.deletedAt && canDeleteTeamMsg(msg) && (
@@ -1202,6 +1210,10 @@ export default function Week7({ currentUser, initialDm }) {
                               ) : (
                                 <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderBody(r.content, C.white)}</div>
                               )}
+                              {!r.deletedAt && liveLoadedRef.current && (
+                                <ReactionBar table="team_messages" messageId={r.id} myId={myUUID}
+                                  reactions={reactions[r.id]} accent={C.gold} onChange={setRx(r.id)} />
+                              )}
                               {!r.deletedAt && canDeleteTeamMsg(r) && (
                                 <button onClick={() => deleteTeamMsg(r)} title="Delete (kept in admin audit log)"
                                   style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:'2px 0 0'}}>🗑 delete</button>
@@ -1275,6 +1287,10 @@ export default function Week7({ currentUser, initialDm }) {
                           <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
                             <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
                           </div>
+                          {!msg.deletedAt && liveLoadedRef.current && (
+                            <ReactionBar table="team_messages" messageId={msg.id} myId={myUUID}
+                              reactions={reactions[msg.id]} accent={C.gold} onChange={setRx(msg.id)} alignRight={isMine} />
+                          )}
                           <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:isMine?'right':'left',display:'flex',gap:8,alignItems:'center',justifyContent:isMine?'flex-end':'flex-start'}}>
                             <span>{timeAgo(msg.createdAt)}</span>
                             <PinBtns m={msg} ctx="team_dm"/>

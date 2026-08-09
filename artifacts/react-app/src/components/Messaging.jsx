@@ -8,6 +8,7 @@ import { sendNotification } from './Notifications'
 import { TZ_OPTIONS, DEFAULT_TZ, zonedTimeToIso, tzShort } from '../lib/tz'
 import Communities from './Communities'
 import { loomIsShown, useLoomOn } from './LoomPrivacy'
+import { ReactionBar, fetchReactions } from './Reactions'
 
 function useIsMobile(bp = 640) {
   const [m, setM] = useState(() => window.innerWidth < bp)
@@ -1106,6 +1107,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       const grew = data.length > msgCountRef.current
       msgCountRef.current = data.length
       setLiveMessages(data)
+      fetchReactions('messages', data.map(m => m.id)).then(setReactions).catch(() => {})
       if (firstLoad || (grew && nearBottom)) {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
       }
@@ -1119,6 +1121,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
   // ── Message pins (per-user — pinning never affects the other person) ──
   const [pins, setPins] = useState([])
+  const [reactions, setReactions] = useState({})   // { msgId: { '👍': [{id,n}] } }
   async function loadPins() {
     if (!activeConvo?.supabaseConvoId || !myProfileId) return
     const data = await dbGet('message_pins', `conversation_id=eq.${activeConvo.supabaseConvoId}&user_id=eq.${myProfileId}`)
@@ -1656,6 +1659,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                         </button>
                       )}
                     </div>
+                    {!r.deleted_at && r.id && (
+                      <ReactionBar table="messages" messageId={r.id} myId={myProfileId}
+                        reactions={reactions[r.id]} accent={C.gold} alignRight={mine}
+                        onChange={map => setReactions(p => ({ ...p, [r.id]: map }))} />
+                    )}
                     <div style={{ fontSize:9, color:C.muted, marginTop:2, textAlign: mine ? 'right' : 'left' }}>{formatTime(r.created_at)}</div>
                   </div>
                 </div>
@@ -1904,6 +1912,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                           </a>
                         )}
                       </div>
+                      {isLive && msg.id && !msg.deleted_at && (
+                        <ReactionBar table="messages" messageId={msg.id} myId={myProfileId}
+                          reactions={reactions[msg.id]} accent={C.gold} alignRight={mine}
+                          onChange={map => setReactions(p => ({ ...p, [msg.id]: map }))} />
+                      )}
                       <div style={{ fontSize:10, color:C.muted, marginTop:3,
                         textAlign:mine?'right':'left',
                         display:'flex', gap:6, alignItems:'center', justifyContent:mine?'flex-end':'flex-start' }}>

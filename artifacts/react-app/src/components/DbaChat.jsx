@@ -19,6 +19,7 @@ import { supabase } from '../supabaseClient'
 import MentionInput from './MentionInput'
 import { sendNotification } from './Notifications'
 import CanvasPanel from './CanvasPanel'
+import { ReactionBar, fetchReactions } from './Reactions'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -162,6 +163,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   const [members,    setMembers]    = useState([])
   const [messages,   setMessages]   = useState([])
   const [pins,       setPins]       = useState([])
+  const [reactions,  setReactions]  = useState({})   // { msgId: { '👍': [{id,n}] } }
   const [canvasOpen, setCanvasOpen] = useState(false)
   const [newMsg,     setNewMsg]     = useState('')
   const [replyTo,    setReplyTo]    = useState(null)
@@ -218,6 +220,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
       const grew = rows.length > msgCountRef.current
       msgCountRef.current = rows.length
       setMessages(rows)
+      fetchReactions('community_messages', rows.map(m => m.id)).then(setReactions).catch(() => {})
       if (firstLoad || (grew && nearBottom)) {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
       }
@@ -647,6 +650,11 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
             <div style={{ fontSize:12, lineHeight:1.55, background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 11px', wordBreak:'break-word', whiteSpace:'pre-wrap' }}>
               {renderBody(m.content, C.white)}
             </div>
+          )}
+          {!m.deleted_at && (
+            <ReactionBar table="community_messages" messageId={m.id} myId={myId}
+              reactions={reactions[m.id]} accent={C.gold}
+              onChange={map => setReactions(p => ({ ...p, [m.id]: map }))} />
           )}
           {!m.deleted_at && (
             <div style={{ display:'flex', gap:10, marginTop:3, alignItems:'center' }}>
