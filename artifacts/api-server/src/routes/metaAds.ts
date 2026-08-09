@@ -172,8 +172,8 @@ const fmtUsd = (n: any) => {
 };
 
 // Pull performance numbers for a date window (account level + top campaigns
-// + per-ad numbers so weekly/monthly recaps can rank best & worst ads).
-async function pullInsights(cfg: MetaCfg, since: string, until: string, withAds = false) {
+// + per-ad numbers so every recap can rank best & worst ads).
+async function pullInsights(cfg: MetaCfg, since: string, until: string, withAds = true) {
   const tr = encodeURIComponent(JSON.stringify({ since, until }));
   const acct = await metaGet(
     `act_${cfg.ad_account_id}/insights?time_range=${tr}&fields=spend,impressions,clicks,ctr,cpc,actions`,
@@ -184,7 +184,7 @@ async function pullInsights(cfg: MetaCfg, since: string, until: string, withAds 
     cfg.token,
   );
   const ads = withAds ? await metaGet(
-    `act_${cfg.ad_account_id}/insights?time_range=${tr}&level=ad&fields=ad_name,campaign_name,spend,actions,clicks&limit=100`,
+    `act_${cfg.ad_account_id}/insights?time_range=${tr}&level=ad&fields=ad_name,campaign_name,spend,actions,clicks,impressions&limit=100`,
     cfg.token,
   ) : null;
   if (!acct) return null;
@@ -208,9 +208,10 @@ async function pullInsights(cfg: MetaCfg, since: string, until: string, withAds 
       name: c.campaign_name, spend: Number(c.spend) || 0, leads: leadCount(c.actions),
     })).sort((a: any, b: any) => b.spend - a.spend),
     ads: (ads?.data || []).map((a: any) => {
-      const sp = Number(a.spend) || 0, ld = leadCount(a.actions);
+      const sp = Number(a.spend) || 0, ld = leadCount(a.actions), ck = Number(a.clicks) || 0;
       return { name: a.ad_name, campaign: a.campaign_name, spend: sp, leads: ld,
-        clicks: Number(a.clicks) || 0, cpl: ld > 0 ? sp / ld : null };
+        clicks: ck, views: Number(a.impressions) || 0,
+        cpc: ck > 0 ? sp / ck : null, cpl: ld > 0 ? sp / ld : null };
     }).filter((a: any) => a.spend > 0).sort((x: any, y: any) => y.spend - x.spend),
   };
 }
@@ -270,18 +271,21 @@ async function writeRecap(period: "daily" | "weekly" | "monthly", orgName: strin
 💰 THE NUMBERS
 • Spend: $X
 • Leads: N ($X per lead)
-• Clicks: N · Impressions: N
+• Clicks: N ($X per click)
+• Views: N
 
 📈 VS ${period === "daily" ? "YESTERDAY" : period === "weekly" ? "LAST WEEK" : "LAST MONTH"}
-• one bullet per meaningful change (spend, leads, cost per lead), each stating up/down and by how much (% or $). Say "about the same" when flat. Omit section if no previous data.
+• one bullet per meaningful change (spend, leads, cost per lead, cost per click), each stating up/down and by how much (% or $). Say "about the same" when flat. Omit section if no previous data.
 
-${period !== "daily" ? `🏆 BEST PERFORMERS
-• up to 3 ads from best_ads: name — $cpl per lead ($spend spent)
+🏆 BEST PERFORMERS
+• up to 3 ads from best_ads, each on TWO lines:
+• AdName — $X per lead ($X spent)
+   N views · N clicks ($X per click)
 
 ⚠️ NEEDS ATTENTION
-• up to 3 ads from worst_ads: name — why (no leads despite $X spend, or high cost per lead)
+• up to 3 ads from worst_ads, same two-line style, first line saying why (no leads despite $X spend, or high cost per lead)
 
-` : ""}🛠 WHAT CHANGED
+🛠 WHAT CHANGED
 • group by person: Name — what they changed (which campaign/ad). If none: "• No changes were made this period."
 
 💡 TAKEAWAY
@@ -306,7 +310,8 @@ Never invent numbers not in the data. Round sensibly. Keep it under 250 words.` 
     "💰 THE NUMBERS",
     `• Spend: ${fmtUsd(cur.spend)}`,
     `• Leads: ${cur.leads}${cur.cpl != null ? ` (${fmtUsd(cur.cpl)} per lead)` : ""}`,
-    `• Clicks: ${cur.clicks.toLocaleString()} · Impressions: ${cur.impressions.toLocaleString()}`,
+    `• Clicks: ${cur.clicks.toLocaleString()}${cur.clicks > 0 ? ` (${fmtUsd(cur.spend / cur.clicks)} per click)` : ""}`,
+    `• Views: ${cur.impressions.toLocaleString()}`,
   ];
   if (prev) {
     const vsLabel = period === "daily" ? "YESTERDAY" : period === "weekly" ? "LAST WEEK" : "LAST MONTH";
@@ -316,15 +321,14 @@ Never invent numbers not in the data. Round sensibly. Keep it under 250 words.` 
     lines.push(`• Leads: ${prev.leads} → ${cur.leads}`);
     if (cur.cpl != null && prev.cpl != null) lines.push(`• Cost per lead ${pct(cur.cpl, prev.cpl) || "about the same"} (${fmtUsd(prev.cpl)} → ${fmtUsd(cur.cpl)})`);
   }
-  if (period !== "daily") {
-    if (ranked.best.length) {
-      lines.push("", "🏆 BEST PERFORMERS");
-      for (const a of ranked.best) lines.push(`• ${a.name} — ${fmtUsd(a.cpl)} per lead (${fmtUsd(a.spend)} spent)`);
-    }
-    if (ranked.worst.length) {
-      lines.push("", "⚠️ NEEDS ATTENTION");
-      for (const a of ranked.worst) lines.push(`• ${a.name} — ${a.cpl == null ? `no leads despite ${fmtUsd(a.spend)} spent` : `${fmtUsd(a.cpl)} per lead`}`);
-    }
+  const adLine2 = (a: any) => `   ${(a.views || 0).toLocaleString()} views · ${a.clicks} clicks${a.cpc != null ? ` (${fmtUsd(a.cpc)} per click)` : ""}`;
+  if (ranked.best.length) {
+    lines.push("", "🏆 BEST PERFORMERS");
+    for (const a of ranked.best) lines.push(`• ${a.name} — ${fmtUsd(a.cpl)} per lead (${fmtUsd(a.spend)} spent)`, adLine2(a));
+  }
+  if (ranked.worst.length) {
+    lines.push("", "⚠️ NEEDS ATTENTION");
+    for (const a of ranked.worst) lines.push(`• ${a.name} — ${a.cpl == null ? `no leads despite ${fmtUsd(a.spend)} spent` : `${fmtUsd(a.cpl)} per lead`}`, adLine2(a));
   }
   lines.push("", "🛠 WHAT CHANGED");
   if (!changes.length) lines.push("• No changes were made this period.");
@@ -375,7 +379,7 @@ async function runRecap(companyId: string, cfg: MetaCfg, period: "daily" | "week
     pSince = day(prevPrevFirst); pUntil = day(new Date(prevFirst.getTime() - 86400_000));
   }
 
-  const cur = await pullInsights(cfg, since, until, period !== "daily");
+  const cur = await pullInsights(cfg, since, until);
   if (!cur) {
     await notifyAdmins(companyId, "⚠️ The ads recap could not pull numbers from Meta — the access token may have expired. Reconnect Meta Ads in the admin panel (Overview → Ads Recaps).");
     return { ok: false, error: "Could not pull numbers from Meta — the token may have expired." };
