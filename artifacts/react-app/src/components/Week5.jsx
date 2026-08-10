@@ -41,6 +41,7 @@ const H = {
 }
 
 import { getRecipeDetails, loadLiveRecipeDetails } from './recipeDetails'
+import { planLessonMove, staleProgressIds } from './courseMoveUtils'
 
 async function dbGet(table, params='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
@@ -567,12 +568,26 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   // Progress rows are keyed by module_id text (e.g. "2.3"), so whenever we
   // renumber a module we must move its course_progress rows along with it.
   // A two-pass rename (via a "tmp." prefix) makes swaps safe.
+  // Returns true only when no progress rows are left under an old or temporary
+  // id — a plain "update returned false" can just mean nobody had progress yet.
   async function remapProgress(pairs) {
     const changed = pairs.filter(p=>p.from!==p.to)
+    if (!changed.length) return true
     for (const p of changed)
       await dbUpdate('course_progress',`course_id=eq.${activeCourse.id}&module_id=eq.${encodeURIComponent(p.from)}`,{module_id:`tmp.${p.to}`})
     for (const p of changed)
       await dbUpdate('course_progress',`course_id=eq.${activeCourse.id}&module_id=eq.${encodeURIComponent(`tmp.${p.to}`)}`,{module_id:p.to})
+    try {
+      const stale = staleProgressIds(changed)
+      const list  = stale.map(id=>`"${id.replace(/"/g,'')}"`).join(',')
+      const left  = await dbGet('course_progress',`course_id=eq.${activeCourse.id}&module_id=in.(${encodeURIComponent(list)})&select=id,module_id`)
+      if ((left||[]).length===0) return true
+      // Second pass for stragglers stuck on a temporary id, then re-verify
+      for (const p of changed)
+        await dbUpdate('course_progress',`course_id=eq.${activeCourse.id}&module_id=eq.${encodeURIComponent(`tmp.${p.to}`)}`,{module_id:p.to})
+      const still = await dbGet('course_progress',`course_id=eq.${activeCourse.id}&module_id=in.(${encodeURIComponent(list)})&select=id`)
+      return (still||[]).length===0
+    } catch { return false }
   }
   async function reloadCompleted() {
     if (!myUUID||!activeCourse) return
@@ -596,7 +611,36 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       const ok2 = ok1 && await dbUpdate('course_modules',`id=eq.${other.id}`,{sort_order:m.sort_order,module_id:oNewId,updated_at:new Date().toISOString()})
       const ok3 = ok2 && await dbUpdate('course_modules',`id=eq.${m.id}`,{module_id:mNewId})
       if (!ok3) { alert('Could not reorder the lessons — please check your connection and try again.'); await refreshModules(activeCourse.id); return }
-      await remapProgress([{from:m.module_id,to:mNewId},{from:other.module_id,to:oNewId}])
+      const remapOk = await remapProgress([{from:m.module_id,to:mNewId},{from:other.module_id,to:oNewId}])
+      if (!remapOk) alert('The lessons were reordered, but some progress records could not be updated — please retry the move to repair them.')
+      await refreshModules(activeCourse.id)
+      await reloadCompleted()
+    } finally { setBuilderBusy(false) }
+  }
+  // Move a lesson into a different section: appended at the end of the target
+  // section, module_id renumbered, and course_progress rows remapped with it.
+  async function moveModuleToSection(m, targetSecId) {
+    if (builderBusy) return
+    const target = draftSecs.find(s=>String(s.id)===String(targetSecId))
+    const plan = planLessonMove(modules, m, target)
+    if (!plan) return
+    setBuilderBusy(true)
+    try {
+      const ok = await dbUpdate('course_modules',`id=eq.${m.id}`,{...plan.update, updated_at:new Date().toISOString()})
+      if (!ok) { alert('Could not move the lesson — please check your connection and try again.'); await refreshModules(activeCourse.id); return }
+      const remapOk = await remapProgress(plan.remap)
+      if (!remapOk) {
+        // Roll the lesson back so learner progress can never point at a dead id
+        await dbUpdate('course_modules',`id=eq.${m.id}`,{
+          section_id:m.section_id, section_title:m.section_title, section_color:m.section_color,
+          sort_order:m.sort_order, module_id:m.module_id, updated_at:new Date().toISOString(),
+        })
+        await remapProgress([{from:plan.update.module_id, to:m.module_id}])
+        alert('Could not move the lesson safely (progress records could not be updated) — the lesson was left in its original section. Please try again.')
+        await refreshModules(activeCourse.id)
+        await reloadCompleted()
+        return
+      }
       await refreshModules(activeCourse.id)
       await reloadCompleted()
     } finally { setBuilderBusy(false) }
@@ -619,10 +663,11 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       for (const m of bMods)
         ok = ok && await dbUpdate('course_modules',`id=eq.${m.id}`,{section_id:sec.id,module_id:`${sec.id}.${m.sort_order}`,updated_at:new Date().toISOString()})
       if (!ok) { alert('Could not reorder the sections — please check your connection and try again.'); await refreshModules(activeCourse.id); return }
-      await remapProgress([
+      const remapOk = await remapProgress([
         ...aMods.map(m=>({from:m.module_id,to:`${other.id}.${m.sort_order}`})),
         ...bMods.map(m=>({from:m.module_id,to:`${sec.id}.${m.sort_order}`})),
       ])
+      if (!remapOk) alert('The sections were reordered, but some progress records could not be updated — please retry the move to repair them.')
       setDraftSecs(prev=>{
         const next=[...prev]
         next[i]={...other, id:sec.id}
@@ -1554,6 +1599,16 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                             </div>
                             {arrowBtn(builderBusy||mIdx===0, ()=>moveModule(m,-1), '↑', 'Move lesson up')}
                             {arrowBtn(builderBusy||mIdx===secModsSorted.length-1, ()=>moveModule(m,1), '↓', 'Move lesson down')}
+                            {draftSecs.length>1&&(
+                              <select value="" disabled={builderBusy} title="Move to another section" aria-label="Move to another section"
+                                onChange={e=>{ if(e.target.value) moveModuleToSection(m, e.target.value) }}
+                                style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 4px',color:builderBusy?C.dim:C.muted,fontSize:9,cursor:builderBusy?'default':'pointer',flexShrink:0,maxWidth:80}}>
+                                <option value="">Move to…</option>
+                                {draftSecs.filter(s=>s.id!==sec.id).map(s=>(
+                                  <option key={s.id} value={s.id}>{s.id}. {s.title}</option>
+                                ))}
+                              </select>
+                            )}
                             <button onClick={()=>setModEdit({id:m.id,title:m.title,duration:m.duration||'',admin_notes:m.admin_notes||'',video_url:m.video_url||''})}
                               style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',color:C.muted,fontSize:9,cursor:'pointer',flexShrink:0}}>Edit</button>
                             <button onClick={()=>deleteModule(m)}
