@@ -398,6 +398,17 @@ const OuraResultScreen = ({ result, brandOrg = null, onSignIn }) => {
   const primary = wl ? wl.primary : B.gold;
   const ok = result === "connected";
   const denied = result === "denied";
+  // Deep link back into the app for installed-PWA users: same origin + the
+  // current path (which already carries the org slug subpath from the OAuth
+  // return URL), with the one-time ?oura/?code params stripped.
+  const appHref = (() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      ["oura", "code", "state"].forEach(k => p.delete(k));
+      const qs = p.toString();
+      return `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+    } catch { return window.location.pathname || "/"; }
+  })();
   return (
     <div style={{ minHeight:"100vh", background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
       <div style={{ width:"100%", maxWidth:440, textAlign:"center" }}>
@@ -421,6 +432,10 @@ const OuraResultScreen = ({ result, brandOrg = null, onSignIn }) => {
               ✓ Connected — you're done here
             </div>
           )}
+          <a href={appHref}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginTop:22, borderRadius:12, padding:"13px 20px", textDecoration:"none", background:`linear-gradient(135deg, ${wl ? wl.secondary : "#ffb733"}, ${primary})`, color:"#000000", fontWeight:800, fontSize:14 }}>
+            Return to the app →
+          </a>
           <button onClick={onSignIn}
             style={{ display:"block", margin:"22px auto 0", background:"none", border:"none", cursor:"pointer", color:primary, fontSize:13, fontWeight:700, padding:0 }}>
             {ok ? "Or sign in here instead →" : "Sign in →"}
