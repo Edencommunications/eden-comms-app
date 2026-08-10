@@ -122,7 +122,7 @@ const EdenLogo = ({ size = 44 }) => (
   }}>
     <img
       src="/eden-logo-new.jpg"
-      alt="Lifestyle of Eden University"
+      alt="Lifestyle of Eden"
       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
     />
   </div>
@@ -323,7 +323,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
         <div style={{ background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, padding:"32px 20px 24px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid #1a1a1a` }}>
           {brandOrg ? <OrgLogo org={brandOrg} size={72}/> : <EdenLogo size={72}/>}
           <h1 style={{ fontSize:22, fontWeight:800, color:"#ffffff", margin:"16px 0 4px", textAlign:"center" }}>{brandOrg ? brandOrg.name : "Eden Communications"}</h1>
-          <p style={{ fontSize:12, color:"#888888", margin:0, textAlign:"center" }}>{brandOrg ? `The private platform for ${brandOrg.name}` : "The private platform for Lifestyle of Eden University"}</p>
+          <p style={{ fontSize:12, color:"#888888", margin:0, textAlign:"center" }}>{brandOrg ? `The private platform for ${brandOrg.name}` : "The private platform for Lifestyle of Eden"}</p>
         </div>
       ) : (
         <div style={{ flex:1, background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, borderRight:`1px solid #1a1a1a`, minWidth:0 }}>
@@ -332,7 +332,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             {brandOrg ? brandOrg.name : <>Eden<br/>Communications</>}
           </h1>
           <p style={{ fontSize:14, color:"#888888", margin:"0 0 32px", textAlign:"center", lineHeight:1.6 }}>
-            {brandOrg ? <>The private platform for<br/>{brandOrg.name}</> : <>The private platform for<br/>Lifestyle of Eden University</>}
+            {brandOrg ? <>The private platform for<br/>{brandOrg.name}</> : <>The private platform for<br/>Lifestyle of Eden</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
             {/* DBA sub-brand logins are community/course spaces — hide the coaching-platform bullets there */}
@@ -641,7 +641,7 @@ const HomeScreen = ({ user, wlOrg = null }) => {
 
       {/* Resources links */}
       <div style={{ padding:"20px 20px 32px" }}>
-        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Lifestyle of Eden University</p>
+        <p style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 12px" }}>Lifestyle of Eden</p>
         {[
           { label:"🎙 Pillars Podcast", url:"https://open.spotify.com/show/0hEI4GF66eXXMSxlgmbVUP" },
           { label:"📺 YouTube Channel", url:"https://www.youtube.com/@lifestyleofeden3879" },
@@ -675,7 +675,7 @@ const DEFAULT_SOCIALS = [
   { emoji:"🎙", label:"Spotify Podcast", sub:"Full show · all episodes",  url:"https://open.spotify.com/show/0hEI4GF66eXXMSxlgmbVUP",  accent:"#1DB954", bg:"#1DB95418" },
   { emoji:"📺", label:"YouTube",         sub:"@lifestyleofeden3879",       url:"https://www.youtube.com/@lifestyleofeden3879",            accent:"#FF0000", bg:"#FF000018" },
   { emoji:"📸", label:"Instagram",       sub:"@nicktofficial",             url:"https://www.instagram.com/nicktofficial/",                accent:"#E1306C", bg:"#E1306C18" },
-  { emoji:"👥", label:"Facebook",        sub:"Lifestyle of Eden University Page",     url:"https://www.facebook.com/profile.php?id=61587350518067",  accent:"#1877F2", bg:"#1877F218" },
+  { emoji:"👥", label:"Facebook",        sub:"Lifestyle of Eden Page",     url:"https://www.facebook.com/profile.php?id=61587350518067",  accent:"#1877F2", bg:"#1877F218" },
   { emoji:"🌐", label:"Website",         sub:"lifestyleofeden.com",        url:"https://lifestyleofeden.com",                            accent:B.gold,    bg:`${B.gold}18` },
   { emoji:"🛍", label:"Eden Clothing",   sub:"Shop the brand",             url:"https://lifestyle-of-eden.myshopify.com/",               accent:B.gold,    bg:`${B.gold}18` },
 ];
@@ -799,7 +799,7 @@ const CommunityScreen = ({ user }:any) => {
     <Screen>
       {/* Hero */}
       <div style={{ background:"linear-gradient(180deg,#1a1200 0%,#000 100%)", padding:"24px 20px 20px" }}>
-        <p style={{ fontSize:11, fontWeight:700, color:myCompany?.brand_color||B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>{myCompany?.name||'Lifestyle of Eden University'}</p>
+        <p style={{ fontSize:11, fontWeight:700, color:myCompany?.brand_color||B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>{myCompany?.name||'Lifestyle of Eden'}</p>
         <h1 style={{ fontSize:22, fontWeight:800, color:B.text, margin:"0 0 4px" }}>Connect</h1>
         <p style={{ fontSize:12, color:B.muted, margin:0 }}>
           {myCompany ? 'Your community links — all in one place' : 'Podcast · social media · shop — all in one place'}
@@ -2232,7 +2232,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
       <div style={{ background:`linear-gradient(180deg,#111100 0%,#000000 100%)`, padding:"20px 20px 16px" }}>
         <p style={{ fontSize:11, color:B.muted, fontWeight:700, letterSpacing:1, margin:"0 0 4px" }}>COACH PORTAL</p>
         <h1 style={{ fontSize:22, fontWeight:700, color:B.text, margin:0 }}>{user.name}</h1>
-        <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden University · {clients.length} active clients</p>
+        <p style={{ fontSize:12, color:B.muted, margin:"4px 0 0" }}>Lifestyle of Eden · {clients.length} active clients</p>
         {loomMode && (
           <div style={{ marginTop:10, padding:"6px 12px", background:"#ff525218", border:"1px solid #ff525244", borderRadius:8 }}>
             <p style={{ fontSize:11, color:"#ff5252", margin:0, fontWeight:600 }}>
@@ -4476,7 +4476,7 @@ const AdminDashboard = ({ user }:any) => {
             })()}
             {/* White-label admin: DBAs (sub-brands) — hidden unless the plan includes them */}
             {!isOwnerHQ && myOrg && <DbaManagerCard org={myOrg}/>}
-            {/* Owner HQ: manage any organization's DBAs (incl. Lifestyle of Eden University) */}
+            {/* Owner HQ: manage any organization's DBAs (incl. Lifestyle of Eden) */}
             {isOwnerHQ && <HqDbaManager orgs={dbOrgs}/>}
             {/* White-label admin: org logo */}
             {!isOwnerHQ && myOrg && (() => {
@@ -6833,7 +6833,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
 // Owner HQ wrapper: pick any organization (including Eden itself), then the
 // regular DBA manager runs against it — same screens, same abilities.
 const HqDbaManager = ({ orgs }: any) => {
-  const eden = { id: EDEN_ORG_ID, name: 'Lifestyle of Eden University', slug: '', brand_color: B.gold, logo_url: null };
+  const eden = { id: EDEN_ORG_ID, name: 'Lifestyle of Eden', slug: '', brand_color: B.gold, logo_url: null };
   const list = [eden, ...(orgs || []).filter((o: any) => o.id !== EDEN_ORG_ID && o.is_active !== false)];
   const [selId, setSelId] = useState(eden.id);
   const [open, setOpen] = useState(false);
@@ -7228,7 +7228,7 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
                 <div style={{ flex: 1.4, minWidth: 160 }}>
                   <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, margin: "0 0 3px" }}>Display name — shown everywhere in the app</p>
-                  <input value={form.name} onChange={e => setForm((p: any) => ({ ...p, name: e.target.value, slug: p.id || p.slugTouched ? p.slug : slugify(e.target.value) }))} placeholder="e.g. Lifestyle of Eden University"
+                  <input value={form.name} onChange={e => setForm((p: any) => ({ ...p, name: e.target.value, slug: p.id || p.slugTouched ? p.slug : slugify(e.target.value) }))} placeholder="e.g. Lifestyle of Eden"
                     style={{ width: "100%", boxSizing: "border-box", background: B.dim, border: `1px solid ${B.border}`, borderRadius: 8, padding: "8px 10px", color: B.text, fontSize: 12, outline: "none" }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 120 }}>

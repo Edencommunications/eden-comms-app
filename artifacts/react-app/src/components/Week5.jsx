@@ -1363,7 +1363,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
             <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
               <div style={{fontSize:15,fontWeight:700,color:C.white,marginBottom:3}}>Distribution — {tiersCourse.title}</div>
               <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
-                Choose which white-label tiers include this course. Leave all unchecked to keep it internal to Lifestyle of Eden University.
+                Choose which white-label tiers include this course. Leave all unchecked to keep it internal to Lifestyle of Eden.
               </div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:16}}>

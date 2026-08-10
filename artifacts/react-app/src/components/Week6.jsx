@@ -217,7 +217,7 @@ function LoginHealthCard({orgs=[], isEden=false}) {
               <select value={fixOrg[m.email]||EDEN_ORG_ID} onChange={e=>setFixOrg(p=>({...p,[m.email]:e.target.value}))}
                 title="Which company does this person belong to?"
                 style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:'#D4A8F0',fontSize:11,outline:'none',cursor:'pointer',maxWidth:150}}>
-                {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden University'}]).map(o=>
+                {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden'}]).map(o=>
                   <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             )}
