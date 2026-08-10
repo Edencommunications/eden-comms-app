@@ -330,7 +330,7 @@ router.get("/webhooks/community-post-dba/:dbaId/config", async (req: Request, re
     const hit = await findDbaAnywhere(dbaId);
     if (!hit || !hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
     if (!dbaAccess(me, hit.companyId, hit.dba).manage) { res.status(403).json({ error: "Not authorized" }); return; }
-    const communities = await dbGet(`communities?company_id=eq.${companyId}&is_active=eq.true&select=id,name&order=name`);
+    const communities = await dbGet(`communities?company_id=eq.${hit.companyId}&is_active=eq.true&select=id,name&order=name`);
     res.json({
       url: `${appBase(req)}/api/webhooks/community-post-dba/${dbaId}`,
       secret: communityPostDbaSecretFor(dbaId),
@@ -358,11 +358,3 @@ router.get("/webhooks/community-post/:companyId/config", async (req: Request, re
 });
 
 export default router;
-
-    const isOrgStaff = caller.role !== "client" && (caller.company_id === commOrg || isEdenStaff);
-
-    const membership = await dbGet<any>(
-      `community_members?community_id=eq.${encodeURIComponent(communityId)}&user_id=eq.${encodeURIComponent(caller.id)}&select=user_id&limit=1`,
-    );
-
-    const isEdenStaff = caller.role !== "client" && caller.company_id === EDEN_ORG_ID;
