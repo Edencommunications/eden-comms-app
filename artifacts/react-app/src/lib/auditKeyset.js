@@ -15,6 +15,14 @@ export function audRangeParams(from, to) {
 // PostgREST quoted value, URL-encoded (handles '+' in ISO timestamps, commas, etc.)
 const pgQuote = v => encodeURIComponent(`"${v}"`)
 
+export function audSearchGroup(search) {
+  const q = String(search || '').trim().replace(/["\\]/g, '')
+  if (!q) return ''
+  // ILIKE pattern, quoted so commas/parens in the query can't break PostgREST syntax
+  const pat = pgQuote(`*${q}*`)
+  return `or(actor_name.ilike.${pat},action.ilike.${pat},target_type.ilike.${pat})`
+}
+
 // Build the PostgREST query string for one page of audit rows.
 // cursor = { created_at, id } of the last row already loaded (or null for page 1).
 // Server-side person/action params ('all' or '' means no filter)
@@ -25,13 +33,27 @@ export function audFilterParams(person, action) {
   return p
 }
 
-export function auditPageQuery({ from = '', to = '', person = '', action = '', cursor = null, limit = AUD_PAGE } = {}) {
+export function auditPageQuery({ from = '', to = '', person = '', action = '', search = '', cursor = null, limit = AUD_PAGE } = {}) {
   let q = `select=*&order=created_at.desc,id.desc&limit=${limit}${audRangeParams(from, to)}${audFilterParams(person, action)}`
+  let cursorGroup = ''
   if (cursor && cursor.created_at != null && cursor.id != null) {
     const ts = pgQuote(cursor.created_at), id = pgQuote(cursor.id)
-    q += `&or=(created_at.lt.${ts},and(created_at.eq.${ts},id.lt.${id}))`
+    cursorGroup = `or(created_at.lt.${ts},and(created_at.eq.${ts},id.lt.${id}))`
   }
+  const searchGroup = audSearchGroup(search)
+  // PostgREST can't repeat the `or` key, so two groups must nest under `and=(...)`
+  if (cursorGroup && searchGroup) q += `&and=(${cursorGroup},${searchGroup})`
+  else if (cursorGroup) q += `&${cursorGroup.replace(/^or\(/, 'or=(')}`
+  else if (searchGroup) q += `&${searchGroup.replace(/^or\(/, 'or=(')}`
   return q
+}
+
+export function makeLatestWins() {
+  let seq = 0
+  return {
+    start: () => ++seq,
+    isCurrent: t => t === seq,
+  }
 }
 
 // ---- Whole-history facet lists (distinct people / actions) ----

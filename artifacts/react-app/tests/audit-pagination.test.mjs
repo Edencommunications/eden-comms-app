@@ -5,7 +5,7 @@
 // is correctly encoded.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AUD_PAGE, auditPageQuery, cmpAuditDesc, isOlderThanCursor } from '../src/lib/auditKeyset.js'
+import { AUD_PAGE, auditPageQuery, cmpAuditDesc, isOlderThanCursor, makeLatestWins } from '../src/lib/auditKeyset.js'
 
 // Simulated PostgREST server: applies the same ordering + keyset predicate.
 function makeServer(rows) {
@@ -69,6 +69,51 @@ test('query string uses composite order and an encoded OR keyset predicate', () 
   assert.ok(!q.includes('+00:00'), "'+' in the timestamp is URL-encoded")
   assert.ok(q.includes('%2B00%3A00'), 'timestamp offset encoded as %2B')
   assert.ok(q.includes('%22'), 'cursor values are PostgREST-quoted')
+})
+
+test('free-text search adds a server-side OR of ILIKE filters', () => {
+  const q = auditPageQuery({ search: 'Jane' })
+  assert.ok(q.includes('or=(actor_name.ilike.'), 'search OR group present')
+  assert.ok(q.includes('action.ilike.'), 'matches action')
+  assert.ok(q.includes('target_type.ilike.'), 'matches target type')
+  assert.ok(q.includes(encodeURIComponent('"*Jane*"')), 'quoted wildcard pattern')
+  assert.ok(!auditPageQuery({ search: '  ' }).includes('ilike'), 'blank search adds nothing')
+})
+
+test('search plus cursor nests both OR groups under a single and=()', () => {
+  const q = auditPageQuery({ search: 'login', cursor: { created_at: '2026-08-10T12:00:00+00:00', id: 'x1' } })
+  assert.ok(q.includes('&and=(or(created_at.lt.'), 'cursor group nested in and=')
+  assert.ok(q.includes(',or(actor_name.ilike.'), 'search group nested in and=')
+  assert.ok(!q.includes('&or=('), 'no bare duplicate or key')
+})
+
+test('search input that could break PostgREST syntax is sanitized and quoted', () => {
+  const q = auditPageQuery({ search: 'a,b(c)"d\\e' })
+  assert.ok(q.includes(encodeURIComponent('"*a,b(c)de*"')), 'quotes/backslashes stripped, rest quoted')
+})
+
+test('a stale unfiltered response that resolves after a newer search cannot overwrite it', async () => {
+  // Simulate the UI: each load takes a ticket, commits only if still current.
+  const guard = makeLatestWins()
+  let shown = null
+  const load = (rows, delayMs) => {
+    const t = guard.start()
+    return new Promise(res => setTimeout(res, delayMs)).then(() => {
+      if (guard.isCurrent(t)) shown = rows
+    })
+  }
+  // Older unfiltered request is slow; newer search request finishes first.
+  const slowUnfiltered = load([{ id: 'all-1' }, { id: 'all-2' }], 30)
+  const fastSearch = load([{ id: 'match-1' }], 5)
+  await Promise.all([slowUnfiltered, fastSearch])
+  assert.deepEqual(shown, [{ id: 'match-1' }], 'filtered server result remains displayed')
+})
+
+test('latest-wins guard also invalidates in-flight pagination when a new load starts', () => {
+  const guard = makeLatestWins()
+  const pageTicket = guard.start()   // "load older" request in flight
+  guard.start()                      // user types → fresh first-page load starts
+  assert.equal(guard.isCurrent(pageTicket), false, 'stale pagination response is dropped')
 })
 
 test('first page has no cursor predicate; date range adds server-side filters', () => {

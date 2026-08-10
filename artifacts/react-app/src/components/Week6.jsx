@@ -1014,9 +1014,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // older generation (superseded filters, stale Load-older) are discarded so a
   // slow request can't overwrite newer results or pagination state.
   const audReqSeq = useRef(0)
+  // Debounced copy of the search box — server queries fire on this, not each keystroke.
+  // Declared before the load functions/effects below so first-load always sees it.
+  const [audSearchQ, setAudSearchQ] = useState('')
   function loadDbAudit() {
     const seq = ++audReqSeq.current
-    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, person:audPerson, action:audAction }))
+    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, person:audPerson, action:audAction, search:audSearchQ }))
       .then(r=>{ if(seq===audReqSeq.current && Array.isArray(r)){ setDbAudit(r); setAudHasMore(r.length>=AUD_PAGE); setAudLoadingMore(false) } })
       .catch(()=>{})
   }
@@ -1028,7 +1031,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (!last?.created_at || last?.id==null) { setAudHasMore(false); return }
     const seq = audReqSeq.current // invalidated if filters change mid-flight
     setAudLoadingMore(true)
-    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, person:audPerson, action:audAction, cursor:{ created_at:last.created_at, id:last.id } }))
+    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, person:audPerson, action:audAction, search:audSearchQ, cursor:{ created_at:last.created_at, id:last.id } }))
       .then(r=>{
         if (seq!==audReqSeq.current) return // filters changed while loading — drop stale page
         if (Array.isArray(r)) {
@@ -1046,6 +1049,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   useEffect(()=>{ if(tab==='audit') loadDbAudit() },[tab])
   // Audit tab filters + restore
   const [audSearch, setAudSearch] = useState('')
+  useEffect(()=>{ const t=setTimeout(()=>setAudSearchQ(audSearch.trim()),350); return ()=>clearTimeout(t) },[audSearch])
   const [audTz, setAudTz] = useState(()=>{ try { return localStorage.getItem('audit_tz')||'local' } catch { return 'local' } })
   function setAudTzPersist(v){ setAudTz(v); try { localStorage.setItem('audit_tz',v) } catch {} }
   const audTime = iso => { try {
@@ -1055,8 +1059,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [audPerson, setAudPerson] = useState('all')
   const [audFrom,   setAudFrom]   = useState('')
   const [audTo,     setAudTo]     = useState('')
-  // Filter changes re-query the server so results aren't limited to the loaded page
-  useEffect(()=>{ if(isAdmin && tab==='audit') loadDbAudit() },[audFrom,audTo,audPerson,audAction])
+  // Filter changes (incl. debounced search) re-query the server so results aren't limited to the loaded page
+  useEffect(()=>{ if(isAdmin && tab==='audit') loadDbAudit() },[audFrom,audTo,audPerson,audAction,audSearchQ])
   // Preset ranges & jump-to-date — both just set audFrom/audTo, which re-query the server
   const audDateStr = d => { const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` }
   function audPreset(days){ const from=new Date(); from.setDate(from.getDate()-days); setAudFrom(audDateStr(from)); setAudTo('') }
