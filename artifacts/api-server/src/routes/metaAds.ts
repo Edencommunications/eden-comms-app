@@ -14,6 +14,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "node:crypto";
 import { logger } from "../lib/logger";
+import { notifyCommunityMembers } from "./communityPost";
 import { requireStaff } from "./checkinForm";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
@@ -359,7 +360,7 @@ async function runRecap(companyId: string, cfg: MetaCfg, period: "daily" | "week
   if (!cfg.community_id) return { ok: false, error: "No community chosen for recaps yet." };
   // Re-validate the destination right before posting — it may have been
   // deleted or belong to a different org since settings were saved.
-  const comm = await dbGet<any>(`communities?id=eq.${encodeURIComponent(cfg.community_id)}&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&select=id`);
+  const comm = await dbGet<any>(`communities?id=eq.${encodeURIComponent(cfg.community_id)}&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&select=id,name`);
   if (!comm[0]) {
     await notifyAdmins(companyId, "⚠️ Ads recaps are paused — the community they post into no longer exists. Pick a new one in the admin panel (Overview → Meta Ads Recaps).");
     return { ok: false, error: "The chosen community no longer exists — pick a new one." };
@@ -413,6 +414,8 @@ async function runRecap(companyId: string, cfg: MetaCfg, period: "daily" | "week
     await notifyAdmins(companyId, "⚠️ The ads recap was generated but could not be posted to the chosen community. Check the community still exists in Overview → Ads Recaps.");
     return { ok: false, error: "Could not post into the community." };
   }
+  // Ping community members so the recap shows in their bell + phone push.
+  await notifyCommunityMembers(cfg.community_id, comm[0]?.name || "Ads", cfg.connected_by || null);
   return { ok: true };
 }
 

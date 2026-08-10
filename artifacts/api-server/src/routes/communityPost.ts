@@ -69,6 +69,27 @@ function appBase(req: Request): string {
   return `https://${host || "edencommunications.io"}`;
 }
 
+// Notify community members a new post landed — feeds the top bell AND phone
+// push (the push watcher mirrors notifications rows). Skips the sender.
+export async function notifyCommunityMembers(communityId: string, communityName: string, senderId: string | null): Promise<void> {
+  try {
+    const members = await dbGet<any>(`community_members?community_id=eq.${encodeURIComponent(communityId)}&select=user_id&limit=200`);
+    const rows = members
+      .map((m: any) => m.user_id)
+      .filter((id: string) => id && id !== senderId)
+      .map((id: string) => ({
+        recipient_id: id,
+        sender_id: senderId,
+        type: "community_post",
+        body: `💬 New post in #${communityName} — check your communities`,
+        is_read: false,
+      }));
+    if (rows.length) await dbInsert("notifications", rows);
+  } catch (e) {
+    logger.warn({ err: String(e) }, "[CommunityPost] member notify failed");
+  }
+}
+
 const router: IRouter = Router();
 
 router.post("/webhooks/community-post/:companyId", async (req: Request, res: Response) => {
@@ -108,6 +129,7 @@ router.post("/webhooks/community-post/:companyId", async (req: Request, res: Res
       parent_id: null,
     });
     if (!ok) { res.status(502).json({ error: "Could not post the message" }); return; }
+    await notifyCommunityMembers(comm.id, comm.name, null);
     logger.info({ companyId, community: comm.name }, "[CommunityPost] webhook posted");
     res.json({ ok: true, community: comm.name });
   } catch (e) {

@@ -87,6 +87,30 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   const [communities, setCommunities] = useState([])
   const [loaded,      setLoaded]      = useState(false)
   const [activeId,    setActiveId]    = useState(null)
+  // ── Per-community unread counts (last-seen timestamps in localStorage) ──
+  const seenKey = `community_seen_${myId || 'anon'}`
+  const getSeen = () => { try { return JSON.parse(localStorage.getItem(seenKey) || '{}') } catch { return {} } }
+  const markSeen = (cid) => {
+    if (!cid) return
+    try { const m = getSeen(); m[cid] = new Date().toISOString(); localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
+    setUnread(u => ({ ...u, [cid]: 0 }))
+  }
+  const [unread, setUnread] = useState({})   // { communityId: count }
+  async function refreshUnread(list) {
+    const cs = (list || communities).filter(c => c.id !== activeId)
+    if (!cs.length) return
+    const seen = getSeen()
+    const results = await Promise.all(cs.map(async c => {
+      try {
+        const since = seen[c.id] || '1970-01-01'
+        const rows = await dbGet('community_messages',
+          `community_id=eq.${c.id}&created_at=gt.${encodeURIComponent(since)}&select=id,sender_id&limit=30`)
+        const n = Array.isArray(rows) ? rows.filter(m => m.sender_id !== myId).length : 0
+        return [c.id, n]
+      } catch { return [c.id, 0] }
+    }))
+    setUnread(u => { const next = { ...u }; for (const [id, n] of results) next[id] = n; return next })
+  }
   const [members,     setMembers]     = useState([])
   const [messages,    setMessages]    = useState([])
   const [pins,        setPins]        = useState([])
@@ -139,6 +163,13 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     } finally { setLoaded(true) }
   }
   useEffect(() => { loadCommunities() }, [myId, companyId, context])
+  // Refresh unread badges when the list changes + every 30s; opening a community clears its badge.
+  useEffect(() => { if (communities.length) refreshUnread(communities) }, [communities.length, activeId])
+  useEffect(() => {
+    const iv = setInterval(() => { if (communities.length) refreshUnread(communities) }, 30000)
+    return () => clearInterval(iv)
+  }, [communities, activeId])
+  useEffect(() => { if (activeId) markSeen(activeId) }, [activeId])
 
   // ── Load members + messages + pins for the open community ──
   async function loadMembers(cid = activeId) {
@@ -491,9 +522,14 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                   display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:14 }}>#</span>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color: activeId===c.id ? C.gold : C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                  <div style={{ fontSize:12, fontWeight:(unread[c.id]>0&&activeId!==c.id)?800:700, color: activeId===c.id ? C.gold : C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
                   <div style={{ fontSize:9, color:C.muted }}>by {c.created_by_name || '—'}</div>
                 </div>
+                {unread[c.id] > 0 && activeId !== c.id && (
+                  <span style={{ background:C.gold, color:C.black, borderRadius:9, minWidth:18, height:18, fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', padding:'0 5px', flexShrink:0 }}>
+                    {unread[c.id] >= 30 ? '30+' : unread[c.id]}
+                  </span>
+                )}
                 {(isAdmin || c.created_by === myId) && (
                   <button onClick={e => { e.stopPropagation(); archiveCommunity(c) }} title="Archive community"
                     style={{ background:'none', border:'none', color:C.muted, fontSize:11, cursor:'pointer', padding:2 }}>🗄</button>

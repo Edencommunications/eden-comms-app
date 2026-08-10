@@ -962,10 +962,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [consultDocs,   setConsultDocs]   = useState([]) // onboarding / monthly / emergency docs from admin
   const [callNotesList, setCallNotesList] = useState([])
 
-  // ── Notifications ──────────────────────────────────────────
-  const [notifications,  setNotifications]  = useState([])
-  const [showNotifPanel, setShowNotifPanel] = useState(false)
-  const unreadCount = notifications.filter(n=>!n.is_read).length
+  // ── Notifications: created here, but displayed only by the app's top bell ──
 
   useEffect(() => {
     // Load company-wide habits and foods once we know which org this user belongs to
@@ -1443,19 +1440,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .catch(()=>{})
   },[email, myUUID])
 
-  // Load + poll notifications every 30 s
-  useEffect(()=>{
-    const uuid = myUUID
-    if(!uuid) return
-    const load = ()=>
-      dbGet('notifications',`recipient_id=eq.${uuid}&order=created_at.desc&limit=40`)
-        .then(rows=>{ if(Array.isArray(rows)&&rows.length) setNotifications(rows) })
-        .catch(()=>{})
-    load()
-    const iv = setInterval(load, 30000)
-    return ()=>clearInterval(iv)
-  },[email, myUUID])
-
   // ── Company habits (each org's admin manages their own library) ──
   async function loadCompanyHabits() {
     if (!myCompanyId) return
@@ -1560,11 +1544,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     await sendNotification({ recipientId, senderId, type, body: message, linkTo })
   }
 
-  function markAllRead() {
-    const uuid = myUUID
-    setNotifications(p=>p.map(n=>({...n,is_read:true})))
-    if(uuid) dbUpdate('notifications',`recipient_id=eq.${uuid}&is_read=eq.false`,{is_read:true,read_at:new Date().toISOString()})
-  }
 
 
   // Load assigned recipes from DB
@@ -1696,43 +1675,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {privacyMode?'🎥 Recording':'🎥 Loom Mode'}
             </button>
           )}
-          {/* Notification bell */}
-          <div style={{position:'relative'}}>
-            <button onClick={()=>{ setShowNotifPanel(p=>!p); markAllRead() }}
-              style={{background:'none',border:'none',cursor:'pointer',padding:'6px 8px',position:'relative',lineHeight:1}}>
-              <span style={{fontSize:17}}>🔔</span>
-              {unreadCount>0&&(
-                <span style={{position:'absolute',top:2,right:2,background:C.danger,color:C.white,
-                  fontSize:8,fontWeight:700,minWidth:14,height:14,borderRadius:7,
-                  display:'flex',alignItems:'center',justifyContent:'center',padding:'0 2px',lineHeight:1}}>
-                  {unreadCount>9?'9+':unreadCount}
-                </span>
-              )}
-            </button>
-            {showNotifPanel&&(
-              <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:200,
-                background:C.card,border:`1px solid ${C.border}`,borderRadius:12,
-                width:290,maxHeight:340,overflowY:'auto',boxShadow:'0 8px 32px #000000aa'}}>
-                <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,
-                  display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-                  <span style={{fontSize:12,fontWeight:700,color:C.white}}>Notifications</span>
-                  <button onClick={()=>setShowNotifPanel(false)}
-                    style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
-                </div>
-                {notifications.length===0?(
-                  <div style={{padding:'24px 14px',textAlign:'center',fontSize:12,color:C.muted}}>No notifications yet</div>
-                ):notifications.map(n=>(
-                  <div key={n.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}22`,
-                    background:n.read?'transparent':`${C.gold}0a`}}>
-                    <div style={{fontSize:12,color:n.is_read?C.muted:C.white,lineHeight:1.5}}>{n.body||n.message}</div>
-                    <div style={{fontSize:9,color:C.dim,marginTop:3}}>
-                      {n.created_at?new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Notification bell removed — all notifications live in the app's top bell */}
         </div>
 
         {/* ── scrollable tab row — hidden when opened as Check-In only ── */}

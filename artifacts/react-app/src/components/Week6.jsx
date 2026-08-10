@@ -873,25 +873,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [adminCompanyId,  setAdminCompanyId]  = useState(null)
   const [adminProfileId,  setAdminProfileId]  = useState(null)
 
-  // ── Admin notifications (bell in the tab bar) ────────────
-  const [adminNotifs,     setAdminNotifs]     = useState([])
-  const [showAdminNotifs, setShowAdminNotifs] = useState(false)
-  const adminUnread = adminNotifs.filter(n=>!n.is_read).length
-  useEffect(()=>{
-    if (!isAdmin || !adminProfileId) return
-    const load = ()=>
-      dbGet('notifications',`recipient_id=eq.${adminProfileId}&order=created_at.desc&limit=40`)
-        .then(rows=>{ if(Array.isArray(rows)) setAdminNotifs(rows) })
-        .catch(()=>{})
-    load()
-    const iv = setInterval(load, 30000)
-    return ()=>clearInterval(iv)
-  },[isAdmin, adminProfileId])
-  function markAdminNotifsRead() {
-    if (!adminProfileId) return
-    setAdminNotifs(p=>p.map(n=>({...n,is_read:true})))
-    dbUpdate('notifications',`recipient_id=eq.${adminProfileId}&is_read=eq.false`,{is_read:true,read_at:new Date().toISOString()})
-  }
+  // Admin notification bell removed — all notifications live in the app's top bell.
 
   // Real coaches from the database (merged with the demo coach so transfers/pickers show everyone)
   const [dbCoaches, setDbCoaches] = useState([])
@@ -1851,31 +1833,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           {isAdmin&&<div style={{fontSize:10,color:C.gold,marginTop:1}}>🛡 Super Admin — Full Access</div>}
         </div>
 
-        {/* Admin notification bell */}
-        {isAdmin&&(
-          <div style={{position:'relative',marginRight:10}}>
-            <button onClick={()=>{ setShowAdminNotifs(s=>!s); if(!showAdminNotifs&&adminUnread) markAdminNotifsRead() }}
-              style={{background:'none',border:'none',cursor:'pointer',fontSize:17,position:'relative',padding:'4px 6px'}}>
-              🔔
-              {adminUnread>0&&(
-                <span style={{position:'absolute',top:-2,right:-2,background:C.danger,color:'#fff',borderRadius:9,minWidth:16,height:16,fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px'}}>{adminUnread}</span>
-              )}
-            </button>
-            {showAdminNotifs&&(
-              <div style={{position:'absolute',right:0,top:34,width:320,maxHeight:380,overflowY:'auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,zIndex:200,boxShadow:'0 8px 30px rgba(0,0,0,.6)'}}>
-                <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,fontSize:12,fontWeight:700,color:C.gold}}>Notifications</div>
-                {adminNotifs.length===0?(
-                  <div style={{padding:'22px 14px',textAlign:'center',fontSize:12,color:C.muted}}>No notifications yet</div>
-                ):adminNotifs.map(n=>(
-                  <div key={n.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
-                    <div style={{fontSize:12,color:n.is_read?C.muted:C.white,lineHeight:1.5}}>{n.body}</div>
-                    <div style={{fontSize:10,color:C.dim,marginTop:3}}>{n.created_at?new Date(n.created_at).toLocaleString():''}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Admin notification bell removed — all notifications live in the app's top bell */}
 
         {/* Check-in counter badge */}
         {(isAdmin||isCoach)&&pendingUpdates>0&&(

@@ -89,3 +89,38 @@ export function useTeamHubUnread(user) {
   }, [email, role]) // eslint-disable-line
   return unread
 }
+
+// App-shell hook: true when any client↔staff conversation has unread messages
+// addressed to this user (messages.is_read=false, sender != me). Messaging.jsx
+// marks messages read when the conversation is opened.
+export function useMessagesUnread(user) {
+  const [unread, setUnread] = useState(false)
+  const email = user?.email || ''
+  useEffect(() => {
+    if (!email || user?.communityOnly) { setUnread(false); return }
+    let stopped = false
+    let me = null
+    const H = { apikey: SUPABASE_ANON, get Authorization() { return sbBearer() } }
+    async function check() {
+      try {
+        if (!me) {
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id`, { headers: H })
+          const rows = r.ok ? await r.json() : []
+          me = rows?.[0]
+          if (!me?.id) return
+        }
+        const rc = await fetch(`${SUPABASE_URL}/rest/v1/conversations?or=(participant_a_id.eq.${me.id},participant_b_id.eq.${me.id})&select=id&limit=200`, { headers: H })
+        const convos = rc.ok ? await rc.json() : []
+        if (!convos.length) { if (!stopped) setUnread(false); return }
+        const ids = convos.map(c => c.id).join(',')
+        const rm = await fetch(`${SUPABASE_URL}/rest/v1/messages?conversation_id=in.(${ids})&is_read=eq.false&sender_id=neq.${me.id}&select=id&limit=1`, { headers: H })
+        const rows = rm.ok ? await rm.json() : []
+        if (!stopped) setUnread(rows.length > 0)
+      } catch {}
+    }
+    check()
+    const iv = setInterval(check, 30000)
+    return () => { stopped = true; clearInterval(iv) }
+  }, [email]) // eslint-disable-line
+  return unread
+}

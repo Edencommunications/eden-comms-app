@@ -981,6 +981,19 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       }
 
       if (convos.length) {
+        // Real unread counts: messages sent TO me that are still unread, per conversation
+        try {
+          const ids = convos.map(c => c.supabaseConvoId).filter(Boolean)
+          if (ids.length) {
+            const rows = await dbGet('messages',
+              `conversation_id=in.(${ids.join(',')})&is_read=eq.false&sender_id=neq.${me.id}&select=id,conversation_id`)
+            if (Array.isArray(rows)) {
+              const counts = {}
+              for (const r of rows) counts[r.conversation_id] = (counts[r.conversation_id] || 0) + 1
+              for (const c of convos) c.unread = counts[c.supabaseConvoId] || 0
+            }
+          }
+        } catch {}
         setDynConversations(convos)
         // Don't auto-open — let user choose
       }
@@ -1107,6 +1120,10 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       const grew = data.length > msgCountRef.current
       msgCountRef.current = data.length
       setLiveMessages(data)
+      // Opening/viewing the conversation marks messages to me as read (feeds the sidebar badges)
+      if (myProfileId && data.some(m => m.sender_id !== myProfileId && !m.is_read)) {
+        dbUpdate('messages', `conversation_id=eq.${activeConvo.supabaseConvoId}&sender_id=neq.${myProfileId}&is_read=eq.false`, { is_read: true, read_at: new Date().toISOString() }).catch(() => {})
+      }
       fetchReactions('messages', data.map(m => m.id)).then(setReactions).catch(() => {})
       if (firstLoad || (grew && nearBottom)) {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
@@ -1774,8 +1791,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               <span>{markedUnread.has(activeId) ? 'Marked unread' : 'Mark unread'}</span>
             )}
           </button>
-          {/* Tab buttons */}
-          {['chat','files'].map(t => (
+          {/* Tab buttons — Files hidden for clients & coaches (labs/pics live in their own sections) */}
+          {(['client','coach'].includes(currentUser?.role || myRole) ? ['chat'] : ['chat','files']).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ padding: isMobile ? '14px 8px' : '14px 14px', background:'none', border:'none',
                 borderBottom:`2px solid ${tab===t?C.gold:'transparent'}`,
