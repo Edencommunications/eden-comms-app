@@ -44,12 +44,20 @@ self.addEventListener('push', e => {
   let data = {}
   try { data = e.data ? e.data.json() : {} } catch {}
   const title = data.title || '🔔 Notification'
-  e.waitUntil(self.registration.showNotification(title, {
+  const opts = {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     data: { url: data.url || '/' },
-  }))
+  }
+  if (data.urgent) {
+    // Huddle ring: stronger buzz, stays on screen (Android), and re-buzzes
+    // replace the previous ring notification instead of stacking
+    opts.vibrate = [300, 100, 300, 100, 400]
+    opts.requireInteraction = true
+    if (data.tag) { opts.tag = data.tag; opts.renotify = true }
+  }
+  e.waitUntil(self.registration.showNotification(title, opts))
 })
 
 self.addEventListener('notificationclick', e => {

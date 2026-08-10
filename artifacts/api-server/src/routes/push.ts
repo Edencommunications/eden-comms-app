@@ -236,6 +236,10 @@ const TYPE_LABELS: Record<string, string> = {
   update_note: "📝 Coach update", loom_posted: "🎥 Video update", meta_ads: "📊 Ads recap",
   community_post: "💬 New community post", community: "👥 Community update", mention: "🏷️ You were tagged",
   start_reminder_7: "🚀 Program starts soon", start_reminder_1: "⏰ Starts tomorrow", start_reminder_0: "🎉 Starts today",
+  huddle_invite: "🎙 Live huddle — you're invited", huddle_ping: "🎙 Live huddle — you're invited",
+  community_added: "👥 Added to a community", community_message: "💬 New community message",
+  team_message: "💬 New team message", broadcast: "📣 Announcement", reaction: "👍 New reaction",
+  course_access: "🎓 Course unlocked", ghl_intake: "🆕 New client signed up",
 };
 
 // ── Privacy: phone buzzes never include message/plan content ──
@@ -251,6 +255,15 @@ const SAFE_BODY: Record<string, string> = {
   update_note: "Your coach posted an update",
   loom_posted: "Your coach posted a video update",
   meta_ads: "A new ads recap was posted",
+  team_message: "A teammate sent a message in Team Hub",
+  community_message: "New activity in one of your communities",
+  broadcast: "Your coach sent an announcement",
+  reaction: "Someone reacted to your message",
+  course_access: "A new course was unlocked for you",
+  ghl_intake: "A new client just came in",
+  start_reminder_7: "A program starts in 7 days",
+  start_reminder_1: "A program starts tomorrow",
+  start_reminder_0: "A program starts today",
 };
 // Types whose bodies are safe topic lines (who/where — never message content)
 // vs. types whose bodies may quote a message and need a sanitized stand-in.
@@ -259,12 +272,14 @@ const SAFE_SENDER_BODY: Record<string, (name: string) => string> = {
 };
 // Community alerts are safe to pass through — their bodies only name the
 // community (never message content), built server-side.
-const PASSTHROUGH_TYPES = new Set(["community_post", "community_added", "community"]);
+// Huddle invite bodies are app-built ("🎙 Name is inviting you…") — name + topic only.
+const PASSTHROUGH_TYPES = new Set(["community_post", "community_added", "community", "huddle_invite", "huddle_ping"]);
 // Where a tap should land inside the app (tab key, applied after login too)
 const TYPE_GOTO: Record<string, string> = {
   message: "msgs", diet_update: "diet", supp_update: "diet", workout_update: "workout",
   checkin_received: "checkin", lab_uploaded: "labs", community_post: "community",
   community_added: "community", community: "community", meta_ads: "community", mention: "team",
+  huddle_invite: "team", huddle_ping: "team", team_message: "team", broadcast: "msgs",
 };
 
 // Injectable sender so tests can capture deliveries instead of hitting
@@ -285,10 +300,14 @@ export async function pushToUser(userId: string, title: string, body: string, ty
   let changed = false;
   for (const sub of found.cfg.subs) {
     try {
+      // Huddle rings: urgent flag (stronger vibration + stays on screen), a
+      // shared tag so re-buzzes replace instead of stacking, short TTL — a
+      // huddle invite delivered an hour late is useless.
+      const isRing = ALWAYS_DELIVER.has(type);
       await sendFn(
         { endpoint: sub.endpoint, keys: sub.keys },
-        JSON.stringify({ title, body: body.slice(0, 180), url }),
-        { TTL: 3600 },
+        JSON.stringify({ title, body: body.slice(0, 180), url, ...(isRing ? { urgent: true, tag: "huddle-ring" } : {}) }),
+        { TTL: isRing ? 90 : 3600 },
       );
       alive.push(sub);
     } catch (e: any) {
@@ -367,10 +386,14 @@ async function watchPass() {
         } else if (n.type === "message" && n.sender_name) {
           body = `${n.sender_name} sent you a message`;
         } else {
-          body = SAFE_BODY[n.type] || "Open the app to view";
+          // Even unmapped future types get a topical line, never pure filler
+          body = SAFE_BODY[n.type] || (n.sender_name ? `Update from ${n.sender_name} — open the app` : "You have a new update — open the app");
         }
         const url = TYPE_GOTO[n.type] ? `/?goto=${TYPE_GOTO[n.type]}` : "/";
         await pushToUser(n.recipient_id, title, body, String(n.type || ""), url).catch(() => {});
+        // Huddle "ring": re-buzz twice (~15s/30s later) while the invite is
+        // still unanswered — the closest a web app gets to a repeating ring.
+        if (ALWAYS_DELIVER.has(String(n.type || ""))) scheduleRingRepush(n, title, body, url);
       }
       // Advance the durable cursor after EVERY row: ts = this row's stamp,
       // ids = all processed rows sharing that stamp.
@@ -386,9 +409,27 @@ async function watchPass() {
   }
 }
 
+// Re-send a huddle ring push while the invite stays unread (max 2 re-buzzes).
+// The push `tag` makes each re-buzz replace the previous notification, so the
+// phone buzzes again without piling up notification rows.
+function scheduleRingRepush(n: any, title: string, body: string, url: string) {
+  for (const delayMs of [15_000, 30_000]) {
+    setTimeout(async () => {
+      try {
+        const rows = await dbGet<any>(`notifications?id=eq.${n.id}&select=is_read`);
+        if (rows[0] && rows[0].is_read === false) {
+          await pushToUser(n.recipient_id, title, body, String(n.type || ""), url).catch(() => {});
+        }
+      } catch {}
+    }, delayMs);
+  }
+}
+
 export function startPushWatcher() {
   getVapid().catch(() => {}); // warm up / generate keys on boot
-  setInterval(watchPass, 20_000);
+  // 5s cadence so a huddle ring lands near-instantly (was 20s; a live call
+  // invite that arrives half a minute late defeats the point of ringing).
+  setInterval(watchPass, 5_000);
 }
 
 // ── Routes ─────────────────────────────────────────────────────
