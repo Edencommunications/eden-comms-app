@@ -135,6 +135,9 @@ type UserPush = {
   subs: Array<{ endpoint: string; keys: any; ua?: string; added?: string }>;
   cats?: Record<string, boolean>;
   quiet?: QuietHours;
+  // One-time "turn on phone notifications" nudge: once dismissed anywhere
+  // (or push enabled on any device), it stays dismissed on every device.
+  nudgeDismissed?: boolean;
 };
 
 // ── Quiet hours ────────────────────────────────────────────────
@@ -413,6 +416,8 @@ router.get("/push/prefs", async (req: Request, res: Response) => {
     res.json({
       ok: true, enabled: !!found?.cfg.enabled, devices: found?.cfg.subs?.length || 0,
       cats, categories: PUSH_CATEGORIES, quiet: quietOut(found?.cfg.quiet),
+      // Enabling push anywhere also counts as "seen the nudge" everywhere.
+      nudgeDismissed: !!found?.cfg.nudgeDismissed || !!found?.cfg.enabled,
     });
   } catch { res.status(500).json({ error: "Could not load settings" }); }
 });
@@ -433,6 +438,7 @@ router.post("/push/subscribe", async (req: Request, res: Response) => {
     const found = await getUserPush(caller.id);
     const cfg: UserPush = found?.cfg || { enabled: true, subs: [] };
     cfg.enabled = true;
+    cfg.nudgeDismissed = true; // enabled on any device ⇒ never nudge again anywhere
     cfg.subs = (cfg.subs || []).filter((s) => s.endpoint !== sub.endpoint);
     cfg.subs.push({ endpoint: sub.endpoint, keys: sub.keys, ua: String(req.get("user-agent") || "").slice(0, 120), added: new Date().toISOString() });
     if (cfg.subs.length > 10) cfg.subs = cfg.subs.slice(-10); // sanity cap per user
@@ -453,6 +459,8 @@ router.post("/push/prefs", async (req: Request, res: Response) => {
     const found = await getUserPush(caller.id);
     const cfg: UserPush = found?.cfg || { enabled: false, subs: [] };
     if (typeof req.body?.enabled === "boolean") cfg.enabled = req.body.enabled;
+    // Nudge dismissal is one-way (true only) — no way to "un-see" the nudge.
+    if (req.body?.nudgeDismissed === true) cfg.nudgeDismissed = true;
     // Per-category switches: accept only known category ids, booleans only.
     if (req.body?.cats && typeof req.body.cats === "object") {
       const cats: Record<string, boolean> = { ...(cfg.cats || {}) };

@@ -122,10 +122,12 @@ export default function Notifications({ currentUser, onNavigate }) {
   const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
 
   // ── One-time "turn on phone notifications" nudge ────────────
-  // Dismissal is remembered per-user in localStorage (same pattern as the
-  // InstallBanner's 'eden-pwa-installed' flag). On iPhone Safari that isn't
-  // installed to the home screen, push isn't possible yet — the InstallBanner
-  // already tells those users to install first, so we stay quiet there.
+  // Dismissal is remembered per-user SERVER-SIDE (push prefs), so dismissing
+  // on one device silences it on every device. localStorage is kept as an
+  // instant-read cache so the banner never flashes before prefs load.
+  // On iPhone Safari that isn't installed to the home screen, push isn't
+  // possible yet — the InstallBanner already tells those users to install
+  // first, so we stay quiet there.
   const nudgeKey = `push-nudge-dismissed:${email || 'anon'}`
   const [nudgeDismissed, setNudgeDismissed] = useState(() => {
     try { return localStorage.getItem(`push-nudge-dismissed:${email || 'anon'}`) === '1' } catch { return true }
@@ -136,6 +138,11 @@ export default function Notifications({ currentUser, onNavigate }) {
   function dismissNudge() {
     try { localStorage.setItem(nudgeKey, '1') } catch {}
     setNudgeDismissed(true)
+    // Persist server-side so other devices stay quiet too (best-effort).
+    fetch('/api/push/prefs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      body: JSON.stringify({ nudgeDismissed: true }),
+    }).catch(() => {})
   }
   const pushPossibleHere = pushSupported && !(isIOS && !isStandalone)
   const showNudge = !nudgeDismissed && pushPossibleHere &&
@@ -144,7 +151,14 @@ export default function Notifications({ currentUser, onNavigate }) {
     if (!myUUID) return
     fetch('/api/push/prefs', { headers: { Authorization: sbBearer() } })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setPushState({ enabled: !!d?.enabled, devices: d?.devices || 0, cats: d?.cats || {}, categories: d?.categories || PUSH_CATEGORIES_FALLBACK, quiet: d?.quiet || { on: false, start: '22:00', end: '07:00' } }))
+      .then(d => {
+        setPushState({ enabled: !!d?.enabled, devices: d?.devices || 0, cats: d?.cats || {}, categories: d?.categories || PUSH_CATEGORIES_FALLBACK, quiet: d?.quiet || { on: false, start: '22:00', end: '07:00' } })
+        // Server-side dismissal (from any device) wins over the local cache.
+        if (d?.nudgeDismissed) {
+          try { localStorage.setItem(nudgeKey, '1') } catch {}
+          setNudgeDismissed(true)
+        }
+      })
       .catch(() => setPushState({ enabled: false, devices: 0, cats: {}, categories: PUSH_CATEGORIES_FALLBACK, quiet: { on: false, start: '22:00', end: '07:00' } }))
   }, [myUUID])
 
