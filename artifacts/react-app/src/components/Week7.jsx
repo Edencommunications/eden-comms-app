@@ -1493,9 +1493,15 @@ export default function Week7({ currentUser, initialDm }) {
                       <div key={msg.id} style={{marginBottom:10}}>
                         <div style={{display:'flex',justifyContent:isMine?'flex-end':'flex-start'}}>
                           <div style={{maxWidth:'72%'}}>
-                            <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
-                              <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
-                            </div>
+                            {msg.deletedAt ? (
+                              <div style={{fontSize:12,color:C.muted,fontStyle:'italic',background:'none',borderRadius:12,padding:'10px 13px',border:`1px dashed ${C.border}`}}>
+                                {isAdminRole ? <>🗑 Deleted by {msg.deletedByName||'staff'} (admins only): <span style={{fontStyle:'normal'}}>{msg.content}</span></> : <>Message deleted{msg.deletedByName?` by ${msg.deletedByName}`:''}</>}
+                              </div>
+                            ) : (
+                              <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
+                                <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
+                              </div>
+                            )}
                             {!msg.deletedAt && liveLoadedRef.current && (
                               <ReactionBar table="team_messages" messageId={msg.id} myId={myUUID}
                                 reactions={reactions[msg.id]} accent={C.gold} onChange={setRx(msg.id)} alignRight={isMine} />
@@ -1565,7 +1571,13 @@ export default function Week7({ currentUser, initialDm }) {
                             <span style={{fontSize:12,fontWeight:700,color:C.white}}><LN>{root.senderName}</LN></span>
                             <span style={{fontSize:10,color:C.muted}}>{timeAgo(root.createdAt)}</span>
                           </div>
-                          <div style={{fontSize:12,color:C.white,lineHeight:1.5}}>{renderBody(root.content, C.white)}</div>
+                          {root.deletedAt ? (
+                            <div style={{fontSize:11,color:C.muted,fontStyle:'italic',borderRadius:7,padding:'8px 10px',border:`1px dashed ${C.border}`}}>
+                              {isAdminRole ? `🗑 Deleted by ${root.deletedByName||'staff'}: ${root.content||''}` : `Message deleted${root.deletedByName?` by ${root.deletedByName}`:''}`}
+                            </div>
+                          ) : (
+                            <div style={{fontSize:12,color:C.white,lineHeight:1.5}}>{renderBody(root.content, C.white)}</div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1584,7 +1596,13 @@ export default function Week7({ currentUser, initialDm }) {
                                 <span style={{fontSize:11,fontWeight:700,color:rMine?C.gold:C.white}}><LN>{r.senderName}</LN></span>
                                 <span style={{fontSize:9,color:C.muted}}>{timeAgo(r.createdAt)}</span>
                               </div>
-                              <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderBody(r.content, C.white)}</div>
+                              {r.deletedAt ? (
+                                <div style={{fontSize:11,color:C.muted,fontStyle:'italic',borderRadius:7,padding:'8px 10px',border:`1px dashed ${C.border}`}}>
+                                  {isAdminRole ? `🗑 Deleted by ${r.deletedByName||'staff'}: ${r.content||''}` : `Message deleted${r.deletedByName?` by ${r.deletedByName}`:''}`}
+                                </div>
+                              ) : (
+                                <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderBody(r.content, C.white)}</div>
+                              )}
                               {!r.deletedAt && liveLoadedRef.current && (
                                 <ReactionBar table="team_messages" messageId={r.id} myId={myUUID}
                                   reactions={reactions[r.id]} accent={C.gold} onChange={setRx(r.id)} />
