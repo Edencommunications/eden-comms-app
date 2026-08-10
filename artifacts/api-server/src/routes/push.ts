@@ -190,7 +190,7 @@ const TYPE_LABELS: Record<string, string> = {
   message: "💬 New message", diet_update: "🥗 Diet plan updated", supp_update: "💊 Supplements updated",
   workout_update: "💪 Workout updated", checkin_received: "📋 Check-in received", lab_uploaded: "🧪 Lab uploaded",
   update_note: "📝 Coach update", loom_posted: "🎥 Video update", meta_ads: "📊 Ads recap",
-  community_post: "💬 New community post",
+  community_post: "💬 New community post", community: "👥 Community update", mention: "🏷️ You were tagged",
   start_reminder_7: "🚀 Program starts soon", start_reminder_1: "⏰ Starts tomorrow", start_reminder_0: "🎉 Starts today",
 };
 
@@ -208,14 +208,19 @@ const SAFE_BODY: Record<string, string> = {
   loom_posted: "Your coach posted a video update",
   meta_ads: "A new ads recap was posted",
 };
+// Types whose bodies are safe topic lines (who/where — never message content)
+// vs. types whose bodies may quote a message and need a sanitized stand-in.
+const SAFE_SENDER_BODY: Record<string, (name: string) => string> = {
+  mention: (n) => `${n} tagged you — open the app to see where`,
+};
 // Community alerts are safe to pass through — their bodies only name the
 // community (never message content), built server-side.
-const PASSTHROUGH_TYPES = new Set(["community_post", "community_added"]);
+const PASSTHROUGH_TYPES = new Set(["community_post", "community_added", "community"]);
 // Where a tap should land inside the app (tab key, applied after login too)
 const TYPE_GOTO: Record<string, string> = {
   message: "msgs", diet_update: "diet", supp_update: "diet", workout_update: "workout",
   checkin_received: "checkin", lab_uploaded: "labs", community_post: "community",
-  community_added: "community", meta_ads: "community",
+  community_added: "community", community: "community", meta_ads: "community", mention: "team",
 };
 
 async function pushToUser(userId: string, title: string, body: string, type = "", url = "/"): Promise<void> {
