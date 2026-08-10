@@ -7,3 +7,5 @@ description: Zero-DDL storage for custom staff titles, per-staff tab access, and
 - Files upload via api-server `POST /team/upload` (any active non-client JWT) → Supabase Storage bucket `team-uploads` (public, created on demand with service key). Express json limit raised to 25mb for base64 bodies.
 **Why:** no DDL on the external Supabase, so both features had to piggyback on existing tables/content.
 **How to apply:** any new per-staff setting → another `staff_meta` field; any new chat embed → a new `[[...]]` marker type parsed in renderBody, always URL-validated.
+
+**Live access updates (Aug 2026):** the app shell subscribes per-staff to a `staff-meta-<profileId>` realtime channel — postgres_changes on admin_settings plus a broadcast `staff-meta-changed` nudge sent by the admin UI on save — with a slow always-on poll fallback. admin_settings was verified NOT in the supabase_realtime publication, so the broadcast nudge is the guaranteed instant path; if the user later runs ALTER PUBLICATION for admin_settings, postgres_changes starts working too.

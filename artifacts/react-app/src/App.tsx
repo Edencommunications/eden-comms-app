@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext, useCallback, useMemo } from "react";
-import { sbBearer } from './lib/sbAuth'
+import { sbBearer, sbAccessToken } from './lib/sbAuth'
+import { createClient } from '@supabase/supabase-js'
 import { TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, useDeadline, clearTzCache, zonedTimeToIso, tzShort, timeLabel } from './lib/tz'
 import {
   ResponsiveContainer, LineChart, AreaChart, BarChart,
@@ -5712,18 +5713,65 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
   const [staffAllowedTabs, setStaffAllowedTabs] = useState<string[]|null>(null);
   useEffect(() => {
     if (!isStaff) { setStaffAllowedTabs(null); return; }
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    const readMeta = async (id: string) => {
+      try {
+        const s: any[] = await sbGet('admin_settings', `key=eq.${encodeURIComponent('staff_meta:'+id)}&select=value`);
+        if (cancelled) return;
+        const v = s?.[0]?.value;
+        if (!v) { setStaffAllowedTabs(null); return; }
+        const meta = typeof v === 'string' ? JSON.parse(v) : v;
+        setStaffAllowedTabs(Array.isArray(meta?.tabs) && meta.tabs.length ? meta.tabs : null);
+      } catch {}
+    };
     (async () => {
       try {
         const rows: any[] = await sbGet('user_profiles', `email=eq.${encodeURIComponent(user.email)}&select=id`);
         const id = rows?.[0]?.id;
-        if (!id) return;
-        const s: any[] = await sbGet('admin_settings', `key=eq.${encodeURIComponent('staff_meta:'+id)}&select=value`);
-        const v = s?.[0]?.value;
-        if (!v) return;
-        const meta = typeof v === 'string' ? JSON.parse(v) : v;
-        if (Array.isArray(meta?.tabs) && meta.tabs.length) setStaffAllowedTabs(meta.tabs);
+        if (!id || cancelled) return;
+        await readMeta(id);
+        if (cancelled) return;
+        // Live updates: apply access changes instantly, not on next login.
+        // 1) postgres_changes on this staff member's admin_settings row (needs the
+        //    table in the supabase_realtime publication to actually deliver);
+        // 2) a broadcast nudge sent by the admin UI on save (no publication needed);
+        // 3) a fallback poll that only runs while the channel is disconnected.
+        const sb = createClient(SB_URL, SB_ANON, { realtime: { params: { eventsPerSecond: 2 } } });
+        try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok); } catch {}
+        let realtimeUp = false;
+        let debounce: any = null;
+        const refresh = () => { clearTimeout(debounce); debounce = setTimeout(() => readMeta(id), 250); };
+        const channel = sb
+          .channel('staff-meta-' + id)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_settings',
+              filter: `key=eq.staff_meta:${id}` }, refresh)
+          .on('broadcast', { event: 'staff-meta-changed' }, ({ payload }: any) => {
+            if (!payload?.id || payload.id === id) refresh();
+          })
+          .subscribe((status: string) => {
+            const wasUp = realtimeUp;
+            realtimeUp = status === 'SUBSCRIBED';
+            if (realtimeUp && !wasUp) readMeta(id); // catch up after (re)connect
+          });
+        // Fallback poll: fast while the channel is down; slow safety-net even
+        // while SUBSCRIBED (admin_settings may not be in the realtime
+        // publication, and a channel can report SUBSCRIBED yet deliver nothing).
+        let tick = 0;
+        const pollId = setInterval(() => {
+          if (document.hidden) return;
+          tick++;
+          if (!realtimeUp || tick % 6 === 0) readMeta(id);
+        }, 10000);
+        cleanup = () => {
+          clearTimeout(debounce);
+          clearInterval(pollId);
+          sb.removeChannel(channel);
+        };
+        if (cancelled) { cleanup(); cleanup = null; }
       } catch {}
     })();
+    return () => { cancelled = true; if (cleanup) cleanup(); };
   }, [isStaff, user.email]);
   const visibleTabs = (isStaff && staffAllowedTabs) ? tabs.filter(t => staffAllowedTabs.includes(t.key)) : tabs;
 

@@ -1554,6 +1554,27 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       : 'Saved.')
   }
 
+  // Nudge a staff member's open session to re-read their staff_meta instantly.
+  // Uses a Supabase broadcast channel (no table publication needed) — App.tsx
+  // listens on 'staff-meta-<profileId>' for the 'staff-meta-changed' event.
+  function notifyStaffMetaChanged(profileId) {
+    try {
+      const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
+      try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
+      const ch = sb.channel('staff-meta-' + profileId)
+      ch.subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          ch.send({ type:'broadcast', event:'staff-meta-changed', payload:{ id: profileId } })
+            .catch(()=>{})
+          // Give the frame a moment to flush, then tear the throwaway channel down
+          setTimeout(()=>{ try { sb.removeChannel(ch) } catch {} }, 1500)
+        }
+      })
+      // Safety: never leave the socket open if we never reach SUBSCRIBED
+      setTimeout(()=>{ try { sb.removeChannel(ch) } catch {} }, 10000)
+    } catch {}
+  }
+
   // ── Edit an existing staff member's title + tab access (staff_meta:<id>) ──
   const [editStaff, setEditStaff] = useState(null) // {id, name, label, tabs:{home,msgs,team}, saving}
   async function openEditStaff(s) {
@@ -1586,8 +1607,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       addAudit(info.name,'Updated staff title/access',editStaff.name, meta.label ? `Title: ${meta.label} · Tabs: ${meta.tabs.join(', ')}` : `Tabs: ${meta.tabs.join(', ')}`)
       dbInsert('audit_logs',{ action:'staff_updated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
         target_type:'user_profile', target_id:editStaff.id, details:{ name:editStaff.name, title:meta.label, tabs:meta.tabs } }).catch(()=>{})
+      notifyStaffMetaChanged(editStaff.id)
       setEditStaff(null)
-      alert('Saved. The change takes effect the next time they log in or refresh.')
+      alert('Saved. The change applies to their session right away.')
     } catch(e) {
       setEditStaff(p=>({ ...p, saving:false }))
       alert("Couldn't save these changes — please try again.")
@@ -1665,6 +1687,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           headers:{ ...H, 'Prefer':'resolution=merge-duplicates,return=minimal' },
           body: JSON.stringify({ company_id: adminCompanyId, key:`staff_meta:${profileId}`, value: JSON.stringify(meta) }),
         })
+        notifyStaffMetaChanged(profileId)
       } catch(e) {}
     }
 
