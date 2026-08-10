@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startBroadcastScheduler } from "./lib/broadcastScheduler";
 import { startStartDateReminders } from "./lib/startDateReminders";
+import { startDietPlanDuplicateWatcher } from "./lib/dietPlanDuplicates";
 import { startMetaAdsScheduler } from "./routes/metaAds";
 import { startPushWatcher } from "./routes/push";
 
@@ -28,6 +29,7 @@ app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
   startBroadcastScheduler();
   startStartDateReminders();
+  startDietPlanDuplicateWatcher();
   startMetaAdsScheduler();
   startPushWatcher();
 });

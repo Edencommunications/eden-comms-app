@@ -13,3 +13,5 @@ Rule: a scheduled job's health signal must be *evaluated*, not just a raw snapsh
 
 **Why:** task #-style reviews rejected a snapshot-only health signal three times until all of the above existed.
 **How to apply:** copy the startDateReminders health pattern for any new scheduled job (broadcasts, sweeps, watchers).
+
+Addendum (Aug 2026): full-table health scans must paginate with Range headers (PostgREST caps responses at ~1,000 rows) and fail the run if any page fails — a single un-paginated GET got a task rejected in completion review.
