@@ -15,7 +15,7 @@ import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 import { supabase as authClient } from '../supabaseClient'
 import { LN, loomShow, loomIsShown, useLoomOn } from './LoomPrivacy'
-import { AUD_PAGE, auditPageQuery } from '../lib/auditKeyset'
+import { AUD_PAGE, auditPageQuery, fetchAuditFacet } from '../lib/auditKeyset'
 
 // Create a full account (login + profile + access records) atomically on the
 // API server. The server owns the whole workflow, so a raced or retried
@@ -1016,9 +1016,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const auditIcon = a => a==='login'?'🔐':a==='profile_updated'?'✏️':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
   const [audHasMore, setAudHasMore] = useState(false)
   const [audLoadingMore, setAudLoadingMore] = useState(false)
+  // Request generation: every fresh query bumps the sequence; responses from an
+  // older generation (superseded filters, stale Load-older) are discarded so a
+  // slow request can't overwrite newer results or pagination state.
+  const audReqSeq = useRef(0)
   function loadDbAudit() {
-    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo }))
-      .then(r=>{ if(Array.isArray(r)){ setDbAudit(r); setAudHasMore(r.length>=AUD_PAGE) } })
+    const seq = ++audReqSeq.current
+    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, person:audPerson, action:audAction }))
+      .then(r=>{ if(seq===audReqSeq.current && Array.isArray(r)){ setDbAudit(r); setAudHasMore(r.length>=AUD_PAGE); setAudLoadingMore(false) } })
       .catch(()=>{})
   }
   // Keyset pagination on (created_at DESC, id DESC): fetch the page strictly older
@@ -1027,9 +1032,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (!Array.isArray(dbAudit) || !dbAudit.length || audLoadingMore) return
     const last = dbAudit[dbAudit.length-1]
     if (!last?.created_at || last?.id==null) { setAudHasMore(false); return }
+    const seq = audReqSeq.current // invalidated if filters change mid-flight
     setAudLoadingMore(true)
-    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, cursor:{ created_at:last.created_at, id:last.id } }))
+    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, person:audPerson, action:audAction, cursor:{ created_at:last.created_at, id:last.id } }))
       .then(r=>{
+        if (seq!==audReqSeq.current) return // filters changed while loading — drop stale page
         if (Array.isArray(r)) {
           setDbAudit(prev=>{
             const seen = new Set((prev||[]).map(x=>x.id))
@@ -1039,7 +1046,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         }
       })
       .catch(()=>{})
-      .finally(()=>setAudLoadingMore(false))
+      .finally(()=>{ if(seq===audReqSeq.current) setAudLoadingMore(false) })
   }
   useEffect(()=>{ if(isAdmin) loadDbAudit() },[])
   useEffect(()=>{ if(tab==='audit') loadDbAudit() },[tab])
@@ -1054,8 +1061,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [audPerson, setAudPerson] = useState('all')
   const [audFrom,   setAudFrom]   = useState('')
   const [audTo,     setAudTo]     = useState('')
-  // Date-range changes re-query the server so results aren't limited to the loaded page
-  useEffect(()=>{ if(isAdmin && tab==='audit') loadDbAudit() },[audFrom,audTo])
+  // Filter changes re-query the server so results aren't limited to the loaded page
+  useEffect(()=>{ if(isAdmin && tab==='audit') loadDbAudit() },[audFrom,audTo,audPerson,audAction])
   // Preset ranges & jump-to-date — both just set audFrom/audTo, which re-query the server
   const audDateStr = d => { const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` }
   function audPreset(days){ const from=new Date(); from.setDate(from.getDate()-days); setAudFrom(audDateStr(from)); setAudTo('') }
@@ -1063,8 +1070,31 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   function audJumpToDate(v){ if(!v){ return } setAudFrom(v); setAudTo(v) }
   const [audRestoring, setAudRestoring] = useState(null)
   const [audRestoredNow, setAudRestoredNow] = useState(new Set())
-  const audActions = useMemo(()=>Array.from(new Set((dbAudit||[]).map(r=>r.action).filter(Boolean))),[dbAudit])
-  const audPeople  = useMemo(()=>Array.from(new Set((dbAudit||[]).map(r=>r.actor_name).filter(Boolean))).sort(),[dbAudit])
+  // Dropdown options come from the WHOLE history (RLS-scoped single-column
+  // queries, deduped client-side) — not just loaded pages — so an admin can
+  // filter by a person/action whose events are all older than page 1.
+  const [audFacets, setAudFacets] = useState({ people:[], actions:[] })
+  const [audFacetsErr, setAudFacetsErr] = useState(false)
+  const [audFacetsRetry, setAudFacetsRetry] = useState(0)
+  useEffect(()=>{
+    if (!isAdmin || tab!=='audit') return
+    let alive = true
+    setAudFacetsErr(false)
+    const fetcher = params => dbGet('audit_logs', params)
+    Promise.all([
+      fetchAuditFacet(fetcher, 'actor_name'),
+      fetchAuditFacet(fetcher, 'action'),
+    ]).then(([people,actions])=>{ if(alive) setAudFacets({ people, actions }) })
+      .catch(()=>{ if(alive) setAudFacetsErr(true) }) // truncated/failed scan → show retry, never a silently-partial list
+    return ()=>{ alive=false }
+  },[tab,audFacetsRetry])
+  // Merge loaded rows + facets + current selection so options never vanish
+  const audActions = useMemo(()=>Array.from(new Set([
+    ...audFacets.actions, ...(dbAudit||[]).map(r=>r.action), ...(audAction!=='all'?[audAction]:[]),
+  ].filter(Boolean))),[audFacets,dbAudit,audAction])
+  const audPeople  = useMemo(()=>Array.from(new Set([
+    ...audFacets.people, ...(dbAudit||[]).map(r=>r.actor_name), ...(audPerson!=='all'?[audPerson]:[]),
+  ].filter(Boolean))).sort(),[audFacets,dbAudit,audPerson])
   const audShown   = useMemo(()=>{
     let list = dbAudit||[]
     if (audAction!=='all') list = list.filter(r=>r.action===audAction)
@@ -2743,6 +2773,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </button>
           </div>
 
+          {audFacetsErr&&(
+            <div style={{fontSize:11,color:C.muted,marginBottom:8}}>
+              Couldn't load the full people/actions lists — dropdowns may be incomplete.{' '}
+              <span onClick={()=>setAudFacetsRetry(n=>n+1)} style={{color:C.gold,cursor:'pointer',fontWeight:700}}>Retry</span>
+            </div>
+          )}
           {/* Filter bar — person / action / date range + search */}
           <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
             <input value={audSearch} onChange={e=>setAudSearch(e.target.value)} placeholder="Search by person or action…"

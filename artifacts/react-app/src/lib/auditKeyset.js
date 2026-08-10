@@ -17,13 +17,54 @@ const pgQuote = v => encodeURIComponent(`"${v}"`)
 
 // Build the PostgREST query string for one page of audit rows.
 // cursor = { created_at, id } of the last row already loaded (or null for page 1).
-export function auditPageQuery({ from = '', to = '', cursor = null, limit = AUD_PAGE } = {}) {
-  let q = `select=*&order=created_at.desc,id.desc&limit=${limit}${audRangeParams(from, to)}`
+// Server-side person/action params ('all' or '' means no filter)
+export function audFilterParams(person, action) {
+  let p = ''
+  if (person && person !== 'all') p += `&actor_name=eq.${encodeURIComponent(person)}`
+  if (action && action !== 'all') p += `&action=eq.${encodeURIComponent(action)}`
+  return p
+}
+
+export function auditPageQuery({ from = '', to = '', person = '', action = '', cursor = null, limit = AUD_PAGE } = {}) {
+  let q = `select=*&order=created_at.desc,id.desc&limit=${limit}${audRangeParams(from, to)}${audFilterParams(person, action)}`
   if (cursor && cursor.created_at != null && cursor.id != null) {
     const ts = pgQuote(cursor.created_at), id = pgQuote(cursor.id)
     q += `&or=(created_at.lt.${ts},and(created_at.eq.${ts},id.lt.${id}))`
   }
   return q
+}
+
+// ---- Whole-history facet lists (distinct people / actions) ----
+// PostgREST has no DISTINCT, so we walk the column in ascending keyset pages:
+// after each page we resume STRICTLY AFTER the last value seen (value.gt),
+// which also skips that value's remaining duplicate rows — every distinct
+// value is still reached because pages are ordered by the value itself.
+export const AUD_FACET_PAGE = 1000
+const AUD_FACET_MAX_PAGES = 50 // safety valve: 50k+ distinct values → treat as error, never as complete
+
+export function auditFacetPageQuery(column, afterValue = null, limit = AUD_FACET_PAGE) {
+  let q = `select=${column}&order=${column}.asc&limit=${limit}&${column}=not.is.null`
+  if (afterValue != null) q += `&${column}=gt.${pgQuote(afterValue)}`
+  return q
+}
+
+// Fetch ALL distinct values of `column` via the fetcher (params) => Promise<rows>.
+// Throws on any fetch failure or if the page cap is hit — callers must surface
+// a retriable error instead of silently treating a truncated list as complete.
+export async function fetchAuditFacet(fetcher, column, pageSize = AUD_FACET_PAGE) {
+  const out = []
+  let after = null
+  for (let page = 0; page < AUD_FACET_MAX_PAGES; page++) {
+    const rows = await fetcher(auditFacetPageQuery(column, after, pageSize))
+    if (!Array.isArray(rows)) throw new Error(`audit facet fetch failed for ${column}`)
+    for (const r of rows) {
+      const v = r?.[column]
+      if (v != null && v !== '' && v !== after) { out.push(v); after = v }
+      else if (v != null && v !== '') after = v
+    }
+    if (rows.length < pageSize) return out
+  }
+  throw new Error(`audit facet scan for ${column} exceeded ${AUD_FACET_MAX_PAGES} pages`)
 }
 
 // Reference implementations of the same ordering/predicate, used by tests to
