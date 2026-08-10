@@ -44,7 +44,7 @@ async function resolveCaller(req: Request): Promise<Caller | null> {
     `${SUPABASE_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name,full_name,role,company_id`,
     { headers: SVC_H },
   );
-  const rows: any[] = pr.ok ? await pr.json().catch(() => []) : [];
+  const rows: any[] = pr.ok ? await pr.json().catch(() => []) as any[] : [];
   const p = rows[0];
   if (!p) return null;
   return { id: p.id, name: p.name || p.full_name || email, role: p.role || "client", companyId: p.company_id || null };
@@ -62,14 +62,14 @@ async function authorizeScope(caller: Caller, scope: string): Promise<string | n
       `${SUPABASE_URL}/rest/v1/communities?id=eq.${cid}&select=id,company_id,created_by`,
       { headers: SVC_H },
     );
-    const comm = ((cr.ok ? await cr.json().catch(() => []) : []) as any[])[0];
+    const comm = ((cr.ok ? await cr.json().catch(() => []) as any[] : []) as any[])[0];
     if (!comm) return null;
     if (isAdmin || comm.created_by === caller.id) return comm.company_id;
     const mr = await fetch(
       `${SUPABASE_URL}/rest/v1/community_members?community_id=eq.${cid}&user_id=eq.${caller.id}&select=id&limit=1`,
       { headers: SVC_H },
     );
-    const mem = (mr.ok ? await mr.json().catch(() => []) : []) as any[];
+    const mem = (mr.ok ? await mr.json().catch(() => []) as any[] : []) as any[];
     return mem.length ? comm.company_id : null;
   }
   if (scope.startsWith("teamgeneral:")) {
@@ -103,7 +103,7 @@ async function fetchDoc(companyId: string, scope: string, id: string): Promise<a
     `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(keyFor(scope, id))}&select=value`,
     { headers: SVC_H },
   );
-  const rows: any[] = r.ok ? await r.json().catch(() => []) : [];
+  const rows: any[] = r.ok ? await r.json().catch(() => []) as any[] : [];
   return rows.length ? parseDoc(rows[0].value) : null;
 }
 
@@ -131,7 +131,7 @@ router.get("/canvas/:scope", async (req: Request, res: Response) => {
       `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${g.companyId}&key=like.${encodeURIComponent(prefix + "*")}&select=key,value`,
       { headers: SVC_H },
     );
-    const rows: any[] = r.ok ? await r.json().catch(() => []) : [];
+    const rows: any[] = r.ok ? await r.json().catch(() => []) as any[] : [];
     const canvases = rows
       .filter((row) => row.key === prefix || String(row.key).startsWith(prefix + ":"))
       .map((row) => {

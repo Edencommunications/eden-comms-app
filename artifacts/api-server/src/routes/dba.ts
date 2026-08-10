@@ -641,14 +641,14 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
     const { recordInviteEmail } = await import("./invites");
     await recordInviteEmail(companyId, email, emailed);
   } catch {}
-  void audit(admin, "dba_member_added", dba.id, { dba: dba.name, member: email });
+  void audit(admin!, "dba_member_added", dba.id, { dba: dba.name, member: email });
   // Auto-join any "everyone in this DBA" chat channels (best-effort)
   if (profile?.id) {
     void (async () => {
       try {
         const cfg = await loadChatCfg(companyId, dba.id);
         for (const cid of Object.keys(cfg.all).filter((k) => cfg.all[k])) {
-          await ensureCommunityMembers(cid, [{ id: profile.id, name: profile.name || name }], { id: admin.id, name: admin.name || null });
+          await ensureCommunityMembers(cid, [{ id: profile.id, name: profile.name || name }], { id: admin!.id, name: admin!.name || null });
         }
       } catch (e) { logger.warn({ err: e }, "[DBA] auto-join failed"); }
     })();
@@ -689,7 +689,7 @@ router.post("/dba/member-remove", async (req: Request, res: Response) => {
   if (!(await saveDbaRow(companyId, dba))) return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
   // Hard-revoke chat access (channel memberships, pins, their 1v1s)
   if (removed?.id) await revokeChatAccess(companyId, dba.id, removed.id).catch(() => {});
-  void audit(admin, "dba_member_removed", dba.id, { dba: dba.name, member: email });
+  void audit(admin!, "dba_member_removed", dba.id, { dba: dba.name, member: email });
   return res.json({ ok: true, dba });
   });
 });

@@ -43,7 +43,7 @@ async function restPost(table: string, body: any): Promise<any[] | null> {
     logger.warn({ table, status: r.status, body: await r.text().catch(() => "") }, "[Broadcast] insert failed");
     return null;
   }
-  return r.json().catch(() => null);
+  return r.json().catch(() => null) as Promise<any[] | null>;
 }
 async function restPatch(path: string, body: any): Promise<void> {
   await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

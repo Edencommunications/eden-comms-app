@@ -33,7 +33,7 @@ router.post("/audit/login", async (req: Request, res: Response) => {
       `${SUPABASE_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name,full_name,role`,
       { headers: SVC_H },
     );
-    const rows: any[] = pr.ok ? await pr.json().catch(() => []) : [];
+    const rows: any[] = pr.ok ? await pr.json().catch(() => []) as any[] : [];
     const p = rows[0] || null;
 
     const ir = await fetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
@@ -72,7 +72,7 @@ router.post("/audit/login-failed", async (req: Request, res: Response) => {
       `${SUPABASE_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name,full_name,role`,
       { headers: SVC_H },
     );
-    const rows: any[] = pr.ok ? await pr.json().catch(() => []) : [];
+    const rows: any[] = pr.ok ? await pr.json().catch(() => []) as any[] : [];
     const p = rows[0];
     if (!p) return res.json({ ok: true }); // unknown email — don't log
     await fetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
@@ -125,7 +125,7 @@ router.post("/audit/event", async (req: Request, res: Response) => {
       `${SUPABASE_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name,full_name,role`,
       { headers: SVC_H },
     );
-    const rows: any[] = pr.ok ? await pr.json().catch(() => []) : [];
+    const rows: any[] = pr.ok ? await pr.json().catch(() => []) as any[] : [];
     const p = rows[0] || null;
 
     const rawDetails = req.body?.details;

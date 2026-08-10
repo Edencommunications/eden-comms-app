@@ -36,7 +36,7 @@ async function requireStaffJwt(req: Request): Promise<{ id: string; company_id: 
     { headers: SVC_H },
   );
   if (!pr.ok) return null;
-  const rows: any[] = await pr.json().catch(() => []);
+  const rows: any[] = await pr.json().catch(() => []) as any[];
   return rows[0] ? { id: rows[0].id, company_id: rows[0].company_id || null, role: rows[0].role } : null;
 }
 
@@ -150,7 +150,7 @@ export async function voiceMemosEnabled(companyId: string | null): Promise<boole
     `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${EDEN_ORG_ID}&key=eq.voice_memo_tiers&select=value`,
     { headers: SVC_H },
   );
-  const srows: any[] = sr.ok ? await sr.json().catch(() => []) : [];
+  const srows: any[] = sr.ok ? await sr.json().catch(() => []) as any[] : [];
   if (!srows[0]?.value) return true; // gating never configured → on for everyone
   let enabledTiers: string[] = [];
   try {
@@ -163,11 +163,11 @@ export async function voiceMemosEnabled(companyId: string | null): Promise<boole
     `${SUPABASE_URL}/rest/v1/organizations?id=eq.${companyId}&select=plan`,
     { headers: SVC_H },
   );
-  const orows: any[] = or.ok ? await or.json().catch(() => []) : [];
+  const orows: any[] = or.ok ? await or.json().catch(() => []) as any[] : [];
   const plan = String(orows[0]?.plan || "").toLowerCase();
   if (!plan) return false; // gating configured + org has no tier → off
   const pr = await fetch(`${SUPABASE_URL}/rest/v1/packages?select=id,name`, { headers: SVC_H });
-  const prows: any[] = pr.ok ? await pr.json().catch(() => []) : [];
+  const prows: any[] = pr.ok ? await pr.json().catch(() => []) as any[] : [];
   const pkg = prows.find((p) => String(p.name || "").toLowerCase() === plan);
   return !!pkg && enabledTiers.includes(String(pkg.id));
 }
