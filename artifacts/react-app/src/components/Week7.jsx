@@ -773,7 +773,8 @@ export default function Week7({ currentUser, initialDm }) {
   const [dmTarget,     setDmTarget]     = useState(null)
   const [dmMessages,   setDmMessages]   = useState({})
   const [dmReplies,    setDmReplies]    = useState({})   // { dmKey: { rootMsgId: [replies] } }
-  const [dmReplyTo,    setDmReplyTo]    = useState(null) // root DM message being replied to
+  const [dmThreadRoot, setDmThreadRoot] = useState(null) // root DM message whose thread panel is open
+  const [newDmReply,   setNewDmReply]   = useState('')
   const [newDm,        setNewDm]        = useState('')
   const [chatView,     setChatView]     = useState('main') // main | thread | dm
   const [showDmPicker, setShowDmPicker] = useState(false)
@@ -977,18 +978,26 @@ export default function Week7({ currentUser, initialDm }) {
     if ((!newDm.trim() && !hasPending('dm')) || !dmTarget) return
     const markers = takePending('dm')
     const key = [myUUID, dmTarget.uuid].sort().join('_')
-    const replyRoot = dmReplyTo
-    const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDm.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString(), threadId:replyRoot?.id || null }
-    if (replyRoot) {
-      setDmReplies(prev => ({ ...prev, [key]: { ...(prev[key]||{}), [replyRoot.id]: [ ...((prev[key]||{})[replyRoot.id]||[]), msg ] } }))
-      setDmMessages(prev => ({ ...prev, [key]:(prev[key]||[]).map(m => m.id===replyRoot.id ? {...m, replyCount:(m.replyCount||0)+1} : m) }))
-    } else {
-      setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
-    }
+    const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDm.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString(), threadId:null }
+    setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
     setNewDm('')
-    setDmReplyTo(null)
     stopTyping()
-    dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name, thread_id:replyRoot?.id || null })
+    dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name, thread_id:null })
+      .then(() => { loadTeamChat(); broadcastNewMessage() })
+    notifyTeamMessage([dmTarget], msg.content)
+  }
+  // Reply inside the DM thread panel — persists as thread_id under the root message
+  function sendDmReply() {
+    if ((!newDmReply.trim() && !hasPending('dm-thread')) || !dmTarget || !dmThreadRoot) return
+    const markers = takePending('dm-thread')
+    const key = [myUUID, dmTarget.uuid].sort().join('_')
+    const root = dmThreadRoot
+    const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDmReply.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString(), threadId:root.id }
+    setDmReplies(prev => ({ ...prev, [key]: { ...(prev[key]||{}), [root.id]: [ ...((prev[key]||{})[root.id]||[]), msg ] } }))
+    setDmMessages(prev => ({ ...prev, [key]:(prev[key]||[]).map(m => m.id===root.id ? {...m, replyCount:(m.replyCount||0)+1} : m) }))
+    setNewDmReply('')
+    stopTyping()
+    dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name, thread_id:root.id })
       .then(() => { loadTeamChat(); broadcastNewMessage() })
     notifyTeamMessage([dmTarget], msg.content)
   }
@@ -1004,7 +1013,7 @@ export default function Week7({ currentUser, initialDm }) {
   const dmKey    = dmTarget ? [myUUID, dmTarget.uuid].sort().join('_') : null
   const dmConvo  = dmKey ? (dmMessages[dmKey] || []) : []
   const dmConvoReplies = dmKey ? (dmReplies[dmKey] || {}) : {}
-  useEffect(() => { setDmReplyTo(null) }, [dmTarget])
+  useEffect(() => { setDmThreadRoot(null); setNewDmReply('') }, [dmTarget])
   // Eden admins who aren't the owner never see OTHER non-owner Eden admins as a DM option —
   // only the owner account appears for them among admins.
   const OWNER_EMAIL = 'info@edencommunications.io'
@@ -1402,6 +1411,7 @@ export default function Week7({ currentUser, initialDm }) {
 
             {/* DM view */}
             {chatView==='dm' && dmTarget && (
+              <div style={{flex:1,display:'flex',flexDirection: isMobile ? 'column' : 'row',overflow: isMobile ? 'auto' : 'hidden'}}>
               <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight: isMobile ? '80vh' : 'auto'}}>
                 <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:10}}>
                   <button onClick={() => setChatView('main')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,padding:0}}>←</button>
@@ -1453,35 +1463,17 @@ export default function Week7({ currentUser, initialDm }) {
                             <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:isMine?'right':'left',display:'flex',gap:8,alignItems:'center',justifyContent:isMine?'flex-end':'flex-start'}}>
                               <span>{timeAgo(msg.createdAt)}</span>
                               <PinBtns m={msg} ctx="team_dm"/>
-                              <button onClick={() => setDmReplyTo(msg)} title="Reply in a thread under this message"
-                                style={{background:'none',border:'none',color:dmReplyTo?.id===msg.id?C.gold:C.muted,fontSize:10,cursor:'pointer',padding:0,fontWeight:dmReplyTo?.id===msg.id?700:400}}>↪ Reply</button>
+                              <button onClick={() => setDmThreadRoot(msg)} title="Open the thread under this message"
+                                style={{background:'none',border:'none',color:dmThreadRoot?.id===msg.id?C.gold:C.muted,fontSize:10,cursor:'pointer',padding:0,fontWeight:dmThreadRoot?.id===msg.id?700:400}}>↪ Reply</button>
                               {reps.length > 0 && (
-                                <span style={{fontSize:9,fontWeight:repUnread?800:700,color:repUnread?C.gold:C.muted,background:repUnread?`${C.gold}20`:'none',border:repUnread?`1px solid ${C.gold}44`:'none',borderRadius:8,padding:repUnread?'1px 7px':0}}>
+                                <button onClick={() => setDmThreadRoot(msg)} title="Open thread"
+                                  style={{background:repUnread?`${C.gold}20`:'none',border:repUnread?`1px solid ${C.gold}44`:'none',borderRadius:8,padding:repUnread?'1px 7px':0,fontSize:9,fontWeight:repUnread?800:700,color:repUnread?C.gold:C.muted,cursor:'pointer'}}>
                                   {repUnread && '● '}🧵 {reps.length} {reps.length===1?'reply':'replies'}
-                                </span>
+                                </button>
                               )}
                             </div>
                           </div>
                         </div>
-                        {/* Thread replies — nested under the parent, indented on the parent's side */}
-                        {reps.map(r => {
-                          const rMine = r.senderId===myUUID
-                          return (
-                            <div key={r.id} style={{display:'flex',justifyContent:isMine?'flex-end':'flex-start',marginTop:6}}>
-                              <div style={{maxWidth:'64%',marginRight:isMine?22:0,marginLeft:isMine?0:22,borderLeft:isMine?'none':`2px solid ${C.gold}44`,borderRight:isMine?`2px solid ${C.gold}44`:'none',paddingLeft:isMine?0:8,paddingRight:isMine?8:0}}>
-                                <div style={{background:rMine?`${C.gold}dd`:C.card,border:rMine?'none':`1px solid ${C.border}`,borderRadius:10,padding:'8px 11px'}}>
-                                  {!rMine && <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:2}}>{r.senderName}</div>}
-                                  <div style={{fontSize:12,color:rMine?C.black:C.white,lineHeight:1.5}}>{renderBody(r.content, rMine?C.black:C.white, rMine)}</div>
-                                </div>
-                                {!r.deletedAt && liveLoadedRef.current && (
-                                  <ReactionBar table="team_messages" messageId={r.id} myId={myUUID}
-                                    reactions={reactions[r.id]} accent={C.gold} onChange={setRx(r.id)} alignRight={rMine} />
-                                )}
-                                <div style={{fontSize:9,color:C.muted,marginTop:2,textAlign:rMine?'right':'left'}}>{timeAgo(r.createdAt)}</div>
-                              </div>
-                            </div>
-                          )
-                        })}
                       </div>
                     )
                   })}
@@ -1490,14 +1482,6 @@ export default function Week7({ currentUser, initialDm }) {
 
                 <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
                   <TypingHint ctx={`dm:${dmKey}`}/>
-                  {dmReplyTo && (
-                    <div style={{display:'flex',alignItems:'center',gap:6,background:`${C.gold}11`,border:`1px solid ${C.gold}33`,borderRadius:8,padding:'5px 10px',marginBottom:6}}>
-                      <span style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                        ↪ Replying to <b style={{color:C.gold}}>{dmReplyTo.senderId===myUUID?'yourself':dmTarget.name.split(' ')[0]}</b>: {(splitAtts(dmReplyTo.content).text || '📎 attachment').slice(0,50)}
-                      </span>
-                      <button onClick={() => setDmReplyTo(null)} style={{marginLeft:'auto',background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>✕</button>
-                    </div>
-                  )}
                   <PendingChips target="dm"/>
                   <div style={{display:'flex',gap:8}}>
                   <ClipBtn target="dm"/><MicBtn target="dm"/>
@@ -1512,6 +1496,84 @@ export default function Week7({ currentUser, initialDm }) {
                   </button>
                   </div>
                 </div>
+              </div>
+
+              {/* DM thread panel — same side-panel experience as #general and client Messages */}
+              {dmThreadRoot && (() => {
+                const root = dmConvo.find(m => m.id === dmThreadRoot.id) || dmThreadRoot
+                const reps = dmConvoReplies[root.id] || []
+                const rootMine = root.senderId === myUUID
+                return (
+                  <div style={{width: isMobile ? '100%' : 320, borderTop: isMobile ? `1px solid ${C.border}` : 'none', borderLeft: isMobile ? 'none' : `1px solid ${C.border}`, display:'flex', flexDirection:'column', overflow: isMobile ? 'visible' : 'hidden'}}>
+                    <div style={{padding:'12px 14px',borderBottom:`1px solid ${C.border}`,flexShrink:0,display:'flex',alignItems:'center',gap:8}}>
+                      <button onClick={() => setDmThreadRoot(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,padding:0}}>←</button>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.white}}>Thread</div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:1}}>{reps.length} {reps.length===1?'reply':'replies'}</div>
+                      </div>
+                      <button onClick={() => setDmThreadRoot(null)}
+                        style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',color:C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}}>✕ Close</button>
+                    </div>
+
+                    <div style={{padding:'12px 14px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+                      <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                        <div style={{width:30,height:30,borderRadius:6,background:rootMine?C.gold:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:rootMine?C.black:C.gold,flexShrink:0}}>
+                          {(root.senderName||'?')[0]}
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:3}}>
+                            <span style={{fontSize:12,fontWeight:700,color:C.white}}><LN>{root.senderName}</LN></span>
+                            <span style={{fontSize:10,color:C.muted}}>{timeAgo(root.createdAt)}</span>
+                          </div>
+                          <div style={{fontSize:12,color:C.white,lineHeight:1.5}}>{renderBody(root.content, C.white)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{flex:1,overflowY:'auto',padding:'8px 14px',minHeight: isMobile ? 120 : 'auto'}}>
+                      {reps.length===0 && <div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'16px 0'}}>No replies yet — start the thread below.</div>}
+                      {reps.map(r => {
+                        const rMine = r.senderId===myUUID
+                        return (
+                          <div key={r.id} style={{marginBottom:12,display:'flex',gap:8,alignItems:'flex-start'}}>
+                            <div style={{width:28,height:28,borderRadius:6,background:rMine?C.gold:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:rMine?C.black:C.gold,flexShrink:0}}>
+                              {(r.senderName||'?')[0]}
+                            </div>
+                            <div style={{flex:1}}>
+                              <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:3}}>
+                                <span style={{fontSize:11,fontWeight:700,color:rMine?C.gold:C.white}}><LN>{r.senderName}</LN></span>
+                                <span style={{fontSize:9,color:C.muted}}>{timeAgo(r.createdAt)}</span>
+                              </div>
+                              <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderBody(r.content, C.white)}</div>
+                              {!r.deletedAt && liveLoadedRef.current && (
+                                <ReactionBar table="team_messages" messageId={r.id} myId={myUUID}
+                                  reactions={reactions[r.id]} accent={C.gold} onChange={setRx(r.id)} />
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div style={{padding:'10px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+                      <TypingHint ctx={`dm:${dmKey}`}/>
+                      <PendingChips target="dm-thread"/>
+                      <div style={{display:'flex',gap:8}}>
+                        <ClipBtn target="dm-thread"/><MicBtn target="dm-thread"/>
+                        <MentionInput value={newDmReply} onChange={v => { setNewDmReply(v); if (v) sendTyping(`dm:${dmKey}`) }} onSubmit={sendDmReply}
+                          candidates={[dmTarget.name]}
+                          colors={C}
+                          placeholder="Reply in thread…"
+                          inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
+                        <button onClick={sendDmReply} disabled={!newDmReply.trim() && !hasPending('dm-thread')}
+                          style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:(newDmReply.trim()||hasPending('dm-thread'))?1:.4}}>
+                          Reply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
               </div>
             )}
             {/* Hidden file input shared by all three composers */}
