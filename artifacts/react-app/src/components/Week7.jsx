@@ -215,11 +215,14 @@ export default function Week7({ currentUser, initialDm }) {
   const setRx = (id) => (map) => setReactions(p => ({ ...p, [id]: map }))
   async function loadTeamChat() {
     try {
-      const rows = await dbGet('team_messages', `org_id=eq.${orgId}&order=created_at.asc&limit=500`)
+      // Fetch the NEWEST 500 rows (desc), then flip ascending for display —
+      // an ascending fetch would drop recent messages once an org passes 500 rows.
+      const rows = await dbGet('team_messages', `org_id=eq.${orgId}&order=created_at.desc&limit=500`)
       if (!Array.isArray(rows) || !rows.length) return
+      rows.reverse()
       liveLoadedRef.current = true
       fetchReactions('team_messages', rows.map(r => r.id)).then(setReactions).catch(() => {})
-      const roots = [], reps = {}, dms = {}
+      const roots = [], reps = {}, dms = {}, dmReps = {}
       for (const r of rows) {
         const m = { id:r.id, senderId:r.sender_id, senderName:r.sender_name, senderRole:r.sender_role,
           content:r.content, createdAt:r.created_at, isDm:!!r.is_dm, threadId:r.thread_id,
@@ -227,7 +230,11 @@ export default function Week7({ currentUser, initialDm }) {
         if (r.is_dm) {
           if (r.sender_id===myUUID || r.dm_to_id===myUUID) {
             const key = [r.sender_id, r.dm_to_id].sort().join('_')
-            ;(dms[key] ||= []).push(m)
+            if (r.thread_id) {
+              ;((dmReps[key] ||= {})[r.thread_id] ||= []).push(m)
+            } else {
+              ;(dms[key] ||= []).push(m)
+            }
           }
         } else if (r.thread_id) {
           ;(reps[r.thread_id] ||= []).push(m)
@@ -235,10 +242,38 @@ export default function Week7({ currentUser, initialDm }) {
           roots.push(m)
         }
       }
+      // Backfill thread roots that fell outside the fetch window — a reply must
+      // never be orphaned just because its parent is older than the last 500 rows.
+      const haveIds = new Set([...roots.map(m => m.id), ...Object.values(dms).flat().map(m => m.id)])
+      const missingIds = new Set()
+      for (const pid of Object.keys(reps)) if (!haveIds.has(pid)) missingIds.add(pid)
+      for (const byParent of Object.values(dmReps)) for (const pid of Object.keys(byParent)) if (!haveIds.has(pid)) missingIds.add(pid)
+      if (missingIds.size) {
+        try {
+          const parents = await dbGet('team_messages', `id=in.(${[...missingIds].join(',')})&select=*`)
+          for (const r of (parents || [])) {
+            const m = { id:r.id, senderId:r.sender_id, senderName:r.sender_name, senderRole:r.sender_role,
+              content:r.content, createdAt:r.created_at, isDm:!!r.is_dm, threadId:r.thread_id,
+              deletedAt:r.deleted_at, deletedByName:r.deleted_by_name, replyCount:0 }
+            if (r.is_dm) {
+              if (r.sender_id===myUUID || r.dm_to_id===myUUID) {
+                const key = [r.sender_id, r.dm_to_id].sort().join('_')
+                ;(dms[key] ||= []).push(m)
+                dms[key].sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt))
+              }
+            } else {
+              roots.push(m)
+              roots.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt))
+            }
+          }
+        } catch {}
+      }
       for (const m of roots) m.replyCount = (reps[m.id]||[]).length
+      for (const key of Object.keys(dms)) for (const m of dms[key]) m.replyCount = (dmReps[key]?.[m.id]||[]).length
       setMessages(roots)
       setThreadReplies(reps)
       setDmMessages(prev => ({ ...prev, ...dms }))
+      setDmReplies(prev => ({ ...prev, ...dmReps }))
     } catch {}
   }
   useEffect(() => {
@@ -656,6 +691,8 @@ export default function Week7({ currentUser, initialDm }) {
   const [newReply,     setNewReply]     = useState('')
   const [dmTarget,     setDmTarget]     = useState(null)
   const [dmMessages,   setDmMessages]   = useState({})
+  const [dmReplies,    setDmReplies]    = useState({})   // { dmKey: { rootMsgId: [replies] } }
+  const [dmReplyTo,    setDmReplyTo]    = useState(null) // root DM message being replied to
   const [newDm,        setNewDm]        = useState('')
   const [chatView,     setChatView]     = useState('main') // main | thread | dm
   const [showDmPicker, setShowDmPicker] = useState(false)
@@ -859,11 +896,18 @@ export default function Week7({ currentUser, initialDm }) {
     if ((!newDm.trim() && !hasPending('dm')) || !dmTarget) return
     const markers = takePending('dm')
     const key = [myUUID, dmTarget.uuid].sort().join('_')
-    const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDm.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString() }
-    setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
+    const replyRoot = dmReplyTo
+    const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDm.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString(), threadId:replyRoot?.id || null }
+    if (replyRoot) {
+      setDmReplies(prev => ({ ...prev, [key]: { ...(prev[key]||{}), [replyRoot.id]: [ ...((prev[key]||{})[replyRoot.id]||[]), msg ] } }))
+      setDmMessages(prev => ({ ...prev, [key]:(prev[key]||[]).map(m => m.id===replyRoot.id ? {...m, replyCount:(m.replyCount||0)+1} : m) }))
+    } else {
+      setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
+    }
     setNewDm('')
+    setDmReplyTo(null)
     stopTyping()
-    dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name })
+    dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name, thread_id:replyRoot?.id || null })
       .then(() => { loadTeamChat(); broadcastNewMessage() })
     notifyTeamMessage([dmTarget], msg.content)
   }
@@ -878,6 +922,8 @@ export default function Week7({ currentUser, initialDm }) {
 
   const dmKey    = dmTarget ? [myUUID, dmTarget.uuid].sort().join('_') : null
   const dmConvo  = dmKey ? (dmMessages[dmKey] || []) : []
+  const dmConvoReplies = dmKey ? (dmReplies[dmKey] || {}) : {}
+  useEffect(() => { setDmReplyTo(null) }, [dmTarget])
   // Eden admins who aren't the owner never see OTHER non-owner Eden admins as a DM option —
   // only the owner account appears for them among admins.
   const OWNER_EMAIL = 'info@edencommunications.io'
@@ -893,14 +939,16 @@ export default function Week7({ currentUser, initialDm }) {
   }, [section, chatView, messages, threadReplies]) // eslint-disable-line
   useEffect(() => {
     if (section === 'chat' && chatView === 'dm' && dmKey) markSeen(dmKey)
-  }, [section, chatView, dmKey, dmMessages]) // eslint-disable-line
+  }, [section, chatView, dmKey, dmMessages, dmReplies]) // eslint-disable-line
 
   // ── Unread counts (messages from others newer than last viewed) ──
   const isUnread = (m, key) => !m.deletedAt && m.senderId !== myUUID && new Date(m.createdAt).getTime() > seenAt(seen, key)
   const generalUnread =
     messages.filter(m => !m.isDm && isUnread(m, 'general')).length +
     Object.values(threadReplies).flat().filter(r => isUnread(r, 'general')).length
-  const dmUnreadCount = (key) => (dmMessages[key] || []).filter(m => isUnread(m, key)).length
+  const dmUnreadCount = (key) =>
+    (dmMessages[key] || []).filter(m => isUnread(m, key)).length +
+    Object.values(dmReplies[key] || {}).flat().filter(m => isUnread(m, key)).length
   const totalDmUnread = otherCoaches.reduce((n, c) => n + dmUnreadCount([myUUID, c.uuid].sort().join('_')), 0)
   const chatUnread = generalUnread + totalDmUnread
   const UnreadPill = ({ n }) => n > 0 ? (
@@ -1307,21 +1355,52 @@ export default function Week7({ currentUser, initialDm }) {
                   )}
                   {dmConvo.map(msg => {
                     const isMine = msg.senderId===myUUID
+                    const reps = dmConvoReplies[msg.id] || []
+                    const lastRep = reps[reps.length-1]
+                    const repUnread = !!lastRep && lastRep.senderId !== myUUID && new Date(lastRep.createdAt).getTime() > seenAt(seen, dmKey)
                     return (
-                      <div key={msg.id} style={{display:'flex',justifyContent:isMine?'flex-end':'flex-start',marginBottom:10}}>
-                        <div style={{maxWidth:'72%'}}>
-                          <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
-                            <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
-                          </div>
-                          {!msg.deletedAt && liveLoadedRef.current && (
-                            <ReactionBar table="team_messages" messageId={msg.id} myId={myUUID}
-                              reactions={reactions[msg.id]} accent={C.gold} onChange={setRx(msg.id)} alignRight={isMine} />
-                          )}
-                          <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:isMine?'right':'left',display:'flex',gap:8,alignItems:'center',justifyContent:isMine?'flex-end':'flex-start'}}>
-                            <span>{timeAgo(msg.createdAt)}</span>
-                            <PinBtns m={msg} ctx="team_dm"/>
+                      <div key={msg.id} style={{marginBottom:10}}>
+                        <div style={{display:'flex',justifyContent:isMine?'flex-end':'flex-start'}}>
+                          <div style={{maxWidth:'72%'}}>
+                            <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
+                              <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
+                            </div>
+                            {!msg.deletedAt && liveLoadedRef.current && (
+                              <ReactionBar table="team_messages" messageId={msg.id} myId={myUUID}
+                                reactions={reactions[msg.id]} accent={C.gold} onChange={setRx(msg.id)} alignRight={isMine} />
+                            )}
+                            <div style={{fontSize:10,color:C.muted,marginTop:3,textAlign:isMine?'right':'left',display:'flex',gap:8,alignItems:'center',justifyContent:isMine?'flex-end':'flex-start'}}>
+                              <span>{timeAgo(msg.createdAt)}</span>
+                              <PinBtns m={msg} ctx="team_dm"/>
+                              <button onClick={() => setDmReplyTo(msg)} title="Reply in a thread under this message"
+                                style={{background:'none',border:'none',color:dmReplyTo?.id===msg.id?C.gold:C.muted,fontSize:10,cursor:'pointer',padding:0,fontWeight:dmReplyTo?.id===msg.id?700:400}}>↪ Reply</button>
+                              {reps.length > 0 && (
+                                <span style={{fontSize:9,fontWeight:repUnread?800:700,color:repUnread?C.gold:C.muted,background:repUnread?`${C.gold}20`:'none',border:repUnread?`1px solid ${C.gold}44`:'none',borderRadius:8,padding:repUnread?'1px 7px':0}}>
+                                  {repUnread && '● '}🧵 {reps.length} {reps.length===1?'reply':'replies'}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        {/* Thread replies — nested under the parent, indented on the parent's side */}
+                        {reps.map(r => {
+                          const rMine = r.senderId===myUUID
+                          return (
+                            <div key={r.id} style={{display:'flex',justifyContent:isMine?'flex-end':'flex-start',marginTop:6}}>
+                              <div style={{maxWidth:'64%',marginRight:isMine?22:0,marginLeft:isMine?0:22,borderLeft:isMine?'none':`2px solid ${C.gold}44`,borderRight:isMine?`2px solid ${C.gold}44`:'none',paddingLeft:isMine?0:8,paddingRight:isMine?8:0}}>
+                                <div style={{background:rMine?`${C.gold}dd`:C.card,border:rMine?'none':`1px solid ${C.border}`,borderRadius:10,padding:'8px 11px'}}>
+                                  {!rMine && <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:2}}>{r.senderName}</div>}
+                                  <div style={{fontSize:12,color:rMine?C.black:C.white,lineHeight:1.5}}>{renderBody(r.content, rMine?C.black:C.white, rMine)}</div>
+                                </div>
+                                {!r.deletedAt && liveLoadedRef.current && (
+                                  <ReactionBar table="team_messages" messageId={r.id} myId={myUUID}
+                                    reactions={reactions[r.id]} accent={C.gold} onChange={setRx(r.id)} alignRight={rMine} />
+                                )}
+                                <div style={{fontSize:9,color:C.muted,marginTop:2,textAlign:rMine?'right':'left'}}>{timeAgo(r.createdAt)}</div>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     )
                   })}
@@ -1330,6 +1409,14 @@ export default function Week7({ currentUser, initialDm }) {
 
                 <div style={{padding:'10px 16px 14px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
                   <TypingHint ctx={`dm:${dmKey}`}/>
+                  {dmReplyTo && (
+                    <div style={{display:'flex',alignItems:'center',gap:6,background:`${C.gold}11`,border:`1px solid ${C.gold}33`,borderRadius:8,padding:'5px 10px',marginBottom:6}}>
+                      <span style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        ↪ Replying to <b style={{color:C.gold}}>{dmReplyTo.senderId===myUUID?'yourself':dmTarget.name.split(' ')[0]}</b>: {(splitAtts(dmReplyTo.content).text || '📎 attachment').slice(0,50)}
+                      </span>
+                      <button onClick={() => setDmReplyTo(null)} style={{marginLeft:'auto',background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:0}}>✕</button>
+                    </div>
+                  )}
                   <PendingChips target="dm"/>
                   <div style={{display:'flex',gap:8}}>
                   <ClipBtn target="dm"/><MicBtn target="dm"/>
