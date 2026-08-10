@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:realtime": "node --test tests/realtime-publication.mjs",
     "test": "esbuild src/routes/__tests__/communityMute.test.ts src/routes/__tests__/communityPostWebhook.test.ts src/routes/__tests__/metaAdsTokenExpiry.test.ts src/lib/__tests__/startDateReminders.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.test-dist --out-extension:.js=.mjs && node --test \".test-dist/**/*.test.mjs\""
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "2.110.3",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
