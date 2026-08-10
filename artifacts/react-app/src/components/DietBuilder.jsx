@@ -886,6 +886,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // Targets from the last saved plan — kept separate from the calculator's
   // `results` (which also carries bmr/maintenance the saved shape lacks).
   const [savedTargets, setSavedTargets] = useState(null)
+  // When the latest saved diet plan was written (diet_plans.updated_at)
+  const [planUpdatedAt, setPlanUpdatedAt] = useState(null)
   // No fallback numbers: if nothing was calculated/saved, meal totals render
   // without target lines (MacroBar hides the "/target" when target is missing).
   const targets = results||savedTargets||{}
@@ -1209,7 +1211,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   useEffect(()=>{
     if (!myUUID) return
     let stale=false
-    dbGet('diet_plans',`client_id=eq.${myUUID}&order=updated_at.desc&limit=1&select=protocol,high_day_meals,low_day_meals,targets`)
+    dbGet('diet_plans',`client_id=eq.${myUUID}&order=updated_at.desc&limit=1&select=protocol,high_day_meals,low_day_meals,targets,updated_at`)
       .then(rows=>{
         if (stale) return
         const row = rows?.[0]
@@ -1228,6 +1230,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             setLowMeals(cur => cur.some(m=>m.foods&&m.foods.length) ? cur : lo)
           const tg = typeof row.targets==='string' ? JSON.parse(row.targets) : row.targets
           if (tg && typeof tg==='object' && tg.cal) setSavedTargets(tg)
+          if (row.updated_at) setPlanUpdatedAt(row.updated_at)
         } catch(e){}
       }).catch(()=>{})
     return ()=>{stale=true}
@@ -1722,6 +1725,20 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       {tab==='plan'&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
 
+          {/* Freshness stamp — when the latest saved plan was written */}
+          {planUpdatedAt&&(
+            <div style={{marginBottom:12,padding:'8px 12px',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,
+              fontSize:12,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
+              <span>🕒</span>
+              <span>
+                {isCoach ? 'Plan last saved on ' : 'Last updated by your coach on '}
+                <span style={{color:C.white,fontWeight:600}}>
+                  {new Date(planUpdatedAt).toLocaleDateString(undefined,{weekday:'short',month:'long',day:'numeric',year:'numeric'})}
+                </span>
+              </span>
+            </div>
+          )}
+
           {/* Protocol selector — coach only */}
           {isCoach&&(
             <Card sx={{marginBottom:12}}>
@@ -1901,7 +1918,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           })}
 
           {isCoach&&(
-            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
+            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}setPlanUpdatedAt(new Date().toISOString());auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
@@ -2073,6 +2090,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   if(isCoach&&myUUID){
                     const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify({}),updated_at:new Date().toISOString()})
                     if(!ok){alert('Could not clear the saved targets — please try again.');return}
+                    setPlanUpdatedAt(new Date().toISOString())
                     auditPlanSave('diet_targets_reset', myUUID, info?.name||currentUser?.name)
                   }
                 }}
