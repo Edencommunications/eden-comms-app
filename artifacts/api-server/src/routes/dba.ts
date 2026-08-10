@@ -311,26 +311,69 @@ router.get("/dba/manifest", async (req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/manifest+json");
   res.setHeader("Cache-Control", "public, max-age=300");
   if (!slug) return res.json(edenDefault);
-  const all = await loadAllDbas();
-  const hit = all.find((x) => x.dba.slug === slug && x.dba.is_active);
-  if (!hit) return res.json(edenDefault);
-  const d = hit.dba;
-  const logoOk = typeof d.logo_url === "string" && /^https?:\/\//i.test(d.logo_url);
+  const b = await brandBySlug(slug);
+  if (!b) return res.json(edenDefault);
+  // Route the icon through our own /dba/icon proxy so data-URL logos (orgs
+  // store those) and cross-origin storage URLs both work as install icons.
+  const iconSrc = b.logo ? `/api/dba/icon?slug=${encodeURIComponent(slug)}` : null;
   return res.json({
-    name: d.name,
-    short_name: d.name.length > 12 ? d.name.slice(0, 12) : d.name,
-    description: `The private space for ${d.name} members`,
-    start_url: `${p}/${d.slug}`,
+    name: b.name,
+    short_name: b.name.length > 12 ? b.name.slice(0, 12) : b.name,
+    description: `The private space for ${b.name} members`,
+    start_url: `${p}/${slug}`,
     scope: `${p}/`,
     display: "standalone",
     background_color: "#000000",
-    theme_color: d.brand_color || "#ffa600",
+    theme_color: b.color || "#ffa600",
     orientation: "portrait",
     icons: [
-      ...(logoOk ? [{ src: d.logo_url, sizes: "512x512", type: "image/png", purpose: "any" }] : []),
+      ...(iconSrc ? [{ src: iconSrc, sizes: "512x512", type: "image/png", purpose: "any" }] : []),
       ...edenDefault.icons,
     ],
   });
+});
+
+// Resolve a public URL slug to its brand (DBA sub-brands first, then
+// white-label organizations) — name, logo, brand color.
+async function brandBySlug(slug: string): Promise<{ name: string; logo: string | null; color: string | null } | null> {
+  const all = await loadAllDbas();
+  const hit = all.find((x) => x.dba.slug === slug && x.dba.is_active);
+  if (hit) return { name: hit.dba.name, logo: hit.dba.logo_url || null, color: hit.dba.brand_color || null };
+  const orgs = await rest<any>(`organizations?slug=eq.${encodeURIComponent(slug)}&is_active=eq.true&select=name,logo_url,brand_color`);
+  if (orgs[0]) return { name: orgs[0].name, logo: orgs[0].logo_url || null, color: orgs[0].brand_color || null };
+  return null;
+}
+
+// ── Public: per-brand home-screen icon ────────────────────────────
+// GET /dba/icon?slug=<slug> — serves the DBA's or org's logo bytes so phones
+// (especially iOS, which ignores manifest icons and uses apple-touch-icon)
+// show the sub-brand's logo when the page is added to the home screen.
+// Unknown slugs / missing logos fall back to the Eden icon.
+router.get("/dba/icon", async (req: Request, res: Response) => {
+  const slug = sanitizeSlug(String(req.query.slug || ""));
+  try {
+    const b = slug ? await brandBySlug(slug) : null;
+    const logo = b?.logo || "";
+    // Org logos are stored as data URLs today — decode and serve the bytes.
+    const dataM = logo.match(/^data:(image\/[a-z0-9+.-]+);base64,(.+)$/i);
+    if (dataM) {
+      res.setHeader("Content-Type", dataM[1]);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.send(Buffer.from(dataM[2], "base64"));
+    }
+    // DBA logos live in Supabase storage — only proxy https URLs on our own
+    // storage host (prevents this route being used to fetch arbitrary URLs).
+    if (/^https:\/\//i.test(logo) && logo.startsWith(`${SUPABASE_URL}/storage/`)) {
+      const r = await fetch(logo);
+      const ct = r.headers.get("content-type") || "";
+      if (r.ok && /^image\//i.test(ct)) {
+        res.setHeader("Content-Type", ct);
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        return res.send(Buffer.from(await r.arrayBuffer()));
+      }
+    }
+  } catch {}
+  return res.redirect(302, "/apple-touch-icon.png");
 });
 
 // ── Admin: list org DBAs ──────────────────────────────────────────

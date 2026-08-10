@@ -28,6 +28,13 @@
           // the app base only shapes start_url/scope/icons inside the manifest.
           var link = document.querySelector('link[rel="manifest"]');
           if (link) link.href = '/api/dba/manifest?slug=' + encodeURIComponent(seg) + '&base=' + encodeURIComponent(base || '/');
+          // iOS ignores manifest icons — swap the apple-touch-icon too so the
+          // home-screen icon uses the sub-brand's logo. The tag appears later
+          // in <head>, so create a branded one here (first match wins on iOS).
+          var touch = document.createElement('link');
+          touch.rel = 'apple-touch-icon';
+          touch.href = '/api/dba/icon?slug=' + encodeURIComponent(seg);
+          document.head.appendChild(touch);
         }
       })();
     </script>
