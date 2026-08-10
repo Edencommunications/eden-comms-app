@@ -771,6 +771,23 @@ export default function Week7({ currentUser, initialDm }) {
     endHuddle, pingCoach,
   } = huddle
 
+  // Ping button feedback — huddlePinging = { name, status: 'sending'|'sent'|'failed' }
+  const pingStatus = (coach) => (huddlePinging && huddlePinging.name === coach.name) ? huddlePinging.status : null
+  const pingLabel = (coach, idle) => {
+    const s = pingStatus(coach)
+    return s === 'sending' ? 'Sending…' : s === 'sent' ? 'Invited ✓' : s === 'failed' ? 'Failed ✕' : idle
+  }
+  const pingBtnStyle = (coach, base) => {
+    const s = pingStatus(coach)
+    if (s === 'sent')   return { ...base, background:`${C.success}22`, border:`1px solid ${C.success}44`, color:C.success }
+    if (s === 'failed') return { ...base, background:`${C.danger}22`, border:`1px solid ${C.danger}44`, color:C.danger }
+    if (s === 'sending') return { ...base, opacity:.65, cursor:'default' }
+    return base
+  }
+  const PingError = ({ coach }) => pingStatus(coach) === 'failed'
+    ? <div style={{fontSize:10,color:C.danger,marginTop:3}}>Could not send invite — try again</div>
+    : null
+
   // Load saved URLs from Supabase on mount
   useEffect(() => {
     if (myUUID) loadSettings()
@@ -1570,10 +1587,14 @@ export default function Week7({ currentUser, initialDm }) {
                           {coach.role}{coach.isHeadCoach?' · Head Coach':''}
                         </div>
                       </div>
-                      <button onClick={async () => { if (liveHuddle) { pingCoach(coach) } else { const ok = await startHuddle(); if (ok) pingCoach(coach) } }}
-                        style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                        {huddlePinging===coach.name?'Invited ✓':'Invite'}
-                      </button>
+                      <div style={{textAlign:'right'}}>
+                        <button disabled={pingStatus(coach)==='sending'}
+                          onClick={async () => { if (liveHuddle) { pingCoach(coach) } else { const ok = await startHuddle(); if (ok) pingCoach(coach) } }}
+                          style={pingBtnStyle(coach, {background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'})}>
+                          {pingLabel(coach,'Invite')}
+                        </button>
+                        <PingError coach={coach}/>
+                      </div>
                     </div>
                   ))}
                 </Card>
@@ -1600,10 +1621,13 @@ export default function Week7({ currentUser, initialDm }) {
                         <LN>{coach.name[0]}</LN>
                       </div>
                       <div style={{flex:1,fontSize:12,color:C.white}}><LN>{coach.name}</LN></div>
-                      <button onClick={() => pingCoach(coach)}
-                        style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:7,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                        {huddlePinging===coach.name?'Invited ✓':'Ping to Join'}
-                      </button>
+                      <div style={{textAlign:'right'}}>
+                        <button disabled={pingStatus(coach)==='sending'} onClick={() => pingCoach(coach)}
+                          style={pingBtnStyle(coach, {background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:7,padding:'5px 12px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'})}>
+                          {pingLabel(coach,'Ping to Join')}
+                        </button>
+                        <PingError coach={coach}/>
+                      </div>
                     </div>
                   ))}
                 </Card>

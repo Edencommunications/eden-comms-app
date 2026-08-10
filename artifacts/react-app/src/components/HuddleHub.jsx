@@ -342,15 +342,34 @@ export function HuddleProvider({ currentUser, children }) {
     }
   }, [huddleRowId, orgId, myUUID])
 
-  const pingCoach = useCallback((coach) => {
-    setHuddlePinging(coach.name)
-    dbInsert('notifications', {
-      recipient_id: coach.uuid, sender_id: myUUID, sender_name: myName,
-      type: 'huddle_invite',
-      body: `🎙 ${myName} is inviting you to a live huddle — hit Join to jump in.`,
-      is_read: false,
-    })
-    setTimeout(() => setHuddlePinging(null), 3000)
+  // Ping = insert a notification row and wait for the INSERT to actually
+  // resolve, so the sender gets real success/failure feedback instead of a
+  // fire-and-forget spinner. huddlePinging = { name, status } where status is
+  // 'sending' | 'sent' | 'failed'.
+  const pingCoach = useCallback(async (coach) => {
+    setHuddlePinging({ name: coach.name, status: 'sending' })
+    let ok = false
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+        method: 'POST', headers: H,
+        body: JSON.stringify({
+          recipient_id: coach.uuid, sender_id: myUUID, sender_name: myName,
+          type: 'huddle_invite',
+          body: `🎙 ${myName} is inviting you to a live huddle — hit Join to jump in.`,
+          is_read: false,
+        }),
+      })
+      ok = r.ok
+      if (!r.ok) console.error('INSERT notifications', await r.text())
+    } catch (e) {
+      console.error('INSERT notifications', e)
+    }
+    setHuddlePinging({ name: coach.name, status: ok ? 'sent' : 'failed' })
+    // Success clears quickly; failure lingers so the sender can read it and retry
+    setTimeout(() => {
+      setHuddlePinging(p => (p && p.name === coach.name ? null : p))
+    }, ok ? 3000 : 6000)
+    return ok
   }, [myUUID, myName])
 
   // Answer the incoming call: mark invite read + join whatever huddle is live
