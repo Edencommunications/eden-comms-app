@@ -120,6 +120,26 @@ export default function Notifications({ currentUser, onNavigate }) {
   const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
+
+  // ── One-time "turn on phone notifications" nudge ────────────
+  // Dismissal is remembered per-user in localStorage (same pattern as the
+  // InstallBanner's 'eden-pwa-installed' flag). On iPhone Safari that isn't
+  // installed to the home screen, push isn't possible yet — the InstallBanner
+  // already tells those users to install first, so we stay quiet there.
+  const nudgeKey = `push-nudge-dismissed:${email || 'anon'}`
+  const [nudgeDismissed, setNudgeDismissed] = useState(() => {
+    try { return localStorage.getItem(`push-nudge-dismissed:${email || 'anon'}`) === '1' } catch { return true }
+  })
+  useEffect(() => {
+    try { setNudgeDismissed(localStorage.getItem(nudgeKey) === '1') } catch { setNudgeDismissed(true) }
+  }, [nudgeKey])
+  function dismissNudge() {
+    try { localStorage.setItem(nudgeKey, '1') } catch {}
+    setNudgeDismissed(true)
+  }
+  const pushPossibleHere = pushSupported && !(isIOS && !isStandalone)
+  const showNudge = !nudgeDismissed && pushPossibleHere &&
+    pushState !== null && !pushState.enabled
   useEffect(() => {
     if (!myUUID) return
     fetch('/api/push/prefs', { headers: { Authorization: sbBearer() } })
@@ -161,6 +181,7 @@ export default function Notifications({ currentUser, onNavigate }) {
         quiet: sd?.quiet ?? p?.quiet ?? { on: false, start: '22:00', end: '07:00' },
       }))
       setPushMsg('✅ Phone notifications are on for this device.')
+      dismissNudge() // enabled — never nudge again
     } catch (e) {
       setPushMsg('Could not turn on notifications — ' + (e?.message || 'unknown error'))
     }
@@ -315,6 +336,43 @@ export default function Notifications({ currentUser, onNavigate }) {
   return (
     <div ref={panelRef} style={{ position:'relative', display:'inline-flex' }}>
 
+      {/* ── One-time push opt-in nudge banner ─────────────────
+          Fixed pill at the top of the screen (the InstallBanner owns the
+          bottom edge). Tapping it opens the bell panel where the enable
+          toggle lives; the × remembers the dismissal per user. */}
+      {showNudge && (
+        <div style={{
+          position:'fixed', top:10, left:'50%', transform:'translateX(-50%)',
+          zIndex:9998, display:'flex', alignItems:'center', gap:8,
+          background:C.card, border:`1px solid ${C.gold}66`,
+          borderRadius:22, padding:'7px 8px 7px 14px',
+          boxShadow:'0 4px 20px rgba(255,166,0,.25)',
+          maxWidth:'calc(100vw - 24px)',
+        }}>
+          <button
+            onClick={() => { setOpen(true); loadNotifs(); dismissNudge() }}
+            style={{
+              background:'none', border:'none', cursor:'pointer', padding:0,
+              display:'flex', alignItems:'center', gap:8, textAlign:'left',
+            }}>
+            <span style={{ fontSize:15 }}>📱</span>
+            <span style={{ fontSize:12, fontWeight:700, color:C.white, lineHeight:1.35 }}>
+              Turn on phone notifications
+              <span style={{ display:'block', fontSize:10, fontWeight:500, color:C.muted }}>
+                Get buzzes for messages &amp; huddles
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={dismissNudge}
+            aria-label="Dismiss notification nudge"
+            style={{
+              background:'none', border:'none', color:C.muted, fontSize:18,
+              cursor:'pointer', padding:'0 6px', lineHeight:1, flexShrink:0,
+            }}>×</button>
+        </div>
+      )}
+
       {/* ── Bell button ──────────────────────────────────── */}
       <button
         onClick={() => { setOpen(o => !o); if (!open) loadNotifs() }}
@@ -338,6 +396,15 @@ export default function Notifications({ currentUser, onNavigate }) {
           }}>
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
+        )}
+        {/* Gold dot: push not yet enabled & nudge not dismissed (hidden while
+            the unread badge occupies the same corner) */}
+        {showNudge && unreadCount === 0 && (
+          <span style={{
+            position:'absolute', top:-3, right:-3,
+            width:10, height:10, borderRadius:5,
+            background:C.gold, border:`2px solid ${C.black}`,
+          }}/>
         )}
       </button>
 
