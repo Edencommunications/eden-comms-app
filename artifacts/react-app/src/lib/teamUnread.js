@@ -80,6 +80,23 @@ export async function syncSeen(uuid) {
   } catch { return local }
 }
 
+// Merge a delta (per-key max) into the local cache WITHOUT pushing to the
+// server — used when another device broadcasts its own "seen" event, which
+// that device already persisted. Returns the merged map.
+export function mergeSeenLocal(uuid, delta) {
+  const local = loadSeen(uuid)
+  let changed = false
+  for (const [k, t] of Object.entries(delta || {})) {
+    const n = Number(t)
+    if (Number.isFinite(n) && n > (local[k] || 0)) { local[k] = n; changed = true }
+  }
+  if (changed) {
+    try { localStorage.setItem(lsKey(uuid), JSON.stringify(local)) } catch {}
+    try { window.dispatchEvent(new CustomEvent('teamhub-seen')) } catch {}
+  }
+  return local
+}
+
 // Timestamp a conversation was last viewed (0 = never)
 export const seenAt = (seen, key) => seen?.[key] ?? 0
 

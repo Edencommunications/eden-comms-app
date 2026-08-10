@@ -11,7 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
 import { supabase } from '../supabaseClient'
-import { loadSeen, saveSeen, seenAt, syncSeen } from '../lib/teamUnread'
+import { loadSeen, saveSeen, seenAt, syncSeen, mergeSeenLocal } from '../lib/teamUnread'
 import Communities from './Communities'
 import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
@@ -383,6 +383,21 @@ export default function Week7({ currentUser, initialDm }) {
       .on('broadcast', { event:'new-message' }, ({ payload }) => {
         if (payload?.userId !== myUUID) loadTeamChat()
       })
+      // Same user reading on ANOTHER device — merge their new read state so
+      // in-conversation unread dividers clear here instantly (no reload).
+      // The other device already persisted to the DB, so merge locally only.
+      .on('broadcast', { event:'seen' }, ({ payload }) => {
+        if (payload?.userId !== myUUID || !payload?.seen) return
+        const merged = mergeSeenLocal(myUUID, payload.seen)
+        setSeen(prev => {
+          let changed = false
+          const next = { ...prev }
+          for (const [k, t] of Object.entries(merged)) {
+            if (Number.isFinite(t) && t > (next[k] || 0)) { next[k] = t; changed = true }
+          }
+          return changed ? next : prev
+        })
+      })
       .subscribe()
     rtChanRef.current = ch
     const prune = setInterval(() => {
@@ -436,6 +451,8 @@ export default function Week7({ currentUser, initialDm }) {
       const ts = Date.now()
       const next = { ...prev, [key]: ts }
       saveSeen(myUUID, next, { [key]: ts })
+      // Tell my other open devices right away (lightweight, like typing hints)
+      try { rtChanRef.current?.send({ type:'broadcast', event:'seen', payload:{ userId:myUUID, seen:{ [key]: ts } } }) } catch {}
       return next
     })
   }
