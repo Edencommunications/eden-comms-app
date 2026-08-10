@@ -462,10 +462,29 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     !!courseEdit && !!activeCourse &&
     ((courseEdit.title||'') !== (activeCourse.title||'') ||
      (courseEdit.description||'') !== (activeCourse.description||''))
+  // In-progress builder typing that would be lost on close
+  const secEditDirty = () => {
+    if (!secEdit) return false
+    const orig = draftSecs.find(s=>s.id===secEdit.id)
+    return (secEdit.title||'') !== (orig?.title||'')
+  }
+  const modEditDirty = () => {
+    if (!modEdit) return false
+    const orig = modules.find(m=>m.id===modEdit.id)
+    if (!orig) return false
+    return (modEdit.title||'') !== (orig.title||'') ||
+           (modEdit.duration||'') !== (orig.duration||'') ||
+           (modEdit.admin_notes||'') !== (orig.admin_notes||'') ||
+           (modEdit.video_url||'') !== (orig.video_url||'')
+  }
+  const builderDirty = () =>
+    courseEditDirty() || secEditDirty() || modEditDirty() ||
+    !!newModTitle.trim() || !!newModDur.trim() || !!newSecTitle.trim()
   function closeBuilder() {
-    if (courseEditDirty()) {
-      if (!window.confirm('You have unsaved course details. Discard your changes?')) return
-      setCourseEdit(null)
+    if (builderDirty()) {
+      if (!window.confirm('You have unsaved changes in the course builder. Discard them?')) return
+      setCourseEdit(null); setSecEdit(null); setModEdit(null)
+      setNewModFor(null); setNewModTitle(''); setNewModDur(''); setNewSecTitle('')
     }
     setShowBuilder(false)
   }
