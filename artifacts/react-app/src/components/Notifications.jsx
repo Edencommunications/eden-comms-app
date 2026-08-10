@@ -65,6 +65,7 @@ function timeAgo(ts) {
 // ── Notification type config ──────────────────────────────────
 const NOTIF_CONFIG = {
   message:      { icon:'💬', label:'New Message',          color: C.gold },
+  dm_thread_reply: { icon:'↩️', label:'Thread Reply',       color: C.gold },
   diet_update:  { icon:'🥗', label:'Diet Plan Updated',    color: C.success },
   supp_update:  { icon:'💊', label:'Supplement Updated',   color:'#D4A8F0' },
   workout_update: { icon:'💪', label:'Workout Plan Updated', color:'#6FE8A8' },
@@ -332,6 +333,18 @@ export default function Notifications({ currentUser, onNavigate }) {
     if (!onNavigate || !notif.link_to) return
     // Check-in notifications deep-link to the submitting client's Check-In Hub:
     // look up the sender's profile so the app can pre-select that client.
+    // DM thread replies deep-link to the sender's DM in the Team Hub: look up
+    // the sender's profile so Week7 can pre-open that conversation.
+    if (notif.type === 'dm_thread_reply' && notif.sender_id) {
+      try {
+        const rows = await dbGet('user_profiles', `id=eq.${notif.sender_id}&select=email,name`)
+        const p = rows?.[0]
+        if (p?.email) {
+          onNavigate(notif.link_to, { email: p.email, name: p.name || notif.sender_name })
+          return
+        }
+      } catch { /* fall through to plain tab navigation */ }
+    }
     if (notif.type === 'checkin_received' && notif.sender_id) {
       try {
         const rows = await dbGet('user_profiles', `id=eq.${notif.sender_id}&select=email,name`)

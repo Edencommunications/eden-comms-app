@@ -5857,7 +5857,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
     if (isStaff) {
       if (tab === "home") return <StaffClientPanel user={user}/>;
       if (tab === "msgs") return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
-      if (tab === "team") return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }}/>;
+      if (tab === "team") return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }} initialDm={coachClient}/>;
       return <StaffClientPanel user={user}/>;
     }
     // Shared screens
@@ -5980,6 +5980,9 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={(dest: string, client?: any) => {
             // Deep-link: check-in notifications carry the submitting client, so
             // coaches land in the Check-In Hub with that client pre-selected.
+            // DM-thread-reply notifications carry the teammate: open Team Hub
+            // with that person's DM pre-selected (works for every staff role).
+            if (dest === 'team' && client?.email) { setCoachClient(client); navTab('team'); return; }
             if (client?.email && (user.role === 'coach' || user.role === 'super_admin')) openClientTool(dest, client, tab);
             else navTab(dest);
           }}/>

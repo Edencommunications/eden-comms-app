@@ -1039,7 +1039,19 @@ export default function Week7({ currentUser, initialDm }) {
     stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name, thread_id:root.id })
       .then(() => { loadTeamChat(); broadcastNewMessage() })
-    notifyTeamMessage([dmTarget], msg.content)
+    // Reply-specific notification: names the thread (parent preview) so the
+    // recipient knows which conversation to open — clicking lands in this DM.
+    const strip = t => String(t || '').replace(/\[\[file\|[^\]]*\]\]/g, '📎 attachment').trim()
+    const parentPreview = strip(root.content).slice(0, 60)
+    const replyPreview  = strip(msg.content).slice(0, 80)
+    if (dmTarget.uuid && dmTarget.uuid !== myUUID) {
+      sendNotification({
+        recipientId: dmTarget.uuid, senderId: myUUID, senderName: myName,
+        type: 'dm_thread_reply',
+        body: `↩️ ${myName} replied in your thread ("${parentPreview}"): "${replyPreview}"`,
+        linkTo: 'team',
+      })
+    }
   }
 
   // ── Huddle helpers — thin wrappers over the global HuddleHub ─
