@@ -441,6 +441,33 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setCourseEdit(null)
   }
 
+  // ── ADMIN: Reorder courses in the catalog ─────────────────
+  const [movingCourse, setMovingCourse] = useState(false)
+  async function moveCourse(course, dir) {
+    if (movingCourse) return
+    const idx = courses.findIndex(c=>c.id===course.id)
+    const j = idx + dir
+    if (idx<0 || j<0 || j>=courses.length) return
+    setMovingCourse(true)
+    const next = [...courses]
+    ;[next[idx], next[j]] = [next[j], next[idx]]
+    // Renumber the whole visible list so duplicate/stale sort_orders can't undo the swap
+    const renumbered = next.map((c,i)=>({...c, sort_order:i+1}))
+    const prevById = Object.fromEntries(courses.map(c=>[c.id,c.sort_order]))
+    let ok = true
+    for (const c of renumbered) {
+      if (c.sort_order === prevById[c.id]) continue
+      ok = await dbUpdate('courses',`id=eq.${c.id}`,{ sort_order:c.sort_order }) && ok
+    }
+    setMovingCourse(false)
+    if (!ok) { alert('Could not save the new course order — please try again.'); loadCourses(); return }
+    setCourses(renumbered)
+    if (activeCourse) {
+      const upd = renumbered.find(c=>c.id===activeCourse.id)
+      if (upd) setActiveCourse(prev=>({...prev, sort_order:upd.sort_order}))
+    }
+  }
+
   // ── ADMIN: Toggle course published ────────────────────────
   async function togglePublish(course) {
     await dbUpdate('courses',`id=eq.${course.id}`,{ is_active:!course.is_active })
@@ -923,7 +950,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   {isAdmin?'Create your first course using the + New button above':isCoach?'No courses have been assigned to your clients yet':'No courses available yet'}
                 </div>
               )}
-              {courses.map(c=>(
+              {courses.map((c,ci)=>(
                 <button key={c.id} onClick={()=>openCourse(c)}
                   style={{width:'100%',textAlign:'left',background:activeCourse?.id===c.id?`${C.gold}15`:C.surface,border:'none',borderLeft:`3px solid ${activeCourse?.id===c.id?C.gold:'transparent'}`,padding:'11px 13px',cursor:'pointer',borderBottom:`1px solid ${C.border}`}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
@@ -931,6 +958,20 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                     {isAdmin&&(
                       <span style={{fontSize:9,background:c.is_active?`${C.success}22`:`${C.danger}22`,color:c.is_active?C.success:C.danger,padding:'1px 5px',borderRadius:4,fontWeight:700,flexShrink:0}}>
                         {c.is_active?'LIVE':'DRAFT'}
+                      </span>
+                    )}
+                    {isAdmin&&courses.length>1&&(
+                      <span style={{display:'flex',gap:2,flexShrink:0}}>
+                        <span role="button" aria-label={`Move ${c.title} up`} title="Move up"
+                          onClick={e=>{e.stopPropagation(); if(ci>0&&!movingCourse) moveCourse(c,-1)}}
+                          style={{width:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:4,border:`1px solid ${C.border}`,background:C.card,color:ci>0&&!movingCourse?C.gold:C.dim,fontSize:9,fontWeight:700,cursor:ci>0&&!movingCourse?'pointer':'default',userSelect:'none'}}>
+                          ▲
+                        </span>
+                        <span role="button" aria-label={`Move ${c.title} down`} title="Move down"
+                          onClick={e=>{e.stopPropagation(); if(ci<courses.length-1&&!movingCourse) moveCourse(c,1)}}
+                          style={{width:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:4,border:`1px solid ${C.border}`,background:C.card,color:ci<courses.length-1&&!movingCourse?C.gold:C.dim,fontSize:9,fontWeight:700,cursor:ci<courses.length-1&&!movingCourse?'pointer':'default',userSelect:'none'}}>
+                          ▼
+                        </span>
                       </span>
                     )}
                   </div>
