@@ -272,8 +272,8 @@ const SAFE_SENDER_BODY: Record<string, (name: string) => string> = {
 };
 // Community alerts are safe to pass through — their bodies only name the
 // community (never message content), built server-side.
-// Huddle invite bodies are app-built ("🎙 Name is inviting you…") — name + topic only.
-const PASSTHROUGH_TYPES = new Set(["community_post", "community_added", "community", "huddle_invite", "huddle_ping"]);
+// Huddle bodies are constructed server-side (see watcher) — never passthrough.
+const PASSTHROUGH_TYPES = new Set(["community_post", "community_added", "community"]);
 // Where a tap should land inside the app (tab key, applied after login too)
 const TYPE_GOTO: Record<string, string> = {
   message: "msgs", diet_update: "diet", supp_update: "diet", workout_update: "workout",
@@ -381,7 +381,13 @@ async function watchPass() {
         const title = TYPE_LABELS[n.type] || "🔔 Notification";
         // Never push actual content to the lock screen — type + safe names only
         let body: string;
-        if (PASSTHROUGH_TYPES.has(n.type)) {
+        if (n.type === "huddle_invite" || n.type === "huddle_ping") {
+          // Build the huddle line server-side from the sender's name only —
+          // never trust the stored body (a bad row could put private text on
+          // a lock screen).
+          const who = String(n.sender_name || "A teammate").slice(0, 60);
+          body = `🎙 ${who} is inviting you to a live huddle — hit Join to jump in.`;
+        } else if (PASSTHROUGH_TYPES.has(n.type)) {
           body = n.body || "New community activity";
         } else if (n.type === "message" && n.sender_name) {
           body = `${n.sender_name} sent you a message`;
