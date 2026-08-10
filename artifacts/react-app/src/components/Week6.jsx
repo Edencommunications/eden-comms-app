@@ -1119,6 +1119,18 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       time: audTime(r.created_at),
     }
   }
+  function audExportCsv() {
+    const esc = v => { const s = String(v==null?'':v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s }
+    const lines = [['Timestamp','Actor','Action','Target','Details'].join(',')]
+    audShown.forEach(r=>{ const a=dbAuditRow(r); lines.push([a.time,a.actor,a.action,a.target,a.detail].map(esc).join(',')) })
+    const blob = new Blob(['\uFEFF'+lines.join('\r\n')], { type:'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const aEl = document.createElement('a')
+    aEl.href = url
+    aEl.download = `audit-log-${new Date().toISOString().slice(0,10)}.csv`
+    document.body.appendChild(aEl); aEl.click(); aEl.remove()
+    URL.revokeObjectURL(url)
+  }
 
   // ── Client lifecycle management (all persisted to localStorage) ──
   // Keyed by client email so the LoginScreen can read the same store.
@@ -2710,7 +2722,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
       {tab==='audit'&&isAdmin&&(
         <div style={{flex:1,overflowY:'auto',padding:16}}>
-          <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:14}}>Audit Log</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.white}}>Audit Log</div>
+            <button onClick={audExportCsv} disabled={!audShown.length}
+              title={audShown.length?`Download ${audShown.length} filtered event${audShown.length===1?'':'s'} as CSV`:'No events to export'}
+              style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'6px 12px',
+                color:C.gold,fontSize:11,fontWeight:800,cursor:audShown.length?'pointer':'default',opacity:audShown.length?1:0.4}}>
+              ⬇ Export CSV{audShown.length?` (${audShown.length})`:''}
+            </button>
+          </div>
 
           {/* Filter bar — person / action / date range + search */}
           <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
