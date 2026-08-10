@@ -28,4 +28,5 @@
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.
 - [Background-job health bar](job-health-monitoring.md) — scheduled jobs need evaluated health (staleness, misconfig, partial-failure = failed run) on /healthz, not a raw snapshot; heartbeat every run.
 - [Audit log server-side filtering](audit-log-filters.md) — audit filters are PostgREST params carried through keyset pagination; distinct facets via gt-resume column scans, never a single big-limit fetch.
+- [Course progress remap safety](course-progress-remap.md) — remap course_progress by primary-key snapshot, never module_id text; cyclic renumbering makes text matching ambiguous.
 - [Web app typecheck](web-typecheck.md) — react-app passes strict tsc via `: any` props + wildcard shims in src/untyped-js-modules.d.ts for legacy .jsx; don't enable allowJs (jsx inference breaks callers).

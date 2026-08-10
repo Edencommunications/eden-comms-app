@@ -34,7 +34,7 @@ const H = {
 }
 
 import { getRecipeDetails, loadLiveRecipeDetails } from './recipeDetails'
-import { planLessonMove, staleProgressIds } from './courseMoveUtils'
+import { planLessonMove, planLessonDrop, rollbackLessonDrop, executeLessonDrop, staleProgressIds } from './courseMoveUtils'
 
 async function dbGet(table, params='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
@@ -95,6 +95,16 @@ export function toEmbedUrl(raw) {
     }
     return u.href
   } catch { return url }
+}
+// Like dbGet, but returns null (not []) when the read FAILED — callers that
+// must distinguish "no rows" from "could not read" (e.g. pre-move snapshots)
+// use this so a failed read can never masquerade as an empty result.
+async function dbGetOrNull(table, params='') {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
+    if (!r.ok) return null
+    return await r.json()
+  } catch { return null }
 }
 async function dbDelete(table, params) {
   try {
@@ -270,6 +280,8 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [newModDur,    setNewModDur]    = useState('')
   const [newSecTitle,  setNewSecTitle]  = useState('')
   const [builderBusy,  setBuilderBusy]  = useState(false)
+  const [dragMod,      setDragMod]      = useState(null)  // lesson being dragged
+  const [dragOver,     setDragOver]     = useState(null)  // {secId,index} insertion point
 
   // Coach: client progress view
   const [showProgress, setShowProgress]  = useState(false)
@@ -666,6 +678,37 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
         await reloadCompleted()
         return
       }
+      await refreshModules(activeCourse.id)
+      await reloadCompleted()
+    } finally { setBuilderBusy(false) }
+  }
+  // Drop a dragged lesson at an exact position in any section. The whole
+  // target section is renumbered (two-pass via tmp ids so rows never collide
+  // on module_id mid-move) and course_progress rows are remapped along.
+  async function dropModule(lesson, targetSec, targetIndex) {
+    if (builderBusy) return
+    const plan = planLessonDrop(modules, lesson, targetSec, targetIndex)
+    if (!plan) return
+    setBuilderBusy(true)
+    try {
+      // The whole transaction (snapshot → module writes → primary-key progress
+      // remap → verify → rollback on any failure) lives in executeLessonDrop
+      // so it can be integration-tested with injected read/write failures.
+      const res = await executeLessonDrop({
+        plan,
+        undo: rollbackLessonDrop(modules, plan),
+        courseId: activeCourse.id,
+        nowISO: new Date().toISOString(),
+        db: { get: dbGetOrNull, update: dbUpdate },
+      })
+      if (res.status==='aborted') {
+        alert('Could not check learner progress before the move — nothing was changed. Please try again.')
+        return
+      }
+      if (res.status==='rolled_back')
+        alert('Could not move the lesson safely — the change was undone. Please try again.')
+      else if (res.status==='undo_failed')
+        alert('Could not move the lesson, and the automatic undo did not fully complete — please retry the move (or move it back) to repair the lesson order and progress records.')
       await refreshModules(activeCourse.id)
       await reloadCompleted()
     } finally { setBuilderBusy(false) }
@@ -1604,8 +1647,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                         </>
                       )}
                     </div>
-                    {/* Lessons */}
-                    <div style={{padding:'6px 10px'}}>
+                    {/* Lessons — rows are draggable; drop anywhere to reorder or cross sections */}
+                    <div
+                      onDragOver={e=>{ if(!dragMod||builderBusy) return; e.preventDefault(); e.dataTransfer.dropEffect='move'; setDragOver({secId:sec.id,index:secModsSorted.length}) }}
+                      onDrop={e=>{ if(!dragMod) return; e.preventDefault(); const d=(dragOver&&dragOver.secId===sec.id)?dragOver:{secId:sec.id,index:secModsSorted.length}; const lesson=dragMod; setDragMod(null); setDragOver(null); dropModule(lesson, sec, d.index) }}
+                      style={{padding:'6px 10px',
+                        outline: dragMod&&dragOver?.secId===sec.id&&secModsSorted.length===0 ? `2px dashed ${C.gold}66` : 'none',
+                        outlineOffset:-4, borderRadius:8}}>
                       {secModsSorted.map((m,mIdx)=>(
                         modEdit?.id===m.id?(
                           <div key={m.id} style={{padding:'6px 0'}}>
@@ -1627,7 +1675,19 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                               style={{width:'100%',marginTop:6,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 9px',color:C.white,fontSize:11,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
                           </div>
                         ):(
-                          <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 2px',borderBottom:`1px solid ${C.border}`}}>
+                          <div key={m.id}
+                            draggable={!builderBusy}
+                            onDragStart={e=>{ setDragMod(m); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', m.id) }catch{} }}
+                            onDragEnd={()=>{ setDragMod(null); setDragOver(null) }}
+                            onDragOver={e=>{ if(!dragMod||builderBusy) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect='move'; const r=e.currentTarget.getBoundingClientRect(); const before=e.clientY < r.top+r.height/2; setDragOver({secId:sec.id, index: before?mIdx:mIdx+1}) }}
+                            onDrop={e=>{ if(!dragMod) return; e.preventDefault(); e.stopPropagation(); const d=(dragOver&&dragOver.secId===sec.id)?dragOver:{secId:sec.id,index:mIdx}; const lesson=dragMod; setDragMod(null); setDragOver(null); dropModule(lesson, sec, d.index) }}
+                            style={{display:'flex',alignItems:'center',gap:8,padding:'7px 2px',borderBottom:`1px solid ${C.border}`,
+                              cursor: builderBusy?'default':'grab',
+                              opacity: dragMod?.id===m.id?.45:1,
+                              boxShadow: dragMod&&dragOver?.secId===sec.id
+                                ? (dragOver.index===mIdx ? `0 -2px 0 0 ${C.gold}` : (dragOver.index===mIdx+1&&mIdx===secModsSorted.length-1 ? `0 2px 0 0 ${C.gold}` : 'none'))
+                                : 'none'}}>
+                            <span aria-hidden="true" title="Drag to move this lesson" style={{fontSize:11,color:C.dim,flexShrink:0,userSelect:'none'}}>⠿</span>
                             <span style={{fontSize:10,color:C.muted,width:18,textAlign:'right',flexShrink:0}}>{m.module_id}</span>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.title}</div>
