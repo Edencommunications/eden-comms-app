@@ -335,7 +335,11 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
             {brandOrg ? <>The private platform for<br/>{brandOrg.name}</> : <>The private platform for<br/>Lifestyle of Eden University</>}
           </p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:260 }}>
-            {["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging","📊 Full client management","🍽 Diet builder + macro tracking"].map(f => (
+            {/* DBA sub-brand logins are community/course spaces — hide the coaching-platform bullets there */}
+            {(brandOrg?.__dba
+              ? ["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging"]
+              : ["🔒 Encrypted in transit & at rest","🛡 Private, encrypted messaging","📊 Full client management","🍽 Diet builder + macro tracking"]
+            ).map(f => (
               <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:`${primary}11`, borderRadius:8, border:`1px solid ${primary}22` }}>
                 <span style={{ fontSize:12, color:"#cccccc" }}>{f}</span>
               </div>
