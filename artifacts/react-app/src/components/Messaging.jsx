@@ -24,12 +24,6 @@ function useIsMobile(bp = 640) {
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-const KNOWN_USERS = {
-  'coach@eden.io':       { uuid: '414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach', role: 'coach' },
-  'client@eden.io':      { uuid: 'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role: 'client' },
-  'admin@edencomms.io':  { uuid: null, name: 'Eden Admin', role: 'super_admin' },
-}
-
 // ── Brand colors ──────────────────────────────────────────────
 const C = {
   gold: '#ffa600', black: '#000000', white: '#ffffff',
@@ -670,7 +664,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const isMobile = useIsMobile()
 
   const email    = currentUser?.email || ''
-  const userInfo = KNOWN_USERS[email] || { uuid: null, name: currentUser?.name || 'User', role: currentUser?.role || 'client' }
+  const userInfo = { uuid: null, name: currentUser?.name || 'User', role: currentUser?.role || 'client' }
   const myUUID   = userInfo.uuid
   const myRole   = userInfo.role
   const myName   = userInfo.name
@@ -692,10 +686,8 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // Only switch to Supabase-loaded convos when they are strictly richer than the demo set.
   // A partial load (e.g. only some participants found in the DB) must not wipe
   // demo conversations that have pre-seeded threads — otherwise the chat shows blank.
-  // Real DB-auth users (not in the demo KNOWN_USERS list) always use live data;
-  // demo accounts only switch when the live set is at least as rich as the demo set,
-  // so a partial load never wipes pre-seeded demo threads.
-  const isRealDbUser = !KNOWN_USERS[email]
+  // All users are real DB-auth users — always use live data.
+  const isRealDbUser = true
   const baseConversations = (dynConversations && dynConversations.length &&
       (isRealDbUser || dynConversations.length >= demoConversations.length))
     ? dynConversations

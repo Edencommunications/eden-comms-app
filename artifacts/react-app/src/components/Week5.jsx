@@ -14,13 +14,6 @@ const SHEET_ID      = '1lckx8AWxzxxddhWESgj7R-FVHoE6g2JBC9NG1J72QTA'
 const SHEET_NAME    = 'FoodList'
 const RECIPE_BUY    = 'https://funnel.lifestyleofeden.com/loe-recipes-5482'
 
-// ── Known users (expand in Week 6 with real auth) ─────────────
-const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach' },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client', coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051' },
-  'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',      role:'super_admin' },
-}
-
 // ── Demo roster (Week 6 pulls this from Supabase dynamically) ─
 // Demo roster removed — rosters load live from the database.
 const DEMO_COACHES = []
@@ -185,11 +178,10 @@ const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
 export default function Week5({currentUser, onAddRecipeToDiet}) {
   const email   = currentUser?.email||''
-  const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
-  const [dbProfile,  setDbProfile]  = useState(null)   // DB-auth users (white-label) resolved from user_profiles
+  const [dbProfile,  setDbProfile]  = useState(null)   // resolved from user_profiles by email
   const [companyCtx, setCompanyCtx] = useState(null)   // {companyId,isWhiteLabel,tierRecipes,packageId} — null = Eden
-  const myUUID  = info.uuid || dbProfile?.id || null
-  const roleEff = KNOWN_USERS[email] ? info.role : (dbProfile?.role || 'client')
+  const myUUID  = dbProfile?.id || null
+  const roleEff = dbProfile?.role || currentUser?.role || 'client'
   const isAdmin = roleEff==='super_admin'
   const isCoach = roleEff==='coach'
   const isClient= roleEff==='client'
@@ -791,7 +783,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       }),
     })
     setAccessList(prev=>[...prev,{user_id:user.uuid,user_name:user.name,user_role:user.role}])
-    dbInsert('audit_logs',{ action:'course_granted', actor_id:myUUID, actor_name:(dbProfile?.name||info.name),
+    dbInsert('audit_logs',{ action:'course_granted', actor_id:myUUID, actor_name:(dbProfile?.name||currentUser?.name||'User'),
       actor_role:roleEff, target_type:'course_access', target_id:user.uuid,
       details:{ name:course.title, user:user.name } }).catch(()=>{})
   }
@@ -821,7 +813,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   async function revokeAccess(userId, course) {
     await dbUpdate('course_access',`course_id=eq.${course.id}&user_id=eq.${userId}`,{ revoked:true })
     const revoked = accessList.find(a=>a.user_id===userId)
-    dbInsert('audit_logs',{ action:'course_revoked', actor_id:myUUID, actor_name:(dbProfile?.name||info.name),
+    dbInsert('audit_logs',{ action:'course_revoked', actor_id:myUUID, actor_name:(dbProfile?.name||currentUser?.name||'User'),
       actor_role:roleEff, target_type:'course_access', target_id:userId,
       details:{ name:course.title, user:revoked?.user_name } }).catch(()=>{})
     setAccessList(prev=>prev.filter(a=>a.user_id!==userId))

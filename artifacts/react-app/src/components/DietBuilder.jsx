@@ -28,12 +28,6 @@ function useIsMobile(bp = 768) {
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach' },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client' },
-  'admin@edencomms.io': { uuid:null,                                    name:'Eden Admin',      role:'super_admin' },
-}
-
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
   surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
@@ -805,9 +799,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .catch(()=>{})
   },[currentUser?.email])
   const email   = currentUser?.email||''
-  const info    = KNOWN_USERS[email]||{role:'client',name:'User'}
-  // Real identity: resolve the profile from the DB so real (non-demo) users work everywhere.
-  // Demo accounts keep working via KNOWN_USERS; real accounts get their DB row.
+  const info    = {role:currentUser?.role||'client',name:currentUser?.name||'User'}
+  // Real identity: resolve the profile from the DB so every user works everywhere.
   const [dbProfile, setDbProfile] = useState(null)
   useEffect(()=>{
     if (!email) { setDbProfile(null); return }
@@ -815,10 +808,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .then(rows=>setDbProfile(rows?.[0]||null))
       .catch(()=>setDbProfile(null))
   },[email])
-  // The client's assigned coach: demo accounts map to the demo coach; real clients use their DB coach_id
-  const myCoachId = KNOWN_USERS[email] ? KNOWN_USERS['coach@eden.io'].uuid : (dbProfile?.coach_id || null)
+  // The client's assigned coach comes from their DB coach_id
+  const myCoachId = dbProfile?.coach_id || null
   // Prefer the role passed in currentUser (coach viewing a client's tools)
-  // over the KNOWN_USERS lookup, which would always return 'client' for client emails
   const role    = currentUser?.role || info.role
   const isCoach = role==='coach'||role==='super_admin'
   const isClient= role==='client'
@@ -828,7 +820,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // null until resolved; Eden org id for Eden staff and any user without a profile row.
   const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
   const [myCompanyId, setMyCompanyId] = useState(null)
-  const [myUUID, setMyUUID] = useState(()=>KNOWN_USERS[email]?.uuid||null)
+  const [myUUID, setMyUUID] = useState(null)
   // Does this org's tier include the Recipe Book? Eden always true; WL orgs resolved
   // from organizations.plan → packages.includes_recipes (Eden admin controls both).
   // null = still resolving — hide recipe UI until known.
@@ -842,7 +834,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       const cid = rows?.[0]?.company_id || EDEN_ORG_ID
       if (stale) return
       setMyCompanyId(cid)
-      setMyUUID(rows?.[0]?.id || KNOWN_USERS[email]?.uuid || null)
+      setMyUUID(rows?.[0]?.id || null)
       if (cid===EDEN_ORG_ID) { setTierRecipes(true) }
       else {
         const org = await dbGet('organizations',`id=eq.${cid}&select=plan`)

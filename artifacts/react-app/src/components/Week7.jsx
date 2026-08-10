@@ -35,11 +35,6 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const DAILY_DOMAIN = 'edencommunications'
 
-const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach', role:'coach',       orgId:'b0000000-0000-0000-0000-000000000001' },
-  'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',   role:'super_admin', orgId:'b0000000-0000-0000-0000-000000000001' },
-}
-
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
 // Demo roster removed — the team list loads live from the database.
@@ -136,7 +131,7 @@ function NavItem({ icon, label, active, onClick, badge }) {
 export default function Week7({ currentUser, initialDm }) {
   const isMobile = useIsMobile()
   const email  = currentUser?.email || ''
-  const info   = KNOWN_USERS[email] || { role:currentUser?.role||'coach', name:currentUser?.name||'User', uuid:null, orgId:EDEN_ORG_ID }
+  const info   = { role:currentUser?.role||'coach', name:currentUser?.name||'User', uuid:null, orgId:EDEN_ORG_ID }
   const [self, setSelf] = useState(info)
   const myUUID = self.uuid
   const myName = self.name
@@ -146,8 +141,8 @@ export default function Week7({ currentUser, initialDm }) {
   // Team roster from DB (coaches, head coaches, VAs, admins) — falls back to demo list
   const [team, setTeam] = useState(DEMO_COACHES)
   useEffect(()=>{
-    // Resolve own profile from DB when not in the hardcoded map (VAs, new staff…)
-    if (!info.uuid && email) {
+    // Resolve own profile from the DB
+    if (email) {
       dbGet('user_profiles', `email=eq.${encodeURIComponent(email)}&select=id,name,full_name,role,company_id`)
         .then(rows=>{
           const me = rows?.[0]

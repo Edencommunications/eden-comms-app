@@ -14,12 +14,6 @@ import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach' },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client' },
-  'admin@edencomms.io': { uuid:null,                                    name:'Eden Admin',      role:'super_admin' },
-}
-
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
   surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
@@ -89,15 +83,13 @@ export default function Notifications({ currentUser, onNavigate }) {
   const panelRef = useRef(null)
 
   const email  = currentUser?.email || ''
-  const info   = KNOWN_USERS[email] || { role: currentUser?.role || 'client', name: currentUser?.name || 'User', uuid:null }
+  const info   = { role: currentUser?.role || 'client', name: currentUser?.name || 'User', uuid:null }
   const role   = info.role
 
-  // Resolve the real profile UUID from the database (KNOWN_USERS only covers
-  // legacy demo accounts — real coaches/admins must be looked up by email).
-  const [myUUID, setMyUUID] = useState(info.uuid)
+  // Resolve the real profile UUID from the database by email.
+  const [myUUID, setMyUUID] = useState(null)
   useEffect(() => {
     let live = true
-    if (info.uuid) { setMyUUID(info.uuid); return }
     if (!email) { setMyUUID(null); return }
     dbGet('user_profiles', `email=eq.${encodeURIComponent(email)}&select=id`)
       .then(rows => { if (live) setMyUUID(Array.isArray(rows) ? rows[0]?.id || null : null) })

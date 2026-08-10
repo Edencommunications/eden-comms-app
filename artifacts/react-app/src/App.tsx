@@ -4825,7 +4825,7 @@ function ClientProgressScreen({ currentUser }: { currentUser: any }) {
   }, [modalIdx, checkins])
 
   // Determine UUID — works for demo and live Supabase users
-  // KNOWN_USERS is defined in Messaging.jsx scope; in App.tsx we use the email to query user_profiles
+  // Identity is resolved from user_profiles by email — no hardcoded account maps.
   const myEmail = currentUser?.email
 
   useEffect(() => { load() }, [myEmail])

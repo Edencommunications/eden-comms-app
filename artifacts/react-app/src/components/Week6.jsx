@@ -72,12 +72,6 @@ function useIsMobile(bp = 768) {
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach',       coachId:null },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client',      coachId:'414b1fb3-f38c-4480-bdb2-fe7b1d844051' },
-  'admin@edencomms.io': { uuid:'00000000-0000-0000-0000-000000000001', name:'Eden Admin',      role:'super_admin', coachId:null },
-}
-
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
 const C = {
@@ -363,12 +357,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   useLoomOn() // re-render when the app-wide visible-names list changes
   const isMobile = useIsMobile()
   const email    = currentUser?.email||''
-  // Real logins carry their role from App.tsx; KNOWN_USERS only covers legacy demo emails.
-  const info     = KNOWN_USERS[email]||{role:currentUser?.role||'client',name:currentUser?.name||'User',uuid:null}
-  // Real users aren't in KNOWN_USERS — resolve their profile id from the DB.
+  // Logins carry their role/name from App.tsx (loaded from user_profiles).
+  const info     = {role:currentUser?.role||'client',name:currentUser?.name||'User',uuid:null}
+  // Resolve the profile id from the DB.
   const [dbUUID, setDbUUID] = useState(null)
   useEffect(()=>{
-    if (info.uuid || !email) return
+    if (!email) return
     dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id`)
       .then(rows=>{ if (Array.isArray(rows)&&rows[0]?.id) setDbUUID(rows[0].id) }).catch(()=>{})
   },[email])

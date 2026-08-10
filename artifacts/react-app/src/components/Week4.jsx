@@ -23,12 +23,6 @@ function useIsMobile(bp = 768) {
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-const KNOWN_USERS = {
-  'coach@eden.io':      { uuid:'414b1fb3-f38c-4480-bdb2-fe7b1d844051', name:'Coach',    role:'coach' },
-  'client@eden.io':     { uuid:'ece58b33-3f2a-4ce7-bed9-a157c914056c', name:'Client', role:'client' },
-  'admin@edencomms.io': { uuid:null,                                    name:'Eden Admin',      role:'super_admin' },
-}
-
 // GHL calendar URL for Lifestyle of Eden
 // White-label coaches replace this with their own GHL or Calendly link
 const DEFAULT_CALENDAR_URL = 'https://links.lifestyleofeden.com/widget/booking/2kKUGzYZqAaNBVpd5uzA'
@@ -214,27 +208,26 @@ export default function Week4({currentUser, initialTab='labs', onBack}) {
       .catch(()=>{})
   },[currentUser?.email])
   const email   = currentUser?.email||''
-  const info    = KNOWN_USERS[email]||{role:'client',name:'User',uuid:null}
-  // Prefer the role passed in currentUser (App.tsx sets role:user.role on toolUser so a coach
-  // viewing a client still sees coach controls), fall back to KNOWN_USERS lookup.
-  const role    = currentUser?.role || info.role
-  const myUUID  = info.uuid
+  // Role comes from currentUser (App.tsx sets role:user.role on toolUser so a coach
+  // viewing a client still sees coach controls).
+  const role    = currentUser?.role || 'client'
   const isCoach  = role==='coach'||role==='super_admin'
   const isClient = role==='client'
   const isAdmin  = role==='super_admin'
 
-  // Real identity: demo accounts keep the demo client/coach; real users resolve
-  // their own profile (and assigned coach) from the DB so labs/workouts save to
-  // the right person instead of the demo account.
+  // Real identity: every user resolves their own profile (and assigned coach)
+  // from the DB so labs/workouts save to the right person.
   const [dbProfile, setDbProfile] = useState(null)
   useEffect(()=>{
-    if (!email || KNOWN_USERS[email]) { setDbProfile(null); return }
-    dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,coach_id`)
+    if (!email) { setDbProfile(null); return }
+    dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,name,full_name,coach_id`)
       .then(rows=>setDbProfile(rows?.[0]||null))
       .catch(()=>setDbProfile(null))
   },[email])
-  const CLIENT_UUID = KNOWN_USERS[email] ? KNOWN_USERS['client@eden.io'].uuid : (dbProfile?.id || null)
-  const COACH_UUID  = KNOWN_USERS[email] ? KNOWN_USERS['coach@eden.io'].uuid  : (dbProfile?.coach_id || null)
+  const myUUID  = dbProfile?.id || null
+  const myName  = dbProfile?.name || dbProfile?.full_name || currentUser?.name || 'User'
+  const CLIENT_UUID = dbProfile?.id || null
+  const COACH_UUID  = dbProfile?.coach_id || null
 
   // ── Main tab ──────────────────────────────────────────────
   const [tab, setTab] = useState(initialTab)
@@ -410,7 +403,7 @@ Training Principles:
         client_id:    CLIENT_UUID,
         coach_id:     COACH_UUID,
         uploaded_by:  myUUID,
-        uploader_name:info.name,
+        uploader_name:myName,
         lab_type:     newLabType,
         file_url:     fileUrl,
         file_name:    file.name,
@@ -427,7 +420,7 @@ Training Principles:
         notifyLabPeople(
           [CLIENT_UUID, COACH_UUID],
           'lab_uploaded',
-          `🧪 ${info.name} uploaded a new ${newLabType} lab`
+          `🧪 ${myName} uploaded a new ${newLabType} lab`
         )
       }
     } catch(err) {
@@ -435,7 +428,7 @@ Training Principles:
       // Still save the record even if storage fails
       await dbInsert('lab_results',{
         client_id:CLIENT_UUID, coach_id:COACH_UUID,
-        uploaded_by:myUUID, uploader_name:info.name,
+        uploaded_by:myUUID, uploader_name:myName,
         lab_type:newLabType, notes:withLabDate(newLabNote, newLabDate),
         file_name:file.name, file_size:file.size,
         loom_url:newLabLoomUrl||null,
@@ -457,7 +450,7 @@ Training Principles:
       if (!rid || rid === myUUID || seen.has(rid)) continue
       seen.add(rid)
       sendNotification({
-        recipientId: rid, senderId: myUUID, senderName: info.name,
+        recipientId: rid, senderId: myUUID, senderName: myName,
         type, body, linkTo: 'labs',
       })
     }
@@ -469,7 +462,7 @@ Training Principles:
     const inserted = await dbInsert('lab_comments',{
       lab_id:      labId,
       author_id:   myUUID,
-      author_name: info.name,
+      author_name: myName,
       author_role: role,
       content:     text,
     })
@@ -483,7 +476,7 @@ Training Principles:
       notifyLabPeople(
         [lab?.client_id, lab?.coach_id, lab?.uploaded_by, ...prior],
         'update_note',
-        `📝 ${info.name} commented on ${lab?.lab_type || 'a lab'}: "${text.slice(0, 80)}"`
+        `📝 ${myName} commented on ${lab?.lab_type || 'a lab'}: "${text.slice(0, 80)}"`
       )
     }
   }
@@ -644,7 +637,7 @@ Training Principles:
     // Alert the client their plan changed (skip self — clients can't save, but be safe)
     if (CLIENT_UUID && CLIENT_UUID !== myUUID) {
       await sendNotification({
-        recipientId: CLIENT_UUID, senderId: COACH_UUID || myUUID, senderName: info.name,
+        recipientId: CLIENT_UUID, senderId: COACH_UUID || myUUID, senderName: myName,
         type: 'workout_update', body: '💪 Your coach updated your workout & cardio plan',
         linkTo: 'workout',
       })
