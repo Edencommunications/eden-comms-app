@@ -17,24 +17,22 @@ import { supabase as authClient } from '../supabaseClient'
 import { LN, loomShow, loomIsShown, useLoomOn } from './LoomPrivacy'
 import { AUD_PAGE, auditPageQuery } from '../lib/auditKeyset'
 
-// Create a real (Supabase Auth) login for a new user via the API server.
-// Requires the signed-in admin's own auth session (JWT) — the server verifies
-// the token and the super_admin role before provisioning.
-async function provisionLogin(email, password, name, role) {
+// Create a full account (login + profile + access records) atomically on the
+// API server. The server owns the whole workflow, so a raced or retried
+// request can never leave a duplicate profile — it answers 409 instead.
+async function createAccount(payload) {
   try {
     const { data } = await authClient.auth.getSession()
     const token = data?.session?.access_token
     if (!token) return { ok:false, error:"Your session can't authorize this — sign out and back in, then try again" }
-    const res = await fetch('/api/auth/provision', {
+    const res = await fetch('/api/auth/create-account', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ email, password, name, role }),
+      body: JSON.stringify(payload),
     })
     const body = await res.json().catch(()=>({}))
-    if (!res.ok) return { ok:false, error: body.error || 'auth service unavailable' }
-    // Pass the server's "welcome email sent" flag through so the UI can tell
-    // the admin whether the login details were emailed automatically.
-    return { ok:true, emailed: !!body.emailed }
+    if (!res.ok) return { ok:false, duplicate: !!body.duplicate, error: body.error || 'auth service unavailable' }
+    return { ok:true, profileId: body.profileId, emailed: !!body.emailed }
   } catch(e) {
     return { ok:false, error:'auth service unreachable' }
   }
@@ -615,8 +613,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const emails = [...new Set(raw.map(r=>r.email).filter(e=>EMAIL_RE.test(e)))]
     let existing = new Set()
     if (emails.length) {
-      const inList = encodeURIComponent(emails.map(e=>`"${e}"`).join(','))
-      const found = await dbGet('user_profiles',`select=email&email=in.(${inList})`)
+      // Case-insensitive match (ilike, no wildcards) so Bob@x.com is flagged
+      // even if the existing row was saved as bob@x.com
+      const orList = emails.map(e=>`email.ilike.${e.replace(/[%_\\(),]/g,'')}`).join(',')
+      const found = await dbGet('user_profiles',`select=email&or=(${encodeURIComponent(orList)})`)
       if (Array.isArray(found)) existing = new Set(found.map(f=>(f.email||'').toLowerCase()))
     }
 
@@ -643,38 +643,17 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const created=[], failed=[]
     const coachName = allCoaches.find(c=>c.uuid===acCoachId)?.name||''
     for (const r of ready) {
-      const initials = r.name.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
       const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
-      // Real login first (Supabase Auth — hashed, must set own password on first sign-in)
-      const authRes = await provisionLogin(r.email, tempPass, r.name, 'client')
-      if (!authRes.ok) { failed.push({email:r.email, reason:authRes.error||'Could not create their login'}); continue }
+      // One atomic server call: login + profile + coach access record.
+      // A duplicate (even one created a split second ago) comes back as a
+      // clean rejection instead of a second account.
+      const authRes = await createAccount({
+        email: r.email, password: tempPass, name: r.name, role: 'client',
+        coach_id: acCoachId, update_day: acCheckInDay, phone: r.phone||null,
+      })
+      if (!authRes.ok) { failed.push({email:r.email, reason:authRes.error||'Could not create their account'}); continue }
       const emailed = !!authRes.emailed
-      const payload = {
-        id:            crypto.randomUUID(),
-        name:          r.name,
-        email:         r.email,
-        phone:         r.phone||null,
-        role:          'client',
-        initials,
-        company_id:    adminCompanyId||null,
-        coach_id:      acCoachId,
-        update_day:    acCheckInDay,
-      }
-      const res = await dbInsert('user_profiles', payload)
-      const profileId = Array.isArray(res)?res[0]?.id:res?.id
-      if (!profileId) { failed.push({email:r.email, reason:'Could not save to the database'}); continue }
-      // Coach access record — same convention as the single Add User flow
-      if (adminCompanyId) {
-        try {
-          await dbInsert('client_access',{
-            company_id:  adminCompanyId,
-            staff_id:    acCoachId,
-            client_id:   profileId,
-            permissions: {messages:true,diet:true,labs:true,workout:true,checkins:true,habits:true},
-            assigned_by: adminProfileId||null,
-          })
-        } catch(e) {}
-      }
+      const profileId = authRes.profileId
       created.push({name:r.name, email:r.email, tempPass, emailed})
       setClients(prev=>[...prev,{
         uuid:profileId, name:r.name, email:r.email, role:'client',
@@ -1647,7 +1626,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
     // Check for an existing account with this email before inserting (same guard as bulk Add Clients)
     try {
-      const existing = await dbGet('user_profiles', `email=eq.${encodeURIComponent(emailNorm)}&select=id`)
+      // ilike with no wildcards = exact case-insensitive match, so Bob@x.com
+      // is caught even if the row was saved as bob@x.com
+      const existing = await dbGet('user_profiles', `email=ilike.${encodeURIComponent(emailNorm.replace(/[%_\\]/g,''))}&select=id`)
       if (Array.isArray(existing) && existing.length > 0) {
         alert('This email already has an account. Use a different email, or find the existing user instead of adding a new one.')
         return
@@ -1657,77 +1638,54 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       return
     }
 
-    const initials = newUser.name.trim().split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2)
     const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
 
-    // Create their real login first (Supabase Auth — hashed password, forced
-    // "set your own password" on first sign-in). No plain-text storage.
-    let emailedLogin = false
-    try {
-      const authRes = await provisionLogin(emailNorm, tempPass, newUser.name.trim(), newUser.role)
-      if (!authRes.ok) {
-        alert(`Could not create this user's login: ${authRes.error || 'auth service unavailable'}. No account was created.`)
-        return
-      }
-      emailedLogin = !!authRes.emailed
-    } catch(e) {
-      alert('Could not reach the auth service — no account was created. Please try again.')
-      return
-    }
+    // org_admin = a white-label company's admin: stored as super_admin scoped to their org
+    const targetOrg = newUser.role==='org_admin' ? orgs.find(o=>o.name===newUser.orgName&&o.isWhiteLabel) : null
+    if (newUser.role==='org_admin' && !targetOrg) { alert('Pick which organization this admin belongs to.'); return }
 
-    // Write to Supabase user_profiles (the app identity record — no password stored here)
-    let profileId = null
-    try {
-      // org_admin = a white-label company's admin: stored as super_admin scoped to their org
-      const targetOrg = newUser.role==='org_admin' ? orgs.find(o=>o.name===newUser.orgName&&o.isWhiteLabel) : null
-      if (newUser.role==='org_admin' && !targetOrg) { alert('Pick which organization this admin belongs to.'); return }
-      const payload = {
-        id:         crypto.randomUUID(),
-        name:       newUser.name.trim(),
-        email:      newUser.email.trim().toLowerCase(),
-        role:       newUser.role==='org_admin' ? 'super_admin' : newUser.role,
-        initials,
-        company_id: targetOrg ? targetOrg.id : (adminCompanyId||null),
-        update_day: newUser.role==='client'?newUser.checkInDay:null,
-      }
-      const result = await dbInsert('user_profiles', payload)
-      profileId = Array.isArray(result)?result[0]?.id:result?.id
-    } catch(e) { /* handled below */ }
-    if (!profileId) {
-      alert('Could not save this user to the database — their login will NOT work. Please check the details and try again.')
-      return
-    }
-
-    // Staff custom title + manual access control — stored zero-DDL in admin_settings
-    // as key staff_meta:<profileId> → {label, tabs:['home','msgs','team']}
+    // Staff custom title + tab access ride along so the server saves them too
+    let staffMeta = null
     if (['va','head_coach','staff'].includes(newUser.role)) {
       const tabs = []
       if (newUser.accessHome) tabs.push('home')
       if (newUser.accessMsgs) tabs.push('msgs')
       if (newUser.accessTeam) tabs.push('team')
-      const meta = { label: newUser.title.trim() || null, tabs: tabs.length ? tabs : ['team'] }
-      try {
-        await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
-          method:'POST',
-          headers:{ ...H, 'Prefer':'resolution=merge-duplicates,return=minimal' },
-          body: JSON.stringify({ company_id: adminCompanyId, key:`staff_meta:${profileId}`, value: JSON.stringify(meta) }),
-        })
-        notifyStaffMetaChanged(profileId)
-      } catch(e) {}
+      staffMeta = { label: newUser.title.trim() || null, tabs: tabs.length ? tabs : ['team'] }
     }
 
-    // If client, create a client_access record linking to their coach
-    if (newUser.role==='client' && newUser.coachId && profileId && adminCompanyId) {
-      try {
-        await dbInsert('client_access',{
-          company_id:  adminCompanyId,
-          staff_id:    newUser.coachId,
-          client_id:   profileId,
-          permissions: {messages:true,diet:true,labs:true,workout:true,checkins:true,habits:true},
-          assigned_by: adminProfileId||null,
-        })
-      } catch(e) {}
+    // One atomic server call: login + user_profiles row + client_access +
+    // staff meta. The server rejects duplicates (409) even if another admin
+    // added the same email a split second ago — no partial account remains.
+    let emailedLogin = false, profileId = null
+    try {
+      const authRes = await createAccount({
+        email: emailNorm,
+        password: tempPass,
+        name: newUser.name.trim(),
+        role: newUser.role==='org_admin' ? 'super_admin' : newUser.role,
+        company_id: targetOrg ? targetOrg.id : undefined,
+        coach_id: newUser.role==='client' ? (newUser.coachId||null) : null,
+        update_day: newUser.role==='client' ? newUser.checkInDay : null,
+        staff_meta: staffMeta || undefined,
+      })
+      if (!authRes.ok) {
+        alert(authRes.duplicate
+          ? (authRes.error || 'This email already has an account.')
+          : `Could not create this user's account: ${authRes.error || 'auth service unavailable'}. No account was created.`)
+        return
+      }
+      emailedLogin = !!authRes.emailed
+      profileId = authRes.profileId || null
+    } catch(e) {
+      alert('Could not reach the auth service — no account was created. Please try again.')
+      return
     }
+    if (!profileId) {
+      alert('Could not save this user — please try again.')
+      return
+    }
+    if (staffMeta) { try { notifyStaffMetaChanged(profileId) } catch(e) {} }
 
     // Add to local demo list
     const localUser = {

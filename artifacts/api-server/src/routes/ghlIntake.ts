@@ -21,7 +21,7 @@ import { Router, type IRouter, type Request } from "express";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { sendEmail, welcomeEmail } from "../lib/mailer";
 import { logger } from "../lib/logger";
-import { provisionAuthUser } from "./auth";
+import { provisionNewAuthUser } from "./auth";
 import { requireStaff } from "./checkinForm";
 
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
@@ -202,7 +202,8 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
   // Duplicate check — same email already has a profile
   const existing = await dbGet(
     "user_profiles",
-    `email=eq.${encodeURIComponent(email)}&select=id,company_id,role`,
+    // ilike (no wildcards) = exact case-insensitive match
+    `email=ilike.${encodeURIComponent(email.replace(/[%_\\]/g, ""))}&select=id,company_id,role`,
   );
   if (existing.length) {
     logWebhook({
@@ -230,9 +231,23 @@ router.post("/webhooks/ghl-intake/:companyId", async (req, res) => {
   // Create the real (Supabase Auth) login first — hashed password, forced
   // "set your own password" on first sign-in. No plain-text storage.
   const tempPass = `Eden${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.floor(10 + Math.random() * 90)}!`;
-  const auth = await provisionAuthUser(email, tempPass, name, true,
+  // Duplicate-rejecting provisioning: if this webhook retries, or races the
+  // admin Add flows, the auth system's unique login email breaks the tie and
+  // we bail out here — the profile insert below never runs for the loser.
+  const auth = await provisionNewAuthUser(email, tempPass, name,
     { company_id: companyId, intended_role: "client" });
-  if (!auth.ok) return fail(500, "error", `Could not create login for client: ${auth.error}`);
+  if (!auth.ok) {
+    if (auth.duplicate) {
+      logWebhook({
+        at: new Date().toISOString(),
+        companyId,
+        status: "duplicate",
+        detail: `${email} already has an account — no changes made`,
+      });
+      return res.status(200).json({ ok: true, duplicate: true, message: `${email} already has an account` });
+    }
+    return fail(500, "error", `Could not create login for client: ${auth.error}`);
+  }
 
   const initials = name.split(" ").filter(Boolean).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
   const profile: Record<string, unknown> = {

@@ -28,6 +28,7 @@
 //   change-password). It can never touch non-demo emails.
 
 import { Router, type IRouter, type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
 import { logger } from "../lib/logger";
 import { mailerConfigured, resetEmail, sendEmail, welcomeEmail } from "../lib/mailer";
 
@@ -89,17 +90,85 @@ export async function provisionAuthUser(
   return { ok: false, error: String(body?.msg || body?.message || `Auth API error (${r.status})`) };
 }
 
-/** Locate a Supabase Auth user's id by email — strictly read-only.
+/** Case-insensitive "does any profile already use this email?" check.
+ *  user_profiles has NO unique email index (external Supabase, schema is
+ *  frozen — no DDL possible from this workspace), so every account-creation
+ *  flow must go through the duplicate-rejecting provisioning below instead
+ *  of trusting its own check-then-insert. */
+export async function profileEmailExists(email: string, excludeId?: string): Promise<boolean> {
+  // ilike with pattern metacharacters stripped = exact case-insensitive match
+  const rows = await dbGet(
+    "user_profiles",
+    `email=ilike.${encodeURIComponent(email.trim().toLowerCase().replace(/[%_\\]/g, ""))}&select=id`,
+  );
+  return rows.some((r: any) => !excludeId || r.id !== excludeId);
+}
+
+export type ProvisionNewResult =
+  | { ok: true; repairedOrphan: boolean; authUserId: string | null }
+  | { ok: false; duplicate?: true; error: string };
+
+// An auth user created within this window is assumed to be another request's
+// in-flight account creation (its profile insert may not have landed yet) —
+// never "orphan-repair" it, or we'd clobber the winner's password and create
+// the duplicate profile this guard exists to prevent.
+const ORPHAN_MIN_AGE_MS = 10 * 60_000;
+
+/** Duplicate-rejecting provisioning for NEW accounts — the single primitive
+ *  every account-creation flow must use. The DB-level backstop is auth.users'
+ *  unique email (the only uniqueness the frozen schema gives us): when two
+ *  requests race, exactly one create succeeds; the loser lands in the
+ *  `existed` branch and is turned into a duplicate rejection, so its profile
+ *  insert never happens. A genuinely old orphaned login (auth user, no
+ *  profile — from a past partial failure) is repaired instead: its password
+ *  is reset to the generated one so the credentials handed out are real. */
+export async function provisionNewAuthUser(
+  email: string,
+  password: string,
+  name?: string,
+  extraMeta: Record<string, string> = {},
+): Promise<ProvisionNewResult> {
+  const emailNorm = email.trim().toLowerCase();
+  const dupMsg = "This email already has an account — no new account was created.";
+  // Pre-check (case-insensitive) — catches the common non-race duplicate cheaply.
+  if (await profileEmailExists(emailNorm)) return { ok: false, duplicate: true, error: dupMsg };
+  const prov = await provisionAuthUser(emailNorm, password, name, true, extraMeta);
+  if (!prov.ok) return { ok: false, error: prov.error };
+  if (!prov.existed) return { ok: true, repairedOrphan: false, authUserId: prov.authUserId };
+  // Auth login already exists. Post-check the profile: if one landed (we lost
+  // a race, or the pre-check raced a concurrent insert), it's a duplicate.
+  if (await profileEmailExists(emailNorm)) return { ok: false, duplicate: true, error: dupMsg };
+  // No profile → orphan candidate. Only repair OLD logins; a fresh one is a
+  // concurrent creation whose profile is still in flight.
+  const user = await findAuthUserByEmail(emailNorm);
+  if (!user) return { ok: false, error: "A login for this email already exists but couldn't be looked up — try again" };
+  const createdAt = Date.parse(String(user.created_at || "")) || 0;
+  if (!createdAt || Date.now() - createdAt < ORPHAN_MIN_AGE_MS) {
+    return { ok: false, duplicate: true, error: dupMsg };
+  }
+  const reset = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
+    method: "PUT",
+    headers: restHeaders(SERVICE_KEY),
+    body: JSON.stringify({ password, email_confirm: true, user_metadata: { must_change_password: true, ...(name ? { name } : {}), ...extraMeta } }),
+  });
+  if (!reset.ok) {
+    return { ok: false, error: "A login for this email already exists but couldn't be reset — remove it in Supabase Auth or use the password-reset flow" };
+  }
+  logger.info({ email: emailNorm }, "[Auth] repaired orphaned auth login (password reset, profile pending)");
+  return { ok: true, repairedOrphan: true, authUserId: String(user.id) };
+}
+
+/** Locate a Supabase Auth user by email — strictly read-only.
  *  Tries the admin list with the `filter` param first (fast path on GoTrue
  *  versions that support it), then falls back to plain pagination through
  *  GET /admin/users, matching the exact email. Never creates or mutates
  *  auth state. */
-async function findAuthUserIdByEmail(email: string): Promise<string | null> {
-  const matchIn = (users: any[]): string | null => {
+export async function findAuthUserByEmail(email: string): Promise<{ id: string; created_at?: string } | null> {
+  const matchIn = (users: any[]): { id: string; created_at?: string } | null => {
     const hit = (Array.isArray(users) ? users : []).find(
       (u: any) => String(u?.email || "").toLowerCase() === email,
     );
-    return hit?.id ? String(hit.id) : null;
+    return hit?.id ? { id: String(hit.id), created_at: hit.created_at } : null;
   };
   try {
     const lr = await fetch(
@@ -108,8 +177,8 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
     );
     if (lr.ok) {
       const lb: any = await lr.json().catch(() => ({}));
-      const id = matchIn(lb?.users);
-      if (id) return id;
+      const hit = matchIn(lb?.users);
+      if (hit) return hit;
     }
   } catch {}
   // Fallback: full pagination (read-only). Bounded to keep the request sane.
@@ -124,12 +193,16 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
       if (!r.ok) break;
       const b: any = await r.json().catch(() => ({}));
       const users = Array.isArray(b?.users) ? b.users : [];
-      const id = matchIn(users);
-      if (id) return id;
+      const hit = matchIn(users);
+      if (hit) return hit;
       if (users.length < PER_PAGE) break; // last page
     }
   } catch {}
   return null;
+}
+
+async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+  return (await findAuthUserByEmail(email))?.id || null;
 }
 
 // ── Caller verification: real Supabase JWT, then role check ──────
@@ -177,8 +250,173 @@ function clientIp(req: Request): string {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
+
+// ── Per-email serialization ──────────────────────────────────────
+// Two same-email account creations hitting THIS server run one after the
+// other, so the second sees the first's profile and gets a clean duplicate
+// rejection. (Cross-instance races are still caught by auth.users' unique
+// email inside provisionNewAuthUser.)
+const emailLocks = new Map<string, Promise<unknown>>();
+async function withEmailLock<T>(email: string, fn: () => Promise<T>): Promise<T> {
+  const tail = emailLocks.get(email) || Promise.resolve();
+  const run = tail.then(fn, fn);
+  const settled = run.then(() => undefined, () => undefined);
+  emailLocks.set(email, settled);
+  settled.then(() => { if (emailLocks.get(email) === settled) emailLocks.delete(email); });
+  return run;
+}
+
+// Welcome email with login details — best-effort, never fails the creation.
+async function sendWelcomeForAdmin(
+  adminCompanyId: string | null,
+  email: string,
+  password: string,
+  name?: string,
+): Promise<boolean> {
+  let emailed = false;
+  if (!mailerConfigured()) return false;
+  try {
+    let orgName = "Eden Communications";
+    let orgSlug: string | null = null;
+    if (adminCompanyId) {
+      const org = await dbGet("organizations", `id=eq.${encodeURIComponent(adminCompanyId)}&select=name,slug`);
+      if (org?.[0]?.name) orgName = org[0].name;
+      if (org?.[0]?.slug) orgSlug = org[0].slug;
+      if (!org?.[0]?.name) {
+        // Legacy fallback: companies row without a mirrored organization
+        const co = await dbGet("companies", `id=eq.${encodeURIComponent(adminCompanyId)}&select=name`);
+        if (co?.[0]?.name) orgName = co[0].name;
+      }
+    }
+    const m = welcomeEmail({ clientName: name || email, email, tempPassword: password, orgName, orgSlug });
+    const sent = await sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text, fromName: orgName });
+    emailed = !!sent.ok;
+    if (!sent.ok) logger.warn({ email, error: sent.error }, "[Auth] welcome email failed");
+  } catch (e) {
+    logger.warn({ err: e }, "[Auth] welcome email errored");
+  }
+  try {
+    const { recordInviteEmail } = await import("./invites");
+    await recordInviteEmail(adminCompanyId || EDEN_ORG_ID, email, emailed);
+  } catch {}
+  return emailed;
+}
 
 const router: IRouter = Router();
+
+// POST /auth/create-account — the atomic account-creation endpoint used by
+// the admin Add User / Add Clients UIs. The server owns BOTH steps (login
+// provisioning through the duplicate-rejecting primitive, then the
+// user_profiles insert with the service key), so the browser never inserts
+// profiles directly and a retried/raced request cannot create a duplicate.
+router.post("/auth/create-account", async (req: Request, res: Response) => {
+  const admin = await requireAdminJwt(req);
+  if (!admin) return res.status(403).json({ ok: false, error: "Not authorized" });
+  if (!SERVICE_KEY) return res.status(503).json({ ok: false, error: "Auth service is not configured" });
+  const b = (req.body || {}) as Record<string, any>;
+  const email = String(b.email || "").trim().toLowerCase();
+  const password = String(b.password || "");
+  const name = String(b.name || "").trim();
+  const role = String(b.role || "client");
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: "Valid email required" });
+  if (password.length < 8) return res.status(400).json({ ok: false, error: "Password must be at least 8 characters" });
+  if (!name) return res.status(400).json({ ok: false, error: "Name required" });
+  if (!["client", "coach", "head_coach", "va", "staff", "super_admin"].includes(role)) {
+    return res.status(400).json({ ok: false, error: "Unknown role" });
+  }
+  // Tenant scoping: admins create accounts in their own org; only Eden
+  // admins may target another org (white-label org admin creation).
+  let companyId = admin.company_id || null;
+  const target = String(b.company_id || "").trim();
+  if (target && target !== companyId) {
+    if (admin.company_id && admin.company_id !== EDEN_ORG_ID) {
+      return res.status(403).json({ ok: false, error: "You can only add users to your own organization" });
+    }
+    companyId = target;
+  }
+
+  const meta: Record<string, string> = {};
+  if (companyId) meta.company_id = companyId;
+  if (["client", "coach", "head_coach", "super_admin"].includes(role)) meta.intended_role = role;
+
+  const outcome = await withEmailLock(email, async (): Promise<
+    { ok: true; profileId: string } | { ok: false; duplicate?: true; error: string }
+  > => {
+    const prov = await provisionNewAuthUser(email, password, name, meta);
+    if (!prov.ok) return prov;
+    const initials = name.split(" ").filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+    const profile: Record<string, unknown> = {
+      id: randomUUID(),
+      name,
+      email,
+      role,
+      initials,
+      company_id: companyId,
+      coach_id: b.coach_id ? String(b.coach_id) : null,
+      update_day: b.update_day ? String(b.update_day) : null,
+    };
+    if (b.phone) profile.phone = String(b.phone);
+    const doInsert = () =>
+      fetch(`${SUPABASE_URL}/rest/v1/user_profiles`, {
+        method: "POST",
+        headers: { ...restHeaders(SERVICE_KEY), Prefer: "return=representation" },
+        body: JSON.stringify(profile),
+      });
+    let ins = await doInsert();
+    if (!ins.ok && profile.phone) {
+      delete profile.phone; // phone column may not exist
+      ins = await doInsert();
+    }
+    if (!ins.ok) {
+      const t = await ins.text().catch(() => "");
+      logger.error({ status: ins.status, body: t }, "[Auth] create-account profile insert failed");
+      // The login exists but has no profile yet — a retry repairs the orphan
+      // through the primitive and inserts the profile then.
+      return { ok: false, error: "The login was created but the profile could not be saved — please try again" };
+    }
+    const rows: any[] = (await ins.json().catch(() => [])) as any[];
+    return { ok: true, profileId: String(rows?.[0]?.id || profile.id) };
+  });
+
+  if (!outcome.ok) {
+    return res.status(outcome.duplicate ? 409 : 502).json(outcome);
+  }
+
+  // Client ↔ coach access record (best-effort, same convention as before)
+  if (role === "client" && b.coach_id && companyId) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/client_access`, {
+        method: "POST",
+        headers: { ...restHeaders(SERVICE_KEY), Prefer: "return=minimal" },
+        body: JSON.stringify({
+          company_id: companyId,
+          staff_id: String(b.coach_id),
+          client_id: outcome.profileId,
+          permissions: { messages: true, diet: true, labs: true, workout: true, checkins: true, habits: true },
+          assigned_by: admin.id,
+        }),
+      });
+    } catch {}
+  }
+
+  // Staff custom title + tab access — zero-DDL admin_settings row
+  if (b.staff_meta && typeof b.staff_meta === "object" && companyId) {
+    try {
+      const tabs = Array.isArray(b.staff_meta.tabs) ? b.staff_meta.tabs.filter((t: any) => ["home", "msgs", "team"].includes(t)) : [];
+      const metaRow = { label: b.staff_meta.label ? String(b.staff_meta.label) : null, tabs: tabs.length ? tabs : ["team"] };
+      await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+        method: "POST",
+        headers: { ...restHeaders(SERVICE_KEY), Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ company_id: companyId, key: `staff_meta:${outcome.profileId}`, value: JSON.stringify(metaRow) }),
+      });
+    } catch {}
+  }
+
+  const emailed = await sendWelcomeForAdmin(companyId, email, password, name);
+  logger.info({ adminId: admin.id, email, role, profileId: outcome.profileId }, "[Auth] account created (atomic)");
+  return res.json({ ok: true, profileId: outcome.profileId, emailed });
+});
 
 router.post("/auth/provision", async (req: Request, res: Response) => {
   const admin = await requireAdminJwt(req);
@@ -191,8 +429,34 @@ router.post("/auth/provision", async (req: Request, res: Response) => {
   const meta: Record<string, string> = {};
   if (admin.company_id) meta.company_id = admin.company_id;
   if (role && ["client", "coach", "head_coach", "super_admin"].includes(role)) meta.intended_role = role;
+
+  // Duplicate guard (server-side, case-insensitive). The browser pre-checks
+  // too, but two admins racing — or a retried request — can both pass that
+  // check. The real backstop is Supabase Auth's DB-level unique email in
+  // auth.users: this endpoint is the FIRST step of every add flow, so when
+  // two provisions race, exactly one wins and the loser gets a clean 409
+  // below (existed) — the profile insert never happens for the loser.
+  const emailNorm = email.trim().toLowerCase();
+  // ilike with no wildcards = exact case-insensitive match. Strip pattern
+  // metacharacters so they can't widen the match.
+  const dupes = await dbGet(
+    "user_profiles",
+    `email=ilike.${encodeURIComponent(emailNorm.replace(/[%_\\]/g, ""))}&select=id`,
+  );
+  if (dupes.length > 0) {
+    return res.status(409).json({ ok: false, duplicate: true, error: "This email already has an account. Use a different email, or find the existing user instead of adding a new one." });
+  }
+
   const result = await provisionAuthUser(email, password, name, true, meta);
   if (!result.ok) return res.status(502).json(result);
+  if (result.existed) {
+    // An auth login already exists for this email (possibly created a moment
+    // ago by another admin). Refuse instead of silently reusing it — the
+    // caller would otherwise create a second profile / hand out a password
+    // that doesn't match the real login.
+    logger.info({ adminId: admin.id, email: emailNorm }, "[Auth] provision refused — auth user already exists");
+    return res.status(409).json({ ok: false, duplicate: true, error: "This email already has a login. If they never received their details, use Invites → Resend instead of adding them again." });
+  }
   logger.info({ adminId: admin.id, email: email.toLowerCase() }, "[Auth] admin provisioned auth user");
   // Email the new user their login details automatically so the admin
   // never has to send credentials by hand. Best-effort: a mail failure

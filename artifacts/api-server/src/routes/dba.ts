@@ -21,7 +21,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { logger } from "../lib/logger";
 import { mailerConfigured, sendEmail, welcomeEmail, dbaAddedEmail } from "../lib/mailer";
-import { requireAdminJwt, provisionAuthUser } from "./auth";
+import { requireAdminJwt, provisionNewAuthUser } from "./auth";
 import { storeChatUpload, transcribeChatAudio, voiceMemosEnabled } from "./teamUpload";
 import { dailyKeyForOrg, validDailyKey } from "./huddle";
 
@@ -592,7 +592,9 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
 
   // Existing profile anywhere (multi-DBA membership across orgs is allowed)
   const profRows = await rest(
-    `user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name,role,is_active`,
+    // ilike (no wildcards) = exact case-insensitive match, so Bob@x.com is
+    // recognized as the existing bob@x.com account
+    `user_profiles?email=ilike.${encodeURIComponent(email.replace(/[%_\\]/g, ""))}&select=id,name,role,is_active`,
   );
   let profile = profRows[0] || null;
   if (profile && profile.is_active === false) {
@@ -602,7 +604,18 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
   let emailed = false;
   let existedLogin = !!profile;
   if (!profile) {
-    // Brand-new person: profile + pre-confirmed login with a temp password
+    // Brand-new person: login FIRST (the auth system's unique email is the
+    // DB-level duplicate backstop — a concurrent add of the same email loses
+    // that race and is rejected before any profile insert), then the profile.
+    const tempPassword = genTempPassword();
+    const prov = await provisionNewAuthUser(email, tempPassword, name, {
+      company_id: companyId!,
+      intended_role: "dba_member",
+    });
+    if (!prov.ok) {
+      if (prov.duplicate) return res.status(409).json({ ok: false, error: "That email already has an account — refresh and try adding them again" });
+      return res.status(502).json({ ok: false, error: prov.error });
+    }
     const ins = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles`, {
       method: "POST",
       headers: { ...SVC_H, Prefer: "return=representation" },
@@ -612,21 +625,12 @@ router.post("/dba/member-add", async (req: Request, res: Response) => {
       body: JSON.stringify({ id: randomUUID(), email, name, role: "client", company_id: companyId }),
     });
     const created: any[] = ins.ok ? ((await ins.json().catch(() => [])) as any[]) : [];
+    // A failed profile insert leaves an orphaned login; a retry repairs it
+    // via the shared provisioning primitive.
     if (!created[0]) return res.status(502).json({ ok: false, error: "Couldn't create the member profile — try again" });
     profile = created[0];
-
-    const tempPassword = genTempPassword();
-    const prov = await provisionAuthUser(email, tempPassword, name, true, {
-      company_id: companyId,
-      intended_role: "dba_member",
-    });
-    if (!prov.ok) {
-      // Roll the profile back so a retry starts clean
-      await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${profile.id}`, { method: "DELETE", headers: SVC_H }).catch(() => {});
-      return res.status(502).json({ ok: false, error: prov.error });
-    }
-    existedLogin = prov.existed;
-    if (mailerConfigured() && !prov.existed) {
+    existedLogin = false; // temp password is valid even when an old orphan was repaired
+    if (mailerConfigured()) {
       const m = welcomeEmail({ clientName: name, email, tempPassword, orgName: dba.name, orgSlug: dba.slug });
       const sent = await sendEmail({ to: email, fromName: dba.name, ...m });
       emailed = !!sent.ok;

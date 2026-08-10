@@ -14,7 +14,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { sendEmail, welcomeEmail, mailerConfigured } from "../lib/mailer";
 import { logger } from "../lib/logger";
-import { provisionAuthUser, requireAdminJwt } from "./auth";
+import { provisionNewAuthUser, requireAdminJwt } from "./auth";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -47,34 +47,6 @@ type Report = { email: string; name: string; role: string; status: "created" | "
 const tempPass = () =>
   `Eden${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.floor(10 + Math.random() * 90)}!`;
 
-// A row can reach us with an auth user already in Supabase Auth but NO
-// user_profiles row (orphan from a past partial failure — we only get here
-// after the profile-existence check). The freshly generated temp password was
-// NOT set on that account, so set it explicitly before handing out
-// credentials. Never called for anyone with a live profile.
-async function setOrphanAuthPassword(email: string, password: string): Promise<boolean> {
-  try {
-    for (let page = 1; page <= 20; page++) {
-      const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=100&page=${page}`, { headers: H });
-      if (!r.ok) return false;
-      const body: any = await r.json().catch(() => ({}));
-      const users: any[] = body?.users || [];
-      if (!users.length) return false;
-      const hit = users.find((u) => String(u.email || "").toLowerCase() === email);
-      if (hit) {
-        const put = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${hit.id}`, {
-          method: "PUT",
-          headers: H,
-          body: JSON.stringify({ password, user_metadata: { ...(hit.user_metadata || {}), must_change_password: true } }),
-        });
-        return put.ok;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
 const initialsOf = (name: string) =>
   name.split(" ").filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
@@ -155,20 +127,21 @@ router.post("/admin/bulk-import", async (req: Request, res: Response) => {
     }
 
     const pass = tempPass();
-    const auth = await provisionAuthUser(r.email, pass, r.name, true,
+    // Duplicate-rejecting provisioning (shared primitive): a concurrent
+    // import / admin add of the same email loses the auth unique-email race
+    // and lands in the `duplicate` branch — no second profile is inserted.
+    // A genuinely old orphaned login (no profile, past partial failure) is
+    // repaired inside the primitive: its password is reset to `pass` so the
+    // credentials we hand out are real.
+    const auth = await provisionNewAuthUser(r.email, pass, r.name,
       { company_id: companyId, intended_role: r.role });
     if (!auth.ok) {
-      report.push({ email: r.email, name: r.name, role: r.role, status: "error", detail: `Could not create login: ${auth.error}` });
-      continue;
-    }
-    if (auth.existed) {
-      // Orphaned auth account (no profile) — the generated password isn't on
-      // it yet. Set it, or fail the row rather than hand out bad credentials.
-      const reset = await setOrphanAuthPassword(r.email, pass);
-      if (!reset) {
-        report.push({ email: r.email, name: r.name, role: r.role, status: "error", detail: "A login for this email already exists but couldn't be reset — remove it in Supabase Auth or use the password-reset flow" });
-        continue;
+      if (auth.duplicate) {
+        report.push({ email: r.email, name: r.name, role: r.role, status: "skipped", detail: "Already has an account — left untouched" });
+      } else {
+        report.push({ email: r.email, name: r.name, role: r.role, status: "error", detail: `Could not create login: ${auth.error}` });
       }
+      continue;
     }
 
     const profile: Record<string, unknown> = {
