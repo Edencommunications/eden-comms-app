@@ -221,6 +221,8 @@ test("unknown DBA id is rejected even with a matching secret", async () => {
   const ghost = "d9999999-9999-9999-9999-999999999999";
   const mod = await import("../communityPost");
   const r = await post(dbaPath(ghost), mod.communityPostDbaSecretFor(ghost), { community_id: COMM_DBA_1, message: "x" });
+  // Unknown DBA → 404 so callers know the endpoint is gone (the handler
+  // resolves the DBA before checking the secret, whose nonce it needs).
   assert.equal(r.status, 404);
   assert.equal(postedMessages.length, 0);
 });

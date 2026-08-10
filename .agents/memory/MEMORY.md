@@ -26,4 +26,5 @@
 - [Session-expiry save failures](session-expiry-saves.md) — cross-tool "Could not save" = stale JWT under RLS; keep-alive refresh in App root; audit_logs writes must go via /audit/event, never direct.
 - [Community post notifications](community-notify.md) — notify endpoints must bind to a verified fresh row, enforce org+membership server-side, and throttle via CAS-persisted admin_settings state.
 - [Supabase realtime sync](supabase-realtime.md) — admin lifecycle sync uses a Realtime channel on user_profiles with 10s polling only as disconnect fallback; pushes require the table in the supabase_realtime publication.
+- [Background-job health bar](job-health-monitoring.md) — scheduled jobs need evaluated health (staleness, misconfig, partial-failure = failed run) on /healthz, not a raw snapshot; heartbeat every run.
 - [Web app typecheck](web-typecheck.md) — react-app passes strict tsc via `: any` props + wildcard shims in src/untyped-js-modules.d.ts for legacy .jsx; don't enable allowJs (jsx inference breaks callers).
