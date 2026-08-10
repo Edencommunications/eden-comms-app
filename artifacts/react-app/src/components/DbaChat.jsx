@@ -189,6 +189,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     if (!cid) return
     const iso = new Date().toISOString()
     try { const m = getSeen(); m[cid] = iso; localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
+    try { window.dispatchEvent(new CustomEvent('hub-seen-updated')) } catch {}   // same-window listeners; cross-tab relies on the storage event
     setUnread(u => ({ ...u, [cid]: 0 }))
     pushSeenRemote(cid, iso)
   }

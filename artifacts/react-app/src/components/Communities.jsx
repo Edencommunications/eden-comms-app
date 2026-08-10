@@ -93,6 +93,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   const markSeen = (cid) => {
     if (!cid) return
     try { const m = getSeen(); m[cid] = new Date().toISOString(); localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
+    try { window.dispatchEvent(new CustomEvent('hub-seen-updated')) } catch {}   // lets Team Hub clear its nav dot instantly
     setUnread(u => ({ ...u, [cid]: 0 }))
   }
   const [unread, setUnread] = useState({})   // { communityId: count }

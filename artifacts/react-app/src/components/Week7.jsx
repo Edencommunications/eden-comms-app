@@ -203,6 +203,87 @@ export default function Week7({ currentUser, initialDm }) {
       .catch(() => {})
   }, [myUUID]) // eslint-disable-line
 
+  // ── Sidebar unread dots for Communities & My DBAs ───────────
+  // Reads the same localStorage seen-maps Communities.jsx (`community_seen_<uid>`)
+  // and DbaChat.jsx (`dba_seen_<dbaId>_<uid>`) maintain, so opening a
+  // conversation there clears the dot here on the next refresh.
+  const [commUnread, setCommUnread] = useState(false)
+  const [dbaUnread,  setDbaUnread]  = useState(false)
+  const readSeenMap = (k) => { try { return JSON.parse(localStorage.getItem(k) || '{}') } catch { return {} } }
+  const hasNewerMsg = async (communityId, since) => {
+    try {
+      const rows = await dbGet('community_messages',
+        `community_id=eq.${communityId}&created_at=gt.${encodeURIComponent(since || '1970-01-01')}&select=id,sender_id&limit=30`)
+      return Array.isArray(rows) && rows.some(m => m.sender_id !== myUUID)
+    } catch { return false }
+  }
+  async function refreshNavUnread() {
+    if (!myUUID) return
+    const isAdminNav = myRole === 'super_admin' || myRole === 'company_admin'
+    // Everything I'm a member of (team communities + DBA channels share community_members)
+    let memberIds = []
+    try { memberIds = ((await dbGet('community_members', `user_id=eq.${myUUID}&select=community_id`)) || []).map(m => m.community_id) } catch {}
+    // 1) Team communities — mirrors Communities.jsx loadCommunities() for context='team'
+    try {
+      let list = []
+      if (isAdminNav) {
+        list = (await dbGet('communities', `company_id=eq.${orgId}&context=eq.team&is_active=eq.true&select=id`)) || []
+      } else {
+        const mine  = (await dbGet('communities', `created_by=eq.${myUUID}&context=eq.team&is_active=eq.true&select=id`)) || []
+        const inIds = memberIds.length
+          ? (await dbGet('communities', `id=in.(${memberIds.join(',')})&context=eq.team&is_active=eq.true&select=id`)) || []
+          : []
+        const dedup = new Set()
+        list = [...mine, ...inIds].filter(c => { if (dedup.has(c.id)) return false; dedup.add(c.id); return true })
+      }
+      const seenMap = readSeenMap(`community_seen_${myUUID}`)
+      const hits = await Promise.all(list.map(c => hasNewerMsg(c.id, seenMap[c.id])))
+      setCommUnread(hits.some(Boolean))
+    } catch {}
+    // 2) DBA chats — group channels I'm a member of + my DMs, per-DBA seen map
+    try {
+      let any = false
+      for (const d of myDbas.filter(x => x.is_active !== false)) {
+        if (any) break
+        // Managers (DBA coach, delegated staff, super admins — anyone the server
+        // returned under scope 'mine') see every group channel, like DbaChat does.
+        const manages = dbaScope === 'mine' || myRole === 'super_admin' ||
+          d.coach_id === myUUID || (d.delegates || []).some(g => g.id === myUUID)
+        const [groups, dms] = await Promise.all([
+          manages
+            ? dbGet('communities', `context=eq.${encodeURIComponent(`dba:${d.id}`)}&is_active=eq.true&select=id`)
+            : memberIds.length
+              ? dbGet('communities', `id=in.(${memberIds.join(',')})&context=eq.${encodeURIComponent(`dba:${d.id}`)}&is_active=eq.true&select=id`)
+              : Promise.resolve([]),
+          dbGet('communities', `context=eq.${encodeURIComponent(`dbadm:${d.id}`)}&is_active=eq.true&name=like.*${myUUID}*&select=id,name`),
+        ])
+        const convos = [
+          ...(groups || []),
+          ...((dms || []).filter(c => String(c.name || '').split('_').includes(myUUID))),
+        ]
+        if (!convos.length) continue
+        const seenMap = readSeenMap(`dba_seen_${d.id}_${myUUID}`)
+        const hits = await Promise.all(convos.map(c => hasNewerMsg(c.id, seenMap[c.id])))
+        if (hits.some(Boolean)) any = true
+      }
+      setDbaUnread(any)
+    } catch {}
+  }
+  useEffect(() => {
+    if (!myUUID) return
+    refreshNavUnread()
+    const iv = setInterval(refreshNavUnread, 30000)
+    // DBA spaces open in another tab — their markSeen writes fire a storage event here
+    const onStorage = (e) => {
+      if (e.key && (e.key.startsWith('dba_seen_') || e.key.startsWith('community_seen_'))) refreshNavUnread()
+    }
+    window.addEventListener('storage', onStorage)
+    // Same-window: Communities.jsx (mounted below) fires this when a community is marked seen
+    const onSeen = () => refreshNavUnread()
+    window.addEventListener('hub-seen-updated', onSeen)
+    return () => { clearInterval(iv); window.removeEventListener('storage', onStorage); window.removeEventListener('hub-seen-updated', onSeen) }
+  }, [myUUID, orgId, myDbas.length, dbaScope, section]) // eslint-disable-line
+
   // ── Team Chat state ────────────────────────────────────────
   // Demo seed messages removed — team chat loads live from the database.
   const [messages, setMessages] = useState([])
@@ -960,10 +1041,10 @@ export default function Week7({ currentUser, initialDm }) {
   // ─── Sidebar nav items ─────────────────────────────────────
   const NAV = [
     { key:'chat',     icon:'💬', label:'Team Chat',  badge: chatUnread > 0 },
-    { key:'communities', icon:'👥', label:'Communities' },
+    { key:'communities', icon:'👥', label:'Communities', badge: commUnread && section !== 'communities' },
     { key:'calendar', icon:'🗓',  label:'My Calendar' },
     { key:'huddle',   icon:'🎙',  label:'Huddle',     badge: huddleActive || !!liveHuddle },
-    ...(myDbas.length ? [{ key:'dbas', icon:'🏷', label:'My DBAs' }] : []),
+    ...(myDbas.length ? [{ key:'dbas', icon:'🏷', label:'My DBAs', badge: dbaUnread }] : []),
   ]
 
   // ════════════════════════════════════════════════════════════
