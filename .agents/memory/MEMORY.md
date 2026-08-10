@@ -30,3 +30,4 @@
 - [Audit log server-side filtering](audit-log-filters.md) — audit filters are PostgREST params carried through keyset pagination; distinct facets via gt-resume column scans, never a single big-limit fetch.
 - [Course progress remap safety](course-progress-remap.md) — remap course_progress by primary-key snapshot, never module_id text; cyclic renumbering makes text matching ambiguous.
 - [Web app typecheck](web-typecheck.md) — react-app passes strict tsc via `: any` props + wildcard shims in src/untyped-js-modules.d.ts for legacy .jsx; don't enable allowJs (jsx inference breaks callers).
+- [Deleted-message redaction](deleted-message-redaction.md) — Team Hub chat reads go through GET /api/team/messages (service key + server-side redaction); direct RLS SELECT hides soft-deleted rows entirely. Client renders placeholders via shared DeletedBubble.

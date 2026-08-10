@@ -21,6 +21,7 @@ import metaAdsRouter from "./metaAds";
 import pushRouter from "./push";
 import reactionsRouter from "./reactions";
 import teamSeenRouter from "./teamSeen";
+import teamMessagesRouter from "./teamMessages";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(metaAdsRouter);
 router.use(pushRouter);
 router.use(reactionsRouter);
 router.use(teamSeenRouter);
+router.use(teamMessagesRouter);
 
 export default router;

@@ -8,7 +8,7 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test tests/course-move.test.mjs tests/audit-pagination.test.mjs tests/comm-seen-merge.test.mjs"
+    "test": "node --test tests/course-move.test.mjs tests/audit-pagination.test.mjs tests/comm-seen-merge.test.mjs tests/deleted-message-privacy.test.mjs"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

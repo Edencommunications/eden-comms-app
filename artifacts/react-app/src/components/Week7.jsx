@@ -16,6 +16,7 @@ import { mergeRemoteSeen } from '../lib/seenMerge'
 import Communities from './Communities'
 import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
+import DeletedBubble from './DeletedBubble'
 import { useHuddle } from './HuddleHub'
 import { ReactionBar, fetchReactions } from './Reactions'
 import { LN } from './LoomPrivacy'
@@ -310,7 +311,10 @@ export default function Week7({ currentUser, initialDm }) {
     try {
       // Fetch the NEWEST 500 rows (desc), then flip ascending for display —
       // an ascending fetch would drop recent messages once an org passes 500 rows.
-      const rows = await dbGet('team_messages', `org_id=eq.${orgId}&order=created_at.desc&limit=500`)
+      // Reads go through the api-server, which redacts deleted-message content
+      // for non-admins server-side — the original text never reaches the browser.
+      const resp = await fetch('/api/team/messages', { headers: { Authorization: sbBearer() } })
+      const rows = resp.ok ? (await resp.json())?.messages : []
       if (!Array.isArray(rows) || !rows.length) return
       rows.reverse()
       liveLoadedRef.current = true
@@ -343,7 +347,8 @@ export default function Week7({ currentUser, initialDm }) {
       for (const byParent of Object.values(dmReps)) for (const pid of Object.keys(byParent)) if (!haveIds.has(pid)) missingIds.add(pid)
       if (missingIds.size) {
         try {
-          const parents = await dbGet('team_messages', `id=in.(${[...missingIds].join(',')})&select=*`)
+          const pResp = await fetch(`/api/team/messages?ids=${[...missingIds].join(',')}`, { headers: { Authorization: sbBearer() } })
+          const parents = pResp.ok ? (await pResp.json())?.messages : []
           for (const r of (parents || [])) {
             const m = { id:r.id, senderId:r.sender_id, senderName:r.sender_name, senderRole:r.sender_role,
               content:r.content, createdAt:r.created_at, isDm:!!r.is_dm, threadId:r.thread_id,
@@ -762,11 +767,10 @@ export default function Week7({ currentUser, initialDm }) {
   function canDeleteTeamMsg(m) { return typeof m.id==='string' && m.id.length===36 && (isAdminRole || m.senderId===myUUID) }
   async function deleteTeamMsg(m) {
     if (!window.confirm('Delete this message for everyone?\nIt stays permanently visible in the admin audit log.')) return
-    const ok = await dbUpdate('team_messages', `id=eq.${m.id}`, { deleted_at:new Date().toISOString(), deleted_by:myUUID, deleted_by_name:myName })
-    if (!ok) { alert('Could not delete — run the database update first.'); return }
-    dbInsert('audit_logs', { action:'message_deleted', actor_id:myUUID, actor_name:myName, actor_role:myRole,
-      target_type:'team_message', target_id:String(m.id),
-      details:{ content:m.content, sender_id:m.senderId, sender_name:m.senderName, sent_at:m.createdAt||null, context:'team_hub', org_id:orgId } })
+    // Server-side: RLS hides deleted rows from direct reads/writes, so the
+    // soft-delete (and its audit log entry) must go through the api-server.
+    const resp = await fetch(`/api/team/messages/${m.id}/delete`, { method:'POST', headers:{ Authorization: sbBearer() } })
+    if (!resp.ok) { alert('Could not delete this message.'); return }
     loadTeamChat()
   }
   const [activeThread, setActiveThread] = useState(null)
@@ -1303,9 +1307,7 @@ export default function Week7({ currentUser, initialDm }) {
                               <span style={{fontSize:10,color:C.muted}}>{timeAgo(msg.createdAt)}</span>
                             </div>
                             {msg.deletedAt ? (
-                              <div style={{fontSize:12,color:C.muted,fontStyle:'italic',background:'none',borderRadius:8,padding:'10px 12px',border:`1px dashed ${C.border}`}}>
-                                {isAdminRole ? <>🗑 Deleted by {msg.deletedByName||'staff'} (admins only): <span style={{fontStyle:'normal'}}>{msg.content}</span></> : <>Message deleted{msg.deletedByName?` by ${msg.deletedByName}`:''}</>}
-                              </div>
+                              <DeletedBubble surface="general-root" m={msg} isAdminRole={isAdminRole} C={C} />
                             ) : (
                               <div style={{fontSize:13,lineHeight:1.5,background:C.card,borderRadius:8,padding:'10px 12px',border:`1px solid ${C.border}`}}>
                                 {renderBody(msg.content, C.white)}
@@ -1409,9 +1411,7 @@ export default function Week7({ currentUser, initialDm }) {
                                 <span style={{fontSize:9,color:C.muted}}>{timeAgo(r.createdAt)}</span>
                               </div>
                               {r.deletedAt ? (
-                                <div style={{fontSize:11,color:C.muted,fontStyle:'italic',borderRadius:7,padding:'8px 10px',border:`1px dashed ${C.border}`}}>
-                                  {isAdminRole ? `🗑 Deleted by ${r.deletedByName||'staff'}: ${r.content||''}` : `Message deleted${r.deletedByName?` by ${r.deletedByName}`:''}`}
-                                </div>
+                                <DeletedBubble surface="general-reply" m={r} isAdminRole={isAdminRole} C={C} fontSize={11} radius={7} padding="8px 10px" />
                               ) : (
                                 <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderBody(r.content, C.white)}</div>
                               )}
@@ -1495,9 +1495,7 @@ export default function Week7({ currentUser, initialDm }) {
                         <div style={{display:'flex',justifyContent:isMine?'flex-end':'flex-start'}}>
                           <div style={{maxWidth:'72%'}}>
                             {msg.deletedAt ? (
-                              <div style={{fontSize:12,color:C.muted,fontStyle:'italic',background:'none',borderRadius:12,padding:'10px 13px',border:`1px dashed ${C.border}`}}>
-                                {isAdminRole ? <>🗑 Deleted by {msg.deletedByName||'staff'} (admins only): <span style={{fontStyle:'normal'}}>{msg.content}</span></> : <>Message deleted{msg.deletedByName?` by ${msg.deletedByName}`:''}</>}
-                              </div>
+                              <DeletedBubble surface="dm-root" m={msg} isAdminRole={isAdminRole} C={C} radius={12} padding="10px 13px" />
                             ) : (
                               <div style={{background:isMine?C.gold:C.card,border:isMine?'none':`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
                                 <div style={{fontSize:13,color:isMine?C.black:C.white,lineHeight:1.5}}>{renderBody(msg.content, isMine?C.black:C.white, isMine)}</div>
@@ -1573,9 +1571,7 @@ export default function Week7({ currentUser, initialDm }) {
                             <span style={{fontSize:10,color:C.muted}}>{timeAgo(root.createdAt)}</span>
                           </div>
                           {root.deletedAt ? (
-                            <div style={{fontSize:11,color:C.muted,fontStyle:'italic',borderRadius:7,padding:'8px 10px',border:`1px dashed ${C.border}`}}>
-                              {isAdminRole ? `🗑 Deleted by ${root.deletedByName||'staff'}: ${root.content||''}` : `Message deleted${root.deletedByName?` by ${root.deletedByName}`:''}`}
-                            </div>
+                            <DeletedBubble surface="dm-thread-root" m={root} isAdminRole={isAdminRole} C={C} fontSize={11} radius={7} padding="8px 10px" />
                           ) : (
                             <div style={{fontSize:12,color:C.white,lineHeight:1.5}}>{renderBody(root.content, C.white)}</div>
                           )}
@@ -1598,9 +1594,7 @@ export default function Week7({ currentUser, initialDm }) {
                                 <span style={{fontSize:9,color:C.muted}}>{timeAgo(r.createdAt)}</span>
                               </div>
                               {r.deletedAt ? (
-                                <div style={{fontSize:11,color:C.muted,fontStyle:'italic',borderRadius:7,padding:'8px 10px',border:`1px dashed ${C.border}`}}>
-                                  {isAdminRole ? `🗑 Deleted by ${r.deletedByName||'staff'}: ${r.content||''}` : `Message deleted${r.deletedByName?` by ${r.deletedByName}`:''}`}
-                                </div>
+                                <DeletedBubble surface="dm-thread-reply" m={r} isAdminRole={isAdminRole} C={C} fontSize={11} radius={7} padding="8px 10px" />
                               ) : (
                                 <div style={{fontSize:12,lineHeight:1.5,background:C.card,borderRadius:7,padding:'8px 10px',border:`1px solid ${C.border}`}}>{renderBody(r.content, C.white)}</div>
                               )}
