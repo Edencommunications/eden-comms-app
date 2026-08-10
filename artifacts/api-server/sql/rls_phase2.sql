@@ -140,10 +140,33 @@ using (user_id = public.me() or public.is_community_member(community_id)
 with check (user_id = public.me()
        or (public.is_staff() and exists (select 1 from communities c where c.id = community_id)));
 
-create policy cmsg_access on public.community_messages for all to authenticated
+-- Split per verb: INSERT additionally requires posting as yourself
+-- (sender_id = public.me()) so members can't impersonate other users.
+-- Webhook posts (sender_id null) use the service-role key and bypass RLS.
+create policy cmsg_select on public.community_messages for select to authenticated
 using (public.is_community_member(community_id)
+       or (public.is_staff() and exists (select 1 from communities c where c.id = community_id)));
+
+create policy cmsg_insert on public.community_messages for insert to authenticated
+with check (
+  sender_id = public.me()
+  and (public.is_community_member(community_id)
        or (public.is_staff() and exists (select 1 from communities c where c.id = community_id)))
-with check (public.is_community_member(community_id)
+);
+
+-- Members: update only their own rows, and the row must stay theirs
+-- (no reassigning sender_id). Staff keep full moderation (soft deletes,
+-- including webhook rows with sender_id null).
+create policy cmsg_update_own on public.community_messages for update to authenticated
+using (sender_id = public.me() and public.is_community_member(community_id))
+with check (sender_id = public.me() and public.is_community_member(community_id));
+
+create policy cmsg_update_staff on public.community_messages for update to authenticated
+using (public.is_staff() and exists (select 1 from communities c where c.id = community_id))
+with check (public.is_staff() and exists (select 1 from communities c where c.id = community_id));
+
+create policy cmsg_delete on public.community_messages for delete to authenticated
+using ((sender_id = public.me() and public.is_community_member(community_id))
        or (public.is_staff() and exists (select 1 from communities c where c.id = community_id)));
 
 -- Team chat: staff in their own org only

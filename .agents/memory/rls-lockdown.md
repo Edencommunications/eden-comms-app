@@ -17,5 +17,6 @@ description: How row-level security is wired — frontend JWT headers, policy sc
 - Policies are additive-permissive: early-dev "allow all" policies silently defeated the new ones. The final SQL loops pg_policies and drops EVERY existing policy per table before recreating. Any future policy work should assume stray legacy policies may exist.
 - Any new frontend REST call must include the Authorization getter (import sbBearer) or it returns empty under RLS.
 - Phase 2 (not done): per-row policies on tables without company_id (messages, course_progress, etc.) — currently any authenticated user passes; isolation there is still app-level.
+- Identity-carrying columns (sender_id etc.) need per-verb policies, and the UPDATE policy must ALSO pin the column (`sender_id = me()` in both USING and WITH CHECK for non-staff) — otherwise a member inserts as themself then PATCHes sender_id to a victim. One-off policy scripts must drop ALL existing policies on the table first (additive-permissive), and every policy change ships as a paste-and-run script mirrored into the rerunnable lockdown script.
 
 **How to apply:** when adding tables, add company_id where sensible and re-run the policy DO-block; when adding frontend fetch helpers, copy the header-getter pattern from any component.
