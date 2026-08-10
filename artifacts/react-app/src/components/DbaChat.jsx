@@ -521,6 +521,18 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     if (r === null) { alert('Could not send — please try again.'); setNewMsg(typed); return }
     setReplyTo(null)
     broadcastLive('new-message', activeId)
+    // Buzz the channel members' bells + phones (server-throttled to one per
+    // community per recipient per 10 min; mentioned users are excluded there
+    // since they already get the mention ping below). Group channels only —
+    // DMs have their own direct notification path. Fire-and-forget.
+    const newId = Array.isArray(r) ? r[0]?.id : null
+    if (newId && !activeIsDm) {
+      fetch(`/api/communities/${activeId}/notify-post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ message_id: newId }),
+      }).catch(() => {})
+    }
     for (const m of findMentions(text)) {
       sendNotification({
         recipientId: m.user_id, senderId: myId, senderName: myName, type: 'mention',

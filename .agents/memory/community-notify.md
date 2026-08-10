@@ -12,4 +12,6 @@ Human posts in communities notify members via an authenticated api-server endpoi
 
 **How it works here:** `/communities/:id/notify-post` inserts `community_post` notification rows (push watcher mirrors them to phones); mention-detection is duplicated server-side so @mentioned users (already pinged by the frontend) aren't double-notified; throttle = 1 buzz per community per recipient per 10 min in `admin_settings community_notify:<cid>`.
 
+**Constraint:** notify endpoints reachable from chat must authenticate with the any-user helper, not the staff-only one — clients post in communities too, and a staff-only gate silently kills their notifications.
+
 **Known gap:** community_messages RLS still lets a member insert arbitrary sender_id; the endpoint's checks close the notify path but the RLS itself needs DDL to fix.

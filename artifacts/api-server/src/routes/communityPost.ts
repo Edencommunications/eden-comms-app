@@ -180,14 +180,12 @@ router.post("/webhooks/community-post/:companyId", async (req: Request, res: Res
     const communityId = String(b.community_id || "").trim();
     const communityName = String(b.community || b.community_name || "").trim();
     let comm: any = null;
-
-    const commOrg = comm.company_id || EDEN_ORG_ID;
     if (communityId) {
-      comm = (await dbGet(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name`))[0];
+      comm = (await dbGet(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${companyId}&is_active=eq.true&select=id,name`))[0];
     } else if (communityName) {
-      comm = (await dbGet(`communities?name=ilike.${encodeURIComponent(communityName)}&company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name&limit=1`))[0];
+      comm = (await dbGet(`communities?name=ilike.${encodeURIComponent(communityName)}&company_id=eq.${companyId}&is_active=eq.true&select=id,name&limit=1`))[0];
     }
-    if (!comm) { res.status(404).json({ error: "Channel not found — send `community_id` or the exact `community` name of one of this DBA's channels" }); return; }
+    if (!comm) { res.status(404).json({ error: "Community not found — send `community_id` or the exact `community` name" }); return; }
 
     const senderName = String(b.sender_name || "").trim().slice(0, 60) || "📬 Team Update";
     const ok = await dbInsert("community_messages", {
@@ -219,16 +217,32 @@ router.post("/webhooks/community-post/:companyId", async (req: Request, res: Res
 // from the verified row, so nothing in the request body can be spoofed.
 router.post("/communities/:id/notify-post", async (req: Request, res: Response) => {
   try {
-    const communityId = String(b.community_id || "").trim();
+    const communityId = String(req.params.id || "").trim();
     const messageId = String(req.body?.message_id || "").trim();
     if (!/^[0-9a-f-]{36}$/i.test(communityId)) { res.status(400).json({ error: "Bad community id" }); return; }
     if (!messageId || messageId.length > 64 || !/^[0-9a-zA-Z-]+$/.test(messageId)) { res.status(400).json({ error: "Send the new message's id as `message_id`" }); return; }
-    const caller = await requireStaff(req);
+    // Any active user (clients post in communities too — staff-only would
+    // silently kill client-post notifications).
+    const caller = await requireUser(req);
     if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
 
-    let comm: any = null;
+    const comm = (await dbGet<any>(
+      `communities?id=eq.${encodeURIComponent(communityId)}&is_active=eq.true&select=id,name,company_id&limit=1`,
+    ))[0];
+    if (!comm) { res.status(404).json({ error: "Community not found" }); return; }
 
+    // Tenant boundary: service-role reads bypass RLS, so enforce it here.
+    // Caller must belong to this community's org (Eden staff may span orgs),
+    // AND be a member of the community or org staff.
     const commOrg = comm.company_id || EDEN_ORG_ID;
+    const isEdenStaff = caller.role !== "client" && caller.company_id === EDEN_ORG_ID;
+    if (caller.company_id !== commOrg && !isEdenStaff) { res.status(403).json({ error: "Not authorized" }); return; }
+    const isOrgStaff = caller.role !== "client" && (caller.company_id === commOrg || isEdenStaff);
+    const membership = await dbGet<any>(
+      `community_members?community_id=eq.${encodeURIComponent(communityId)}&user_id=eq.${encodeURIComponent(caller.id)}&select=user_id&limit=1`,
+    );
+    if (!membership.length && !isOrgStaff) { res.status(403).json({ error: "Not authorized" }); return; }
+
     const msg = (await dbGet<any>(
       `community_messages?id=eq.${encodeURIComponent(messageId)}&community_id=eq.${encodeURIComponent(communityId)}&select=id,sender_id,sender_name,content,created_at,deleted_at&limit=1`,
     ))[0];
@@ -244,8 +258,9 @@ router.post("/communities/:id/notify-post", async (req: Request, res: Response) 
       .filter((id: string) => id && id !== caller.id && !mentioned.has(id));
 
     // Shared, atomic throttle: only recipients we successfully claim get a row.
-    const recipients = await claimThrottledRecipients(comm.company_id || EDEN_ORG_ID, comm.id, candidates);
-    const senderName = String(b.sender_name || "").trim().slice(0, 60) || "📬 Team Update";
+    const recipients = await claimThrottledRecipients(commOrg, comm.id, candidates);
+    // Derived from the VERIFIED message row — never from the request body.
+    const senderName = String(msg.sender_name || "").trim().slice(0, 60);
     const rows = recipients.map((id: string) => ({
       recipient_id: id,
       sender_id: caller.id,
@@ -291,8 +306,6 @@ router.post("/webhooks/community-post-dba/:dbaId", async (req: Request, res: Res
     const communityId = String(b.community_id || "").trim();
     const communityName = String(b.community || b.community_name || "").trim();
     let comm: any = null;
-
-    const commOrg = comm.company_id || EDEN_ORG_ID;
     if (communityId) {
       comm = (await dbGet(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name`))[0];
     } else if (communityName) {
@@ -330,7 +343,8 @@ router.get("/webhooks/community-post-dba/:dbaId/config", async (req: Request, re
     const hit = await findDbaAnywhere(dbaId);
     if (!hit || !hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
     if (!dbaAccess(me, hit.companyId, hit.dba).manage) { res.status(403).json({ error: "Not authorized" }); return; }
-    const communities = await dbGet(`communities?company_id=eq.${hit.companyId}&is_active=eq.true&select=id,name&order=name`);
+    const ctx = encodeURIComponent(`dba:${dbaId}`);
+    const communities = await dbGet(`communities?company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name&order=name`);
     res.json({
       url: `${appBase(req)}/api/webhooks/community-post-dba/${dbaId}`,
       secret: communityPostDbaSecretFor(dbaId),
