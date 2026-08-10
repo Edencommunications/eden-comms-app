@@ -9,3 +9,5 @@ description: How per-org GHL contract-signed webhooks work and quirks of the liv
 - Config/troubleshooting endpoints are admin-gated via Supabase JWT (requireStaff → role super_admin, own org or Eden). The old spoofable `x-admin-id` header is no longer accepted (security review caught it leaking secrets). White-label admins self-serve the URL+secret from their own admin panel Overview.
 - Webhook accepts header secret (`x-webhook-secret`) or timestamped HMAC signature (`x-webhook-signature: t=...,v1=...` over `${t}.${rawBody}`, 5-min tolerance); query/body secrets are rejected per security review.
 - Webhook received-log is in-memory only (ring buffer on the API server); it resets on restart.
+
+**Community-post webhook (Zapier → community):** same HMAC-derived per-org secret pattern (label `community-post:<companyId>`), fails closed without SESSION_SECRET, 30 posts/hour per org. Rotating SESSION_SECRET rotates ALL derived webhook secrets — users must re-paste them into Zapier/GHL.

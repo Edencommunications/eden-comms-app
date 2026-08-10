@@ -4036,6 +4036,15 @@ const AdminDashboard = ({ user }:any) => {
   const ghlCopy = async (what: string, val: string) => {
     try { await navigator.clipboard.writeText(val); setGhlCopied(what); setTimeout(() => setGhlCopied(''), 2000); } catch {}
   };
+  // Community post webhook — Zapier → post into a community (per-org)
+  const [cpCfg, setCpCfg] = useState<any>(null);        // null loading · false error · {url, secret, communities}
+  useEffect(() => {
+    if (!myOrg?.id) return;
+    fetch(`/api/webhooks/community-post/${myOrg.id}/config`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setCpCfg(d && d.url ? d : false))
+      .catch(() => setCpCfg(false));
+  }, [myOrg?.id]);
   // Automated welcome messages (admin-configurable, per org + per coach)
   const [welcomeCfg, setWelcomeCfg] = useState<any>(null); // null = loading
   const [welcomeSaving, setWelcomeSaving] = useState(false);
@@ -4373,6 +4382,39 @@ const AdminDashboard = ({ user }:any) => {
                         </button>
                       </div>
                     ))}
+                  </>
+                )}
+              </Card>
+            )}
+            {/* Community post webhook — Zapier → post into a community */}
+            {myOrg && (
+              <Card style={{ marginBottom:20 }}>
+                <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>📬 Zapier → Community Post Webhook</p>
+                <p style={{ fontSize:11, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
+                  Let Zapier (or any automation) post a message into one of your communities — e.g. the weekly check-in form link into your Team Check-In community.
+                  In Zapier, use <strong>Webhooks by Zapier → POST</strong> with the URL below, add a header <strong>x-webhook-secret</strong> with the secret,
+                  and send JSON data with <strong>community</strong> (the community's name, exactly as shown below) and <strong>message</strong> (the text to post — links are fine).
+                  Optional: <strong>sender_name</strong> to change the name the post appears under.
+                </p>
+                {cpCfg === null && <p style={{ fontSize:12, color:B.muted, margin:0 }}>Loading…</p>}
+                {cpCfg === false && <p style={{ fontSize:12, color:"#ffa600", margin:0 }}>Couldn't load the webhook details — refresh the page or contact Eden support.</p>}
+                {cpCfg && cpCfg.url && (
+                  <>
+                    {[['Webhook URL', cpCfg.url], ['Secret', cpCfg.secret]].map(([label, val]: any) => (
+                      <div key={`cp-${label}`} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:10, fontWeight:700, color:B.muted, width:90, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</span>
+                        <code style={{ flex:1, minWidth:180, fontSize:10, color:B.text, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 8px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{val}</code>
+                        <button onClick={() => ghlCopy(`cp-${label}`, val)}
+                          style={{ background: ghlCopied === `cp-${label}` ? (B.success || '#4FD89A') : 'none', color: ghlCopied === `cp-${label}` ? '#000' : B.gold, border:`1px solid ${B.border}`, borderRadius:6, padding:"5px 10px", fontSize:10, fontWeight:700, cursor:"pointer" }}>
+                          {ghlCopied === `cp-${label}` ? '✓ Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    ))}
+                    {Array.isArray(cpCfg.communities) && cpCfg.communities.length > 0 && (
+                      <p style={{ fontSize:11, color:B.muted, margin:"6px 0 0", lineHeight:1.6 }}>
+                        Your communities: {cpCfg.communities.map((c:any) => c.name).join(' · ')}
+                      </p>
+                    )}
                   </>
                 )}
               </Card>
