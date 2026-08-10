@@ -106,6 +106,14 @@ export default function Notifications({ currentUser, onNavigate }) {
   const unreadCount = notifs.filter(n => !n.is_read).length
 
   // ── Phone push notifications (Web Push) ─────────────────────
+  // Fallback labels in case an older server doesn't send `categories` yet.
+  const PUSH_CATEGORIES_FALLBACK = [
+    { id: 'messages', label: 'Messages' },
+    { id: 'plan_updates', label: 'Plan updates' },
+    { id: 'checkins', label: 'Check-ins' },
+    { id: 'reminders', label: 'Reminders' },
+    { id: 'ads_recaps', label: 'Ads recaps' },
+  ]
   const [pushState, setPushState] = useState(null)   // null loading · {enabled, devices, supported, needsInstall}
   const [pushBusy, setPushBusy] = useState(false)
   const [pushMsg, setPushMsg] = useState('')
@@ -116,8 +124,8 @@ export default function Notifications({ currentUser, onNavigate }) {
     if (!myUUID) return
     fetch('/api/push/prefs', { headers: { Authorization: sbBearer() } })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setPushState({ enabled: !!d?.enabled, devices: d?.devices || 0 }))
-      .catch(() => setPushState({ enabled: false, devices: 0 }))
+      .then(d => setPushState({ enabled: !!d?.enabled, devices: d?.devices || 0, cats: d?.cats || {}, categories: d?.categories || PUSH_CATEGORIES_FALLBACK }))
+      .catch(() => setPushState({ enabled: false, devices: 0, cats: {}, categories: PUSH_CATEGORIES_FALLBACK }))
   }, [myUUID])
 
   async function enablePush() {
@@ -145,12 +153,36 @@ export default function Notifications({ currentUser, onNavigate }) {
       })
       const sd = await sr.json().catch(() => null)
       if (!sr.ok) { setPushMsg(sd?.error || 'Could not turn on notifications.'); setPushBusy(false); return }
-      setPushState({ enabled: true, devices: sd?.devices || 1 })
+      // Preserve saved per-category choices — the server echoes them back.
+      setPushState(p => ({
+        enabled: true, devices: sd?.devices || 1,
+        cats: sd?.cats ?? p?.cats ?? {},
+        categories: sd?.categories ?? p?.categories ?? PUSH_CATEGORIES_FALLBACK,
+      }))
       setPushMsg('✅ Phone notifications are on for this device.')
     } catch (e) {
       setPushMsg('Could not turn on notifications — ' + (e?.message || 'unknown error'))
     }
     setPushBusy(false)
+  }
+
+  async function toggleCat(catId) {
+    const next = !(pushState?.cats?.[catId] !== false)
+    // optimistic flip
+    setPushState(p => ({ ...(p || {}), cats: { ...(p?.cats || {}), [catId]: next } }))
+    try {
+      const r = await fetch('/api/push/prefs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ cats: { [catId]: next } }),
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(d?.error || 'save failed')
+      if (d?.cats) setPushState(p => ({ ...(p || {}), cats: d.cats }))
+    } catch {
+      // revert on failure
+      setPushState(p => ({ ...(p || {}), cats: { ...(p?.cats || {}), [catId]: !next } }))
+      setPushMsg('Could not save that preference — try again.')
+    }
   }
 
   async function disablePush() {
@@ -430,6 +462,30 @@ export default function Notifications({ currentUser, onNavigate }) {
                 }}/>
               </button>
             </div>
+            {pushState?.enabled && (
+              <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:6 }}>
+                {(pushState.categories || PUSH_CATEGORIES_FALLBACK).map(cat => {
+                  const on = pushState.cats?.[cat.id] !== false
+                  return (
+                    <div key={cat.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, paddingLeft:6 }}>
+                      <div style={{ fontSize:11, color:C.muted }}>{cat.label}</div>
+                      <button
+                        onClick={() => toggleCat(cat.id)}
+                        aria-label={`${cat.label} phone alerts ${on ? 'on' : 'off'}`}
+                        style={{
+                          width:34, height:18, borderRadius:9, border:'none', cursor:'pointer', flexShrink:0,
+                          background: on ? C.gold : C.border, position:'relative', transition:'background .2s',
+                        }}>
+                        <span style={{
+                          position:'absolute', top:2, left: on ? 18 : 2,
+                          width:14, height:14, borderRadius:7, background:C.white, transition:'left .2s', display:'block',
+                        }}/>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
             {pushMsg && <div style={{ fontSize:10, color: pushMsg.startsWith('✅') ? C.success : '#ffa600', marginTop:6, lineHeight:1.5 }}>{pushMsg}</div>}
             <div style={{ fontSize:9, color:C.muted, marginTop:6, textAlign:'center' }}>
               🔒 Notifications are private and encrypted

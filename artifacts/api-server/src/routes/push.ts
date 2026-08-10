@@ -15,7 +15,8 @@
 //     is org-readable under RLS, so the private key is AES-encrypted with
 //     a SESSION_SECRET-derived key, same scheme as the Meta Ads token.
 //   • Users toggle pushes on/off in the bell panel; the flag lives
-//     server-side so OFF silences every device at once.
+//     server-side so OFF silences every device at once. Per-category
+//     switches (Messages, Plan updates, …) live in the same JSON.
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "node:crypto";
 import webpush from "web-push";
@@ -127,7 +128,53 @@ function isTrustedPushEndpoint(endpoint: string): boolean {
 }
 
 // ── Per-user subscription storage ──────────────────────────────
-type UserPush = { enabled: boolean; subs: Array<{ endpoint: string; keys: any; ua?: string; added?: string }> };
+// `cats` = per-category opt-outs. Missing key ⇒ ON (default everything buzzes).
+type UserPush = {
+  enabled: boolean;
+  subs: Array<{ endpoint: string; keys: any; ua?: string; added?: string }>;
+  cats?: Record<string, boolean>;
+};
+
+// ── Notification categories (per-type phone-push preferences) ──
+export const PUSH_CATEGORIES = [
+  { id: "messages", label: "Messages" },
+  { id: "plan_updates", label: "Plan updates" },
+  { id: "checkins", label: "Check-ins" },
+  { id: "reminders", label: "Reminders" },
+  { id: "ads_recaps", label: "Ads recaps" },
+] as const;
+const CATEGORY_IDS = new Set(PUSH_CATEGORIES.map((c) => c.id as string));
+
+// Every notification type that lands in the `notifications` table must be
+// owned by exactly one category (or listed in ALWAYS_DELIVER below).
+export const TYPE_CATEGORY: Record<string, string> = {
+  message: "messages", mention: "messages", broadcast: "messages",
+  community_post: "messages", community_message: "messages", team_message: "messages",
+  community: "messages", community_added: "messages", reaction: "messages",
+  diet_update: "plan_updates", supp_update: "plan_updates", workout_update: "plan_updates",
+  update_note: "plan_updates", loom_posted: "plan_updates", course_access: "plan_updates",
+  checkin_received: "checkins", lab_uploaded: "checkins",
+  start_reminder_7: "reminders", start_reminder_1: "reminders", start_reminder_0: "reminders",
+  ghl_intake: "reminders",
+  meta_ads: "ads_recaps",
+};
+// Product decision: live-call rings behave like incoming phone calls and are
+// controlled only by the master phone-notifications switch, not a category.
+const ALWAYS_DELIVER = new Set(["huddle_invite", "huddle_ping"]);
+// Product decision: an UNKNOWN/new type must never bypass the switches — it is
+// governed by the "Messages" switch (the most-visible one) until a developer
+// maps it above. A warn log makes the missing mapping visible.
+const UNKNOWN_TYPE_CATEGORY = "messages";
+
+export function categoryAllowed(cfg: UserPush, type: string): boolean {
+  if (ALWAYS_DELIVER.has(type)) return true;
+  let cat = TYPE_CATEGORY[type];
+  if (!cat) {
+    logger.warn({ type }, "[Push] unmapped notification type — governed by the Messages switch; add it to TYPE_CATEGORY");
+    cat = UNKNOWN_TYPE_CATEGORY;
+  }
+  return cfg.cats?.[cat] !== false; // missing key ⇒ on
+}
 
 async function getUserPush(userId: string): Promise<{ cfg: UserPush; companyId: string } | null> {
   const rows = await dbGet<any>(`admin_settings?key=eq.push_sub:${encodeURIComponent(userId)}&select=company_id,value`);
@@ -171,9 +218,10 @@ const TYPE_GOTO: Record<string, string> = {
   community_added: "community", meta_ads: "community",
 };
 
-async function pushToUser(userId: string, title: string, body: string, url = "/"): Promise<void> {
+async function pushToUser(userId: string, title: string, body: string, type = "", url = "/"): Promise<void> {
   const found = await getUserPush(userId);
   if (!found || !found.cfg.enabled || !found.cfg.subs?.length) return;
+  if (!categoryAllowed(found.cfg, type)) return;
   if (!(await getVapid())) return;
   const alive: typeof found.cfg.subs = [];
   let changed = false;
@@ -264,7 +312,7 @@ async function watchPass() {
           body = SAFE_BODY[n.type] || "Open the app to view";
         }
         const url = TYPE_GOTO[n.type] ? `/?goto=${TYPE_GOTO[n.type]}` : "/";
-        await pushToUser(n.recipient_id, title, body, url).catch(() => {});
+        await pushToUser(n.recipient_id, title, body, String(n.type || ""), url).catch(() => {});
       }
       // Advance the durable cursor after EVERY row: ts = this row's stamp,
       // ids = all processed rows sharing that stamp.
@@ -299,13 +347,18 @@ router.get("/push/public-key", async (req: Request, res: Response) => {
   } catch { res.status(500).json({ error: "Push is not available right now" }); }
 });
 
-// Current status for the caller: enabled flag + device count.
+// Current status for the caller: enabled flag + device count + category switches.
 router.get("/push/prefs", async (req: Request, res: Response) => {
   try {
     const caller = await requireUser(req);
     if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
     const found = await getUserPush(caller.id);
-    res.json({ ok: true, enabled: !!found?.cfg.enabled, devices: found?.cfg.subs?.length || 0 });
+    const cats: Record<string, boolean> = {};
+    for (const c of PUSH_CATEGORIES) cats[c.id] = found?.cfg.cats?.[c.id] !== false;
+    res.json({
+      ok: true, enabled: !!found?.cfg.enabled, devices: found?.cfg.subs?.length || 0,
+      cats, categories: PUSH_CATEGORIES,
+    });
   } catch { res.status(500).json({ error: "Could not load settings" }); }
 });
 
@@ -323,28 +376,42 @@ router.post("/push/subscribe", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Unrecognized push service" }); return;
     }
     const found = await getUserPush(caller.id);
-    const cfg = found.cfg;
-    cfg.enabled = enabled;
+    const cfg: UserPush = found?.cfg || { enabled: true, subs: [] };
+    cfg.enabled = true;
+    cfg.subs = (cfg.subs || []).filter((s) => s.endpoint !== sub.endpoint);
+    cfg.subs.push({ endpoint: sub.endpoint, keys: sub.keys, ua: String(req.get("user-agent") || "").slice(0, 120), added: new Date().toISOString() });
+    if (cfg.subs.length > 10) cfg.subs = cfg.subs.slice(-10); // sanity cap per user
     if (!(await saveUserPush(caller.company_id, caller.id, cfg))) {
       res.status(502).json({ error: "Could not save" }); return;
     }
-    res.json({ ok: true, enabled, devices: cfg.subs?.length || 0 });
-  } catch { res.status(500).json({ error: "Could not save" }); }
+    const cats: Record<string, boolean> = {};
+    for (const c of PUSH_CATEGORIES) cats[c.id] = cfg.cats?.[c.id] !== false;
+    res.json({ ok: true, devices: cfg.subs.length, cats, categories: PUSH_CATEGORIES });
+  } catch { res.status(500).json({ error: "Could not subscribe" }); }
 });
 
-// Remove this device's subscription (e.g. before logout on a shared device).
-router.post("/push/unsubscribe", async (req: Request, res: Response) => {
+// Toggle pushes on/off (all devices) and/or update per-category switches.
+router.post("/push/prefs", async (req: Request, res: Response) => {
   try {
     const caller = await requireUser(req);
     if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
-    const enabled = !!req.body?.enabled;
     const found = await getUserPush(caller.id);
-    const cfg = found.cfg;
-    cfg.enabled = enabled;
+    const cfg: UserPush = found?.cfg || { enabled: false, subs: [] };
+    if (typeof req.body?.enabled === "boolean") cfg.enabled = req.body.enabled;
+    // Per-category switches: accept only known category ids, booleans only.
+    if (req.body?.cats && typeof req.body.cats === "object") {
+      const cats: Record<string, boolean> = { ...(cfg.cats || {}) };
+      for (const [k, v] of Object.entries(req.body.cats)) {
+        if (CATEGORY_IDS.has(k) && typeof v === "boolean") cats[k] = v;
+      }
+      cfg.cats = cats;
+    }
     if (!(await saveUserPush(caller.company_id, caller.id, cfg))) {
       res.status(502).json({ error: "Could not save" }); return;
     }
-    res.json({ ok: true, enabled, devices: cfg.subs?.length || 0 });
+    const cats: Record<string, boolean> = {};
+    for (const c of PUSH_CATEGORIES) cats[c.id] = cfg.cats?.[c.id] !== false;
+    res.json({ ok: true, enabled: !!cfg.enabled, devices: cfg.subs?.length || 0, cats });
   } catch { res.status(500).json({ error: "Could not save" }); }
 });
 
