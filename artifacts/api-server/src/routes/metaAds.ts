@@ -124,18 +124,21 @@ async function saveCfg(companyId: string, cfg: MetaCfg): Promise<boolean> {
 // Compare-and-swap update: only writes if the stored value is still exactly
 // `expectedRaw`. Returns true if WE won the claim — the scheduler uses this
 // so two server instances can never double-post the same recap.
-async function casCfg(companyId: string, expectedRaw: string, cfg: MetaCfg): Promise<boolean> {
+async function casRaw(companyId: string, expectedRaw: string, newRaw: string): Promise<boolean> {
   const r = await fetch(
     `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${encodeURIComponent(companyId)}&key=eq.meta_ads&value=eq.${encodeURIComponent(expectedRaw)}`,
     {
       method: "PATCH",
       headers: { ...SH, Prefer: "return=representation" },
-      body: JSON.stringify({ value: serializeCfg(cfg), updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ value: newRaw, updated_at: new Date().toISOString() }),
     },
   );
   if (!r.ok) return false;
-  const rows: any[] = await r.json().catch(() => []);
+  const rows = (await r.json().catch(() => [])) as any[];
   return Array.isArray(rows) && rows.length > 0;
+}
+async function casCfg(companyId: string, expectedRaw: string, cfg: MetaCfg): Promise<boolean> {
+  return casRaw(companyId, expectedRaw, serializeCfg(cfg));
 }
 
 // ── Meta Graph API helpers ──────────────────────────────────────
@@ -351,9 +354,15 @@ Never invent numbers not in the data. Round sensibly. Keep it under 250 words.` 
 
 // ── Posting + failure alerts ────────────────────────────────────
 
-async function notifyAdmins(companyId: string, body: string) {
+// Returns true only when every intended admin got the notification (and at
+// least one admin exists) — callers that must not lose an alert check this.
+async function notifyAdmins(companyId: string, body: string): Promise<boolean> {
   const admins = await dbGet<any>(`user_profiles?company_id=eq.${encodeURIComponent(companyId)}&role=eq.super_admin&is_active=not.is.false&select=id`);
-  for (const a of admins) await dbInsert("notifications", { recipient_id: a.id, type: "meta_ads", body, is_read: false });
+  let ok = admins.length > 0;
+  for (const a of admins) {
+    if (!(await dbInsert("notifications", { recipient_id: a.id, type: "meta_ads", body, is_read: false }))) ok = false;
+  }
+  return ok;
 }
 
 async function runRecap(companyId: string, cfg: MetaCfg, period: "daily" | "weekly" | "monthly"): Promise<{ ok: boolean; error?: string }> {
@@ -419,9 +428,12 @@ async function runRecap(companyId: string, cfg: MetaCfg, period: "daily" | "week
   return { ok: true };
 }
 
-// ── Scheduler (started from index.ts) ───────────────────────────
-
+const tokenFp = (token: string) =>
+  crypto.createHash("sha256").update(token).digest("hex").slice(0, 12);
 async function processDue() {
+  // Token health first — it reads/writes its own fresh rows, so it can't
+  // interfere with the recap claims below (which re-read afterwards).
+  await checkTokenExpiries();
   try {
     const rows = await dbGet<any>(`admin_settings?key=eq.meta_ads&select=company_id,value`);
     const now = new Date();
@@ -526,6 +538,7 @@ router.post("/meta-ads/connect", async (req: Request, res: Response) => {
       connected_by: caller.id, connected_by_name: names?.[0]?.name || null,
       hour: Number.isFinite(Number(prev.hour)) ? Number(prev.hour) : 12,
     };
+    // Fresh token ⇒ new fingerprint, so the expiry warnings naturally re-arm.
     if (!(await saveCfg(caller.company_id, cfg))) { res.status(502).json({ error: "Could not save the connection" }); return; }
     res.json({ ok: true, account_name: v.name });
   } catch { res.status(500).json({ error: "Could not connect Meta Ads" }); }
@@ -591,3 +604,116 @@ router.post("/meta-ads/run-now", async (req: Request, res: Response) => {
 });
 
 export default router;
+
+async function checkTokenExpiries() {
+  const rows = await dbGet<any>(`admin_settings?key=eq.meta_ads&select=company_id,value`);
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  for (const row of rows) {
+    try {
+      const rawStored = typeof row.value === "string" ? row.value : JSON.stringify(row.value);
+      const cfg = parseCfg(row.value);
+      if (!cfg?.token) continue;
+      const c = cfg as any;
+      if (c.last_token_check === todayStr) continue;
+
+      // Atomically claim today's check (same CAS trick as recaps) so two
+      // server instances can't both notify. We keep the exact bytes we wrote
+      // so every later write can be a CAS against them — if an admin
+      // reconnects (or anything else changes the row) mid-check, our update
+      // loses the swap and we abandon it instead of clobbering fresh config.
+      c.last_token_check = todayStr;
+      const claimedRaw = serializeCfg(cfg);
+      if (!(await casRaw(row.company_id, rawStored, claimedRaw))) continue;
+      const finish = async (mutate: (o: any) => void): Promise<boolean> => {
+        const next: any = { ...(cfg as any) };
+        mutate(next);
+        const won = await casRaw(row.company_id, claimedRaw, serializeCfg(next));
+        if (!won) logger.info({ companyId: row.company_id }, "[MetaAds] config changed mid-check — leaving it untouched");
+        return won;
+      };
+
+      const info = await debugToken(cfg.token);
+      if (!info) {
+        // Meta unreachable — release today's claim so the next 15-min pass
+        // retries, bounded to 3 attempts per day.
+        await finish((o) => {
+          const f = Number(o.token_check_fails || 0) + 1;
+          o.token_check_fails = f;
+          if (f < 3) delete o.last_token_check;
+        });
+        continue;
+      }
+
+      const fp = tokenFp(cfg.token);
+      const expired = !info.valid ||
+        (info.expiresAt != null && info.expiresAt > 0 && info.expiresAt * 1000 <= now.getTime());
+      const daysLeft = !expired && info.expiresAt != null && info.expiresAt > 0
+        ? Math.floor((info.expiresAt * 1000 - now.getTime()) / 86400_000)
+        : null;
+
+      let notice: string | null = null;
+      let flag: string | null = null;
+      if (expired && c.warned_expired_fp !== fp) {
+        notice = "⚠️ Your Meta Ads connection has expired — ads recaps can't post until you reconnect. Get a fresh access token and reconnect in the admin panel (Overview → Ads Recaps).";
+        flag = "warned_expired_fp";
+      } else if (!expired && daysLeft != null && daysLeft <= 7 && c.warned_expiring_fp !== fp) {
+        const when = fmtDate(new Date(info.expiresAt! * 1000).toISOString().slice(0, 10));
+        notice = `⏳ Your Meta Ads connection expires in ${daysLeft <= 0 ? "less than a day" : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`} (${when}). Reconnect with a fresh access token in the admin panel (Overview → Ads Recaps) so recaps don't get missed.`;
+        flag = "warned_expiring_fp";
+      }
+      if (!notice || !flag) {
+        // Nothing to send today — clear any stale retry counters (CAS-guarded).
+        if (c.token_warn_fails || c.token_check_fails) {
+          await finish((o) => { delete o.token_warn_fails; delete o.token_check_fails; });
+        }
+        continue;
+      }
+
+      const delivered = await notifyAdmins(row.company_id, notice);
+      const flagName = flag, fpVal = fp;
+      if (delivered) {
+        // Only mark "warned" once every admin actually got the bell —
+        // otherwise a transient DB hiccup would silently swallow the
+        // warning forever for this token. CAS-guarded: if an admin
+        // reconnected mid-check the swap loses and nothing is clobbered
+        // (the new token has a new fingerprint, so warnings re-arm anyway).
+        await finish((o) => {
+          o[flagName] = fpVal;
+          delete o.token_warn_fails;
+          delete o.token_check_fails;
+        });
+        logger.info({ companyId: row.company_id, expired, daysLeft }, "[MetaAds] token expiry warning sent");
+      } else {
+        // Delivery failed: release today's claim so the next 15-min pass
+        // retries, bounded to 3 attempts per day so a broken notifications
+        // table can't loop forever.
+        await finish((o) => {
+          const fails = Number(o.token_warn_fails || 0) + 1;
+          o.token_warn_fails = fails;
+          if (fails < 3) delete o.last_token_check;
+        });
+        logger.warn({ companyId: row.company_id }, "[MetaAds] token expiry warning delivery failed");
+      }
+    } catch (e) {
+      logger.warn({ companyId: row?.company_id, err: String(e) }, "[MetaAds] token check failed");
+    }
+  }
+}
+
+async function debugToken(token: string): Promise<{ valid: boolean; expiresAt: number | null } | null> {
+  try {
+    const t = encodeURIComponent(token);
+    const r = await fetch(`${GRAPH}/debug_token?input_token=${t}&access_token=${t}`);
+    const b: any = await r.json().catch(() => null);
+    const d = b?.data;
+    if (d && typeof d.is_valid === "boolean") {
+      // expires_at is unix seconds; 0 means "never expires".
+      const exp = Number(d.expires_at);
+      return { valid: d.is_valid, expiresAt: Number.isFinite(exp) ? exp : null };
+    }
+    // An OAuth error on the call itself means the token is already dead.
+    if (b?.error?.code === 190) return { valid: false, expiresAt: null };
+    return null;
+  } catch { return null; }
+}

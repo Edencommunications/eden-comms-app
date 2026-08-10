@@ -7,3 +7,4 @@ description: Per-org Meta Marketing API recaps posted into a community by the ap
 - **Why CAS**: scheduler claims due periods via compare-and-swap on the raw stored value (PATCH with `value=eq.<old>`) so two instances/overlapping passes can't double-post; failed runs roll the marker back with max 3 retries/day tracked as `fails_<period>_<date>` keys.
 - Recap = Meta insights (account + campaign level, lead action types) + `/activities` change log, summarized by AI integration (model gpt-5.6-luna) with a plain-format fallback; failures notify org super_admins via notifications (body/is_read).
 - Destination community is re-validated (org + is_active) right before every post.
+- **Token expiry watch**: Meta long-lived tokens die ~60 days; `/debug_token` lets a token inspect itself (no app token needed), and expiry warnings must be one-shot and reset on reconnect or admins get spammed / never re-warned.
