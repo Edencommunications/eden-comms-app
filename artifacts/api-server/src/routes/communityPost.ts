@@ -17,6 +17,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { logger } from "../lib/logger";
 import { requireStaff } from "./checkinForm";
 import { findDbaAnywhere, dbaAccess, requireUserJwt } from "./dba";
+import { requireUser } from "./push";
 
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
@@ -97,6 +98,66 @@ export async function notifyCommunityMembers(communityId: string, communityName:
   }
 }
 
+// ── Human chat posts → throttled member notifications ──────────
+// At most one notification per community per recipient per 10 minutes, so a
+// busy back-and-forth doesn't buzz phones on every single message. The
+// throttle state is PERSISTED in admin_settings (key `community_notify:<id>`)
+// and claimed via compare-and-swap, so it holds across restarts and with
+// multiple autoscaled server instances: whichever instance wins the CAS
+// claims those recipients; the loser retries against the fresh state and
+// finds them already stamped.
+const NOTIFY_THROTTLE_MS = 10 * 60_000;
+const NOTIFY_KEY = (cid: string) => `community_notify:${cid}`;
+
+async function claimThrottledRecipients(companyId: string, communityId: string, candidates: string[]): Promise<string[]> {
+  const key = NOTIFY_KEY(communityId);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const now = Date.now();
+    const rows = await dbGet<any>(`admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(key)}&select=value`);
+    const rawStored: string | null = rows[0] ? String(rows[0].value) : null;
+    let stamps: Record<string, number> = {};
+    try { stamps = rawStored ? JSON.parse(rawStored) : {}; } catch { stamps = {}; }
+    for (const [k, t] of Object.entries(stamps)) if (typeof t !== "number" || now - t >= NOTIFY_THROTTLE_MS) delete stamps[k];
+    const eligible = candidates.filter((id) => !(id in stamps));
+    if (!eligible.length) return [];
+    for (const id of eligible) stamps[id] = now;
+    const newValue = JSON.stringify(stamps);
+    if (rawStored === null) {
+      // First-ever notification for this community: insert; a duplicate-key
+      // failure means another instance beat us — retry against its row.
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings`, {
+        method: "POST", headers: H,
+        body: JSON.stringify({ company_id: companyId, key, value: newValue, updated_at: new Date().toISOString() }),
+      });
+      if (r.ok) return eligible;
+    } else {
+      // CAS: only wins if nobody changed the row since we read it.
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent(key)}&value=eq.${encodeURIComponent(rawStored)}`,
+        { method: "PATCH", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify({ value: newValue, updated_at: new Date().toISOString() }) },
+      );
+      const updated = (r.ok ? await r.json().catch(() => []) : []) as any[];
+      if (Array.isArray(updated) && updated.length) return eligible;
+    }
+  }
+  return []; // lost the race 3× — someone else notified; stay silent
+}
+
+// Same mention detection the frontend uses — computed server-side from the
+// verified message text so mentioned members (who already got a mention
+// notification) aren't pinged twice, and callers can't spoof exclusions.
+const escRe = (s: string) => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function mentionedUserIds(text: string, members: Array<{ user_id: string; user_name?: string | null }>): string[] {
+  const hits: string[] = [];
+  for (const m of members) {
+    if (!m.user_id || !m.user_name) continue;
+    const first = String(m.user_name).split(" ")[0];
+    const re = new RegExp(`@(${escRe(m.user_name)}|${escRe(first)})(\\b|$)`, "i");
+    if (re.test(text)) hits.push(m.user_id);
+  }
+  return hits;
+}
+
 const router: IRouter = Router();
 
 router.post("/webhooks/community-post/:companyId", async (req: Request, res: Response) => {
@@ -119,12 +180,14 @@ router.post("/webhooks/community-post/:companyId", async (req: Request, res: Res
     const communityId = String(b.community_id || "").trim();
     const communityName = String(b.community || b.community_name || "").trim();
     let comm: any = null;
+
+    const commOrg = comm.company_id || EDEN_ORG_ID;
     if (communityId) {
-      comm = (await dbGet(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${companyId}&is_active=eq.true&select=id,name`))[0];
+      comm = (await dbGet(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name`))[0];
     } else if (communityName) {
-      comm = (await dbGet(`communities?name=ilike.${encodeURIComponent(communityName)}&company_id=eq.${companyId}&is_active=eq.true&select=id,name&limit=1`))[0];
+      comm = (await dbGet(`communities?name=ilike.${encodeURIComponent(communityName)}&company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name&limit=1`))[0];
     }
-    if (!comm) { res.status(404).json({ error: "Community not found — send `community_id` or the exact `community` name for this org" }); return; }
+    if (!comm) { res.status(404).json({ error: "Channel not found — send `community_id` or the exact `community` name of one of this DBA's channels" }); return; }
 
     const senderName = String(b.sender_name || "").trim().slice(0, 60) || "📬 Team Update";
     const ok = await dbInsert("community_messages", {
@@ -141,6 +204,61 @@ router.post("/webhooks/community-post/:companyId", async (req: Request, res: Res
     res.json({ ok: true, community: comm.name });
   } catch (e) {
     logger.warn({ err: String(e) }, "[CommunityPost] webhook failed");
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
+// Human chat posts: the frontend calls this right after inserting a
+// community_messages row, so regular messages buzz bells + phones too
+// (not just automated webhook/recap posts).
+//
+// Anti-spam/integrity: the notification is BOUND to a real, freshly created
+// message — the caller sends the new message_id, and we verify the row
+// exists in this community, was authored by the authenticated caller, and
+// is recent. Sender name and mention exclusions are derived server-side
+// from the verified row, so nothing in the request body can be spoofed.
+router.post("/communities/:id/notify-post", async (req: Request, res: Response) => {
+  try {
+    const communityId = String(b.community_id || "").trim();
+    const messageId = String(req.body?.message_id || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(communityId)) { res.status(400).json({ error: "Bad community id" }); return; }
+    if (!messageId || messageId.length > 64 || !/^[0-9a-zA-Z-]+$/.test(messageId)) { res.status(400).json({ error: "Send the new message's id as `message_id`" }); return; }
+    const caller = await requireStaff(req);
+    if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
+
+    let comm: any = null;
+
+    const commOrg = comm.company_id || EDEN_ORG_ID;
+    const msg = (await dbGet<any>(
+      `community_messages?id=eq.${encodeURIComponent(messageId)}&community_id=eq.${encodeURIComponent(communityId)}&select=id,sender_id,sender_name,content,created_at,deleted_at&limit=1`,
+    ))[0];
+    if (!msg || msg.sender_id !== caller.id) { res.status(403).json({ error: "That message isn't yours or isn't in this community" }); return; }
+    if (msg.deleted_at) { res.status(409).json({ error: "That message was deleted" }); return; }
+    const ageMs = Date.now() - new Date(msg.created_at || 0).getTime();
+    if (!(ageMs >= -60_000 && ageMs <= 120_000)) { res.status(409).json({ error: "Only brand-new messages can notify" }); return; }
+
+    const members = await dbGet<any>(`community_members?community_id=eq.${encodeURIComponent(communityId)}&select=user_id,user_name&limit=200`);
+    const mentioned = new Set(mentionedUserIds(String(msg.content || ""), members));
+    const candidates = members
+      .map((m: any) => m.user_id)
+      .filter((id: string) => id && id !== caller.id && !mentioned.has(id));
+
+    // Shared, atomic throttle: only recipients we successfully claim get a row.
+    const recipients = await claimThrottledRecipients(comm.company_id || EDEN_ORG_ID, comm.id, candidates);
+    const senderName = String(b.sender_name || "").trim().slice(0, 60) || "📬 Team Update";
+    const rows = recipients.map((id: string) => ({
+      recipient_id: id,
+      sender_id: caller.id,
+      type: "community_post",
+      body: senderName ? `💬 ${senderName} posted in #${comm.name}` : `💬 New post in #${comm.name} — check your communities`,
+      is_read: false,
+    }));
+    if (rows.length && !(await dbInsert("notifications", rows))) {
+      res.status(502).json({ error: "Could not create notifications" }); return;
+    }
+    res.json({ ok: true, notified: rows.length });
+  } catch (e) {
+    logger.warn({ err: String(e) }, "[CommunityPost] notify-post failed");
     res.status(500).json({ error: "Something went wrong" });
   }
 });
@@ -173,6 +291,8 @@ router.post("/webhooks/community-post-dba/:dbaId", async (req: Request, res: Res
     const communityId = String(b.community_id || "").trim();
     const communityName = String(b.community || b.community_name || "").trim();
     let comm: any = null;
+
+    const commOrg = comm.company_id || EDEN_ORG_ID;
     if (communityId) {
       comm = (await dbGet(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name`))[0];
     } else if (communityName) {
@@ -210,9 +330,7 @@ router.get("/webhooks/community-post-dba/:dbaId/config", async (req: Request, re
     const hit = await findDbaAnywhere(dbaId);
     if (!hit || !hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
     if (!dbaAccess(me, hit.companyId, hit.dba).manage) { res.status(403).json({ error: "Not authorized" }); return; }
-    const communities = await dbGet(
-      `communities?company_id=eq.${hit.companyId}&context=eq.${encodeURIComponent(`dba:${dbaId}`)}&is_active=eq.true&select=id,name&order=name`,
-    );
+    const communities = await dbGet(`communities?company_id=eq.${companyId}&is_active=eq.true&select=id,name&order=name`);
     res.json({
       url: `${appBase(req)}/api/webhooks/community-post-dba/${dbaId}`,
       secret: communityPostDbaSecretFor(dbaId),
@@ -240,3 +358,11 @@ router.get("/webhooks/community-post/:companyId/config", async (req: Request, re
 });
 
 export default router;
+
+    const isOrgStaff = caller.role !== "client" && (caller.company_id === commOrg || isEdenStaff);
+
+    const membership = await dbGet<any>(
+      `community_members?community_id=eq.${encodeURIComponent(communityId)}&user_id=eq.${encodeURIComponent(caller.id)}&select=user_id&limit=1`,
+    );
+
+    const isEdenStaff = caller.role !== "client" && caller.company_id === EDEN_ORG_ID;

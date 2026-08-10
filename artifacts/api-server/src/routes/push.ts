@@ -91,7 +91,7 @@ async function getVapid(): Promise<{ publicKey: string; privateKey: string } | n
 
 // ── Auth: any logged-in user (clients included) ────────────────
 type Profile = { id: string; role: string; company_id: string };
-async function requireUser(req: Request): Promise<Profile | null> {
+export async function requireUser(req: Request): Promise<Profile | null> {
   const auth = String(req.get("authorization") || "");
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || token === SUPABASE_ANON) return null;
@@ -143,6 +143,7 @@ const TYPE_LABELS: Record<string, string> = {
   message: "💬 New message", diet_update: "🥗 Diet plan updated", supp_update: "💊 Supplements updated",
   workout_update: "💪 Workout updated", checkin_received: "📋 Check-in received", lab_uploaded: "🧪 Lab uploaded",
   update_note: "📝 Coach update", loom_posted: "🎥 Video update", meta_ads: "📊 Ads recap",
+  community_post: "💬 New community post",
   start_reminder_7: "🚀 Program starts soon", start_reminder_1: "⏰ Starts tomorrow", start_reminder_0: "🎉 Starts today",
 };
 
@@ -322,26 +323,23 @@ router.post("/push/subscribe", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Unrecognized push service" }); return;
     }
     const found = await getUserPush(caller.id);
-    const cfg: UserPush = found?.cfg || { enabled: true, subs: [] };
-    cfg.enabled = true;
-    cfg.subs = (cfg.subs || []).filter((s) => s.endpoint !== sub.endpoint);
-    cfg.subs.push({ endpoint: sub.endpoint, keys: sub.keys, ua: String(req.get("user-agent") || "").slice(0, 120), added: new Date().toISOString() });
-    if (cfg.subs.length > 10) cfg.subs = cfg.subs.slice(-10); // sanity cap per user
+    const cfg = found.cfg;
+    cfg.enabled = enabled;
     if (!(await saveUserPush(caller.company_id, caller.id, cfg))) {
       res.status(502).json({ error: "Could not save" }); return;
     }
-    res.json({ ok: true, devices: cfg.subs.length });
-  } catch { res.status(500).json({ error: "Could not subscribe" }); }
+    res.json({ ok: true, enabled, devices: cfg.subs?.length || 0 });
+  } catch { res.status(500).json({ error: "Could not save" }); }
 });
 
-// Toggle pushes on/off for ALL of the caller's devices at once.
-router.post("/push/prefs", async (req: Request, res: Response) => {
+// Remove this device's subscription (e.g. before logout on a shared device).
+router.post("/push/unsubscribe", async (req: Request, res: Response) => {
   try {
     const caller = await requireUser(req);
     if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
     const enabled = !!req.body?.enabled;
     const found = await getUserPush(caller.id);
-    const cfg: UserPush = found?.cfg || { enabled, subs: [] };
+    const cfg = found.cfg;
     cfg.enabled = enabled;
     if (!(await saveUserPush(caller.company_id, caller.id, cfg))) {
       res.status(502).json({ error: "Could not save" }); return;

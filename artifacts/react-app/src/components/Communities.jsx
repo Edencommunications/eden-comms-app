@@ -364,11 +364,23 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     if (r === null) { alert('Could not send — run the database update first.'); setNewMsg(text); return }
     setReplyTo(null)
     broadcastLive('new-message', activeId)
-    for (const m of findMentions(text)) {
+    const mentioned = findMentions(text)
+    for (const m of mentioned) {
       sendNotification({
         recipientId: m.user_id, senderId: myId, senderName: myName, type: 'mention',
         body: `💬 ${myName} tagged you in "${active?.name}": "${text.slice(0,80)}"`,
       })
+    }
+    // Buzz the rest of the community (bell + phone push) — server-side,
+    // bound to the just-created message and throttled per recipient so busy
+    // chats don't spam. Fire-and-forget.
+    const newId = Array.isArray(r) ? r[0]?.id : null
+    if (newId) {
+      fetch(`/api/communities/${activeId}/notify-post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ message_id: newId }),
+      }).catch(() => {})
     }
     loadMessages()
   }
