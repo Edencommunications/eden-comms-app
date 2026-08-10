@@ -9,8 +9,10 @@ import { logger } from "../lib/logger";
 // to a per-recipe Google Doc. Those hyperlinks are NOT exposed via the gviz
 // feed the app uses, so we pull the sheet's xlsx export (where hyperlinks are
 // preserved), extract the doc links, fetch each doc's plain-text export, and
-// parse out Ingredients / Instructions. Results are cached in memory and on
-// disk so clients get instant responses.
+// parse out Ingredients / Instructions. Results are cached in memory, on
+// disk, and in the database (admin_settings — no DDL available) so clients
+// get instant responses that also survive redeploys (published filesystem is
+// ephemeral, so the disk cache alone is not enough).
 
 const SHEET_ID = "1lckx8AWxzxxddhWESgj7R-FVHoE6g2JBC9NG1J72QTA";
 const SHEET_NAME = "FoodList";
@@ -26,6 +28,66 @@ type CachePayload = {
 
 let memoryCache: CachePayload | null = null;
 let refreshing: Promise<CachePayload | null> | null = null;
+
+// ── DB persistence (admin_settings key-value — schema is frozen, no DDL) ──
+// The recipe sheet is Eden-wide content, so the cache lives under the Eden
+// org's row: key 'recipe_details_cache' → full CachePayload JSON.
+
+const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
+const DB_CACHE_KEY = "recipe_details_cache";
+const SH = {
+  apikey: SERVICE_KEY,
+  Authorization: `Bearer ${SERVICE_KEY}`,
+  "Content-Type": "application/json",
+};
+
+async function loadDbCache(): Promise<CachePayload | null> {
+  if (!SERVICE_KEY) return null;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${EDEN_ORG_ID}&key=eq.${DB_CACHE_KEY}&select=value`,
+      { headers: SH },
+    );
+    if (!r.ok) return null;
+    const rows = (await r.json()) as Array<{ value: unknown }>;
+    if (!rows[0]) return null;
+    const parsed =
+      typeof rows[0].value === "string"
+        ? JSON.parse(rows[0].value)
+        : rows[0].value;
+    if (parsed && parsed.recipes && parsed.updatedAt) return parsed;
+  } catch (err) {
+    logger.warn({ err }, "recipe-details: failed to load DB cache");
+  }
+  return null;
+}
+
+async function saveDbCache(payload: CachePayload): Promise<void> {
+  if (!SERVICE_KEY) return;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`,
+      {
+        method: "POST",
+        headers: { ...SH, Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({
+          company_id: EDEN_ORG_ID,
+          key: DB_CACHE_KEY,
+          value: JSON.stringify(payload),
+        }),
+      },
+    );
+    if (!r.ok)
+      logger.warn(
+        { status: r.status },
+        "recipe-details: failed to save DB cache",
+      );
+  } catch (err) {
+    logger.warn({ err }, "recipe-details: failed to save DB cache");
+  }
+}
 
 // ── xlsx helpers (xlsx files are zip archives of XML) ──────────────────
 
@@ -237,6 +299,7 @@ async function buildCache(): Promise<CachePayload | null> {
   };
   memoryCache = payload;
   saveDiskCache(payload);
+  await saveDbCache(payload);
   logger.info(
     { count: Object.keys(recipes).length },
     "recipe-details: cache refreshed",
@@ -262,12 +325,26 @@ function isStale(cache: CachePayload | null): boolean {
   return !cache || Date.now() - Date.parse(cache.updatedAt) > CACHE_TTL_MS;
 }
 
+// Warm the memory cache on startup so the very first request after a
+// redeploy is served instantly from the DB; if the copy is stale, refresh
+// from the sheet in the background.
+void (async () => {
+  try {
+    if (!memoryCache) memoryCache = loadDiskCache();
+    if (!memoryCache) memoryCache = await loadDbCache();
+    if (isStale(memoryCache)) void refresh();
+  } catch (err) {
+    logger.warn({ err }, "recipe-details: startup warm-up failed");
+  }
+})();
+
 const router: IRouter = Router();
 
 // GET /api/recipe-details          → cached details (stale-while-revalidate)
 // GET /api/recipe-details?refresh=1 → force a synchronous refresh
 router.get("/recipe-details", async (req, res) => {
   if (!memoryCache) memoryCache = loadDiskCache();
+  if (!memoryCache) memoryCache = await loadDbCache(); // survives redeploys
   const force = req.query.refresh === "1";
 
   if (force || !memoryCache) {
