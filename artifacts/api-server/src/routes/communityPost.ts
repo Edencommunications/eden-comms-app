@@ -13,10 +13,10 @@
 //   (shown in the Admin Panel so admins can self-serve Zapier setup).
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
 import { logger } from "../lib/logger";
 import { requireStaff } from "./checkinForm";
-import { findDbaAnywhere, dbaAccess, requireUserJwt } from "./dba";
+import { findDbaAnywhere, dbaAccess, requireUserJwt, rotateDbaWebhookNonce } from "./dba";
 import { requireUser } from "./push";
 
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
@@ -50,9 +50,13 @@ export function communityPostSecretFor(companyId: string): string {
 }
 // Per-DBA secret — distinct label so a DBA credential can never be mistaken
 // for (or upgraded to) the org-wide one. Scoped to that DBA's own channels.
-export function communityPostDbaSecretFor(dbaId: string): string {
+// A stored per-DBA nonce (set by "Reset secret") is mixed into the HMAC so a
+// single leaked DBA secret can be rotated without touching SESSION_SECRET.
+// No nonce (legacy DBAs) → original derivation, so existing secrets keep working.
+export function communityPostDbaSecretFor(dbaId: string, nonce?: string | null): string {
   if (!SECRET_KEY) throw new Error("SESSION_SECRET is not set");
-  return createHmac("sha256", SECRET_KEY).update(`community-post-dba:${dbaId}`).digest("hex").slice(0, 32);
+  const label = nonce ? `community-post-dba:${dbaId}:${nonce}` : `community-post-dba:${dbaId}`;
+  return createHmac("sha256", SECRET_KEY).update(label).digest("hex").slice(0, 32);
 }
 
 // Simple per-org rate limit: at most 30 posts per hour. Zapier check-in
@@ -385,11 +389,13 @@ router.post("/webhooks/community-post-dba/:dbaId", async (req: Request, res: Res
     if (!/^[0-9a-f-]{36}$/i.test(dbaId)) { res.status(400).json({ error: "Bad DBA id" }); return; }
     const given = String(req.get("x-webhook-secret") || "").trim();
     if (!SECRET_KEY) { res.status(503).json({ error: "Webhook not available — server secret missing" }); return; }
-    if (!given || !safeEqual(given, communityPostDbaSecretFor(dbaId))) {
+    // Load the DBA first: the expected secret depends on its stored nonce.
+    // Unknown DBA → same 401 as a wrong secret (no existence oracle).
+    const hit = await findDbaAnywhere(dbaId);
+    if (!hit || !given || !safeEqual(given, communityPostDbaSecretFor(dbaId, hit.dba.webhook_nonce))) {
       res.status(401).json({ error: "Wrong or missing x-webhook-secret header" }); return;
     }
-    const hit = await findDbaAnywhere(dbaId);
-    if (!hit || !hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
+    if (!hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
     if (rateLimited(`dba:${dbaId}`)) { res.status(429).json({ error: "Too many posts — try again later (30 per hour max)" }); return; }
 
     const b: any = req.body || {};
@@ -444,10 +450,31 @@ router.get("/webhooks/community-post-dba/:dbaId/config", async (req: Request, re
     const communities = await dbGet(`communities?company_id=eq.${hit.companyId}&context=eq.${ctx}&is_active=eq.true&select=id,name&order=name`);
     res.json({
       url: `${appBase(req)}/api/webhooks/community-post-dba/${dbaId}`,
-      secret: communityPostDbaSecretFor(dbaId),
+      secret: communityPostDbaSecretFor(dbaId, hit.dba.webhook_nonce),
       communities,
     });
   } catch { res.status(500).json({ error: "Could not load config" }); }
+});
+
+// Reset a DBA's webhook secret — rotates ONLY this DBA's credential by
+// storing a fresh nonce in its record. The old secret stops working the
+// moment the nonce is saved; org-level and other DBA secrets are untouched.
+router.post("/webhooks/community-post-dba/:dbaId/reset-secret", async (req: Request, res: Response) => {
+  try {
+    const dbaId = String(req.params.dbaId || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(dbaId)) { res.status(400).json({ error: "Bad DBA id" }); return; }
+    if (!SECRET_KEY) { res.status(503).json({ error: "Webhook not available — server secret missing" }); return; }
+    const me = await requireUserJwt(req);
+    if (!me) { res.status(403).json({ error: "Not authorized" }); return; }
+    const hit = await findDbaAnywhere(dbaId);
+    if (!hit || !hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
+    if (!dbaAccess(me, hit.companyId, hit.dba).manage) { res.status(403).json({ error: "Not authorized" }); return; }
+    const nonce = randomBytes(16).toString("hex");
+    const saved = await rotateDbaWebhookNonce(dbaId, nonce, { id: me.id, name: me.name });
+    if (!saved) { res.status(502).json({ error: "Could not reset the secret — try again" }); return; }
+    logger.info({ dbaId }, "[CommunityPost] DBA webhook secret reset");
+    res.json({ ok: true, secret: communityPostDbaSecretFor(dbaId, nonce) });
+  } catch { res.status(500).json({ error: "Something went wrong" }); }
 });
 
 // Admin-only config: URL + secret + this org's communities for easy setup.

@@ -92,6 +92,10 @@ export type DbaRecord = {
   learn_course_ids: string[]; // org/Eden course ids assigned to this DBA's Learn tab
   tier_defs: DbaTierDef[]; // per-DBA tier ladder (empty = org default ladder)
   learn_tiers: Record<string, string[]>; // courseId → tier ids allowed (missing/empty = everyone)
+  // Mixed into the webhook-secret HMAC so ONE DBA's secret can be rotated
+  // without touching SESSION_SECRET (which would rotate every org+DBA secret).
+  // null/absent = legacy derivation (no nonce) — existing secrets keep working.
+  webhook_nonce: string | null;
 };
 export type DbaTierDef = { id: string; name: string; desc: string | null; dm: boolean; app: boolean };
 
@@ -122,6 +126,7 @@ function parseDba(value: any): DbaRecord | null {
       learn_tiers: v.learn_tiers && typeof v.learn_tiers === "object" && !Array.isArray(v.learn_tiers)
         ? Object.fromEntries(Object.entries(v.learn_tiers).map(([k, arr]) => [String(k), Array.isArray(arr) ? arr.map(String) : []]))
         : {},
+      webhook_nonce: v.webhook_nonce ? String(v.webhook_nonce) : null,
     };
   } catch {
     return null;
@@ -520,6 +525,7 @@ router.post("/dba/save", async (req: Request, res: Response) => {
     learn_course_ids: existing?.learn_course_ids || [],
     tier_defs: existing?.tier_defs || [],
     learn_tiers: existing?.learn_tiers || {},
+    webhook_nonce: existing?.webhook_nonce || null,
   };
   if (!(await saveDbaRow(companyId, dba))) {
     return res.status(502).json({ ok: false, error: "Couldn't save — try again" });
@@ -2691,6 +2697,26 @@ function genTempPassword(): string {
   crypto.getRandomValues(buf);
   for (let i = 0; i < 12; i++) out += chars[buf[i] % chars.length];
   return out;
+}
+
+/**
+ * Rotate a DBA's webhook-secret nonce (serialized with all other DBA writes so
+ * concurrent member edits can't drop it). Returns the fresh record, or null.
+ */
+export async function rotateDbaWebhookNonce(
+  dbaId: string,
+  nonce: string,
+  actor: { id: string; name: string | null },
+): Promise<{ companyId: string; dba: DbaRecord } | null> {
+  return withLock("dba-write", async () => {
+    const hit = await findDbaAnywhere(dbaId);
+    if (!hit) return null;
+    hit.dba.webhook_nonce = nonce;
+    const ok = await saveDbaRow(hit.companyId, hit.dba);
+    if (!ok) return null;
+    void audit(actor, "dba_webhook_secret_reset", hit.dba.id, { dba: hit.dba.name });
+    return hit;
+  });
 }
 
 async function audit(admin: { id: string; name: string | null }, action: string, targetId: string, details: Record<string, any>) {

@@ -6524,6 +6524,21 @@ const DbaHq = ({ dba, primary, content }: any) => {
   const zapCopy = async (what: string, val: string) => {
     try { await navigator.clipboard.writeText(val); setZapCopied(what); setTimeout(() => setZapCopied(''), 2000); } catch {}
   };
+  const [zapResetting, setZapResetting] = useState(false);
+  const [zapResetMsg, setZapResetMsg] = useState('');
+  const zapResetSecret = async () => {
+    if (!window.confirm(`Reset ${dba?.name}'s webhook secret? The current secret stops working immediately — you'll need to paste the new one into Zapier (or any automation using it). Other spaces and the organization's webhook are not affected.`)) return;
+    setZapResetting(true); setZapResetMsg('');
+    try {
+      const r = await fetch(`${(import.meta.env.BASE_URL || '/')}api/webhooks/community-post-dba/${dba.id}/reset-secret`, {
+        method: 'POST', headers: { Authorization: sbBearer() },
+      });
+      const b = await r.json().catch(() => null);
+      if (r.ok && b?.secret) { setZap((p: any) => (p && p.url ? { ...p, secret: b.secret } : p)); setZapResetMsg('✅ Secret reset — the old one no longer works. Update Zapier with the new secret.'); }
+      else setZapResetMsg(`⚠️ ${b?.error || "Couldn't reset the secret — try again."}`);
+    } catch { setZapResetMsg("⚠️ Couldn't reset the secret — try again."); }
+    setZapResetting(false);
+  };
   const defs = hq?.effective_defs || [];
   const courses = (content?.courses || []);
   if (hq === null) return <div style={{ padding: 60, textAlign: "center" }}><p style={{ color: B.muted, fontSize: 13 }}>Loading…</p></div>;
@@ -6674,6 +6689,14 @@ const DbaHq = ({ dba, primary, content }: any) => {
             ) : (
               <p style={{ fontSize: 11, color: B.muted, margin: "6px 0 0" }}>No channels yet — create one in the Community tab first.</p>
             )}
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${B.border}` }}>
+              <button disabled={zapResetting} onClick={zapResetSecret}
+                style={{ background: "none", color: "#e05a5a", border: `1px solid ${B.border}`, borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: zapResetting ? 0.6 : 1 }}>
+                {zapResetting ? 'Resetting…' : '🔄 Reset secret'}
+              </button>
+              <p style={{ fontSize: 10, color: B.muted, margin: "5px 0 0", lineHeight: 1.5 }}>If this secret ever leaks, reset it — the old one stops working instantly, and only this space is affected.</p>
+              {zapResetMsg && <p style={{ fontSize: 11, color: zapResetMsg.startsWith('✅') ? '#4FD89A' : '#ffa600', margin: "6px 0 0" }}>{zapResetMsg}</p>}
+            </div>
           </>
         )}
       </Card>
