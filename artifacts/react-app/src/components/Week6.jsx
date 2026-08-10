@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 import { supabase as authClient } from '../supabaseClient'
 import { LN, loomShow, loomIsShown, useLoomOn } from './LoomPrivacy'
+import { AUD_PAGE, auditPageQuery } from '../lib/auditKeyset'
 
 // Create a real (Supabase Auth) login for a new user via the API server.
 // Requires the signed-in admin's own auth session (JWT) — the server verifies
@@ -1034,10 +1035,32 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     profile_updated:'fixed name/email for',
   }
   const auditIcon = a => a==='login'?'🔐':a==='profile_updated'?'✏️':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
+  const [audHasMore, setAudHasMore] = useState(false)
+  const [audLoadingMore, setAudLoadingMore] = useState(false)
   function loadDbAudit() {
-    dbGet('audit_logs','select=*&order=created_at.desc&limit=300')
-      .then(r=>{ if(Array.isArray(r)) setDbAudit(r) })
+    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo }))
+      .then(r=>{ if(Array.isArray(r)){ setDbAudit(r); setAudHasMore(r.length>=AUD_PAGE) } })
       .catch(()=>{})
+  }
+  // Keyset pagination on (created_at DESC, id DESC): fetch the page strictly older
+  // than the last loaded row — deterministic even when timestamps collide.
+  function loadOlderAudit() {
+    if (!Array.isArray(dbAudit) || !dbAudit.length || audLoadingMore) return
+    const last = dbAudit[dbAudit.length-1]
+    if (!last?.created_at || last?.id==null) { setAudHasMore(false); return }
+    setAudLoadingMore(true)
+    dbGet('audit_logs', auditPageQuery({ from:audFrom, to:audTo, cursor:{ created_at:last.created_at, id:last.id } }))
+      .then(r=>{
+        if (Array.isArray(r)) {
+          setDbAudit(prev=>{
+            const seen = new Set((prev||[]).map(x=>x.id))
+            return [...(prev||[]), ...r.filter(x=>!seen.has(x.id))]
+          })
+          setAudHasMore(r.length>=AUD_PAGE)
+        }
+      })
+      .catch(()=>{})
+      .finally(()=>setAudLoadingMore(false))
   }
   useEffect(()=>{ if(isAdmin) loadDbAudit() },[])
   useEffect(()=>{ if(tab==='audit') loadDbAudit() },[tab])
@@ -1052,6 +1075,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [audPerson, setAudPerson] = useState('all')
   const [audFrom,   setAudFrom]   = useState('')
   const [audTo,     setAudTo]     = useState('')
+  // Date-range changes re-query the server so results aren't limited to the loaded page
+  useEffect(()=>{ if(isAdmin && tab==='audit') loadDbAudit() },[audFrom,audTo])
   const [audRestoring, setAudRestoring] = useState(null)
   const [audRestoredNow, setAudRestoredNow] = useState(new Set())
   const audActions = useMemo(()=>Array.from(new Set((dbAudit||[]).map(r=>r.action).filter(Boolean))),[dbAudit])
@@ -2812,8 +2837,18 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               {audRestoredNow.has(r.id)&&<span style={{fontSize:11,color:C.success,fontWeight:700,flexShrink:0}}>✓ Restored</span>}
             </div>
           )})}
-          {dbAudit!==null&&dbAudit.length>=300&&(
-            <div style={{fontSize:11,color:C.muted,textAlign:'center'}}>Showing the 300 most recent events.</div>
+          {dbAudit!==null&&audHasMore&&(
+            <div style={{textAlign:'center',marginTop:4,marginBottom:8}}>
+              <button onClick={loadOlderAudit} disabled={audLoadingMore}
+                style={{background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'8px 18px',
+                  color:C.gold,fontSize:12,fontWeight:800,cursor:audLoadingMore?'default':'pointer',opacity:audLoadingMore?0.5:1}}>
+                {audLoadingMore?'Loading…':'⬇ Load older events'}
+              </button>
+              <div style={{fontSize:10,color:C.muted,marginTop:6}}>Showing {dbAudit.length} events — older history is available.</div>
+            </div>
+          )}
+          {dbAudit!==null&&!audHasMore&&dbAudit.length>0&&(
+            <div style={{fontSize:11,color:C.muted,textAlign:'center'}}>End of audit history{(audFrom||audTo)?' for this date range':''}.</div>
           )}
         </div>
       )}
