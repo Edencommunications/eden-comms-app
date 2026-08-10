@@ -257,6 +257,12 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [newTitle,     setNewTitle]     = useState('')
   const [newDesc,      setNewDesc]      = useState('')
   const [savingCourse, setSavingCourse] = useState(false)
+  // Never silently discard a half-typed new course (backdrop click or Cancel)
+  const closeNewCourse = () => {
+    if ((newTitle.trim() || newDesc.trim()) && !window.confirm('Discard your new course?')) return
+    setNewTitle(''); setNewDesc('')
+    setShowNewCourse(false)
+  }
 
   // Admin: edit course title/description
   const [courseEdit,   setCourseEdit]   = useState(null) // {title,description}
@@ -1706,7 +1712,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       {/* ── NEW COURSE MODAL (Admin only) ─────────────────── */}
       {showNewCourse&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
-          onClick={e=>{if(e.target===e.currentTarget)setShowNewCourse(false)}}>
+          onClick={e=>{if(e.target===e.currentTarget)closeNewCourse()}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:420,padding:24}}>
             <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>Create New Course</div>
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>Course will be saved as a draft. Publish when ready and grant access to coaches and clients.</div>
@@ -1721,7 +1727,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                 style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
             </div>
             <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>setShowNewCourse(false)}
+              <button onClick={closeNewCourse}
                 style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
               <button onClick={createCourse} disabled={savingCourse||!newTitle.trim()}
                 style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newTitle.trim()&&!savingCourse?1:.5}}>
