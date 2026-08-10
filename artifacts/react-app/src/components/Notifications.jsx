@@ -124,8 +124,8 @@ export default function Notifications({ currentUser, onNavigate }) {
     if (!myUUID) return
     fetch('/api/push/prefs', { headers: { Authorization: sbBearer() } })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setPushState({ enabled: !!d?.enabled, devices: d?.devices || 0, cats: d?.cats || {}, categories: d?.categories || PUSH_CATEGORIES_FALLBACK }))
-      .catch(() => setPushState({ enabled: false, devices: 0, cats: {}, categories: PUSH_CATEGORIES_FALLBACK }))
+      .then(d => setPushState({ enabled: !!d?.enabled, devices: d?.devices || 0, cats: d?.cats || {}, categories: d?.categories || PUSH_CATEGORIES_FALLBACK, quiet: d?.quiet || { on: false, start: '22:00', end: '07:00' } }))
+      .catch(() => setPushState({ enabled: false, devices: 0, cats: {}, categories: PUSH_CATEGORIES_FALLBACK, quiet: { on: false, start: '22:00', end: '07:00' } }))
   }, [myUUID])
 
   async function enablePush() {
@@ -158,6 +158,7 @@ export default function Notifications({ currentUser, onNavigate }) {
         enabled: true, devices: sd?.devices || 1,
         cats: sd?.cats ?? p?.cats ?? {},
         categories: sd?.categories ?? p?.categories ?? PUSH_CATEGORIES_FALLBACK,
+        quiet: sd?.quiet ?? p?.quiet ?? { on: false, start: '22:00', end: '07:00' },
       }))
       setPushMsg('✅ Phone notifications are on for this device.')
     } catch (e) {
@@ -182,6 +183,27 @@ export default function Notifications({ currentUser, onNavigate }) {
       // revert on failure
       setPushState(p => ({ ...(p || {}), cats: { ...(p?.cats || {}), [catId]: !next } }))
       setPushMsg('Could not save that preference — try again.')
+    }
+  }
+
+  async function saveQuiet(patch) {
+    const prev = pushState?.quiet || { on: false, start: '22:00', end: '07:00' }
+    const next = { ...prev, ...patch }
+    // Save with the phone's own timezone so "10pm" means 10pm where the user is.
+    let tz
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone } catch {}
+    setPushState(p => ({ ...(p || {}), quiet: next })) // optimistic
+    try {
+      const r = await fetch('/api/push/prefs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ quiet: { ...next, ...(tz ? { tz } : {}) } }),
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(d?.error || 'save failed')
+      if (d?.quiet) setPushState(p => ({ ...(p || {}), quiet: d.quiet }))
+    } catch {
+      setPushState(p => ({ ...(p || {}), quiet: prev })) // revert on failure
+      setPushMsg('Could not save quiet hours — try again.')
     }
   }
 
@@ -484,6 +506,48 @@ export default function Notifications({ currentUser, onNavigate }) {
                     </div>
                   )
                 })}
+                {/* Quiet hours — no buzzes during the window (bell alerts still land in-app) */}
+                {(() => {
+                  const q = pushState.quiet || { on: false, start: '22:00', end: '07:00' }
+                  return (
+                    <div style={{ paddingLeft:6, marginTop:2, borderTop:`1px solid ${C.border}`, paddingTop:8 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+                        <div>
+                          <div style={{ fontSize:11, color:C.white, fontWeight:600 }}>🌙 Quiet hours</div>
+                          <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>No buzzes during these hours — alerts still show in the app</div>
+                        </div>
+                        <button
+                          onClick={() => saveQuiet({ on: !q.on })}
+                          aria-label={`Quiet hours ${q.on ? 'on' : 'off'}`}
+                          style={{
+                            width:34, height:18, borderRadius:9, border:'none', cursor:'pointer', flexShrink:0,
+                            background: q.on ? C.gold : C.border, position:'relative', transition:'background .2s',
+                          }}>
+                          <span style={{
+                            position:'absolute', top:2, left: q.on ? 18 : 2,
+                            width:14, height:14, borderRadius:7, background:C.white, transition:'left .2s', display:'block',
+                          }}/>
+                        </button>
+                      </div>
+                      {q.on && (
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6 }}>
+                          <span style={{ fontSize:10, color:C.muted }}>From</span>
+                          <input
+                            type="time" value={q.start} aria-label="Quiet hours start"
+                            onChange={e => e.target.value && saveQuiet({ start: e.target.value })}
+                            style={{ fontSize:11, background:'transparent', color:C.white, border:`1px solid ${C.border}`, borderRadius:6, padding:'2px 6px', colorScheme:'dark' }}
+                          />
+                          <span style={{ fontSize:10, color:C.muted }}>to</span>
+                          <input
+                            type="time" value={q.end} aria-label="Quiet hours end"
+                            onChange={e => e.target.value && saveQuiet({ end: e.target.value })}
+                            style={{ fontSize:11, background:'transparent', color:C.white, border:`1px solid ${C.border}`, borderRadius:6, padding:'2px 6px', colorScheme:'dark' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             )}
             {pushMsg && <div style={{ fontSize:10, color: pushMsg.startsWith('✅') ? C.success : '#ffa600', marginTop:6, lineHeight:1.5 }}>{pushMsg}</div>}

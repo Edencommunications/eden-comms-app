@@ -129,11 +129,52 @@ function isTrustedPushEndpoint(endpoint: string): boolean {
 
 // ── Per-user subscription storage ──────────────────────────────
 // `cats` = per-category opt-outs. Missing key ⇒ ON (default everything buzzes).
+type QuietHours = { on: boolean; start: string; end: string; tz?: string };
 type UserPush = {
   enabled: boolean;
   subs: Array<{ endpoint: string; keys: any; ua?: string; added?: string }>;
   cats?: Record<string, boolean>;
+  quiet?: QuietHours;
 };
+
+// ── Quiet hours ────────────────────────────────────────────────
+// Optional nightly window (e.g. 22:00–07:00) during which NO phone push is
+// sent — bell notifications still land in-app, so nothing is lost. Times are
+// interpreted in the user's own timezone (IANA name captured when they save).
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+function isValidTz(tz: string): boolean {
+  try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return true; } catch { return false; }
+}
+function minutesNowIn(tz: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false })
+    .formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value || 0);
+  const m = Number(parts.find((p) => p.type === "minute")?.value || 0);
+  return (h % 24) * 60 + m;
+}
+export function inQuietHours(q: QuietHours | undefined, now?: number): boolean {
+  if (!q?.on || !HHMM.test(q.start || "") || !HHMM.test(q.end || "")) return false;
+  const tz = q.tz && isValidTz(q.tz) ? q.tz : "UTC";
+  const cur = typeof now === "number" ? now : minutesNowIn(tz);
+  const [sh, sm] = q.start.split(":").map(Number);
+  const [eh, em] = q.end.split(":").map(Number);
+  const s = sh * 60 + sm, e = eh * 60 + em;
+  if (s === e) return false; // zero-length window = off
+  // Window may wrap midnight (22:00–07:00): inside if after start OR before end.
+  return s < e ? cur >= s && cur < e : cur >= s || cur < e;
+}
+function sanitizeQuiet(raw: any): QuietHours | null {
+  if (!raw || typeof raw !== "object") return null;
+  const on = raw.on === true;
+  const start = HHMM.test(String(raw.start || "")) ? String(raw.start) : "22:00";
+  const end = HHMM.test(String(raw.end || "")) ? String(raw.end) : "07:00";
+  const tzRaw = String(raw.tz || "").slice(0, 64);
+  const tz = tzRaw && isValidTz(tzRaw) ? tzRaw : undefined;
+  return { on, start, end, ...(tz ? { tz } : {}) };
+}
+function quietOut(q?: QuietHours): QuietHours {
+  return { on: !!q?.on, start: q?.start || "22:00", end: q?.end || "07:00", ...(q?.tz ? { tz: q.tz } : {}) };
+}
 
 // ── Notification categories (per-type phone-push preferences) ──
 export const PUSH_CATEGORIES = [
@@ -226,6 +267,9 @@ const TYPE_GOTO: Record<string, string> = {
 async function pushToUser(userId: string, title: string, body: string, type = "", url = "/"): Promise<void> {
   const found = await getUserPush(userId);
   if (!found || !found.cfg.enabled || !found.cfg.subs?.length) return;
+  // Quiet hours: no phone buzzes inside the window — bell notifications
+  // still appear in-app, and no push is queued for later (by design).
+  if (inQuietHours(found.cfg.quiet)) return;
   if (!categoryAllowed(found.cfg, type)) return;
   if (!(await getVapid())) return;
   const alive: typeof found.cfg.subs = [];
@@ -362,7 +406,7 @@ router.get("/push/prefs", async (req: Request, res: Response) => {
     for (const c of PUSH_CATEGORIES) cats[c.id] = found?.cfg.cats?.[c.id] !== false;
     res.json({
       ok: true, enabled: !!found?.cfg.enabled, devices: found?.cfg.subs?.length || 0,
-      cats, categories: PUSH_CATEGORIES,
+      cats, categories: PUSH_CATEGORIES, quiet: quietOut(found?.cfg.quiet),
     });
   } catch { res.status(500).json({ error: "Could not load settings" }); }
 });
@@ -391,7 +435,7 @@ router.post("/push/subscribe", async (req: Request, res: Response) => {
     }
     const cats: Record<string, boolean> = {};
     for (const c of PUSH_CATEGORIES) cats[c.id] = cfg.cats?.[c.id] !== false;
-    res.json({ ok: true, devices: cfg.subs.length, cats, categories: PUSH_CATEGORIES });
+    res.json({ ok: true, devices: cfg.subs.length, cats, categories: PUSH_CATEGORIES, quiet: quietOut(cfg.quiet) });
   } catch { res.status(500).json({ error: "Could not subscribe" }); }
 });
 
@@ -411,12 +455,18 @@ router.post("/push/prefs", async (req: Request, res: Response) => {
       }
       cfg.cats = cats;
     }
+    // Quiet hours: {on, start:"HH:MM", end:"HH:MM", tz:"IANA/Zone"} — validated,
+    // invalid times fall back to sensible defaults, invalid tz is dropped (UTC).
+    if (req.body?.quiet !== undefined) {
+      const q = sanitizeQuiet(req.body.quiet);
+      if (q) cfg.quiet = q;
+    }
     if (!(await saveUserPush(caller.company_id, caller.id, cfg))) {
       res.status(502).json({ error: "Could not save" }); return;
     }
     const cats: Record<string, boolean> = {};
     for (const c of PUSH_CATEGORIES) cats[c.id] = cfg.cats?.[c.id] !== false;
-    res.json({ ok: true, enabled: !!cfg.enabled, devices: cfg.subs?.length || 0, cats });
+    res.json({ ok: true, enabled: !!cfg.enabled, devices: cfg.subs?.length || 0, cats, quiet: quietOut(cfg.quiet) });
   } catch { res.status(500).json({ error: "Could not save" }); }
 });
 
