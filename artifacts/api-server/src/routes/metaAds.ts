@@ -605,7 +605,9 @@ router.post("/meta-ads/run-now", async (req: Request, res: Response) => {
 
 export default router;
 
-async function checkTokenExpiries() {
+// Exported for tests (metaAdsTokenExpiry.test.ts) — the scheduler calls it
+// from processDue; nothing else should invoke it directly.
+export async function checkTokenExpiries() {
   const rows = await dbGet<any>(`admin_settings?key=eq.meta_ads&select=company_id,value`);
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
