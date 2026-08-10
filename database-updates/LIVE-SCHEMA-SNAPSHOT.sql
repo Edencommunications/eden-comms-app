@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
 -- LIVE SUPABASE SCHEMA SNAPSHOT — generated from the running DB
--- Generated: 2026-08-10
+-- Generated: 2026-08-10 (refresh)
 -- This file is the AUTHORITATIVE reference for what actually
 -- exists in the live database. The other .sql files in this repo
 -- are historical and may be stale — trust THIS file.
