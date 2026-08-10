@@ -21,7 +21,7 @@ async function rest<T = any>(path: string): Promise<T[]> {
 }
 
 type Profile = { id: string; role: string; company_id: string | null };
-async function requireStaff(req: Request): Promise<Profile | null> {
+async function requireUser(req: Request): Promise<Profile | null> {
   const auth = String(req.get("authorization") || "");
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || token === SUPABASE_ANON) return null;
@@ -34,13 +34,25 @@ async function requireStaff(req: Request): Promise<Profile | null> {
   if (!email) return null;
   const rows = await rest<any>(`user_profiles?email=eq.${encodeURIComponent(email)}&is_active=not.is.false&select=id,role,company_id`);
   const me = rows[0];
-  if (!me || me.role === "client") return null; // Team Hub is staff-only
+  if (!me) return null;
   return me;
 }
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-// Valid conversation keys: "general" or "<uuidA>_<uuidB>" (DM pair, sorted)
-const KEY_RE = new RegExp(`^(general|${UUID}_${UUID})$`, "i");
+// Valid conversation keys:
+//   "general" / "<uuidA>_<uuidB>"  — Team Hub (staff-only)
+//   "dba:<dbaId>:<communityId>"    — DBA chat channels & 1v1s (any member)
+const KEY_RE = new RegExp(`^(general|${UUID}_${UUID}|dba:${UUID}:${UUID})$`, "i");
+const DBA_KEY_RE = new RegExp(`^dba:${UUID}:${UUID}$`, "i");
+
+// Team Hub is staff-only; DBA members hold role 'client' in the owning org,
+// so clients may sync read state ONLY for dba:* keys (their own row).
+function allowedKeys(me: Profile, map: Record<string, number>): Record<string, number> {
+  if (me.role !== "client") return map;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(map)) if (DBA_KEY_RE.test(k)) out[k] = v;
+  return out;
+}
 
 export function sanitize(input: any): Record<string, number> {
   const out: Record<string, number> = {};
@@ -119,9 +131,9 @@ const router: IRouter = Router();
 // GET /team/seen — this user's last-viewed map from the DB.
 router.get("/team/seen", async (req: Request, res: Response) => {
   try {
-    const me = await requireStaff(req);
+    const me = await requireUser(req);
     if (!me) { res.status(401).json({ error: "Not authorized" }); return; }
-    res.json({ ok: true, seen: (await readSeenRow(me)).seen });
+    res.json({ ok: true, seen: allowedKeys(me, (await readSeenRow(me)).seen) });
   } catch (e) {
     logger.warn({ err: String(e) }, "[TeamSeen] read failed");
     res.status(500).json({ error: "Could not load read state" });
@@ -132,12 +144,12 @@ router.get("/team/seen", async (req: Request, res: Response) => {
 // Returns the merged map so the device can update its cache.
 router.post("/team/seen", async (req: Request, res: Response) => {
   try {
-    const me = await requireStaff(req);
+    const me = await requireUser(req);
     if (!me) { res.status(401).json({ error: "Not authorized" }); return; }
-    const incoming = sanitize((req.body || {}).seen);
+    const incoming = allowedKeys(me, sanitize((req.body || {}).seen));
     const merged = await saveSeenAtomic(me, incoming);
     if (!merged) { res.status(500).json({ error: "Could not save read state" }); return; }
-    res.json({ ok: true, seen: merged });
+    res.json({ ok: true, seen: allowedKeys(me, merged) });
   } catch (e) {
     logger.warn({ err: String(e) }, "[TeamSeen] save failed");
     res.status(500).json({ error: "Could not save read state" });

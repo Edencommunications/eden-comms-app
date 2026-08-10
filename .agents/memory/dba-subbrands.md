@@ -72,3 +72,6 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 - Each DBA gets its own derived webhook secret (HMAC label `community-post-dba:<dbaId>`, communityPost.ts) valid ONLY for that DBA's `dba:<id>` group channels — never org communities, other DBAs, or `dbadm:` DMs. Org secret and endpoint untouched.
 - POST /webhooks/community-post-dba/:dbaId + /config (config auth = dbaAccess(...).manage — coach/delegates/org+HQ admins). Card lives in the DBA HQ tab next to the Daily.co card.
 - dba.ts now exports findDbaAnywhere/dbaAccess/requireUserJwt for reuse (no circular import: communityPost→dba only).
+
+## Cross-device chat read state
+DBA chat unread "last seen" syncs through the shared `/team/seen` store using namespaced keys `dba:<dbaId>:<communityId>` (numeric ms stamps, per-key max merge). Clients (DBA members hold role 'client') are allowed on those routes but only for `dba:*` keys — Team Hub keys stay staff-only. localStorage (`dba_seen_*`, ISO strings) remains the fast cache; DbaChat converts ISO↔ms at the sync boundary.

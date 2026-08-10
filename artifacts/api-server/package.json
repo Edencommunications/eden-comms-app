@@ -9,7 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:realtime": "node --test tests/realtime-publication.mjs",
-    "test": "esbuild src/routes/__tests__/communityMute.test.ts src/routes/__tests__/communityPostWebhook.test.ts src/routes/__tests__/metaAdsTokenExpiry.test.ts src/lib/__tests__/startDateReminders.test.ts src/routes/__tests__/pushToggle.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.test-dist --out-extension:.js=.mjs && node --test \".test-dist/**/*.test.mjs\""
+    "test": "esbuild src/routes/__tests__/communityMute.test.ts src/routes/__tests__/teamSeen.test.ts src/routes/__tests__/communityPostWebhook.test.ts src/routes/__tests__/metaAdsTokenExpiry.test.ts src/lib/__tests__/startDateReminders.test.ts src/routes/__tests__/pushToggle.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.test-dist --out-extension:.js=.mjs && node --test \".test-dist/**/*.test.mjs\""
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

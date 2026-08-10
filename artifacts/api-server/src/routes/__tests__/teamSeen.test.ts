@@ -116,10 +116,39 @@ const post = (tok: string, seen: any) =>
 const get = (tok: string) =>
   realFetch(`${base}/team/seen`, { headers: tok ? { Authorization: `Bearer ${tok}` } : {} });
 
-test("requires auth and rejects clients", async () => {
+const DBA_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const CHAN_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const DBA_KEY = `dba:${DBA_ID}:${CHAN_ID}`;
+
+test("requires auth", async () => {
   assert.equal((await get("")).status, 401);
-  assert.equal((await get("tok-client")).status, 401);
-  assert.equal((await post("tok-client", { general: 1000 })).status, 401);
+  assert.equal((await post("", { general: 1000 })).status, 401);
+});
+
+test("clients can sync ONLY dba:* keys — Team Hub keys are dropped", async () => {
+  const r = await post("tok-client", { general: 1000, [DM_KEY]: 2000, [DBA_KEY]: 3000 });
+  assert.equal(r.status, 200);
+  const b: any = await (await get("tok-client")).json();
+  assert.deepEqual(b.seen, { [DBA_KEY]: 3000 });
+});
+
+test("staff can mix Team Hub and DBA keys in one map", async () => {
+  await post("tok-a", { general: 1000, [DBA_KEY]: 3000 });
+  const b: any = await (await get("tok-a")).json();
+  assert.deepEqual(b.seen, { general: 1000, [DBA_KEY]: 3000 });
+});
+
+test("dba keys get the same per-key max merge (no rollback)", async () => {
+  await post("tok-client", { [DBA_KEY]: 5000 });
+  await post("tok-client", { [DBA_KEY]: 1000 }); // stale device — ignored
+  const b: any = await (await get("tok-client")).json();
+  assert.equal(b.seen[DBA_KEY], 5000);
+});
+
+test("malformed dba keys are dropped", async () => {
+  await post("tok-a", { "dba:nope:really": 1000, [`dba:${DBA_ID}`]: 2000, [`dba:${DBA_ID}:${CHAN_ID}:x`]: 3000 });
+  const b: any = await (await get("tok-a")).json();
+  assert.deepEqual(b.seen, {});
 });
 
 test("round-trips a seen map and sanitizes bad input", async () => {
