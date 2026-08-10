@@ -344,7 +344,9 @@ let watching = false;
 
 type WatchState = { ts: string; ids: string[]; lease?: string; holder?: string };
 
-async function watchPass() {
+// Exported for tests (pushWatcherRestart.test.ts) — production only calls it
+// through startPushWatcher()'s setInterval.
+export async function watchPass() {
   if (watching) return; // never overlap passes within this process
   watching = true;
   try {
