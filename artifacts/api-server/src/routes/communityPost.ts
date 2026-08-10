@@ -390,12 +390,14 @@ router.post("/webhooks/community-post-dba/:dbaId", async (req: Request, res: Res
     const given = String(req.get("x-webhook-secret") || "").trim();
     if (!SECRET_KEY) { res.status(503).json({ error: "Webhook not available — server secret missing" }); return; }
     // Load the DBA first: the expected secret depends on its stored nonce.
-    // Unknown DBA → same 401 as a wrong secret (no existence oracle).
     const hit = await findDbaAnywhere(dbaId);
-    if (!hit || !given || !safeEqual(given, communityPostDbaSecretFor(dbaId, hit.dba.webhook_nonce))) {
+    // Unknown or inactive DBA → 404 so callers know the endpoint is gone.
+    if (!hit) { res.status(404).json({ error: "DBA not found" }); return; }
+    if (!hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
+    // Wrong or missing secret → 401.
+    if (!given || !safeEqual(given, communityPostDbaSecretFor(dbaId, hit.dba.webhook_nonce))) {
       res.status(401).json({ error: "Wrong or missing x-webhook-secret header" }); return;
     }
-    if (!hit.dba.is_active) { res.status(404).json({ error: "DBA not found" }); return; }
     if (rateLimited(`dba:${dbaId}`)) { res.status(429).json({ error: "Too many posts — try again later (30 per hour max)" }); return; }
 
     const b: any = req.body || {};
