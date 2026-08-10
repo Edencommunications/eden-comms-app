@@ -219,7 +219,7 @@ async function dbaAllowedForOrg(companyId: string): Promise<boolean> {
 }
 
 // ── Authenticated (non-admin) caller → profile ───────────────────
-async function requireUserJwt(req: Request): Promise<{ id: string; email: string; name: string | null; role: string; company_id: string | null } | null> {
+export async function requireUserJwt(req: Request): Promise<{ id: string; email: string; name: string | null; role: string; company_id: string | null } | null> {
   const auth = String(req.get("authorization") || "");
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || token === SUPABASE_ANON) return null;
@@ -698,12 +698,12 @@ router.post("/dba/member-remove", async (req: Request, res: Response) => {
 // Access: DBA member, the DBA's coach, or a super_admin of the DBA's org.
 // Managers (coach / org admin) also get the org's course catalog so they can
 // assign/unassign courses, plus edit rights on Connect links.
-async function findDbaAnywhere(dbaId: string): Promise<{ companyId: string; dba: DbaRecord } | null> {
+export async function findDbaAnywhere(dbaId: string): Promise<{ companyId: string; dba: DbaRecord } | null> {
   const all = await loadAllDbas();
   return all.find((x) => x.dba.id === dbaId) || null;
 }
 type Me = NonNullable<Awaited<ReturnType<typeof requireUserJwt>>>;
-function dbaAccess(me: Me, companyId: string, dba: DbaRecord): { member: boolean; manage: boolean } {
+export function dbaAccess(me: Me, companyId: string, dba: DbaRecord): { member: boolean; manage: boolean } {
   const member = dba.members.some((m) => m.email.toLowerCase() === me.email);
   // Delegated staff/VAs manage too — but only same-org, non-client logins,
   // and the grant is re-checked live from the DBA record on every request.

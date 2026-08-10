@@ -6456,6 +6456,19 @@ const DbaHq = ({ dba, primary, content }: any) => {
       .catch(() => setDaily({ connected: false, source: 'none', mode: 'org' }));
   }, [dba.id]);
   useEffect(() => { setDailyIn(''); setDailyMsg(''); loadDaily(); }, [loadDaily]);
+  // Zapier → post into this DBA's channels (per-DBA webhook, own secret)
+  const [zap, setZap] = useState<any>(null);           // null loading · false error · {url, secret, communities}
+  const [zapCopied, setZapCopied] = useState('');
+  useEffect(() => {
+    setZap(null);
+    fetch(`${(import.meta.env.BASE_URL || '/')}api/webhooks/community-post-dba/${dba.id}/config`, { headers: { Authorization: sbBearer() } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setZap(d && d.url ? d : false))
+      .catch(() => setZap(false));
+  }, [dba.id]);
+  const zapCopy = async (what: string, val: string) => {
+    try { await navigator.clipboard.writeText(val); setZapCopied(what); setTimeout(() => setZapCopied(''), 2000); } catch {}
+  };
   const defs = hq?.effective_defs || [];
   const courses = (content?.courses || []);
   if (hq === null) return <div style={{ padding: 60, textAlign: "center" }}><p style={{ color: B.muted, fontSize: 13 }}>Loading…</p></div>;
@@ -6572,6 +6585,42 @@ const DbaHq = ({ dba, primary, content }: any) => {
           </>
         )}
         {dailyMsg && <p style={{ fontSize: 11, color: '#4FD89A', margin: "8px 0 0" }}>{dailyMsg}</p>}
+      </Card>
+
+      {/* ── Zapier → community post webhook (this DBA's own secret) ── */}
+      <Card style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: B.text, margin: "0 0 4px" }}>📬 Zapier → Community Post Webhook</p>
+        <p style={{ fontSize: 11, color: B.muted, margin: "0 0 10px", lineHeight: 1.6 }}>
+          Let Zapier (or any automation) post a message into one of {dba?.name}'s channels — this secret only works for this space's channels, nothing else.
+          In Zapier, use <strong>Webhooks by Zapier → POST</strong> with the URL below, add a header <strong>x-webhook-secret</strong> with the secret,
+          and send JSON data with <strong>community</strong> (the channel's name, exactly as shown below) and <strong>message</strong> (the text to post — links are fine).
+          Optional: <strong>sender_name</strong> to change the name the post appears under.
+        </p>
+        {zap === null && <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>Loading…</p>}
+        {zap === false && <p style={{ fontSize: 12, color: "#ffa600", margin: 0 }}>Couldn't load the webhook details — refresh the page and try again.</p>}
+        {zap && zap.url && (
+          <>
+            {[["Webhook URL", zap.url], ["Secret (x-webhook-secret header)", zap.secret]].map(([label, val]: any) => (
+              <div key={label} style={{ marginBottom: 8 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: B.muted, letterSpacing: .6, textTransform: "uppercase", margin: "0 0 3px" }}>{label}</p>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <code style={{ flex: 1, minWidth: 180, fontSize: 10, color: B.text, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 6, padding: "6px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</code>
+                  <button onClick={() => zapCopy(label, val)}
+                    style={{ background: zapCopied === label ? '#4FD89A' : 'none', color: zapCopied === label ? '#000' : primary, border: `1px solid ${B.border}`, borderRadius: 6, padding: "5px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                    {zapCopied === label ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {Array.isArray(zap.communities) && zap.communities.length > 0 ? (
+              <p style={{ fontSize: 11, color: B.muted, margin: "6px 0 0", lineHeight: 1.6 }}>
+                Your channels: {zap.communities.map((c: any) => c.name).join(' · ')}
+              </p>
+            ) : (
+              <p style={{ fontSize: 11, color: B.muted, margin: "6px 0 0" }}>No channels yet — create one in the Community tab first.</p>
+            )}
+          </>
+        )}
       </Card>
 
       {/* ── Members & tiers ── */}

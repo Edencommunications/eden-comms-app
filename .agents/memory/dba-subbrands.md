@@ -67,3 +67,8 @@ description: How white-label sub-brands (DBAs) are stored, gated, branded, and h
 - dbaAccess coach branch requires the coach to still be non-client staff of the DBA's org (demotion/transfer revokes manage). PATCH predicates must carry company_id/course_id to avoid authz TOCTOU — architect review caught both.
 - Lessons live in course_modules (denormalized sections: section_id/section_title, module_id = "sec.n"); no course_sections table. Video URLs normalized client-side (dbaToEmbed) to YouTube/Vimeo/Loom/Drive embeds.
 - DBA Connect links support optional emoji; member view is a 2-col accent-gradient card grid cycling through brand_colors palette.
+
+## Per-DBA Zapier webhook (Aug 2026)
+- Each DBA gets its own derived webhook secret (HMAC label `community-post-dba:<dbaId>`, communityPost.ts) valid ONLY for that DBA's `dba:<id>` group channels — never org communities, other DBAs, or `dbadm:` DMs. Org secret and endpoint untouched.
+- POST /webhooks/community-post-dba/:dbaId + /config (config auth = dbaAccess(...).manage — coach/delegates/org+HQ admins). Card lives in the DBA HQ tab next to the Daily.co card.
+- dba.ts now exports findDbaAnywhere/dbaAccess/requireUserJwt for reuse (no circular import: communityPost→dba only).
