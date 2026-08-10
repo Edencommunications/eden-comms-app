@@ -168,6 +168,12 @@ export const FOODS = [
   {name:'Celery',serving:'100g',cal:14,pro:0.7,fat:0.2,carb:3,fib:1.6,cat:'Fruits/Vegetables'},
   {name:'Onion',serving:'100g',cal:40,pro:1.1,fat:0.1,carb:9.3,fib:1.7,cat:'Fruits/Vegetables'},
   {name:'Garlic',serving:'9g',cal:13,pro:0.6,fat:0,carb:3,fib:0.2,cat:'Fruits/Vegetables'},
+  {name:'Lemon',serving:'1 lemon (58g)',cal:17,pro:0.6,fat:0.2,carb:5.4,fib:1.6,cat:'Fruits/Vegetables'},
+  {name:'Raw Goat Milk',serving:'240ml',cal:168,pro:8.7,fat:10.1,carb:10.9,fib:0,cat:'Drinks/Condiments'},
+  {name:'Raw Cow Milk (Whole)',serving:'240ml',cal:150,pro:7.7,fat:8,carb:11.7,fib:0,cat:'Drinks/Condiments'},
+  {name:'MALK Almond Milk (Unsweetened)',serving:'240ml',cal:60,pro:2,fat:5,carb:2,fib:1,cat:'Drinks/Condiments'},
+  {name:'Raw Parmigiano Reggiano',serving:'1oz (28g)',cal:111,pro:10,fat:7.3,carb:0.9,fib:0,cat:'Proteins'},
+  {name:'Capers',serving:'1 tbsp (9g)',cal:2,pro:0.2,fat:0.1,carb:0.4,fib:0.3,cat:'Drinks/Condiments'},
   // ── Broths ──
   {name:'Miso Broth',serving:'240ml',cal:40,pro:3,fat:1,carb:5,fib:1,cat:'Drinks/Condiments'},
   {name:'Chicken Broth',serving:'240ml',cal:15,pro:1.6,fat:0.5,carb:1.1,fib:0,cat:'Drinks/Condiments'},
