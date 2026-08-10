@@ -393,7 +393,46 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
   );
 };
 
-// FORGOT PASSWORD — sends a real Supabase Auth recovery email
+const OuraResultScreen = ({ result, brandOrg = null, onSignIn }) => {
+  const wl = brandOrg ? wlPalette(brandOrg) : null;
+  const primary = wl ? wl.primary : B.gold;
+  const ok = result === "connected";
+  const denied = result === "denied";
+  return (
+    <div style={{ minHeight:"100vh", background: brandOrg ? `linear-gradient(160deg, ${primary}22 0%, #000000 100%)` : `linear-gradient(160deg, #1a1200 0%, #000000 100%)`, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ width:"100%", maxWidth:440, textAlign:"center" }}>
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:16 }}>
+          {brandOrg ? <OrgLogo org={brandOrg} size={64}/> : <EdenLogo size={64}/>}
+        </div>
+        <Card style={{ padding:"32px 24px" }}>
+          <div style={{ fontSize:48, marginBottom:14, color: ok ? B.success : denied ? B.muted : B.danger, fontWeight:800 }}>{ok ? "✓" : denied ? "✋" : "⚠️"}</div>
+          <h1 style={{ fontSize:20, fontWeight:800, color:B.text, margin:"0 0 10px" }}>
+            {ok ? "Your Oura Ring is connected!" : denied ? "Connection cancelled" : "Something went wrong"}
+          </h1>
+          <p style={{ fontSize:13, color:B.muted, lineHeight:1.7, margin:"0 auto", maxWidth:340 }}>
+            {ok
+              ? "All set — your ring data will start syncing to your coach automatically. You can close this tab and return to the app."
+              : denied
+              ? "No problem — you declined access on Oura's page, so nothing was connected. To try again, open the app and tap \"Connect Oura Ring\" in your Wearables tab."
+              : "Your Oura Ring wasn't connected. Please open the app and tap \"Connect Oura Ring\" in your Wearables tab to try again."}
+          </p>
+          {ok && (
+            <div style={{ marginTop:18, display:"inline-block", background:`${B.success}18`, border:`1px solid ${B.success}44`, borderRadius:8, padding:"8px 16px", fontSize:12, fontWeight:700, color:B.success }}>
+              ✓ Connected — you're done here
+            </div>
+          )}
+          <button onClick={onSignIn}
+            style={{ display:"block", margin:"22px auto 0", background:"none", border:"none", cursor:"pointer", color:primary, fontSize:13, fontWeight:700, padding:0 }}>
+            {ok ? "Or sign in here instead →" : "Sign in →"}
+          </button>
+        </Card>
+        <p style={{ fontSize:10, color:"#444444", marginTop:18 }}>
+          {brandOrg ? `🔒 ${brandOrg.name}` : "🔒 edencommunications.io"}
+        </p>
+      </div>
+    </div>
+  );
+};
 const ForgotScreen = ({ onBack }) => {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -7524,6 +7563,12 @@ export default function App() {
   // in with a temporary recovery session — show the "choose a new password"
   // screen instead of the login form.
   const [recovery, setRecovery] = useState(() => /type=recovery/.test(window.location.hash));
+  // Oura OAuth redirect result (?oura=connected|denied|error) — captured once
+  // so a signed-out tab can show the friendly confirmation page. The URL keeps
+  // the param so a signed-in session's Wearables tab can still pick it up.
+  const [ouraReturn, setOuraReturn] = useState<string|null>(() => {
+    try { return new URLSearchParams(window.location.search).get("oura"); } catch { return null; }
+  });
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setRecovery(true);
@@ -7629,6 +7674,21 @@ export default function App() {
   }, [user?.email, user?.mustChangePassword, isDbaMember, cameViaDba]);
 
   if (!user) {
+    // Oura OAuth return in a signed-out tab (phones often open the redirect
+    // in a fresh browser) — show a friendly confirmation instead of a bare
+    // login form. Signed-in users never hit this: Wearables handles ?oura=.
+    if (ouraReturn) {
+      return <OuraResultScreen result={ouraReturn} brandOrg={brandOrg}
+        onSignIn={() => {
+          setOuraReturn(null);
+          try {
+            const p = new URLSearchParams(window.location.search);
+            p.delete("oura");
+            const qs = p.toString();
+            history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+          } catch {}
+        }}/>;
+    }
     if (recovery) return <SetPasswordScreen mode="recovery"
       onDone={()=>{ setRecovery(false); supabase.auth.signOut().catch(()=>{}); try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch {} }}
       onCancel={()=>{ setRecovery(false); supabase.auth.signOut().catch(()=>{}); try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch {} }}/>;
