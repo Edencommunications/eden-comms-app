@@ -180,6 +180,41 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   const msgCountRef = useRef(-1)
 
   const allConvos = [...channels, ...dms]
+
+  // ── Per-conversation unread counts (last-seen timestamps in localStorage,
+  //    same pattern + badge styling as Communities.jsx) ──
+  const seenKey = `dba_seen_${dbaId}_${myId || 'anon'}`
+  const getSeen = () => { try { return JSON.parse(localStorage.getItem(seenKey) || '{}') } catch { return {} } }
+  const markSeen = (cid) => {
+    if (!cid) return
+    try { const m = getSeen(); m[cid] = new Date().toISOString(); localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
+    setUnread(u => ({ ...u, [cid]: 0 }))
+  }
+  const [unread, setUnread] = useState({})   // { communityId: count }
+  const convosRef = useRef([])
+  convosRef.current = allConvos
+  async function refreshUnread(list) {
+    const cs = (list || convosRef.current).filter(c => c.id !== activeIdRef.current)
+    if (!cs.length) return
+    const seen = getSeen()
+    const results = await Promise.all(cs.map(async c => {
+      try {
+        const since = seen[c.id] || '1970-01-01'
+        const rows = await dbGet('community_messages',
+          `community_id=eq.${c.id}&created_at=gt.${encodeURIComponent(since)}&select=id,sender_id&limit=30`)
+        const n = Array.isArray(rows) ? rows.filter(m => m.sender_id !== myId).length : 0
+        return [c.id, n]
+      } catch { return [c.id, 0] }
+    }))
+    setUnread(u => { const next = { ...u }; for (const [id, n] of results) next[id] = n; return next })
+  }
+  const UnreadBadge = ({ n }) => n > 0 ? (
+    <span style={{ background:C.gold, color:C.black, borderRadius:9, minWidth:18, height:18, fontSize:10, fontWeight:800,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:'0 5px', flexShrink:0 }}>
+      {n >= 30 ? '30+' : n}
+    </span>
+  ) : null
+
   const active = allConvos.find(c => c.id === activeId) || null
   const activeIsDm = !!active && active.context === `dbadm:${dbaId}`
   const dmPartnerName = (c) => {
@@ -205,6 +240,14 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   }
   useEffect(() => { setLoaded(false); if (cfg) loadChannels() }, [cfg]) // eslint-disable-line
 
+  // Refresh unread badges when the list changes + every 30s; opening a conversation clears its badge.
+  useEffect(() => { if (allConvos.length) refreshUnread(allConvos) }, [channels.length, dms.length, activeId]) // eslint-disable-line
+  useEffect(() => {
+    const iv = setInterval(() => { if (allConvos.length) refreshUnread(allConvos) }, 30000)
+    return () => clearInterval(iv)
+  }, [channels, dms, activeId]) // eslint-disable-line
+  useEffect(() => { if (activeId) markSeen(activeId) }, [activeId]) // eslint-disable-line
+
   async function loadMembers(cid = activeId) {
     if (!cid) return
     const rows = await dbGet('community_members', `community_id=eq.${cid}&order=created_at.asc`)
@@ -220,6 +263,9 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
       const grew = rows.length > msgCountRef.current
       msgCountRef.current = rows.length
       setMessages(rows)
+      // Keep this conversation "read" while it's open so leaving it doesn't
+      // show a stale badge for messages the person already saw.
+      if (grew && cid === activeIdRef.current) markSeen(cid)
       fetchReactions('community_messages', rows.map(m => m.id)).then(setReactions).catch(() => {})
       if (firstLoad || (grew && nearBottom)) {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
@@ -250,7 +296,8 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     const onLive = ({ payload }) => {
       if (!payload?.communityId) return
       if (payload.userId === myId) return
-      if (payload.communityId === activeIdRef.current) loadMessages(payload.communityId)
+      if (payload.communityId === activeIdRef.current) { loadMessages(payload.communityId); markSeen(payload.communityId) }
+      else refreshUnread()
     }
     const ch = supabase.channel(`dba-chat-live-${dbaId}`)
       .on('broadcast', { event: 'new-message' },     onLive)
@@ -722,9 +769,10 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                   display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:14, color: channelColor(ci) }}>#</span>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color: activeId===c.id ? channelColor(ci) : C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
+                  <div style={{ fontSize:12, fontWeight:(unread[c.id]>0&&activeId!==c.id)?800:700, color: activeId===c.id ? channelColor(ci) : C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
                   <div style={{ fontSize:9, color:C.muted }}>{allFlags[c.id] ? 'everyone in this community' : `by ${c.created_by_name || '—'}`}</div>
                 </div>
+                {activeId !== c.id && <UnreadBadge n={unread[c.id]}/>}
                 {canManage && (
                   <button onClick={e => { e.stopPropagation(); archiveChannel(c) }} title="Archive group"
                     style={{ background:'none', border:'none', color:C.muted, fontSize:11, cursor:'pointer', padding:2 }}>🗄</button>
@@ -749,9 +797,10 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                   <div style={{ width:22, height:22, borderRadius:'50%', background:`${C.gold}22`, color:C.gold,
                     display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, flexShrink:0 }}>{(p.name||'?')[0]}</div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:12, fontWeight:600, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
+                    <div style={{ fontSize:12, fontWeight:(openConvo&&unread[openConvo.id]>0&&activeId!==openConvo.id)?800:600, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
                     <div style={{ fontSize:9, color:C.muted }}>{p.kind === 'coach' ? 'Coach' : p.kind === 'admin' ? 'Admin' : 'Member'}</div>
                   </div>
+                  {openConvo && activeId !== openConvo.id && <UnreadBadge n={unread[openConvo.id]}/>}
                   {!unlocked && <span style={{ fontSize:11 }}>🔒</span>}
                   {dmBusy === p.id && <span style={{ fontSize:9, color:C.muted }}>…</span>}
                 </div>
