@@ -4036,15 +4036,17 @@ const AdminDashboard = ({ user }:any) => {
   const ghlCopy = async (what: string, val: string) => {
     try { await navigator.clipboard.writeText(val); setGhlCopied(what); setTimeout(() => setGhlCopied(''), 2000); } catch {}
   };
-  // Community post webhook — Zapier → post into a community (per-org)
+  // Community post webhook — Zapier → post into a community (per-org).
+  // Eden HQ uses the Eden org id; white-label admins use their own org.
+  const cpOrgId = isOwnerHQ ? EDEN_COMPANY_ID : (myOrg?.id || null);
   const [cpCfg, setCpCfg] = useState<any>(null);        // null loading · false error · {url, secret, communities}
   useEffect(() => {
-    if (!myOrg?.id) return;
-    fetch(`/api/webhooks/community-post/${myOrg.id}/config`, { headers: { Authorization: sbBearer() } })
+    if (!cpOrgId) return;
+    fetch(`/api/webhooks/community-post/${cpOrgId}/config`, { headers: { Authorization: sbBearer() } })
       .then(r => (r.ok ? r.json() : null))
       .then(d => setCpCfg(d && d.url ? d : false))
       .catch(() => setCpCfg(false));
-  }, [myOrg?.id]);
+  }, [cpOrgId]);
   // Automated welcome messages (admin-configurable, per org + per coach)
   const [welcomeCfg, setWelcomeCfg] = useState<any>(null); // null = loading
   const [welcomeSaving, setWelcomeSaving] = useState(false);
@@ -4387,7 +4389,7 @@ const AdminDashboard = ({ user }:any) => {
               </Card>
             )}
             {/* Community post webhook — Zapier → post into a community */}
-            {myOrg && (
+            {cpOrgId && (
               <Card style={{ marginBottom:20 }}>
                 <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>📬 Zapier → Community Post Webhook</p>
                 <p style={{ fontSize:11, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
