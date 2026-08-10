@@ -192,6 +192,27 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     try { window.dispatchEvent(new CustomEvent('hub-seen-updated')) } catch {}   // same-window listeners; cross-tab relies on the storage event
     setUnread(u => ({ ...u, [cid]: 0 }))
     pushSeenRemote(cid, iso)
+    // Tell my other open devices right away (Team Hub 'seen' pattern) — the
+    // DB write above is the durable copy; this just clears their dots instantly.
+    try { rtChanRef.current?.send({ type:'broadcast', event:'seen', payload:{ userId: myId, seen: { [cid]: Date.parse(iso) } } }) } catch {}
+  }
+  // Same user read a conversation on ANOTHER device — merge (per-key max) into
+  // the local cache and clear its badge here without waiting for a poll cycle.
+  function onRemoteSeen(payload) {
+    if (payload?.userId !== myId || !payload?.seen) return
+    const m = getSeen()
+    let changed = false
+    const cleared = []
+    for (const [cid, t] of Object.entries(payload.seen)) {
+      const n = Number(t)
+      if (!Number.isFinite(n) || n <= 0) continue
+      const cur = m[cid] ? Date.parse(m[cid]) || 0 : 0
+      if (n > cur) { m[cid] = new Date(n).toISOString(); changed = true; cleared.push(cid) }
+    }
+    if (!changed) return
+    try { localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
+    try { window.dispatchEvent(new CustomEvent('hub-seen-updated')) } catch {}
+    setUnread(u => { const next = { ...u }; for (const cid of cleared) next[cid] = 0; return next })
   }
 
   // ── Cross-device read-state sync (same /team/seen store Team Hub uses).
@@ -377,6 +398,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     const ch = supabase.channel(`dba-chat-live-${dbaId}`)
       .on('broadcast', { event: 'new-message' },     onLive)
       .on('broadcast', { event: 'message-deleted' }, onLive)
+      .on('broadcast', { event: 'seen' }, ({ payload }) => onRemoteSeen(payload))
       .subscribe(status => { rtLiveRef.current = status === 'SUBSCRIBED' })
     rtChanRef.current = ch
     return () => { rtLiveRef.current = false; rtChanRef.current = null; supabase.removeChannel(ch) }

@@ -243,6 +243,15 @@ export default function Week7({ currentUser, initialDm }) {
     // 2) DBA chats — group channels I'm a member of + my DMs, per-DBA seen map
     try {
       let any = false
+      // Merge the DB read-state copy (keys `dba:<dbaId>:<communityId>`, numeric
+      // ms, server merges per-key max) into the local dba_seen_* caches first —
+      // a chat read on ANOTHER device clears this device's dot within a cycle.
+      let remoteSeen = null
+      try {
+        const r = await fetch('/api/team/seen', { headers: { Authorization: sbBearer() } })
+        const b = r.ok ? await r.json() : null
+        if (b?.seen && typeof b.seen === 'object') remoteSeen = b.seen
+      } catch { /* offline — local caches still work */ }
       for (const d of myDbas.filter(x => x.is_active !== false)) {
         if (any) break
         // Managers (DBA coach, delegated staff, super admins — anyone the server
@@ -262,7 +271,21 @@ export default function Week7({ currentUser, initialDm }) {
           ...((dms || []).filter(c => String(c.name || '').split('_').includes(myUUID))),
         ]
         if (!convos.length) continue
-        const seenMap = readSeenMap(`dba_seen_${d.id}_${myUUID}`)
+        const lsKey = `dba_seen_${d.id}_${myUUID}`
+        const seenMap = readSeenMap(lsKey)
+        if (remoteSeen) {
+          const pfx = `dba:${d.id}:`
+          let changed = false
+          for (const [k, v] of Object.entries(remoteSeen)) {
+            if (!k.startsWith(pfx)) continue
+            const cid = k.slice(pfx.length)
+            const n = Number(v)
+            if (!Number.isFinite(n) || n <= 0) continue
+            const cur = seenMap[cid] ? Date.parse(seenMap[cid]) || 0 : 0
+            if (n > cur) { seenMap[cid] = new Date(n).toISOString(); changed = true }
+          }
+          if (changed) { try { localStorage.setItem(lsKey, JSON.stringify(seenMap)) } catch {} }
+        }
         const hits = await Promise.all(convos.map(c => hasNewerMsg(c.id, seenMap[c.id])))
         if (hits.some(Boolean)) any = true
       }
