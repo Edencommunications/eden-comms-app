@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { getStartRemindersHealth } from "../lib/startDateReminders";
 import { getDietPlanDuplicatesHealth } from "../lib/dietPlanDuplicates";
+import { getRealtimeWatchHealth } from "../lib/realtimeWatch";
 
 const router: IRouter = Router();
 
@@ -12,14 +13,19 @@ router.get("/healthz", (_req, res) => {
   // silently stopped). Surface that as a degraded, non-200 health response so
   // uptime monitors catch it.
   const reminders = getStartRemindersHealth();
+
+  // Daily realtime-publication watchdog: a failed or stale run means
+  // "instant admin updates" may be silently broken.
+  const realtimeWatch = getRealtimeWatchHealth();
   // Duplicate diet-plan watcher: unhealthy when any client has more than one
   // diet_plans row (insert-per-save regression), when the check itself failed,
   // or when the hourly check silently stopped running.
   const dietPlanDuplicates = getDietPlanDuplicatesHealth();
-  const healthy = reminders.healthy && dietPlanDuplicates.healthy;
+  const healthy = reminders.healthy && dietPlanDuplicates.healthy && realtimeWatch.healthy;
   res
     .status(healthy ? 200 : 503)
-    .json({ ...data, status: healthy ? "ok" : "degraded", startDateReminders: reminders, dietPlanDuplicates });
+    .json({ ...data, status: healthy ? "ok" : "degraded", startDateReminders: reminders, dietPlanDuplicates, realtimeWatch });
 });
+
 
 export default router;
