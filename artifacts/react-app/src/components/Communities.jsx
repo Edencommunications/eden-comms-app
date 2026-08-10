@@ -87,14 +87,79 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   const [communities, setCommunities] = useState([])
   const [loaded,      setLoaded]      = useState(false)
   const [activeId,    setActiveId]    = useState(null)
-  // ── Per-community unread counts (last-seen timestamps in localStorage) ──
+  // ── Per-community unread counts (last-seen timestamps in localStorage,
+  //    synced cross-device through /team/seen — same pattern as DbaChat.jsx) ──
   const seenKey = `community_seen_${myId || 'anon'}`
   const getSeen = () => { try { return JSON.parse(localStorage.getItem(seenKey) || '{}') } catch { return {} } }
   const markSeen = (cid) => {
     if (!cid) return
-    try { const m = getSeen(); m[cid] = new Date().toISOString(); localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
+    const iso = new Date().toISOString()
+    try { const m = getSeen(); m[cid] = iso; localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
     try { window.dispatchEvent(new CustomEvent('hub-seen-updated')) } catch {}   // lets Team Hub clear its nav dot instantly
     setUnread(u => ({ ...u, [cid]: 0 }))
+    pushSeenRemote(cid, iso)
+  }
+
+  // ── Cross-device read-state sync (same /team/seen store Team Hub & DBA chat
+  //    use). Server keys are namespaced `comm:<communityId>` with numeric ms
+  //    stamps; the server merges per-key with max(), so a stale device can
+  //    never roll a newer device's read state backwards. localStorage above
+  //    stays as the fast local cache (ISO strings, as before). ──
+  const pushQ = useRef({ timer: null, queue: null, token: null })
+  function pushSeenRemote(cid, iso) {
+    const t = Date.parse(iso)
+    if (!myId || !cid || !Number.isFinite(t)) return
+    const st = pushQ.current
+    st.queue = { ...(st.queue || {}), [`comm:${cid}`]: t }
+    // Capture the bearer at enqueue time — after an account switch a delayed
+    // flush goes out with the OLD session's token (server rejects it) instead
+    // of writing under the new user (same guard as teamUnread.js).
+    st.token = sbBearer()
+    if (st.timer) return
+    st.timer = setTimeout(async () => {
+      const { queue, token } = st
+      st.timer = null; st.queue = null
+      try {
+        await fetch('/api/team/seen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: token },
+          body: JSON.stringify({ seen: queue }),
+        })
+      } catch { /* offline — local cache still works; next markSeen retries */ }
+    }, 800)
+  }
+  // One-time upload of the existing local cache so read state from before
+  // cross-device sync (or reads that happened offline) reaches the server.
+  const seededRef = useRef(null)
+  function seedSeenRemote() {
+    if (!myId || seededRef.current === seenKey) return
+    seededRef.current = seenKey
+    const m = getSeen()
+    for (const [cid, iso] of Object.entries(m)) {
+      if (Number.isFinite(Date.parse(iso))) pushSeenRemote(cid, iso)
+    }
+  }
+  // Pull the DB copy and merge (per-key max) into the local cache.
+  async function syncSeenRemote() {
+    if (!myId) return
+    try {
+      const r = await fetch('/api/team/seen', { headers: { Authorization: sbBearer() } })
+      const b = r.ok ? await r.json() : null
+      const remote = b?.seen
+      if (!remote || typeof remote !== 'object') return
+      const pfx = 'comm:'
+      const m = getSeen()
+      let changed = false
+      for (const [k, v] of Object.entries(remote)) {
+        if (!k.startsWith(pfx)) continue
+        const cid = k.slice(pfx.length)
+        const n = Number(v)
+        if (!Number.isFinite(n) || n <= 0) continue
+        const cur = m[cid] ? Date.parse(m[cid]) || 0 : 0
+        if (n > cur) { m[cid] = new Date(n).toISOString(); changed = true }
+      }
+      if (changed) { try { localStorage.setItem(seenKey, JSON.stringify(m)) } catch {} }
+    } catch { /* offline — local cache still works */ }
   }
   const [unread, setUnread] = useState({})   // { communityId: count }
   async function refreshUnread(list) {
@@ -166,9 +231,19 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   }
   useEffect(() => { loadCommunities() }, [myId, companyId, context])
   // Refresh unread badges when the list changes + every 30s; opening a community clears its badge.
-  useEffect(() => { if (communities.length) refreshUnread(communities) }, [communities.length, activeId])
+  // Each cycle first pulls the DB read state, so a community read on another
+  // device clears this device's badge within a poll cycle.
   useEffect(() => {
-    const iv = setInterval(() => { if (communities.length) refreshUnread(communities) }, 30000)
+    if (!communities.length) return
+    let dead = false
+    seedSeenRemote()
+    syncSeenRemote().then(() => { if (!dead) refreshUnread(communities) })
+    return () => { dead = true }
+  }, [communities.length, activeId])
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (communities.length) syncSeenRemote().then(() => refreshUnread(communities))
+    }, 30000)
     return () => clearInterval(iv)
   }, [communities, activeId])
   useEffect(() => { if (activeId) markSeen(activeId) }, [activeId])

@@ -125,11 +125,26 @@ test("requires auth", async () => {
   assert.equal((await post("", { general: 1000 })).status, 401);
 });
 
-test("clients can sync ONLY dba:* keys — Team Hub keys are dropped", async () => {
-  const r = await post("tok-client", { general: 1000, [DM_KEY]: 2000, [DBA_KEY]: 3000 });
+const COMM_KEY = `comm:${CHAN_ID}`;
+
+test("clients can sync ONLY dba:*/comm:* keys — Team Hub keys are dropped", async () => {
+  const r = await post("tok-client", { general: 1000, [DM_KEY]: 2000, [DBA_KEY]: 3000, [COMM_KEY]: 4000 });
   assert.equal(r.status, 200);
   const b: any = await (await get("tok-client")).json();
-  assert.deepEqual(b.seen, { [DBA_KEY]: 3000 });
+  assert.deepEqual(b.seen, { [DBA_KEY]: 3000, [COMM_KEY]: 4000 });
+});
+
+test("comm keys get the same per-key max merge (no rollback)", async () => {
+  await post("tok-client", { [COMM_KEY]: 5000 });
+  await post("tok-client", { [COMM_KEY]: 1000 }); // stale device — ignored
+  const b: any = await (await get("tok-client")).json();
+  assert.equal(b.seen[COMM_KEY], 5000);
+});
+
+test("malformed comm keys are dropped", async () => {
+  await post("tok-a", { "comm:nope": 1000, [`comm:${CHAN_ID}:x`]: 2000, "comm:": 3000 });
+  const b: any = await (await get("tok-a")).json();
+  assert.deepEqual(b.seen, {});
 });
 
 test("staff can mix Team Hub and DBA keys in one map", async () => {

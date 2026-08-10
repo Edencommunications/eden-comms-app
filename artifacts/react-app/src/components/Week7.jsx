@@ -12,6 +12,7 @@ import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
 import { supabase } from '../supabaseClient'
 import { loadSeen, saveSeen, seenAt, syncSeen, mergeSeenLocal } from '../lib/teamUnread'
+import { mergeRemoteSeen } from '../lib/seenMerge'
 import Communities from './Communities'
 import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
@@ -223,6 +224,16 @@ export default function Week7({ currentUser, initialDm }) {
     // Everything I'm a member of (team communities + DBA channels share community_members)
     let memberIds = []
     try { memberIds = ((await dbGet('community_members', `user_id=eq.${myUUID}&select=community_id`)) || []).map(m => m.community_id) } catch {}
+    // Pull the DB read-state copy once up front (server merges per-key max) so
+    // a community or DBA chat read on ANOTHER device clears this device's
+    // nav dots within a refresh cycle. Keys: `comm:<communityId>` (Communities)
+    // and `dba:<dbaId>:<communityId>` (DBA chat), numeric ms stamps.
+    let remoteSeen = null
+    try {
+      const r = await fetch('/api/team/seen', { headers: { Authorization: sbBearer() } })
+      const b = r.ok ? await r.json() : null
+      if (b?.seen && typeof b.seen === 'object') remoteSeen = b.seen
+    } catch { /* offline — local caches still work */ }
     // 1) Team communities — mirrors Communities.jsx loadCommunities() for context='team'
     try {
       let list = []
@@ -236,22 +247,17 @@ export default function Week7({ currentUser, initialDm }) {
         const dedup = new Set()
         list = [...mine, ...inIds].filter(c => { if (dedup.has(c.id)) return false; dedup.add(c.id); return true })
       }
-      const seenMap = readSeenMap(`community_seen_${myUUID}`)
+      const lsKey = `community_seen_${myUUID}`
+      const { map: seenMap, changed } = mergeRemoteSeen(readSeenMap(lsKey), remoteSeen, 'comm:')
+      if (changed) { try { localStorage.setItem(lsKey, JSON.stringify(seenMap)) } catch {} }
       const hits = await Promise.all(list.map(c => hasNewerMsg(c.id, seenMap[c.id])))
       setCommUnread(hits.some(Boolean))
     } catch {}
     // 2) DBA chats — group channels I'm a member of + my DMs, per-DBA seen map
     try {
       let any = false
-      // Merge the DB read-state copy (keys `dba:<dbaId>:<communityId>`, numeric
-      // ms, server merges per-key max) into the local dba_seen_* caches first —
+      // remoteSeen (fetched above) merges into the local dba_seen_* caches —
       // a chat read on ANOTHER device clears this device's dot within a cycle.
-      let remoteSeen = null
-      try {
-        const r = await fetch('/api/team/seen', { headers: { Authorization: sbBearer() } })
-        const b = r.ok ? await r.json() : null
-        if (b?.seen && typeof b.seen === 'object') remoteSeen = b.seen
-      } catch { /* offline — local caches still work */ }
       for (const d of myDbas.filter(x => x.is_active !== false)) {
         if (any) break
         // Managers (DBA coach, delegated staff, super admins — anyone the server
@@ -272,20 +278,8 @@ export default function Week7({ currentUser, initialDm }) {
         ]
         if (!convos.length) continue
         const lsKey = `dba_seen_${d.id}_${myUUID}`
-        const seenMap = readSeenMap(lsKey)
-        if (remoteSeen) {
-          const pfx = `dba:${d.id}:`
-          let changed = false
-          for (const [k, v] of Object.entries(remoteSeen)) {
-            if (!k.startsWith(pfx)) continue
-            const cid = k.slice(pfx.length)
-            const n = Number(v)
-            if (!Number.isFinite(n) || n <= 0) continue
-            const cur = seenMap[cid] ? Date.parse(seenMap[cid]) || 0 : 0
-            if (n > cur) { seenMap[cid] = new Date(n).toISOString(); changed = true }
-          }
-          if (changed) { try { localStorage.setItem(lsKey, JSON.stringify(seenMap)) } catch {} }
-        }
+        const { map: seenMap, changed } = mergeRemoteSeen(readSeenMap(lsKey), remoteSeen, `dba:${d.id}:`)
+        if (changed) { try { localStorage.setItem(lsKey, JSON.stringify(seenMap)) } catch {} }
         const hits = await Promise.all(convos.map(c => hasNewerMsg(c.id, seenMap[c.id])))
         if (hits.some(Boolean)) any = true
       }

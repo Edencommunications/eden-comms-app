@@ -42,15 +42,17 @@ const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 // Valid conversation keys:
 //   "general" / "<uuidA>_<uuidB>"  — Team Hub (staff-only)
 //   "dba:<dbaId>:<communityId>"    — DBA chat channels & 1v1s (any member)
-const KEY_RE = new RegExp(`^(general|${UUID}_${UUID}|dba:${UUID}:${UUID})$`, "i");
-const DBA_KEY_RE = new RegExp(`^dba:${UUID}:${UUID}$`, "i");
+//   "comm:<communityId>"           — org Communities (clients + team tabs)
+const KEY_RE = new RegExp(`^(general|${UUID}_${UUID}|dba:${UUID}:${UUID}|comm:${UUID})$`, "i");
+const CLIENT_OK_KEY_RE = new RegExp(`^(dba:${UUID}:${UUID}|comm:${UUID})$`, "i");
 
-// Team Hub is staff-only; DBA members hold role 'client' in the owning org,
-// so clients may sync read state ONLY for dba:* keys (their own row).
+// Team Hub is staff-only; DBA members and community members can hold role
+// 'client', so clients may sync read state ONLY for dba:* and comm:* keys
+// (their own row).
 function allowedKeys(me: Profile, map: Record<string, number>): Record<string, number> {
   if (me.role !== "client") return map;
   const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(map)) if (DBA_KEY_RE.test(k)) out[k] = v;
+  for (const [k, v] of Object.entries(map)) if (CLIENT_OK_KEY_RE.test(k)) out[k] = v;
   return out;
 }
 
