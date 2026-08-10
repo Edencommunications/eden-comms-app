@@ -172,6 +172,25 @@ async function dbDelete(table, query) {
   })
   if (!r.ok) console.error('DELETE', await r.text())
 }
+// Save a client's diet plan without piling up rows: update the newest existing
+// diet_plans row for this client (and prune any older duplicates left over from
+// the old insert-per-save behavior), or insert one if none exists yet.
+// Keeps at most one canonical row per client; loading (newest by updated_at)
+// keeps working unchanged.
+async function saveDietPlanRow(payload) {
+  const rows = await dbGet('diet_plans', `client_id=eq.${payload.client_id}&order=updated_at.desc&select=id`)
+  if (Array.isArray(rows) && rows.length > 0) {
+    const keepId = rows[0].id
+    const ok = await dbUpdate('diet_plans', `id=eq.${keepId}`, payload)
+    if (!ok) return null
+    // Prune older leftovers (best effort — save already succeeded)
+    if (rows.length > 1) {
+      try { await dbDelete('diet_plans', `client_id=eq.${payload.client_id}&id=neq.${keepId}`) } catch {}
+    }
+    return true
+  }
+  return dbInsert('diet_plans', payload)
+}
 function scoreColor(v) {
   if (v == null) return C.muted
   if (v >= 8) return C.success
@@ -1185,8 +1204,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     return ()=>{stale=true}
   },[myUUID,myCompanyId])
   // Hydrate the meal-plan builder from the latest saved diet plan so both the
-  // client and the coach see what was last saved (saves are INSERTs — one row
-  // per save — so pick the newest by updated_at).
+  // client and the coach see what was last saved (saves keep one canonical row
+  // per client; ordering by updated_at stays safe if old duplicates linger).
   useEffect(()=>{
     if (!myUUID) return
     let stale=false
@@ -1882,7 +1901,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           })}
 
           {isCoach&&(
-            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
+            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
@@ -2052,7 +2071,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   if(!window.confirm('Reset the calculated macros? This clears the calorie & macro targets here AND removes them from the client\'s diet view.'))return
                   setResults(null);setSavedTargets(null)
                   if(isCoach&&myUUID){
-                    const ok=await dbInsert('diet_plans',{client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify({}),updated_at:new Date().toISOString()})
+                    const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify({}),updated_at:new Date().toISOString()})
                     if(!ok){alert('Could not clear the saved targets — please try again.');return}
                     auditPlanSave('diet_targets_reset', myUUID, info?.name||currentUser?.name)
                   }
