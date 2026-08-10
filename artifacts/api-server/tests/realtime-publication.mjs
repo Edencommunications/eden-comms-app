@@ -19,13 +19,13 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const TABLES = ["organizations", "packages", "client_documents"];
+const TABLES = ["organizations", "packages", "client_documents", "admin_settings"];
 const EVENT_TIMEOUT_MS = Number(process.env.REALTIME_EVENT_TIMEOUT_MS || 3000);
 
 const FIX_HINT =
   `Realtime event did NOT arrive — the table is likely missing from the ` +
   `supabase_realtime publication. Fix in the Supabase SQL editor:\n` +
-  `  ALTER PUBLICATION supabase_realtime ADD TABLE organizations, packages, client_documents;\n` +
+  `  ALTER PUBLICATION supabase_realtime ADD TABLE organizations, packages, client_documents, admin_settings;\n` +
   `(Until then, admins fall back to the ~10s poll.)`;
 
 const REST = {
@@ -102,8 +102,14 @@ test("realtime publication delivers UPDATE events for admin tables", { timeout: 
       const col = pickColumn(row);
       assert.ok(col, `${table}: no updatable column found on the sample row`);
 
+      // Filter by `id` when the table has one; admin_settings is keyed by
+      // (key, company_id) instead.
+      const filter =
+        "id" in row
+          ? `id=eq.${encodeURIComponent(row.id)}`
+          : `key=eq.${encodeURIComponent(row.key)}&company_id=eq.${encodeURIComponent(row.company_id)}`;
       const patch = await fetch(
-        `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(row.id)}`,
+        `${SUPABASE_URL}/rest/v1/${table}?${filter}`,
         { method: "PATCH", headers: REST, body: JSON.stringify({ [col]: row[col] }) },
       );
       if (!patch.ok) assert.fail(`${table}: PATCH failed: HTTP ${patch.status} ${await patch.text()}`);

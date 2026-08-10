@@ -5755,8 +5755,10 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
             if (realtimeUp && !wasUp) readMeta(id); // catch up after (re)connect
           });
         // Fallback poll: fast while the channel is down; slow safety-net even
-        // while SUBSCRIBED (admin_settings may not be in the realtime
-        // publication, and a channel can report SUBSCRIBED yet deliver nothing).
+        // while SUBSCRIBED. admin_settings IS in the supabase_realtime
+        // publication (added Aug 10 2026; verified by test:realtime in
+        // api-server), but a channel can report SUBSCRIBED yet deliver
+        // nothing if that ever regresses, so keep the slow poll.
         let tick = 0;
         const pollId = setInterval(() => {
           if (document.hidden) return;
