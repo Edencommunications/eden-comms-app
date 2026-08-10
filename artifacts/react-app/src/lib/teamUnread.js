@@ -21,9 +21,63 @@ export function loadSeen(uuid) {
   try { return JSON.parse(localStorage.getItem(lsKey(uuid)) || '{}') || {} } catch { return {} }
 }
 
-export function saveSeen(uuid, map) {
+export function saveSeen(uuid, map, delta) {
   try { localStorage.setItem(lsKey(uuid), JSON.stringify(map)) } catch {}
   try { window.dispatchEvent(new CustomEvent('teamhub-seen')) } catch {}
+  // Sync only what changed (falls back to the full map for older callers)
+  pushSeen(uuid, delta || map)
+}
+
+// ── Cross-device sync (DB is the source of truth; localStorage is cache) ──
+// The api-server merges per-key with max(), so a stale device can never
+// roll another device's newer read state backwards.
+const API = (p) => `${(import.meta.env.BASE_URL || '/')}api/${p}`
+
+// Push state is scoped per user AND the bearer token is captured at enqueue
+// time — after an account switch a delayed flush goes out with the OLD
+// session's token (server rejects it) instead of writing under the new user.
+const pushState = {} // uuid -> { timer, queue, token }
+function pushSeen(uuid, map) {
+  if (!uuid) return
+  const st = (pushState[uuid] ||= { timer: null, queue: null, token: null })
+  st.queue = { ...(st.queue || {}), ...map }
+  st.token = sbBearer()
+  if (st.timer) return
+  // Lightly debounced so rapid conversation switches send one request
+  st.timer = setTimeout(async () => {
+    const { queue, token } = st
+    st.timer = null; st.queue = null
+    try {
+      await fetch(API('team/seen'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({ seen: queue }),
+      })
+    } catch { /* offline — local cache still works; next markSeen retries */ }
+  }, 800)
+}
+
+// Fetch the DB copy, merge (per-key max) into localStorage, return merged map.
+// Never throws — falls back to the local cache on any failure.
+export async function syncSeen(uuid) {
+  const local = loadSeen(uuid)
+  try {
+    const r = await fetch(API('team/seen'), { headers: { Authorization: sbBearer() } })
+    const b = r.ok ? await r.json() : null
+    const remote = b?.seen
+    if (!remote || typeof remote !== 'object') return local
+    const merged = { ...local }
+    let changed = false
+    for (const [k, t] of Object.entries(remote)) {
+      const n = Number(t)
+      if (Number.isFinite(n) && n > (merged[k] || 0)) { merged[k] = n; changed = true }
+    }
+    if (changed) {
+      try { localStorage.setItem(lsKey(uuid), JSON.stringify(merged)) } catch {}
+      try { window.dispatchEvent(new CustomEvent('teamhub-seen')) } catch {}
+    }
+    return merged
+  } catch { return local }
 }
 
 // Timestamp a conversation was last viewed (0 = never)
@@ -66,7 +120,10 @@ export function useTeamHubUnread(user) {
           { headers: H })
         const rows = r2.ok ? await r2.json() : []
         if (stopped || !Array.isArray(rows)) return
-        const seen = loadSeen(me.id)
+        // Pull the DB read state each cycle so a chat read on another
+        // device clears this device's badge within a poll cycle.
+        const seen = await syncSeen(me.id)
+        if (stopped) return
         const any = rows.some(m => {
           const t = new Date(m.created_at).getTime()
           if (m.is_dm) {

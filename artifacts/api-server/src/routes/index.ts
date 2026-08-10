@@ -19,6 +19,7 @@ import ouraRouter from "./oura";
 import metaAdsRouter from "./metaAds";
 import pushRouter from "./push";
 import reactionsRouter from "./reactions";
+import teamSeenRouter from "./teamSeen";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(ouraRouter);
 router.use(metaAdsRouter);
 router.use(pushRouter);
 router.use(reactionsRouter);
+router.use(teamSeenRouter);
 
 export default router;

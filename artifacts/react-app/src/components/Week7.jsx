@@ -11,7 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
 import { supabase } from '../supabaseClient'
-import { loadSeen, saveSeen, seenAt } from '../lib/teamUnread'
+import { loadSeen, saveSeen, seenAt, syncSeen } from '../lib/teamUnread'
 import Communities from './Communities'
 import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
@@ -305,12 +305,21 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Unread tracking: last-viewed timestamps per conversation ──
   const [seen, setSeen] = useState({})
-  useEffect(() => { if (myUUID) setSeen(loadSeen(myUUID)) }, [myUUID])
+  // Local cache first for instant paint, then merge the DB copy (source of
+  // truth) so read state follows the person across devices.
+  useEffect(() => {
+    if (!myUUID) return
+    let stop = false
+    setSeen(loadSeen(myUUID))
+    syncSeen(myUUID).then(m => { if (!stop) setSeen(m) }).catch(() => {})
+    return () => { stop = true }
+  }, [myUUID])
   function markSeen(key) {
     if (!myUUID) return
     setSeen(prev => {
-      const next = { ...prev, [key]: Date.now() }
-      saveSeen(myUUID, next)
+      const ts = Date.now()
+      const next = { ...prev, [key]: ts }
+      saveSeen(myUUID, next, { [key]: ts })
       return next
     })
   }
