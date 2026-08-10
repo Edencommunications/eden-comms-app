@@ -146,7 +146,31 @@ const TYPE_LABELS: Record<string, string> = {
   start_reminder_7: "🚀 Program starts soon", start_reminder_1: "⏰ Starts tomorrow", start_reminder_0: "🎉 Starts today",
 };
 
-async function pushToUser(userId: string, title: string, body: string): Promise<void> {
+// ── Privacy: phone buzzes never include message/plan content ──
+// Only the KIND of alert (and safe names like a community or sender) shows on
+// the lock screen. Full details stay inside the app's bell.
+const SAFE_BODY: Record<string, string> = {
+  message: "You have a new message — open the app to read it",
+  diet_update: "Your diet plan was updated",
+  supp_update: "Your supplement plan was updated",
+  workout_update: "Your workout was updated",
+  checkin_received: "A check-in was submitted",
+  lab_uploaded: "A lab result was uploaded",
+  update_note: "Your coach posted an update",
+  loom_posted: "Your coach posted a video update",
+  meta_ads: "A new ads recap was posted",
+};
+// Community alerts are safe to pass through — their bodies only name the
+// community (never message content), built server-side.
+const PASSTHROUGH_TYPES = new Set(["community_post", "community_added"]);
+// Where a tap should land inside the app (tab key, applied after login too)
+const TYPE_GOTO: Record<string, string> = {
+  message: "msgs", diet_update: "diet", supp_update: "diet", workout_update: "workout",
+  checkin_received: "checkin", lab_uploaded: "labs", community_post: "community",
+  community_added: "community", meta_ads: "community",
+};
+
+async function pushToUser(userId: string, title: string, body: string, url = "/"): Promise<void> {
   const found = await getUserPush(userId);
   if (!found || !found.cfg.enabled || !found.cfg.subs?.length) return;
   if (!(await getVapid())) return;
@@ -156,7 +180,7 @@ async function pushToUser(userId: string, title: string, body: string): Promise<
     try {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: sub.keys },
-        JSON.stringify({ title, body: body.slice(0, 180), url: "/" }),
+        JSON.stringify({ title, body: body.slice(0, 180), url }),
         { TTL: 3600 },
       );
       alive.push(sub);
@@ -229,9 +253,17 @@ async function watchPass() {
     for (const n of pending) {
       if (n.recipient_id) {
         const title = TYPE_LABELS[n.type] || "🔔 Notification";
-        const body = n.sender_name && !String(n.body || "").includes(n.sender_name)
-          ? `${n.sender_name}: ${n.body || ""}` : (n.body || "");
-        await pushToUser(n.recipient_id, title, body).catch(() => {});
+        // Never push actual content to the lock screen — type + safe names only
+        let body: string;
+        if (PASSTHROUGH_TYPES.has(n.type)) {
+          body = n.body || "New community activity";
+        } else if (n.type === "message" && n.sender_name) {
+          body = `${n.sender_name} sent you a message`;
+        } else {
+          body = SAFE_BODY[n.type] || "Open the app to view";
+        }
+        const url = TYPE_GOTO[n.type] ? `/?goto=${TYPE_GOTO[n.type]}` : "/";
+        await pushToUser(n.recipient_id, title, body, url).catch(() => {});
       }
       // Advance the durable cursor after EVERY row: ts = this row's stamp,
       // ids = all processed rows sharing that stamp.

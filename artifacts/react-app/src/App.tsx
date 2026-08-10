@@ -29,6 +29,19 @@ import DbaChat from "./components/DbaChat";
 import DbaHuddles from "./components/DbaHuddles";
 import DbaCalendar from "./components/DbaCalendar";
 import { useTeamHubUnread, useMessagesUnread } from "./lib/teamUnread";
+
+// Capture ?goto=<tab> from a tapped phone notification as soon as the app
+// loads — even if the user still has to log in, we land them there afterwards.
+try {
+  const _p = new URLSearchParams(window.location.search);
+  const _g = _p.get("goto");
+  if (_g) {
+    sessionStorage.setItem("goto_after_login", _g);
+    _p.delete("goto");
+    const _q = _p.toString();
+    window.history.replaceState({}, "", window.location.pathname + (_q ? `?${_q}` : ""));
+  }
+} catch {}
 import Wearables from "./components/Wearables";
 import CheckinFormEditor from "./components/CheckinFormEditor";
 import InstallBanner from "./components/InstallBanner";
@@ -5369,6 +5382,17 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
     supabase.auth.getSession().then(({ data }) => setHasAuthSession(!!data?.session)).catch(()=>{});
   }, []);
   const [tab, setTab]           = useState("home");
+  // ── Tap-through from a phone notification: /?goto=<tab> lands there after login ──
+  useEffect(() => {
+    try {
+      const dest = sessionStorage.getItem("goto_after_login");
+      if (dest) {
+        sessionStorage.removeItem("goto_after_login");
+        const valid = ["home","msgs","diet","checkin","labs","workout","wearables","calendar","learn","community","team","admin"];
+        if (valid.includes(dest)) setTab(dest);
+      }
+    } catch {}
+  }, []);
   // White-label branding: if this user belongs to a white-label company, brand the shell as theirs
   const [wlOrg, setWlOrg] = useState<any>(null);
   useEffect(() => {

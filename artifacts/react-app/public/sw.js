@@ -57,7 +57,13 @@ self.addEventListener('notificationclick', e => {
   const url = (e.notification.data && e.notification.data.url) || '/'
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      for (const c of list) { if ('focus' in c) return c.focus() }
+      for (const c of list) {
+        if ('focus' in c) {
+          // Steer the already-open app to the tapped destination
+          if (url !== '/' && 'navigate' in c) { try { c.navigate(url) } catch {} }
+          return c.focus()
+        }
+      }
       return clients.openWindow(url)
     })
   )
