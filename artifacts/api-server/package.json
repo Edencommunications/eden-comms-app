@@ -11,7 +11,7 @@
     "test:realtime": "node --test tests/realtime-publication.mjs",
     "test:staff-meta": "node --test tests/staff-meta-realtime.mjs",
     "test:live": "node tests/live-suite.mjs",
-    "test": "esbuild src/routes/__tests__/authProvisionDuplicate.test.ts src/routes/__tests__/communityMute.test.ts src/routes/__tests__/teamSeen.test.ts src/routes/__tests__/communityPostWebhook.test.ts src/routes/__tests__/metaAdsTokenExpiry.test.ts src/lib/__tests__/startDateReminders.test.ts src/lib/__tests__/dietPlanDuplicates.test.ts src/lib/__tests__/realtimeWatch.test.ts src/routes/__tests__/quietHours.test.ts src/routes/__tests__/pushToggle.test.ts src/routes/__tests__/pushNudge.test.ts src/routes/__tests__/huddleRing.test.ts src/routes/__tests__/pushWatcherRestart.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.test-dist --out-extension:.js=.mjs && node --test \".test-dist/**/*.test.mjs\""
+    "test": "esbuild src/routes/__tests__/authProvisionDuplicate.test.ts src/routes/__tests__/communityMute.test.ts src/routes/__tests__/teamSeen.test.ts src/routes/__tests__/communityPostWebhook.test.ts src/routes/__tests__/metaAdsTokenExpiry.test.ts src/lib/__tests__/startDateReminders.test.ts src/lib/__tests__/dietPlanDuplicates.test.ts src/lib/__tests__/realtimeWatch.test.ts src/lib/__tests__/healthAlerts.test.ts src/routes/__tests__/quietHours.test.ts src/routes/__tests__/pushToggle.test.ts src/routes/__tests__/pushNudge.test.ts src/routes/__tests__/huddleRing.test.ts src/routes/__tests__/pushWatcherRestart.test.ts --bundle --platform=node --format=esm --packages=external --outdir=.test-dist --out-extension:.js=.mjs && node --test \".test-dist/**/*.test.mjs\""
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
