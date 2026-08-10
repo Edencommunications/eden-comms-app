@@ -99,18 +99,25 @@ async function dbInsert(table, body) {
   if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
-// Upload an org logo to Supabase Storage (bucket: org-logos) → public URL, or null
+// Upload an org logo to real file storage (server endpoint → org-logos bucket)
+// and return its public https URL, or null if the upload failed.
 async function uploadOrgLogo(prefix, file) {
   try {
-    const ext = ((file.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,''))||'png'
-    const path = `${prefix}-${Date.now()}.${ext}`
-    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/org-logos/${path}`, {
+    const dataBase64 = await new Promise((resolve, reject) => {
+      const rd = new FileReader()
+      rd.onload = () => resolve(String(rd.result||'').split(',')[1] || '')
+      rd.onerror = reject
+      rd.readAsDataURL(file)
+    })
+    if (!dataBase64) return null
+    const r = await fetch('/api/branding/logo', {
       method:'POST',
-      headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':file.type||'image/png' },
-      body:file,
+      headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+      body: JSON.stringify({ key: prefix, contentType: file.type || 'image/png', dataBase64 }),
     })
     if (!r.ok) return null
-    return `${SUPABASE_URL}/storage/v1/object/public/org-logos/${path}`
+    const body = await r.json().catch(()=>null)
+    return typeof body?.url === 'string' && body.url ? body.url : null
   } catch { return null }
 }
 async function dbDelete(table, params) {
@@ -680,23 +687,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   async function onNewOrgLogoFile(file) {
     if (!file) return
     if (!file.type.startsWith('image/')) { setOrgLogoErr('Please choose an image file.'); return }
-    if (file.size > 2*1024*1024) { setOrgLogoErr('Image too large — please use a file under 2 MB.'); return }
+    if (file.size > 5*1024*1024) { setOrgLogoErr('Image too large — please use a file under 5 MB.'); return }
     setOrgLogoErr(''); setOrgLogoBusy(true)
     try {
-      // Preferred: real file storage
+      // Real file storage — the logo lands in the org-logos bucket and only its URL is saved
       const url = await uploadOrgLogo('neworg', file)
       if (url) { setNewOrg(p=>({...p, logoUrl:url})); return }
-      // Fallback if the storage bucket isn't set up yet: small images inline
-      if (file.size > 400*1024) {
-        setOrgLogoErr('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.')
-        return
-      }
-      const dataUrl = await new Promise((resolve,reject)=>{
-        const rd = new FileReader()
-        rd.onload = ()=>resolve(String(rd.result||'')); rd.onerror = reject
-        rd.readAsDataURL(file)
-      })
-      setNewOrg(p=>({...p, logoUrl:dataUrl}))
+      setOrgLogoErr('Upload failed — try again or paste a hosted image URL.')
     } catch { setOrgLogoErr('Upload failed — try again or paste a hosted image URL.') }
     finally { setOrgLogoBusy(false) }
   }

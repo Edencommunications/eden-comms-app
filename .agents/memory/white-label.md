@@ -27,3 +27,5 @@ description: How white-label orgs, tiers, and content gating work in the Eden co
 
 ## GHL client intake webhooks
 Each org has one row in `company_intake_secrets` (secret in URL path: `POST /api/ghl-intake/:secret` on the api-server). Coach resolved by GHL assigned-user email within the org; duplicates by email+company acknowledged not recreated; unknown coach → client created unassigned. Regenerate = UPDATE in place (never delete+insert, or a failed insert leaves the org keyless). api-server request logging redacts the secret path segment — keep that if the route moves.
+
+- Logos are files, not rows: uploaded branding images belong in Supabase Storage (server-side, service key creates buckets on demand — anon clients can't); logo_url stores only https URLs, but legacy inline data: URLs must keep rendering.

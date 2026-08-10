@@ -20,7 +20,7 @@ const SVC_H = {
 };
 
 // Verify the caller's Supabase JWT and require an active non-client profile.
-async function requireStaffJwt(req: Request): Promise<{ id: string; company_id: string | null; role: string } | null> {
+export async function requireStaffJwt(req: Request): Promise<{ id: string; company_id: string | null; role: string } | null> {
   const auth = String(req.get("authorization") || "");
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || token === SUPABASE_ANON) return null;

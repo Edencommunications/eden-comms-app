@@ -2613,18 +2613,27 @@ async function sbPatch(table:string, params:string, body:any):Promise<boolean> {
 async function sbDelete(table:string, params:string) {
   try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:SB_H}); } catch {}
 }
-// Upload an org logo to Supabase Storage (bucket: org-logos) and return its public URL, or null if unavailable
+// Upload an org logo to real file storage (server-side, bucket: org-logos)
+// and return its public https URL, or null if the upload failed. The server
+// creates the bucket on demand with its service key, so this always works —
+// no more data-URL fallback in the database.
 async function sbUploadLogo(orgId:string, file:File):Promise<string|null> {
   try {
-    const ext  = ((file.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,''))||'png';
-    const path = `${orgId}-${Date.now()}.${ext}`;
-    const r = await fetch(`${SB_URL}/storage/v1/object/org-logos/${path}`,{
-      method:'POST',
-      headers:{ 'apikey':SB_ANON, get Authorization(){ return sbBearer() }, 'Content-Type':file.type||'image/png' },
-      body:file,
+    const dataBase64: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    if (!dataBase64) return null;
+    const r = await fetch('/api/branding/logo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      body: JSON.stringify({ key: orgId, contentType: file.type || 'image/png', dataBase64 }),
     });
     if (!r.ok) return null;
-    return `${SB_URL}/storage/v1/object/public/org-logos/${path}`;
+    const body = await r.json().catch(() => null);
+    return typeof body?.url === 'string' && body.url ? body.url : null;
   } catch { return null; }
 }
 
@@ -3801,19 +3810,12 @@ const OrgBrandingEditor = ({ org, onSaved, onClose }:any) => {
   const onLogoFile = async (file: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { setLogoError('Please choose an image file.'); return; }
-    if (file.size > 2 * 1024 * 1024) { setLogoError('Image too large — please use a file under 2 MB.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setLogoError('Image too large — please use a file under 5 MB.'); return; }
     setLogoError('');
-    // Preferred: real file storage
+    // Real file storage — the logo lands in the org-logos bucket and only its URL is saved
     const url = await sbUploadLogo(org.id, file);
     if (url) { setLogoDraft(url); return; }
-    // Fallback if the storage bucket isn't set up yet: store small images inline
-    if (file.size > 400 * 1024) {
-      setLogoError('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setLogoDraft(String(reader.result || ''));
-    reader.readAsDataURL(file);
+    setLogoError('Upload failed — please try again, or paste a hosted image URL.');
   };
 
   const inputStyle:any = { background:B.dim, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.text, fontSize:12, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
@@ -4006,20 +4008,13 @@ const AdminDashboard = ({ user }:any) => {
   const onLogoFile = async (file: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { setLogoError('Please choose an image file.'); return; }
-    if (file.size > 2 * 1024 * 1024) { setLogoError('Image too large — please use a file under 2 MB.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setLogoError('Image too large — please use a file under 5 MB.'); return; }
     setLogoError(''); setLogoSaving(true);
-    // Preferred: real file storage (keeps the database lean and logos fast to load)
+    // Real file storage — the logo lands in the org-logos bucket and only its URL is saved
     const url = myOrg ? await sbUploadLogo(myOrg.id, file) : null;
     if (url) { await saveLogo(url); return; }
-    // Fallback if the storage bucket isn't set up yet: store small images inline as before
-    if (file.size > 400 * 1024) {
-      setLogoSaving(false);
-      setLogoError('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => saveLogo(String(reader.result || ''));
-    reader.readAsDataURL(file);
+    setLogoSaving(false);
+    setLogoError('Upload failed — please try again, or paste a hosted image URL.');
   };
 
   useEffect(() => { (async () => {
@@ -7138,7 +7133,7 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
   const onLogoFile = async (file: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { setLogoErr('Please choose an image file.'); return; }
-    if (file.size > 2 * 1024 * 1024) { setLogoErr('Image too large — please use a file under 2 MB.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setLogoErr('Image too large — please use a file under 5 MB.'); return; }
     setLogoErr(''); setLogoBusy(true);
     // Only apply the finished upload to the draft that started it — if the
     // editor was cancelled or switched to another DBA meanwhile, drop it.
@@ -7146,21 +7141,10 @@ const DbaManagerCard = ({ org, hqOrgId }: any) => {
     const applyIfSameDraft = (url: string) =>
       setForm((p: any) => (p && (p.id || null) === draftId ? { ...p, logoUrl: url } : p));
     try {
-      // Preferred: real file storage (shared org-logos bucket, dba-prefixed path)
+      // Real file storage (shared org-logos bucket, dba-prefixed path)
       const url = await sbUploadLogo(`dba-${draftId || org.id}`, file);
       if (url) { applyIfSameDraft(url); return; }
-      // Fallback if the storage bucket isn't set up yet: store small images inline
-      if (file.size > 400 * 1024) {
-        setLogoErr('File storage isn\u2019t set up yet — use a file under 400 KB, or paste a hosted image URL.');
-        return;
-      }
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      applyIfSameDraft(dataUrl);
+      setLogoErr('Upload failed — try again or paste a hosted image URL.');
     } catch { setLogoErr('Upload failed — try again or paste a hosted image URL.'); }
     finally { setLogoBusy(false); }
   };
