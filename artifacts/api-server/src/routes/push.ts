@@ -205,9 +205,8 @@ export const TYPE_CATEGORY: Record<string, string> = {
 // Product decision: live-call rings behave like incoming phone calls and are
 // controlled only by the master phone-notifications switch, not a category.
 const ALWAYS_DELIVER = new Set(["huddle_invite", "huddle_ping"]);
-// Product decision: an UNKNOWN/new type must never bypass the switches — it is
-// governed by the "Messages" switch (the most-visible one) until a developer
-// maps it above. A warn log makes the missing mapping visible.
+
+export function isRingType(type: string): boolean { return ALWAYS_DELIVER.has(type); }
 const UNKNOWN_TYPE_CATEGORY = "messages";
 
 export function categoryAllowed(cfg: UserPush, type: string): boolean {
@@ -303,7 +302,7 @@ export async function pushToUser(userId: string, title: string, body: string, ty
       // Huddle rings: urgent flag (stronger vibration + stays on screen), a
       // shared tag so re-buzzes replace instead of stacking, short TTL — a
       // huddle invite delivered an hour late is useless.
-      const isRing = ALWAYS_DELIVER.has(type);
+      const isRing = isRingType(type);
       await sendFn(
         { endpoint: sub.endpoint, keys: sub.keys },
         JSON.stringify({ title, body: body.slice(0, 180), url, ...(isRing ? { urgent: true, tag: "huddle-ring" } : {}) }),
@@ -378,28 +377,11 @@ async function watchPass() {
     const pending = fetched.filter((n) => !done.has(n.id));
     for (const n of pending) {
       if (n.recipient_id) {
-        const title = TYPE_LABELS[n.type] || "🔔 Notification";
-        // Never push actual content to the lock screen — type + safe names only
-        let body: string;
-        if (n.type === "huddle_invite" || n.type === "huddle_ping") {
-          // Build the huddle line server-side from the sender's name only —
-          // never trust the stored body (a bad row could put private text on
-          // a lock screen).
-          const who = String(n.sender_name || "A teammate").slice(0, 60);
-          body = `🎙 ${who} is inviting you to a live huddle — hit Join to jump in.`;
-        } else if (PASSTHROUGH_TYPES.has(n.type)) {
-          body = n.body || "New community activity";
-        } else if (n.type === "message" && n.sender_name) {
-          body = `${n.sender_name} sent you a message`;
-        } else {
-          // Even unmapped future types get a topical line, never pure filler
-          body = SAFE_BODY[n.type] || (n.sender_name ? `Update from ${n.sender_name} — open the app` : "You have a new update — open the app");
-        }
-        const url = TYPE_GOTO[n.type] ? `/?goto=${TYPE_GOTO[n.type]}` : "/";
+        const { title, body, url } = buildPushContent(n);
         await pushToUser(n.recipient_id, title, body, String(n.type || ""), url).catch(() => {});
         // Huddle "ring": re-buzz twice (~15s/30s later) while the invite is
         // still unanswered — the closest a web app gets to a repeating ring.
-        if (ALWAYS_DELIVER.has(String(n.type || ""))) scheduleRingRepush(n, title, body, url);
+        if (isRingType(String(n.type || ""))) scheduleRingRepush(n, title, body, url);
       }
       // Advance the durable cursor after EVERY row: ts = this row's stamp,
       // ids = all processed rows sharing that stamp.
@@ -415,11 +397,37 @@ async function watchPass() {
   }
 }
 
-// Re-send a huddle ring push while the invite stays unread (max 2 re-buzzes).
-// The push `tag` makes each re-buzz replace the previous notification, so the
-// phone buzzes again without piling up notification rows.
-function scheduleRingRepush(n: any, title: string, body: string, url: string) {
-  for (const delayMs of [15_000, 30_000]) {
+// Build the lock-screen title/body/url for a notification row (watcher path).
+// Never pushes actual content — type + safe names only; huddle ring bodies are
+// constructed server-side from the sender's name (never trusted from the row).
+export function buildPushContent(n: any): { title: string; body: string; url: string } {
+  const title = TYPE_LABELS[n.type] || "🔔 Notification";
+  let body: string;
+  if (isRingType(String(n.type || ""))) {
+    // Build the huddle line server-side from the sender's name only —
+    // never trust the stored body (a bad row could put private text on
+    // a lock screen).
+    const who = String(n.sender_name || "A teammate").slice(0, 60);
+    body = `🎙 ${who} is inviting you to a live huddle — hit Join to jump in.`;
+  } else if (PASSTHROUGH_TYPES.has(n.type)) {
+    body = n.body || "New community activity";
+  } else if (n.type === "message" && n.sender_name) {
+    body = `${n.sender_name} sent you a message`;
+  } else {
+    // Even unmapped future types get a topical line, never pure filler
+    body = SAFE_BODY[n.type] || (n.sender_name ? `Update from ${n.sender_name} — open the app` : "You have a new update — open the app");
+  }
+  const url = TYPE_GOTO[n.type] ? `/?goto=${TYPE_GOTO[n.type]}` : "/";
+  return { title, body, url };
+}
+// Delays are injectable so tests don't wait 15/30 real seconds.
+let RING_REPUSH_DELAYS_MS: number[] = [15_000, 30_000];
+export function __setRingRepushDelaysForTests(d: number[] | null) {
+  RING_REPUSH_DELAYS_MS = d && d.length ? d : [15_000, 30_000];
+}
+
+export function scheduleRingRepush(n: any, title: string, body: string, url: string) {
+  for (const delayMs of RING_REPUSH_DELAYS_MS) {
     setTimeout(async () => {
       try {
         const rows = await dbGet<any>(`notifications?id=eq.${n.id}&select=is_read`);
