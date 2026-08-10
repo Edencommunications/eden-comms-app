@@ -522,9 +522,10 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     setReplyTo(null)
     broadcastLive('new-message', activeId)
     // Buzz the channel members' bells + phones (server-throttled to one per
-    // community per recipient per 10 min; mentioned users are excluded there
-    // since they already get the mention ping below). Group channels only —
-    // DMs have their own direct notification path. Fire-and-forget.
+    // community per recipient per 10 min). Mention pings for group channels
+    // are ALSO created server-side there, so per-community mutes apply to
+    // them too. DMs keep the direct client-side mention path (no community
+    // to mute). Fire-and-forget.
     const newId = Array.isArray(r) ? r[0]?.id : null
     if (newId && !activeIsDm) {
       fetch(`/api/communities/${activeId}/notify-post`, {
@@ -533,11 +534,13 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
         body: JSON.stringify({ message_id: newId }),
       }).catch(() => {})
     }
-    for (const m of findMentions(text)) {
-      sendNotification({
-        recipientId: m.user_id, senderId: myId, senderName: myName, type: 'mention',
-        body: `💬 ${myName} tagged you in "${activeIsDm ? 'a direct message' : active?.name}": "${typed.slice(0,80)}"`,
-      })
+    if (activeIsDm) {
+      for (const m of findMentions(text)) {
+        sendNotification({
+          recipientId: m.user_id, senderId: myId, senderName: myName, type: 'mention',
+          body: `💬 ${myName} tagged you in "a direct message": "${typed.slice(0,80)}"`,
+        })
+      }
     }
     loadMessages()
   }

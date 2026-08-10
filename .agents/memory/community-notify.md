@@ -15,3 +15,8 @@ Human posts in communities notify members via an authenticated api-server endpoi
 **Constraint:** notify endpoints reachable from chat must authenticate with the any-user helper, not the staff-only one — clients post in communities too, and a staff-only gate silently kills their notifications.
 
 **Known gap:** community_messages RLS still lets a member insert arbitrary sender_id; the endpoint's checks close the notify path but the RLS itself needs DDL to fix.
+
+## Per-community mutes (added Aug 2026)
+- Mute state: admin_settings key `community_mute:<communityId>:<userId>`, value "1"/"0", upserted atomically on (company_id,key). Server-only reads/writes via /communities/:id/mute (requireUser + org/membership check).
+- **Rule:** EVERY buzz producer for a community must consult `mutedUserIds()` — regular posts, webhook/recap posts, mentions, and reaction pings. Mentions must be created server-side in notify-post (Communities.jsx AND DbaChat.jsx group channels); client-side sendNotification bypasses mute and got the task rejected twice in review.
+- api-server now has a test setup: `pnpm run test` (esbuild bundle → node --test, Supabase mocked at global fetch). node --experimental-strip-types can't run app imports (extensionless); tsx isn't installed.

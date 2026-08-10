@@ -10,6 +10,7 @@
 // (conversation participant, community member, org staff, or DM party).
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+import { mutedUserIds } from "./communityPost";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU";
@@ -133,8 +134,15 @@ async function readReactions(messageIds: string[]): Promise<Record<string, RxMap
 // Tell the message author someone reacted (never yourself; never spam —
 // one unread reaction notification per sender+message at a time).
 async function notifyAuthor(me: Profile, table: string, messageId: string, emoji: string) {
-  const m = (await rest<any>(`${table}?id=eq.${encodeURIComponent(messageId)}&select=sender_id,content`))[0];
+  const cols = table === "community_messages" ? "sender_id,content,community_id" : "sender_id,content";
+  const m = (await rest<any>(`${table}?id=eq.${encodeURIComponent(messageId)}&select=${cols}`))[0];
   if (!m?.sender_id || m.sender_id === me.id) return;
+  // Respect the author's per-community mute — no reaction buzzes from a
+  // community they've silenced.
+  if (table === "community_messages" && m.community_id) {
+    const muted = await mutedUserIds(String(m.community_id));
+    if (muted.has(String(m.sender_id))) return;
+  }
   // Skip if they already have an unread reaction ping from me for this message
   const linkTo = `reaction:${table}:${messageId}`;
   const dup = await rest<any>(`notifications?recipient_id=eq.${encodeURIComponent(m.sender_id)}&sender_id=eq.${encodeURIComponent(me.id)}&type=eq.reaction&link_to=eq.${encodeURIComponent(linkTo)}&is_read=eq.false&select=id&limit=1`);

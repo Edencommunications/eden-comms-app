@@ -116,6 +116,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
   const [pins,        setPins]        = useState([])
   const [reactions,   setReactions]   = useState({})   // { msgId: { '👍': [{id,n}] } }
   const [canvasOpen,  setCanvasOpen]  = useState(false)
+  const [isMuted,     setIsMuted]     = useState(null)   // null = loading; per-community mute (buzzes off, badge stays)
 
   // ── Rename a community (coaches in the client tab; admins only in Team Hub — enforced by canManage) ──
   async function renameCommunity(c) {
@@ -170,6 +171,31 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     return () => clearInterval(iv)
   }, [communities, activeId])
   useEffect(() => { if (activeId) markSeen(activeId) }, [activeId])
+
+  // ── Per-community mute (silences bell/phone buzzes, keeps the unread badge) ──
+  useEffect(() => {
+    setIsMuted(null)
+    if (!activeId) return
+    let dead = false
+    fetch(`/api/communities/${activeId}/mute`, { headers: { Authorization: sbBearer() } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!dead && d) setIsMuted(!!d.muted) })
+      .catch(() => {})
+    return () => { dead = true }
+  }, [activeId])
+  async function toggleMute() {
+    if (isMuted === null || !activeId) return
+    const next = !isMuted
+    setIsMuted(next)   // optimistic
+    try {
+      const r = await fetch(`/api/communities/${activeId}/mute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ muted: next }),
+      })
+      if (!r.ok) setIsMuted(!next)
+    } catch { setIsMuted(!next) }
+  }
 
   // ── Load members + messages + pins for the open community ──
   async function loadMembers(cid = activeId) {
@@ -364,16 +390,10 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
     if (r === null) { alert('Could not send — run the database update first.'); setNewMsg(text); return }
     setReplyTo(null)
     broadcastLive('new-message', activeId)
-    const mentioned = findMentions(text)
-    for (const m of mentioned) {
-      sendNotification({
-        recipientId: m.user_id, senderId: myId, senderName: myName, type: 'mention',
-        body: `💬 ${myName} tagged you in "${active?.name}": "${text.slice(0,80)}"`,
-      })
-    }
-    // Buzz the rest of the community (bell + phone push) — server-side,
-    // bound to the just-created message and throttled per recipient so busy
-    // chats don't spam. Fire-and-forget.
+    // Buzz the community (bell + phone push) — server-side, bound to the
+    // just-created message, throttled per recipient, and respecting each
+    // member's per-community mute. Mention pings are also created there so
+    // muted members are excluded from those too. Fire-and-forget.
     const newId = Array.isArray(r) ? r[0]?.id : null
     if (newId) {
       fetch(`/api/communities/${activeId}/notify-post`, {
@@ -575,6 +595,12 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                 </div>
                 <div style={{ fontSize:10, color:C.muted }}>{members.length} member{members.length===1?'':'s'}</div>
               </div>
+              <button onClick={toggleMute} disabled={isMuted === null}
+                title={isMuted ? 'Unmute — get buzzes for new posts here again' : 'Mute — stop phone/bell buzzes from this community (unread badge stays)'}
+                style={{ background:C.card, border:`1px solid ${isMuted ? C.gold : C.border}`, borderRadius:8, padding:'6px 10px',
+                         color: isMuted ? C.gold : C.muted, fontSize:12, cursor: isMuted===null?'default':'pointer', opacity: isMuted===null?0.4:1 }}>
+                {isMuted ? '🔕' : '🔔'}
+              </button>
               <button onClick={() => setCanvasOpen(true)} title="Open the shared canvas — a live doc everyone here can edit"
                 style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', color:C.white, fontSize:11, fontWeight:700, cursor:'pointer' }}>
                 📝 Canvas

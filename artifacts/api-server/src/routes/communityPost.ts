@@ -77,14 +77,40 @@ function appBase(req: Request): string {
   return `https://${host || "edencommunications.io"}`;
 }
 
+// ── Per-member community mutes ─────────────────────────────────
+// A member can mute a busy community's buzzes without leaving it: we keep a
+// tiny admin_settings row per (community, user) — key `community_mute:<cid>:<uid>`,
+// value "1" (muted) or "0" (unmuted). No schema change needed. Muted members
+// still get the in-app unread badge (that's computed from messages, not
+// notifications); they just stop receiving bell/push notification rows for
+// that community.
+const MUTE_KEY = (cid: string, uid: string) => `community_mute:${cid}:${uid}`;
+export async function mutedUserIds(communityId: string): Promise<Set<string>> {
+  try {
+    const prefix = `community_mute:${communityId}:`;
+    const rows = await dbGet<any>(`admin_settings?key=like.${encodeURIComponent(prefix)}*&select=key,value&limit=500`);
+    const out = new Set<string>();
+    for (const r of rows) {
+      if (String(r.value) !== "1") continue;
+      const uid = String(r.key || "").slice(prefix.length);
+      if (uid) out.add(uid);
+    }
+    return out;
+  } catch { return new Set(); }
+}
+
 // Notify community members a new post landed — feeds the top bell AND phone
-// push (the push watcher mirrors notifications rows). Skips the sender.
+// push (the push watcher mirrors notifications rows). Skips the sender and
+// anyone who muted this community.
 export async function notifyCommunityMembers(communityId: string, communityName: string, senderId: string | null): Promise<void> {
   try {
-    const members = await dbGet<any>(`community_members?community_id=eq.${encodeURIComponent(communityId)}&select=user_id&limit=200`);
+    const [members, muted] = await Promise.all([
+      dbGet<any>(`community_members?community_id=eq.${encodeURIComponent(communityId)}&select=user_id&limit=200`),
+      mutedUserIds(communityId),
+    ]);
     const rows = members
       .map((m: any) => m.user_id)
-      .filter((id: string) => id && id !== senderId)
+      .filter((id: string) => id && id !== senderId && !muted.has(id))
       .map((id: string) => ({
         recipient_id: id,
         sender_id: senderId,
@@ -160,6 +186,58 @@ export function mentionedUserIds(text: string, members: Array<{ user_id: string;
 
 const router: IRouter = Router();
 
+// ── Mute / unmute a community's buzzes (any member, clients included) ──
+// GET  /communities/:id/mute   → { muted: boolean }
+// POST /communities/:id/mute   { muted: boolean }
+async function communityForMute(req: Request, res: Response): Promise<{ caller: any; comm: any } | null> {
+  const communityId = String(req.params.id || "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(communityId)) { res.status(400).json({ error: "Bad community id" }); return null; }
+  const caller = await requireUser(req);
+  if (!caller) { res.status(401).json({ error: "Not authorized" }); return null; }
+  const comm = (await dbGet<any>(`communities?id=eq.${encodeURIComponent(communityId)}&select=id,name,company_id&limit=1`))[0];
+  if (!comm) { res.status(404).json({ error: "Community not found" }); return null; }
+  // Only actual members (or same-org staff / Eden staff) can touch mute state.
+  const commOrg = comm.company_id || EDEN_ORG_ID;
+  const isEdenStaff = caller.role !== "client" && caller.company_id === EDEN_ORG_ID;
+  if (caller.company_id !== commOrg && !isEdenStaff) { res.status(403).json({ error: "Not authorized" }); return null; }
+  const membership = await dbGet<any>(
+    `community_members?community_id=eq.${encodeURIComponent(communityId)}&user_id=eq.${encodeURIComponent(caller.id)}&select=user_id&limit=1`,
+  );
+  const isOrgStaff = caller.role !== "client";
+  if (!membership.length && !isOrgStaff) { res.status(403).json({ error: "You're not a member of this community" }); return null; }
+  return { caller, comm };
+}
+
+router.get("/communities/:id/mute", async (req: Request, res: Response) => {
+  try {
+    const ok = await communityForMute(req, res);
+    if (!ok) return;
+    const key = MUTE_KEY(ok.comm.id, ok.caller.id);
+    const rows = await dbGet<any>(`admin_settings?key=eq.${encodeURIComponent(key)}&select=value&limit=1`);
+    res.json({ muted: String(rows[0]?.value ?? "") === "1" });
+  } catch { res.status(500).json({ error: "Could not load mute state" }); }
+});
+
+router.post("/communities/:id/mute", async (req: Request, res: Response) => {
+  try {
+    const ok = await communityForMute(req, res);
+    if (!ok) return;
+    const muted = req.body?.muted === true || req.body?.muted === "true";
+    const key = MUTE_KEY(ok.comm.id, ok.caller.id);
+    const companyId = ok.comm.company_id || EDEN_ORG_ID;
+    // Atomic upsert on (company_id,key): a single explicit "1"/"0" row, so
+    // concurrent toggles can't leave a half-written state and any failure is
+    // reported instead of silently claiming success.
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+      method: "POST",
+      headers: { ...H, Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({ company_id: companyId, key, value: muted ? "1" : "0", updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) { res.status(502).json({ error: "Could not save mute state" }); return; }
+    res.json({ ok: true, muted });
+  } catch { res.status(500).json({ error: "Could not save mute state" }); }
+});
+
 router.post("/webhooks/community-post/:companyId", async (req: Request, res: Response) => {
   try {
     const companyId = String(req.params.companyId || "").trim();
@@ -231,17 +309,19 @@ router.post("/communities/:id/notify-post", async (req: Request, res: Response) 
     ))[0];
     if (!comm) { res.status(404).json({ error: "Community not found" }); return; }
 
-    // Tenant boundary: service-role reads bypass RLS, so enforce it here.
-    // Caller must belong to this community's org (Eden staff may span orgs),
-    // AND be a member of the community or org staff.
+    // Tenant + membership authorization: the caller must belong to the
+    // community's org (Eden staff may span orgs) and be a member — or be
+    // org staff, who may post in any of their org's communities.
     const commOrg = comm.company_id || EDEN_ORG_ID;
     const isEdenStaff = caller.role !== "client" && caller.company_id === EDEN_ORG_ID;
-    if (caller.company_id !== commOrg && !isEdenStaff) { res.status(403).json({ error: "Not authorized" }); return; }
     const isOrgStaff = caller.role !== "client" && (caller.company_id === commOrg || isEdenStaff);
-    const membership = await dbGet<any>(
-      `community_members?community_id=eq.${encodeURIComponent(communityId)}&user_id=eq.${encodeURIComponent(caller.id)}&select=user_id&limit=1`,
-    );
-    if (!membership.length && !isOrgStaff) { res.status(403).json({ error: "Not authorized" }); return; }
+    if (caller.company_id !== commOrg && !isEdenStaff) { res.status(403).json({ error: "Not authorized" }); return; }
+    if (!isOrgStaff) {
+      const membership = await dbGet<any>(
+        `community_members?community_id=eq.${encodeURIComponent(communityId)}&user_id=eq.${encodeURIComponent(caller.id)}&select=user_id&limit=1`,
+      );
+      if (!membership.length) { res.status(403).json({ error: "Not authorized" }); return; }
+    }
 
     const msg = (await dbGet<any>(
       `community_messages?id=eq.${encodeURIComponent(messageId)}&community_id=eq.${encodeURIComponent(communityId)}&select=id,sender_id,sender_name,content,created_at,deleted_at&limit=1`,
@@ -253,14 +333,31 @@ router.post("/communities/:id/notify-post", async (req: Request, res: Response) 
 
     const members = await dbGet<any>(`community_members?community_id=eq.${encodeURIComponent(communityId)}&select=user_id,user_name&limit=200`);
     const mentioned = new Set(mentionedUserIds(String(msg.content || ""), members));
+    const muted = await mutedUserIds(communityId);
+    // Sender name comes from the VERIFIED message row — never the request body.
+    const senderName = String(msg.sender_name || "").trim().slice(0, 60);
+
+    // Mention pings are created HERE (server-side, from the verified message
+    // text) so the per-community mute applies to them too — a muted member
+    // gets no buzz at all from this community, mentions included.
+    const content = String(msg.content || "");
+    const mentionRows = [...mentioned]
+      .filter((id) => id !== caller.id && !muted.has(id))
+      .map((id) => ({
+        recipient_id: id,
+        sender_id: caller.id,
+        type: "mention",
+        body: `💬 ${senderName || "Someone"} tagged you in "${comm.name}": "${content.slice(0, 80)}"`,
+        is_read: false,
+      }));
+    if (mentionRows.length) await dbInsert("notifications", mentionRows);
+
     const candidates = members
       .map((m: any) => m.user_id)
-      .filter((id: string) => id && id !== caller.id && !mentioned.has(id));
+      .filter((id: string) => id && id !== caller.id && !mentioned.has(id) && !muted.has(id));
 
     // Shared, atomic throttle: only recipients we successfully claim get a row.
     const recipients = await claimThrottledRecipients(commOrg, comm.id, candidates);
-    // Derived from the VERIFIED message row — never from the request body.
-    const senderName = String(msg.sender_name || "").trim().slice(0, 60);
     const rows = recipients.map((id: string) => ({
       recipient_id: id,
       sender_id: caller.id,
@@ -271,7 +368,7 @@ router.post("/communities/:id/notify-post", async (req: Request, res: Response) 
     if (rows.length && !(await dbInsert("notifications", rows))) {
       res.status(502).json({ error: "Could not create notifications" }); return;
     }
-    res.json({ ok: true, notified: rows.length });
+    res.json({ ok: true, notified: rows.length, mentioned: mentionRows.length });
   } catch (e) {
     logger.warn({ err: String(e) }, "[CommunityPost] notify-post failed");
     res.status(500).json({ error: "Something went wrong" });
