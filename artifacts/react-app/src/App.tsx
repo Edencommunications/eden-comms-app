@@ -55,6 +55,7 @@ const B = {
   black:   "#000000",   // BASE — page backgrounds
   white:   "#ffffff",   // TEXT — all labels, headings
   surface: "#111111",   // cards, panels (near-black for depth)
+  bg:      "#111111",   // alias of surface — subtle inner backgrounds
   card:    "#1a1a1a",   // elevated cards
   border:  "#2a2a2a",   // dividers, input borders
   muted:   "#888888",   // secondary text, inactive icons
@@ -69,18 +70,18 @@ const B = {
 // ─── WHITE-LABEL PALETTE ─────────────────────────────────────────────────────
 // Turns an organizations row (brand_color + brand_colors jsonb) into a full
 // theme. Falls back gracefully to the Eden gold theme when nothing is set.
-const wlPalette = (org) => {
-  const isHex = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim());
+const wlPalette = (org: any) => {
+  const isHex = (v: any) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim());
   const primary = isHex(org?.brand_color) ? org.brand_color.trim() : B.gold;
-  const extra = Array.isArray(org?.brand_colors) ? org.brand_colors.filter(isHex).map(c => c.trim()) : [];
+  const extra = Array.isArray(org?.brand_colors) ? org.brand_colors.filter(isHex).map((c: any) => c.trim()) : [];
   const secondary = extra[0] || primary;
   const accent = extra[1] || extra[0] || primary;
   const all = [primary, ...extra];
-  return { primary, secondary, accent, extra, all, nth: (i) => all[i % all.length] };
+  return { primary, secondary, accent, extra, all, nth: (i: any) => all[i % all.length] };
 };
 
 // ─── AUTH CONTEXT ─────────────────────────────────────────────────────────────
-const AuthContext = createContext(null);
+const AuthContext = createContext<any>(null);
 const useAuth = () => useContext(AuthContext);
 
 // ─── OWNER ────────────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ const OWNER_EMAIL = "info@edencommunications.io";
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
 // @ts-nocheck
-const Ic = ({ n, size = 20, s = undefined, c = B.muted }) => {
+const Ic = ({ n, size = 20, s = undefined, c = B.muted }: any) => {
   const sz = size ?? s ?? 20;
   const d = {
     msg:      <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none" stroke={c} strokeWidth="1.8"/></>,
@@ -119,7 +120,7 @@ const Ic = ({ n, size = 20, s = undefined, c = B.muted }) => {
     progress: <><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></>,
     watch:    <><circle cx="12" cy="12" r="6" fill="none" stroke={c} strokeWidth="1.8"/><polyline points="12,9 12,12 14,13.5" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/><path d="M9 3.5h6M9 20.5h6" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></>,
   };
-  return <svg width={sz} height={sz} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{d[n]}</svg>;
+  return <svg width={sz} height={sz} viewBox="0 0 24 24" style={{display:"block",flexShrink:0}}>{(d as any)[n]}</svg>;
 };
 
 // ─── LIFESTYLE OF EDEN LOGO — uploaded brand mark ────────────────────────────
@@ -145,7 +146,7 @@ const EdenLogo = ({ size = 44 }) => (
 const HoneycombLogo = EdenLogo;
 
 // ─── SHARED UI COMPONENTS ─────────────────────────────────────────────────────
-const Input = ({ label, type = "text", value, onChange, placeholder, icon, rightIcon, onRightClick, error }) => (
+const Input = ({ label, type = "text", value, onChange, placeholder, icon, rightIcon, onRightClick, error }: any) => (
   <div style={{ marginBottom: 16 }}>
     {label && <label style={{ display:"block", fontSize:11, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:6 }}>{label}</label>}
     <div style={{ position:"relative" }}>
@@ -159,7 +160,7 @@ const Input = ({ label, type = "text", value, onChange, placeholder, icon, right
   </div>
 );
 
-const Btn = ({ children, onClick, variant="primary", disabled, fullWidth, style: sx }) => {
+const Btn = ({ children, onClick, variant="primary", disabled, fullWidth, style: sx }: any) => {
   const styles = {
     primary:   { background:`linear-gradient(135deg, #ffb733, #ffa600)`, color:"#000000", fontWeight:800 },
     secondary: { background:B.card, color:B.text, border:`1px solid ${B.border}` },
@@ -168,32 +169,32 @@ const Btn = ({ children, onClick, variant="primary", disabled, fullWidth, style:
   };
   return (
     <button onClick={onClick} disabled={disabled}
-      style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, borderRadius:12, padding:"13px 20px", border:"none", cursor:disabled?"not-allowed":"pointer", fontWeight:700, fontSize:14, width:fullWidth?"100%":"auto", opacity:disabled?0.5:1, transition:"opacity 0.2s", fontFamily:"inherit", ...styles[variant], ...sx }}>
+      style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, borderRadius:12, padding:"13px 20px", border:"none", cursor:disabled?"not-allowed":"pointer", fontWeight:700, fontSize:14, width:fullWidth?"100%":"auto", opacity:disabled?0.5:1, transition:"opacity 0.2s", fontFamily:"inherit", ...(styles as any)[variant], ...sx }}>
       {children}
     </button>
   );
 };
 
-const Card = ({ children, style: sx }) => (
+const Card = ({ children, style: sx }: any) => (
   <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:16, ...sx }}>{children}</div>
 );
 
-const Badge = ({ children, color = B.gold }) => (
+const Badge = ({ children, color = B.gold }: any) => (
   <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, background:color+"22", color, letterSpacing:0.8, textTransform:"uppercase" }}>{children}</span>
 );
 
-const NavTab = ({ icon, label, active, onClick }) => (
+const NavTab = ({ icon, label, active, onClick }: any) => (
   <button onClick={onClick} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3, background:"none", border:"none", cursor:"pointer", padding:"6px 0 8px" }}>
     <Ic n={icon} size={20} c={active?B.gold:B.muted}/>
     <span style={{ fontSize:9, fontWeight:600, color:active?B.gold:B.muted, letterSpacing:0.5, textTransform:"uppercase" }}>{label}</span>
   </button>
 );
 
-const Screen = ({ children, scroll=true }) => (
+const Screen = ({ children, scroll=true }: any) => (
   <div style={{ flex:1, overflowY:scroll?"auto":"hidden", overflowX:"hidden" }}>{children}</div>
 );
 
-const PageHeader = ({ title, subtitle, onBack, right }) => (
+const PageHeader = ({ title, subtitle, onBack, right }: any) => (
   <div style={{ padding:"20px 20px 0", borderBottom:`1px solid ${B.border}`, paddingBottom:16, marginBottom:0 }}>
     {onBack && (
       <button onClick={onBack} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:6, padding:0, marginBottom:12 }}>
@@ -215,7 +216,7 @@ const Divider = () => <div style={{ height:1, background:B.border, margin:"12px 
 // ─── SCREENS ─────────────────────────────────────────────────────────────────
 
 // Circle logo for a branded (white-label) login — org initial on brand color
-const OrgLogo = ({ org, size = 44 }) => {
+const OrgLogo = ({ org, size = 44 }: any) => {
   const p = wlPalette(org);
   const logoUrl = typeof org?.logo_url === "string" && org.logo_url.trim() ? org.logo_url.trim() : null;
   const [imgFailed, setImgFailed] = useState(false);
@@ -238,7 +239,7 @@ const OrgLogo = ({ org, size = 44 }) => {
 // LOGIN
 // brandOrg: organizations row loaded from a branded link (?org=<slug>) — themes
 // the whole login page with that org's name and palette. Null = Eden default.
-const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
+const LoginScreen = ({ onLogin, onForgot, brandOrg = null }: any) => {
   const wl = brandOrg ? wlPalette(brandOrg) : null;
   const primary = wl ? wl.primary : B.gold;
   const secondary = wl ? wl.secondary : "#ffb733";
@@ -393,7 +394,7 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }) => {
   );
 };
 
-const OuraResultScreen = ({ result, brandOrg = null, onSignIn }) => {
+const OuraResultScreen = ({ result, brandOrg = null, onSignIn }: any) => {
   const wl = brandOrg ? wlPalette(brandOrg) : null;
   const primary = wl ? wl.primary : B.gold;
   const ok = result === "connected";
@@ -448,7 +449,7 @@ const OuraResultScreen = ({ result, brandOrg = null, onSignIn }) => {
     </div>
   );
 };
-const ForgotScreen = ({ onBack }) => {
+const ForgotScreen = ({ onBack }: any) => {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -501,7 +502,7 @@ const ForgotScreen = ({ onBack }) => {
 // SET PASSWORD — shared by the first-login "set your own password" prompt
 // (mode="first") and the emailed reset-link landing (mode="recovery").
 // Requires an active Supabase Auth session (sign-in or recovery link).
-const SetPasswordScreen = ({ mode, onDone, onCancel }) => {
+const SetPasswordScreen = ({ mode, onDone, onCancel }: any) => {
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
   const [show, setShow] = useState(false);
@@ -557,7 +558,7 @@ const SetPasswordScreen = ({ mode, onDone, onCancel }) => {
 
 // CHANGE PASSWORD — small modal available from the app header once signed in
 // through real auth (demo accounts have no auth session, so it's hidden).
-const ChangePasswordModal = ({ onClose }) => {
+const ChangePasswordModal = ({ onClose }: any) => {
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
   const [show, setShow] = useState(false);
@@ -609,7 +610,7 @@ const ChangePasswordModal = ({ onClose }) => {
 
 // ─── DASHBOARD SCREENS ────────────────────────────────────────────────────────
 
-const HomeScreen = ({ user, wlOrg = null }) => {
+const HomeScreen = ({ user, wlOrg = null }: any) => {
   const homeDeadline = useDeadline(user?.email);
   // Upcoming start date — countdown card for clients who haven't started yet
   const [startInfo, setStartInfo] = useState<any>(null); // { startDate, coachName }
@@ -1095,14 +1096,14 @@ const DietScreen = () => {
                     <span style={{ fontSize:11, color:B.muted, flexShrink:0 }}>{f.cal}cal</span>
                   </div>
                   <div style={{ display:"flex", gap:10, marginTop:3 }}>
-                    {[["P",f.pro,"#4FD89A"],["C",f.carb,"#6FB8E8"],["F",f.fat,"#ffa600"],["Fib",f.fib,"#D4A8F0"]].map(([l,v,c])=>(
+                    {[["P",f.pro,"#4FD89A"],["C",f.carb,"#6FB8E8"],["F",f.fat,"#ffa600"],["Fib",f.fib,"#D4A8F0"]].map(([l,v,c]: any[])=>(
                       <span key={l} style={{ fontSize:10, color:c }}>{l}: {Math.round(v)}g</span>
                     ))}
                   </div>
                 </div>
               ))}
               <div style={{ marginTop:10, padding:"8px 10px", background:B.surface, borderRadius:8, display:"flex", gap:12 }}>
-                {[["P",mt.pro,"#4FD89A"],["C",mt.carb,"#6FB8E8"],["F",mt.fat,"#ffa600"],["Fib",mt.fib,"#D4A8F0"]].map(([l,v,c])=>(
+                {[["P",mt.pro,"#4FD89A"],["C",mt.carb,"#6FB8E8"],["F",mt.fat,"#ffa600"],["Fib",mt.fib,"#D4A8F0"]].map(([l,v,c]: any[])=>(
                   <span key={l} style={{ fontSize:11, color:c, fontWeight:600 }}>{l}: {Math.round(v)}g</span>
                 ))}
               </div>
@@ -1216,8 +1217,8 @@ const LabsScreen = () => {
 
 const CheckInScreen = () => {
   const [form, setForm] = useState({ weight:"", temp:"", steps:"", heartRate:"", hrv:"", bloodPressure:"", sleep:"5", sleepWindow:"", sleepDisruption:"", sleepCycles:"", bloating:"5", brainFog:"5", sexDrive:"5", energy:"5", hunger:"5", stress:"5", mood:"", bowelCount:"", bowelType:"", notes:"" });
-  const set = k => v => setForm(f=>({...f,[k]:v}));
-  const Scale = ({ label, val, onChange }) => (
+  const set = (k: any) => (v: any) => setForm(f=>({...f,[k]:v}));
+  const Scale = ({ label, val, onChange }: any) => (
     <div style={{ marginBottom:16 }}>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
         <label style={{ fontSize:11, fontWeight:700, color:B.muted, letterSpacing:0.8, textTransform:"uppercase" }}>{label}</label>
@@ -2197,7 +2198,7 @@ const UpcomingStartsSection = ({ clients, loomMode = false }: { clients: any[]; 
 };
 
 // ── Coach Dashboard ───────────────────────────────────────────────────────────
-const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured, followedUp, setFollowedUp }) => {
+const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured, followedUp, setFollowedUp }: any) => {
   const isMobile = useIsMobile();
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [rosterOpen,     setRosterOpen]     = useState(true);
@@ -2466,7 +2467,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                         </div>
                         {!loomMode && (
                           <button onClick={()=>{
-                            setFollowedUp(prev => { const s = new Set(prev); s.add(c.email); return s; });
+                            setFollowedUp((prev: any) => { const s = new Set(prev); s.add(c.email); return s; });
                             onNavigate?.("msgs", { email:c.email, name:c.name, role:"client" });
                           }}
                             style={{ background:`${B.gold}22`, border:`1px solid ${B.gold}55`, borderRadius:6,
@@ -5427,7 +5428,7 @@ function BookingScreen({ currentUser }: { currentUser: any }) {
 const IDLE_MS      = 14 * 60 * 1000;  // 14 min idle → show warning
 const WARNING_SECS = 60;               // 60 s to respond before forced logout
 
-const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }) => {
+const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
   // Change-password is only possible with a real Supabase Auth session
   // (hardcoded demo logins don't have one).
   const [hasAuthSession, setHasAuthSession] = useState(false);
