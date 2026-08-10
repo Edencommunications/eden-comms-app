@@ -39,7 +39,7 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- **Before shipping, run every live-Supabase safety check with one command:** `pnpm --filter @workspace/api-server run test:live` (needs `SUPABASE_SERVICE_ROLE_KEY`). It runs realtime-publication, staff-meta-realtime, community-notify-throttle, push-categories, dba-boundary, and auth.integration with per-check pass/fail output. The last two need the "API Server" workflow running — if it isn't reachable they're reported as SKIPPED and the suite exits non-zero, so start the workflow and re-run for a full pass.
 
 ## Pointers
 

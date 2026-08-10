@@ -269,8 +269,8 @@ const w3 = await webhook(`/webhooks/community-post/${ORG}`, communityPostSecretF
 check("org webhook posts by community name", w3.status === 200 && w3.body.ok === true && w3.body.community === "General", JSON.stringify(w3));
 check("org webhook notifies all community members", notifications.length - beforeOrg === 4);
 
-// Sanity: only community_post rows were inserted, all bound to real senders
-check("all notification rows are community_post and never self-addressed", notifications.every((n) => n.type === "community_post" && n.recipient_id !== n.sender_id));
+// Sanity: only community_post (buzz) and mention rows were inserted, never self-addressed
+check("all notification rows are community_post/mention and never self-addressed", notifications.every((n) => (n.type === "community_post" || n.type === "mention") && n.recipient_id !== n.sender_id));
 
 server.close();
 Date.now = realNow;
