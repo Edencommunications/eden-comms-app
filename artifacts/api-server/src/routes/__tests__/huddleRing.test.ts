@@ -23,6 +23,9 @@ const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 let adminSettings: Array<{ company_id: string; key: string; value: string }> = [];
 // notifications rows the mock serves for the re-buzz is_read check
 let notifications: Record<string, { id: string; is_read: boolean }> = {};
+// When true, the mocked notifications endpoint fails (500) — simulates a
+// Supabase outage / network blip during the re-buzz is_read lookup.
+let notificationsFail = false;
 
 const realFetch = globalThis.fetch;
 function mockSupabase() {
@@ -51,6 +54,7 @@ function mockSupabase() {
       return json(adminSettings);
     }
     if (u.pathname === "/rest/v1/notifications") {
+      if (notificationsFail) return json({ message: "upstream error" }, 500);
       const idEq = String(q.get("id") || "");
       if (idEq.startsWith("eq.")) {
         const row = notifications[idEq.slice(3)];
@@ -82,6 +86,7 @@ after(() => {
 beforeEach(() => {
   adminSettings = [];
   notifications = {};
+  notificationsFail = false;
   sent = [];
   // A subscribed, push-enabled user (stored the same way /push/subscribe does)
   adminSettings.push({
@@ -183,6 +188,19 @@ test("already-read invite never re-buzzes at all", async () => {
   mod.scheduleRingRepush(n, "🎙 Live huddle — you're invited", "Sarah is inviting you", "/?goto=team");
   await sleep(120);
   assert.equal(sent.length, 0);
+});
+
+// ── (5) Fail-safe: a FAILED is_read lookup must mean NO re-buzz ─
+// If Supabase errors (network blip / 500) during the read-state check, the
+// only safe behavior is silence — a re-buzz-on-error would keep phones
+// buzzing after the huddle was answered.
+test("a failed notifications lookup (500) sends NO re-buzz — fail silent, never fail loud", async () => {
+  const n = { id: "n-err", recipient_id: USER, type: "huddle_invite" };
+  notifications["n-err"] = { id: "n-err", is_read: false }; // row exists & unread…
+  notificationsFail = true; // …but the lookup itself fails
+  mod.scheduleRingRepush(n, "🎙 Live huddle — you're invited", "Sarah is inviting you", "/?goto=team");
+  await sleep(120); // both re-buzz windows (20/40ms) pass
+  assert.equal(sent.length, 0, "an errored read-state lookup must never trigger a re-buzz");
 });
 
 test("a deleted notification row (huddle cleaned up) never re-buzzes", async () => {
