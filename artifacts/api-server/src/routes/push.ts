@@ -264,7 +264,13 @@ const TYPE_GOTO: Record<string, string> = {
   community_added: "community", community: "community", meta_ads: "community", mention: "team",
 };
 
-async function pushToUser(userId: string, title: string, body: string, type = "", url = "/"): Promise<void> {
+// Injectable sender so tests can capture deliveries instead of hitting
+// real push services (FCM/APNs). Production always uses webpush directly.
+type SendFn = (sub: { endpoint: string; keys: any }, payload: string, opts: { TTL: number }) => Promise<unknown>;
+let sendFn: SendFn = (sub, payload, opts) => webpush.sendNotification(sub, payload, opts);
+export function __setSendForTests(fn: SendFn | null) { sendFn = fn || ((sub, payload, opts) => webpush.sendNotification(sub, payload, opts)); }
+
+export async function pushToUser(userId: string, title: string, body: string, type = "", url = "/"): Promise<void> {
   const found = await getUserPush(userId);
   if (!found || !found.cfg.enabled || !found.cfg.subs?.length) return;
   // Quiet hours: no phone buzzes inside the window — bell notifications
@@ -276,7 +282,7 @@ async function pushToUser(userId: string, title: string, body: string, type = ""
   let changed = false;
   for (const sub of found.cfg.subs) {
     try {
-      await webpush.sendNotification(
+      await sendFn(
         { endpoint: sub.endpoint, keys: sub.keys },
         JSON.stringify({ title, body: body.slice(0, 180), url }),
         { TTL: 3600 },
