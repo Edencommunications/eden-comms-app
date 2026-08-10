@@ -154,9 +154,20 @@ async function metaGet(path: string, token: string): Promise<any | null> {
 
 // Validate a token + account by asking Meta for the account's name.
 async function validateAccount(token: string, adAccountId: string): Promise<{ ok: boolean; name?: string; error?: string }> {
-  const b = await metaGet(`act_${adAccountId}?fields=name,account_status`, token);
-  if (!b) return { ok: false, error: "Meta rejected that token or ad account ID — double-check both and try again." };
-  return { ok: true, name: b.name || `Account ${adAccountId}` };
+  // Call Graph directly (not metaGet) so we can surface Meta's actual
+  // error message to the admin instead of a generic guess.
+  try {
+    const r = await fetch(`${GRAPH}/act_${adAccountId}?fields=name,account_status&access_token=${encodeURIComponent(token)}`);
+    const b: any = await r.json().catch(() => null);
+    if (!r.ok || b?.error) {
+      const msg = String(b?.error?.message || "").slice(0, 200);
+      logger.warn({ path: `act_${adAccountId}`, err: msg }, "[MetaAds] Graph API error");
+      return { ok: false, error: msg ? `Meta said: "${msg}" — this comes from Meta's side, not the app.` : "Meta rejected that token or ad account ID — double-check both and try again." };
+    }
+    return { ok: true, name: b.name || `Account ${adAccountId}` };
+  } catch {
+    return { ok: false, error: "Could not reach Meta — try again in a moment." };
+  }
 }
 
 // "2026-08-07" → "August 7, 2026"
