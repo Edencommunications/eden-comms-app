@@ -20,6 +20,7 @@ const MEMBER = "22222222-2222-2222-2222-222222222222"; // client, member
 const MUTED = "33333333-3333-3333-3333-333333333333";  // client, member, muted
 const OUTSIDER = "44444444-4444-4444-4444-444444444444"; // client, NOT a member
 const MSG_ID = "55555555-5555-5555-5555-555555555555";   // fresh message by MEMBER mentioning @Muted
+const DBA_ID = "66666666-6666-6666-6666-666666666666";   // DBA whose channel is COMM (for the DBA webhook test)
 
 // token → email; email → profile
 const tokens: Record<string, string> = {
@@ -190,6 +191,61 @@ test("notify-post sends NO mention ping to a muted mentioned member", async () =
   });
   assert.equal(r.status, 200);
   assert.deepEqual(notifications.filter(n => n.recipient_id === MUTED), []);
+});
+
+// ── Full webhook paths (Zapier/recap posts) ────────────────────────
+// These go through the real HTTP routes with real derived secrets, so a
+// regression anywhere in the webhook → notifyCommunityMembers chain shows up.
+
+test("org webhook post skips muted members, buzzes the rest", async () => {
+  const { communityPostSecretFor } = await import("../communityPost");
+  adminSettings.push({ company_id: ORG, key: `community_mute:${COMM}:${MUTED}`, value: "1" });
+  const r = await api(`/webhooks/community-post/${ORG}`, {
+    method: "POST",
+    headers: { "x-webhook-secret": communityPostSecretFor(ORG) },
+    body: JSON.stringify({ community_id: COMM, message: "Weekly check-in time!" }),
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual(notifications.map(n => n.recipient_id), [MEMBER]);
+});
+
+test("DBA webhook post skips muted members, buzzes the rest", async () => {
+  const { communityPostDbaSecretFor } = await import("../communityPost");
+  adminSettings.push({ company_id: ORG, key: `community_mute:${COMM}:${MUTED}`, value: "1" });
+  adminSettings.push({
+    company_id: ORG,
+    key: `dba:${DBA_ID}`,
+    value: JSON.stringify({ id: DBA_ID, name: "Sub Brand", slug: "sub-brand", is_active: true, members: [] }),
+  });
+  const r = await api(`/webhooks/community-post-dba/${DBA_ID}`, {
+    method: "POST",
+    headers: { "x-webhook-secret": communityPostDbaSecretFor(DBA_ID) },
+    body: JSON.stringify({ community_id: COMM, message: "Sub-brand recap!" }),
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual(notifications.map(n => n.recipient_id), [MEMBER]);
+});
+
+test("unmuting restores webhook buzzes", async () => {
+  const { communityPostSecretFor } = await import("../communityPost");
+  const secret = communityPostSecretFor(ORG);
+  const post = () => api(`/webhooks/community-post/${ORG}`, {
+    method: "POST",
+    headers: { "x-webhook-secret": secret },
+    body: JSON.stringify({ community_id: COMM, message: "hello" }),
+  });
+  // Muted: silent
+  adminSettings.push({ company_id: ORG, key: `community_mute:${COMM}:${MUTED}`, value: "1" });
+  assert.equal((await post()).status, 200);
+  assert.deepEqual(notifications.map(n => n.recipient_id), [MEMBER]);
+  // Member unmutes via the real route, then the next webhook post buzzes them
+  notifications = [];
+  const r = await api(`/communities/${COMM}/mute`, {
+    method: "POST", headers: auth("tok-muted"), body: JSON.stringify({ muted: false }),
+  });
+  assert.equal(r.status, 200);
+  assert.equal((await post()).status, 200);
+  assert.deepEqual(notifications.map(n => n.recipient_id).sort(), [MEMBER, MUTED].sort());
 });
 
 test("an unmuted ('0') row does not silence anyone", async () => {
