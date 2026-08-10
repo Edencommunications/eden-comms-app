@@ -1056,6 +1056,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [audTo,     setAudTo]     = useState('')
   // Date-range changes re-query the server so results aren't limited to the loaded page
   useEffect(()=>{ if(isAdmin && tab==='audit') loadDbAudit() },[audFrom,audTo])
+  // Preset ranges & jump-to-date — both just set audFrom/audTo, which re-query the server
+  const audDateStr = d => { const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` }
+  function audPreset(days){ const from=new Date(); from.setDate(from.getDate()-days); setAudFrom(audDateStr(from)); setAudTo('') }
+  const audPresetActive = days => { const from=new Date(); from.setDate(from.getDate()-days); return audFrom===audDateStr(from) && !audTo }
+  function audJumpToDate(v){ if(!v){ return } setAudFrom(v); setAudTo(v) }
   const [audRestoring, setAudRestoring] = useState(null)
   const [audRestoredNow, setAudRestoredNow] = useState(new Set())
   const audActions = useMemo(()=>Array.from(new Set((dbAudit||[]).map(r=>r.action).filter(Boolean))),[dbAudit])
@@ -2758,6 +2763,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>🕐 {o.label}</option>)}
             </select>
             <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              {[7,30,90].map(d=>(
+                <button key={d} onClick={()=>audPreset(d)} title={`Show the last ${d} days`}
+                  style={{background:audPresetActive(d)?`${C.gold}22`:'none',border:`1px solid ${audPresetActive(d)?C.gold+'88':C.border}`,borderRadius:8,padding:'6px 10px',
+                    color:audPresetActive(d)?C.gold:C.muted,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  {d}d
+                </button>
+              ))}
+              <input type="date" value={audFrom&&audFrom===audTo?audFrom:''} onChange={e=>audJumpToDate(e.target.value)} title="Jump to a specific day"
+                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${audFrom&&audFrom===audTo?C.gold+'88':C.border}`,background:C.card,color:audFrom&&audFrom===audTo?C.gold:C.white,fontSize:11,colorScheme:'dark',width:34,cursor:'pointer'}}/>
               <input type="date" value={audFrom} onChange={e=>setAudFrom(e.target.value)} title="From date"
                 style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:11,colorScheme:'dark'}}/>
               <span style={{color:C.muted,fontSize:12}}>→</span>
