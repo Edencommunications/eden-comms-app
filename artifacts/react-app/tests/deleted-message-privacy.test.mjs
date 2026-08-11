@@ -4,7 +4,7 @@
 // Guards two invariants:
 // 1. The shared DeletedBubble component never renders the original content
 //    for non-admins, and renders the "(admins only)" content for admins.
-// 2. Every Team Hub surface in Week7.jsx (general roots, general thread
+// 2. Every Team Hub surface in Week7.tsx (general roots, general thread
 //    replies, DM roots, DM thread roots, DM thread replies) renders deleted
 //    messages through DeletedBubble — no inline re-implementations that could
 //    silently re-expose deleted content.
@@ -41,11 +41,11 @@ test('admin sees the (admins only) original content', () => {
 })
 
 test('every Team Hub surface renders deleted messages via DeletedBubble', () => {
-  const src = readFileSync(fileURLToPath(new URL('../src/components/Week7.jsx', import.meta.url)), 'utf8')
+  const src = readFileSync(fileURLToPath(new URL('../src/components/Week7.tsx', import.meta.url)), 'utf8')
   for (const surface of ['general-root', 'general-reply', 'dm-root', 'dm-thread-root', 'dm-thread-reply']) {
     assert.ok(src.includes(`<DeletedBubble surface="${surface}"`), `surface ${surface} must use DeletedBubble`)
   }
   // No inline deleted-message rendering left that could leak content:
-  assert.ok(!src.includes('(admins only)'), 'inline admins-only renderer found in Week7.jsx — use DeletedBubble')
+  assert.ok(!src.includes('(admins only)'), 'inline admins-only renderer found in Week7.tsx — use DeletedBubble')
   assert.ok(!/isAdminRole\s*\?\s*[`<]/.test(src.replace(/\n/g, ' ')), 'inline isAdminRole deleted-content ternary found — use DeletedBubble')
 })

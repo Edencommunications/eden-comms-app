@@ -20,15 +20,15 @@ const C = {
   border:'#2a2a2a', muted:'#888', success:'#4FD89A', danger:'#ff4444',
 }
 
-const API = (p) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`
+const API = (p: any) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`
 
-async function apiGet(path) {
+async function apiGet(path: any) {
   try {
     const r = await fetch(API(path), { headers: { Authorization: sbBearer() } })
     return await r.json().catch(() => null)
   } catch { return null }
 }
-async function apiPost(path, body) {
+async function apiPost(path: any, body: any) {
   try {
     const r = await fetch(API(path), {
       method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
@@ -39,40 +39,40 @@ async function apiPost(path, body) {
   } catch { return { ok:false, error:'Could not reach the server' } }
 }
 
-function timeAgo(ts) {
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000)
+function timeAgo(ts: any) {
+  const diff = Math.floor((Date.now() - (new Date(ts) as any)) / 1000)
   if (diff < 60) return 'just now'
   if (diff < 3600) return `${Math.floor(diff/60)}m ago`
   return `${Math.floor(diff/3600)}h ago`
 }
 
-const AUD_LABEL = { leaders:'Leaders only', all:'Everyone', pick:'Invited members' }
+const AUD_LABEL: any = { leaders:'Leaders only', all:'Everyone', pick:'Invited members' }
 
 // `visible` — whether the Huddles tab itself is showing. The component stays
 // mounted across all DBA tabs so an active call keeps running; when the user
 // is on another tab we render ONLY the floating call window.
-export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
-  const [data, setData] = useState(null)     // {can_start, huddles, roster}
-  const [joined, setJoined] = useState(null) // huddle currently in the call window
+export default function DbaHuddles({ dba, primary, isMobile, visible = true }: any) {
+  const [data, setData] = useState<any>(null)     // {can_start, huddles, roster}
+  const [joined, setJoined] = useState<any>(null) // huddle currently in the call window
   const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState(false)
   // Start form
   const [showStart, setShowStart] = useState(false)
   const [title, setTitle] = useState('')
   const [audience, setAudience] = useState('all')
-  const [picked, setPicked] = useState({})
-  const joinedRef = useRef(null)
+  const [picked, setPicked] = useState<any>({})
+  const joinedRef = useRef<any>(null)
   joinedRef.current = joined
   const visibleRef = useRef(visible)
   visibleRef.current = visible
 
   // ── Draggable shrunk call window (same behavior as org huddles) ──
   // winPos = null → default pinned position. Once dragged, we keep x/y.
-  const [winPos, setWinPos] = useState(null)
-  const winRef  = useRef(null)
-  const dragRef = useRef(null) // { startX, startY, origX, origY, moved }
+  const [winPos, setWinPos] = useState<any>(null)
+  const winRef  = useRef<any>(null)
+  const dragRef = useRef<any>(null) // { startX, startY, origX, origY, moved }
 
-  const clampPos = (x, y) => {
+  const clampPos = (x: any, y: any) => {
     const el = winRef.current
     const w = el ? el.offsetWidth  : 320
     const h = el ? el.offsetHeight : 280
@@ -80,7 +80,7 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
     const maxY = Math.max(0, window.innerHeight - h)
     return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) }
   }
-  const onHeaderPointerDown = (e) => {
+  const onHeaderPointerDown = (e: any) => {
     if (expanded) return                    // only the shrunk window drags
     if (e.target.closest('button')) return  // don't hijack Expand/End/Leave
     const el = winRef.current
@@ -90,7 +90,7 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
     e.currentTarget.setPointerCapture?.(e.pointerId)
     e.preventDefault()
   }
-  const onHeaderPointerMove = (e) => {
+  const onHeaderPointerMove = (e: any) => {
     const d = dragRef.current
     if (!d) return
     const dx = e.clientX - d.startX, dy = e.clientY - d.startY
@@ -102,7 +102,7 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
   // Keep the window on-screen when the viewport shrinks / rotates
   useEffect(() => {
     if (!winPos) return
-    const onResize = () => setWinPos(p => (p ? clampPos(p.x, p.y) : p))
+    const onResize = () => setWinPos((p: any) => (p ? clampPos(p.x, p.y) : p))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [winPos !== null]) // eslint-disable-line
@@ -116,7 +116,7 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
       setData(b)
       // If the room we're in was ended elsewhere, close the window
       const cur = joinedRef.current
-      if (cur && !b.huddles.some(h => h.id === cur.id)) setJoined(null)
+      if (cur && !b.huddles.some((h: any) => h.id === cur.id)) setJoined(null)
     }
   }
   useEffect(() => {
@@ -143,7 +143,7 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
     setJoined(b.huddle); setExpanded(true)
     load()
   }
-  async function endHuddle(h) {
+  async function endHuddle(h: any) {
     if (!confirm(`End "${h.title}" for everyone?`)) return
     const b = await apiPost('huddle-end', { dbaId: dba.id, huddleId: h.id })
     if (!b.ok) { alert(b.error || 'Could not end the huddle.'); return }
@@ -153,8 +153,8 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
 
   const huddles = data?.huddles || []
   const roster = data?.roster || []
-  const inp = { width:'100%', boxSizing:'border-box', background:C.surface, color:C.white, border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', fontSize:13, outline:'none' }
-  const btn = (bg, fg = C.black) => ({ background:bg, color:fg, border:'none', borderRadius:8, padding:'9px 16px', fontSize:12, fontWeight:800, cursor:'pointer' })
+  const inp: any = { width:'100%', boxSizing:'border-box', background:C.surface, color:C.white, border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', fontSize:13, outline:'none' }
+  const btn = (bg: any, fg: any = C.black): any => ({ background:bg, color:fg, border:'none', borderRadius:8, padding:'9px 16px', fontSize:12, fontWeight:800, cursor:'pointer' })
 
   return (
     <>
@@ -188,9 +188,9 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
           {audience === 'pick' && (
             <div style={{ maxHeight:180, overflowY:'auto', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 10px', marginBottom:10 }}>
               {roster.length === 0 && <p style={{ fontSize:12, color:C.muted }}>No members to invite yet.</p>}
-              {roster.map(m => (
+              {roster.map((m: any) => (
                 <label key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', fontSize:13, color:C.white, cursor:'pointer' }}>
-                  <input type="checkbox" checked={!!picked[m.id]} onChange={e => setPicked(p => ({ ...p, [m.id]: e.target.checked }))} />
+                  <input type="checkbox" checked={!!picked[m.id]} onChange={e => setPicked((p: any) => ({ ...p, [m.id]: e.target.checked }))} />
                   {m.name} {m.leader && <span style={{ fontSize:9, fontWeight:800, color:primary, border:`1px solid ${primary}55`, borderRadius:10, padding:'1px 6px' }}>LEADER</span>}
                 </label>
               ))}
@@ -214,7 +214,7 @@ export default function DbaHuddles({ dba, primary, isMobile, visible = true }) {
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {huddles.map(h => (
+          {huddles.map((h: any) => (
             <div key={h.id} style={{ background:C.card, border:`1px solid ${joined?.id===h.id ? primary : C.border}`, borderRadius:12, padding:'14px 16px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
               <span style={{ width:9, height:9, borderRadius:5, background:C.success, boxShadow:`0 0 8px ${C.success}`, flexShrink:0 }} />
               <div style={{ flex:1, minWidth:150 }}>

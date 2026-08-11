@@ -25,10 +25,10 @@ export const TZ_OPTIONS = [
 
 export const DEFAULT_TZ = 'America/Chicago'
 
-export function tzShort(tz) {
+export function tzShort(tz: any) {
   return (TZ_OPTIONS.find(o => o.value === tz) || TZ_OPTIONS[0]).short
 }
-export function tzLabel(tz) {
+export function tzLabel(tz: any) {
   return (TZ_OPTIONS.find(o => o.value === tz) || TZ_OPTIONS[0]).label
 }
 
@@ -36,15 +36,15 @@ export function tzLabel(tz) {
 // Two-pass offset resolution keeps DST transition edges correct: the first pass
 // estimates the offset, the second re-derives it at the corrected instant so a
 // time on the other side of a spring-forward/fall-back boundary lands right.
-function wallClockInTz(ms, tz) {
+function wallClockInTz(ms: any, tz: any) {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   })
-  const p = Object.fromEntries(dtf.formatToParts(new Date(ms)).map(x => [x.type, x.value]))
+  const p: any = Object.fromEntries(dtf.formatToParts(new Date(ms)).map(x => [x.type, x.value]))
   return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second)
 }
-export function zonedTimeToIso(dateStr, timeStr, tz) {
+export function zonedTimeToIso(dateStr: any, timeStr: any, tz: any) {
   const target = new Date(`${dateStr}T${timeStr}:00Z`).getTime()
   let guess = target
   for (let i = 0; i < 3; i++) {                    // converges in ≤2 passes
@@ -63,7 +63,7 @@ export function zonedTimeToIso(dateStr, timeStr, tz) {
 export const DEFAULT_TIME = '09:00'
 
 // "09:00" → "9 AM", "07:30" → "7:30 AM", "14:00" → "2 PM"
-export function timeLabel(hhmm) {
+export function timeLabel(hhmm: any) {
   const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || DEFAULT_TIME)
   if (!m) return '9 AM'
   let h = +m[1]; const min = m[2]
@@ -72,9 +72,9 @@ export function timeLabel(hhmm) {
   return min === '00' ? `${h} ${ap}` : `${h}:${min} ${ap}`
 }
 
-const cache = {}
+const cache: any = {}
 
-async function get(pathQuery) {
+async function get(pathQuery: any) {
   const r = await fetch(`${SB_URL}/rest/v1/${pathQuery}`, {
     headers: { apikey: ANON, Authorization: sbBearer() },
   })
@@ -89,14 +89,14 @@ const DEFAULTS = { tz: DEFAULT_TZ, time: DEFAULT_TIME }
 //   • Clients → ALWAYS their coach's settings (client-level values are
 //     ignored — there is no per-client override in the product)
 //   • Fallback → defaults (9 AM Central)
-export async function fetchDeadline(email) {
+export async function fetchDeadline(email: any): Promise<any> {
   if (!email) return DEFAULTS
   if (cache[email]) return cache[email]
   try {
     const rows = await get(`user_profiles?email=eq.${encodeURIComponent(email)}&select=role,timezone,deadline_time,coach_id`)
     const me = Array.isArray(rows) ? rows[0] : null
     if (!me) return DEFAULTS
-    let tz, time
+    let tz: any, time: any
     if (me.role === 'client') {
       if (me.coach_id) {
         const c = await get(`user_profiles?id=eq.${me.coach_id}&select=timezone,deadline_time`)
@@ -114,13 +114,13 @@ export async function fetchDeadline(email) {
 }
 
 // Back-compat: resolve just the timezone
-export async function fetchDeadlineTz(email) { return (await fetchDeadline(email)).tz }
+export async function fetchDeadlineTz(email: any) { return (await fetchDeadline(email)).tz }
 
 // Clear ALL cached entries — clients cache their coach's resolved timezone,
 // so a coach changing their setting must invalidate every key, not just their own.
 // Also bumps a version counter so mounted useDeadline() hooks refetch live.
 let cacheVersion = 0
-const listeners = new Set()
+const listeners = new Set<any>()
 export function clearTzCache() {
   for (const k of Object.keys(cache)) delete cache[k]
   cacheVersion++
@@ -129,7 +129,7 @@ export function clearTzCache() {
 
 // React hook: returns { tzS: "CST", timeL: "9 AM", text: "9 AM CST" } for deadline text
 import { useState, useEffect } from 'react'
-export function useDeadline(email) {
+export function useDeadline(email: any) {
   const initial = cache[email] || DEFAULTS
   const [d, setD] = useState({ tzS: tzShort(initial.tz), timeL: timeLabel(initial.time) })
   const [v, setV] = useState(cacheVersion)
@@ -147,4 +147,4 @@ export function useDeadline(email) {
   return { ...d, text: `${d.timeL} ${d.tzS}` }
 }
 // Back-compat hook: just the tz short label
-export function useDeadlineTzShort(email) { return useDeadline(email).tzS }
+export function useDeadlineTzShort(email: any) { return useDeadline(email).tzS }

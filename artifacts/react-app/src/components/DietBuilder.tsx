@@ -16,7 +16,7 @@ import {
 import { getRecipeDetails, loadLiveRecipeDetails } from './recipeDetails'
 
 function useIsMobile(bp = 768) {
-  const [m, setM] = useState(() => window.innerWidth < bp)
+  const [m, setM] = useState<any>(() => window.innerWidth < bp)
   useEffect(() => {
     const h = () => setM(window.innerWidth < bp)
     window.addEventListener('resize', h)
@@ -28,6 +28,7 @@ function useIsMobile(bp = 768) {
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
+
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
   surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
@@ -36,10 +37,10 @@ const C = {
 
 // Side-by-side photo compare: two panes, tap a pane to select it, tap a
 // thumbnail below to fill ONLY that pane (never the whole page).
-function PhotoCompare({ photos, isMobile }) {
-  const [panes, setPanes]   = useState({ left:null, right:null })
-  const [active, setActive] = useState('left')
-  const pane = (side) => {
+function PhotoCompare({ photos, isMobile }: any) {
+  const [panes, setPanes]   = useState<any>({ left:null, right:null })
+  const [active, setActive] = useState<any>('left')
+  const pane = (side: any) => {
     const p = panes[side]
     const isActive = active === side
     return (
@@ -61,14 +62,14 @@ function PhotoCompare({ photos, isMobile }) {
         {isActive && <div style={{ position:'absolute', top:6, left:6, fontSize:9, fontWeight:800, letterSpacing:1,
           background:C.gold, color:'#000', borderRadius:6, padding:'2px 7px' }}>SELECTED</div>}
         {p && <button title="Remove this photo from the comparison"
-          onClick={(e)=>{ e.stopPropagation(); setPanes(prev=>({ ...prev, [side]:null })); setActive(side) }}
+          onClick={(e)=>{ e.stopPropagation(); setPanes((prev: any)=>({ ...prev, [side]:null })); setActive(side) }}
           style={{ position:'absolute', top:6, right:6, width:24, height:24, borderRadius:'50%', cursor:'pointer',
             background:'rgba(0,0,0,0.7)', border:`1px solid ${C.border}`, color:C.white, fontSize:12, lineHeight:1,
             display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>}
       </div>
     )
   }
-  const byWeek = {}
+  const byWeek: Record<string, any> = {}
   for (const p of photos || []) {
     if (!p.photo_url) continue
     const k = p.week_label || 'Uncategorized'
@@ -85,11 +86,11 @@ function PhotoCompare({ photos, isMobile }) {
         <div key={week} style={{ marginBottom:14 }}>
           <div style={{ fontSize:11, fontWeight:700, color:C.white, marginBottom:6 }}>{week}</div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-            {wPhotos.map((p, i) => {
+            {wPhotos.map((p: any, i: any) => {
               const inLeft = panes.left?.id === p.id, inRight = panes.right?.id === p.id
               return (
                 <div key={i}
-                  onClick={()=>{ setPanes(prev=>({ ...prev, [active]:p })); setActive(a=>a==='left'?'right':'left') }}
+                  onClick={()=>{ setPanes((prev: any)=>({ ...prev, [active]:p })); setActive((a: any)=>a==='left'?'right':'left') }}
                   style={{ width:isMobile?58:72, cursor:'pointer' }}>
                   <img src={p.photo_url} alt="" style={{ width:'100%', height:isMobile?76:94, objectFit:'cover', borderRadius:8,
                     display:'block', border:`2px solid ${(inLeft||inRight) ? C.gold : C.border}` }}/>
@@ -116,7 +117,7 @@ const H = {
 // Write a row to the audit trail after a successful plan save.
 // Goes through the server, which derives the actor from the caller's JWT —
 // the browser never supplies (and can't forge) actor identity.
-function auditPlanSave(action, clientId, clientName) {
+function auditPlanSave(action: any, clientId: any, clientName: any, role?: any) {
   try {
     fetch('/api/audit/event', {
       method: 'POST',
@@ -125,7 +126,7 @@ function auditPlanSave(action, clientId, clientName) {
     }).catch(() => {})
   } catch {}
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
@@ -133,13 +134,13 @@ async function dbInsert(table, body) {
   // H asks for return=representation, so successful inserts yield the new row(s)
   return r.json().catch(()=>true)
 }
-async function dbGet(table, query='') {
+async function dbGet(table: any, query='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() } }
   })
   return r.ok ? r.json() : []
 }
-async function dbUpdate(table, query, body) {
+async function dbUpdate(table: any, query: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     method:'PATCH',
     headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() },
@@ -149,7 +150,7 @@ async function dbUpdate(table, query, body) {
   if (!r.ok) { console.error('UPDATE', await r.text()); return null }
   return true
 }
-async function dbUpsert(table, body, onConflict) {
+async function dbUpsert(table: any, body: any, onConflict: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
     method:'POST',
     headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() },
@@ -159,7 +160,7 @@ async function dbUpsert(table, body, onConflict) {
   if (!r.ok) console.error('UPSERT', await r.text())
   return r.ok
 }
-async function dbDelete(table, query) {
+async function dbDelete(table: any, query: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     method:'DELETE',
     headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() } }
@@ -171,7 +172,7 @@ async function dbDelete(table, query) {
 // the old insert-per-save behavior), or insert one if none exists yet.
 // Keeps at most one canonical row per client; loading (newest by updated_at)
 // keeps working unchanged.
-async function saveDietPlanRow(payload) {
+async function saveDietPlanRow(payload: any) {
   const rows = await dbGet('diet_plans', `client_id=eq.${payload.client_id}&order=updated_at.desc&select=id`)
   if (Array.isArray(rows) && rows.length > 0) {
     const keepId = rows[0].id
@@ -185,7 +186,7 @@ async function saveDietPlanRow(payload) {
   }
   return dbInsert('diet_plans', payload)
 }
-function scoreColor(v) {
+function scoreColor(v: any) {
   if (v == null) return C.muted
   if (v >= 8) return C.success
   if (v >= 5) return C.gold
@@ -197,7 +198,7 @@ import { MASTER_HABITS, FOODS, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 
 // ── Recipe Book ──────────────────────────────────────────────
 const RECIPE_BUY = 'https://funnel.lifestyleofeden.com/loe-recipes-5482'
-const RECIPE_CAT_EMOJI = {Breakfast:'🥞',Lunch:'🥗',Dinner:'🍽',Snacks:'🫙',Drinks:'🥤',Desserts:'🍰',Soups:'🍲',Sides:'🥦',Sauces:'🧴'}
+const RECIPE_CAT_EMOJI: Record<string, any> = {Breakfast:'🥞',Lunch:'🥗',Dinner:'🍽',Snacks:'🫙',Drinks:'🥤',Desserts:'🍰',Soups:'🍲',Sides:'🥦',Sauces:'🧴'}
 const STATIC_RECIPES = [
   {name:'Whole Food Protein Pancakes',    cal:270, pro:27,  fat:7,  carb:28, fib:5,  category:'Breakfast'},
   {name:'Breakfast Tacos',               cal:670, pro:45,  fat:32, carb:49, fib:9,  category:'Breakfast'},
@@ -463,8 +464,8 @@ const DEFICIT_SURPLUS = [
   {label:'25% Deficit',val:0.75},
 ]
 
-function mealMacros(meal) {
-  return meal.foods.reduce((acc,item)=>({
+function mealMacros(meal: any) {
+  return meal.foods.reduce((acc: any,item: any)=>({
     cal:Math.round(acc.cal+item.food.cal*item.servings),
     pro:Math.round(acc.pro+item.food.pro*item.servings),
     fat:Math.round(acc.fat+item.food.fat*item.servings),
@@ -474,7 +475,7 @@ function mealMacros(meal) {
 }
 
 // Return the next calendar date for a given weekday name, e.g. "Wednesday" → "Wednesday, Jul 30"
-function nextUpdateDate(dayName) {
+function nextUpdateDate(dayName: any) {
   if (!dayName) return null
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
   const target = days.indexOf(dayName)
@@ -496,15 +497,15 @@ function parseServing(serving='') {
   return { amount: 1, unit: serving }
 }
 
-function calcBMR(weight,height,age,gender) {
+function calcBMR(weight: any,height: any,age: any,gender: any) {
   const w=parseFloat(weight)*0.453592, h=parseFloat(height)*2.54, a=parseFloat(age)
   if(!w||!h||!a) return 0
   return gender==='Male'?Math.round(10*w+6.25*h-5*a+5):Math.round(10*w+6.25*h-5*a-161)
 }
 
-const MCOLS={cal:'#ffa600',pro:'#4FD89A',carb:'#6FB8E8',fat:'#f06060',fib:'#D4A8F0'}
+const MCOLS: Record<string, any>={cal:'#ffa600',pro:'#4FD89A',carb:'#6FB8E8',fat:'#f06060',fib:'#D4A8F0'}
 
-function MacroBar({label,val,target,unit=''}) {
+function MacroBar({label,val,target,unit=''}: any) {
   const col=MCOLS[label]||C.gold
   const pct=target?Math.min(100,Math.round(val/target*100)):0
   return (
@@ -519,7 +520,7 @@ function MacroBar({label,val,target,unit=''}) {
   )
 }
 
-function Lbl({t}) {
+function Lbl({t}: any) {
   return <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'13px 0 7px'}}>{t}</div>
 }
 
@@ -531,7 +532,7 @@ function ReadOnlyBadge() {
   )
 }
 
-function Inp({label,value,onChange,type='text',placeholder,disabled=false}) {
+function Inp({label,value,onChange,type='text',placeholder,disabled=false}: any) {
   return (
     <div style={{marginBottom:10}}>
       {label&&<div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
@@ -542,24 +543,24 @@ function Inp({label,value,onChange,type='text',placeholder,disabled=false}) {
   )
 }
 
-function Sel({label,value,onChange,options,disabled=false}) {
+function Sel({label,value,onChange,options,disabled=false}: any) {
   return (
     <div style={{marginBottom:10}}>
       {label&&<div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
       <select value={value} onChange={e=>onChange&&onChange(e.target.value)} disabled={disabled}
         style={{width:'100%',background:disabled?C.dim:C.surface,border:`1px solid ${disabled?C.dim:C.border}`,borderRadius:8,padding:'9px 12px',color:disabled?C.muted:C.white,fontSize:13,outline:'none',cursor:disabled?'not-allowed':'pointer'}}>
-        {options.map(o=><option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
+        {options.map((o: any)=><option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
       </select>
     </div>
   )
 }
 
-function Card({children,sx={}}) {
+function Card({children,sx={}}: any) {
   return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,...sx}}>{children}</div>
 }
 
 // ── View-only food row (client sees this instead of editable row) ──
-function ReadOnlyFoodRow({item}) {
+function ReadOnlyFoodRow({item}: any) {
   const ps = parseServing(item.food.serving)
   const actualAmt = Math.round(item.servings * ps.amount * 10) / 10
   return (
@@ -577,11 +578,11 @@ function ReadOnlyFoodRow({item}) {
 // ════════════════════════════════════════════════════════════════
 // CHECK-IN CHARTS — full suite matching the home modal
 // ════════════════════════════════════════════════════════════════
-function CheckInCharts({ checkins }) {
+function CheckInCharts({ checkins }: any) {
   if (!checkins || checkins.length < 2) return null
 
   // Empty/disabled metrics stay null → charts show a gap instead of a fake 0
-  const num = (v, parse=parseFloat) => {
+  const num = (v: any, parse=parseFloat) => {
     if (v == null || String(v).trim() === '') return null
     const n = parse(String(v).replace(/,/g, ''))
     return Number.isFinite(n) ? n : null
@@ -613,7 +614,7 @@ function CheckInCharts({ checkins }) {
     },
   }
 
-  const Panel = ({ title, children }) => (
+  const Panel = ({ title, children }: any) => (
     <div style={{ marginBottom:16 }}>
       <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>{title}</div>
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'12px 4px 8px 0' }}>
@@ -652,7 +653,7 @@ function CheckInCharts({ checkins }) {
             <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={[60,100]}/>
             <Tooltip {...CT.tooltip} formatter={v=>[v+'%','Compliance']}/>
             <Bar dataKey="compliance" fill={C.gold} radius={[4,4,0,0]}
-              label={{position:'top',fontSize:9,fill:C.gold,formatter:v=>v+'%'}}/>
+              label={{position:'top',fontSize:9,fill:C.gold,formatter:(v: any)=>v+'%'}}/>
           </BarChart>
         </ResponsiveContainer>
       </Panel>
@@ -667,7 +668,7 @@ function CheckInCharts({ checkins }) {
               <YAxis tick={{fill:CT.tick,fontSize:9}} tickLine={false} axisLine={false} domain={[0,100]}/>
               <Tooltip {...CT.tooltip} formatter={v=>[v+'%','Habits']}/>
               <Bar dataKey="habitPct" radius={[4,4,0,0]}
-                label={{position:'top',fontSize:9,fill:'#4FD89A',formatter:v=>v!=null?v+'%':''}}
+                label={{position:'top',fontSize:9,fill:'#4FD89A',formatter:(v: any)=>v!=null?v+'%':''}}
                 fill="#4FD89A"/>
             </BarChart>
           </ResponsiveContainer>
@@ -785,10 +786,10 @@ function CheckInCharts({ checkins }) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[], onBack}) {
+export default function DietBuilder({currentUser, initialTab='plan', demoCheckins=[], onBack}: any) {
   const isMobile = useIsMobile()
-  const [adminFormDocs, setAdminFormDocs] = useState([])
-  const [,setLiveDetailsReady] = useState(false) // re-render once sheet-linked doc details arrive
+  const [adminFormDocs, setAdminFormDocs] = useState<any>([])
+  const [,setLiveDetailsReady] = useState<any>(false) // re-render once sheet-linked doc details arrive
   useEffect(()=>{ loadLiveRecipeDetails().then(()=>setLiveDetailsReady(true)) },[])
   useEffect(()=>{
     const em = currentUser?.email||''
@@ -801,7 +802,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const email   = currentUser?.email||''
   const info    = {role:currentUser?.role||'client',name:currentUser?.name||'User'}
   // Real identity: resolve the profile from the DB so every user works everywhere.
-  const [dbProfile, setDbProfile] = useState(null)
+  const [dbProfile, setDbProfile] = useState<any>(null)
   useEffect(()=>{
     if (!email) { setDbProfile(null); return }
     dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,name,role,coach_id,company_id`)
@@ -819,12 +820,12 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   // Which organization this user belongs to — scopes company habits/foods/cardio libraries.
   // null until resolved; Eden org id for Eden staff and any user without a profile row.
   const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
-  const [myCompanyId, setMyCompanyId] = useState(null)
-  const [myUUID, setMyUUID] = useState(null)
+  const [myCompanyId, setMyCompanyId] = useState<any>(null)
+  const [myUUID, setMyUUID] = useState<any>(null)
   // Does this org's tier include the Recipe Book? Eden always true; WL orgs resolved
   // from organizations.plan → packages.includes_recipes (Eden admin controls both).
   // null = still resolving — hide recipe UI until known.
-  const [tierRecipes, setTierRecipes] = useState(null)
+  const [tierRecipes, setTierRecipes] = useState<any>(null)
   const isWLOrg = !!myCompanyId && myCompanyId!==EDEN_ORG_ID
   useEffect(()=>{ let stale=false; (async()=>{
     if (!email) return
@@ -849,94 +850,94 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     } catch { if(!stale){ setMyCompanyId(EDEN_ORG_ID) } /* tierRecipes stays null on failure — fail closed (recipe UI hidden) */ }
   })(); return ()=>{ stale=true } },[email])
 
-  const [tab,        setTab]        = useState(initialTab)
-  const [dayType,    setDayType]    = useState('high')
-  const [protocol,   setProtocol]   = useState('Base Diet Protocol Male')
-  const [showPicker, setShowPicker] = useState(false)
-  const [activeMeal, setActiveMeal] = useState(null)
-  const [foodSearch, setFoodSearch] = useState('')
-  const [viewRecipe, setViewRecipe] = useState(null)   // full recipe detail modal (client + coach)
-  const [previewRecipe, setPreviewRecipe] = useState(null) // inline preview in coach picker
-  const [privacyMode,setPrivacyMode]= useState(false)
+  const [tab,        setTab]        = useState<any>(initialTab)
+  const [dayType,    setDayType]    = useState<any>('high')
+  const [protocol,   setProtocol]   = useState<any>('Base Diet Protocol Male')
+  const [showPicker, setShowPicker] = useState<any>(false)
+  const [activeMeal, setActiveMeal] = useState<any>(null)
+  const [foodSearch, setFoodSearch] = useState<any>('')
+  const [viewRecipe, setViewRecipe] = useState<any>(null)   // full recipe detail modal (client + coach)
+  const [previewRecipe, setPreviewRecipe] = useState<any>(null) // inline preview in coach picker
+  const [privacyMode,setPrivacyMode]= useState<any>(false)
 
-  const [highMeals, setHighMeals] = useState(
+  const [highMeals, setHighMeals] = useState<any>(
     ['Meal 1','Meal 2','Meal 3','Meal 4','Meal 5','Meal 6'].map(n=>({name:n,foods:[]}))
   )
-  const [lowMeals, setLowMeals] = useState(
+  const [lowMeals, setLowMeals] = useState<any>(
     ['Meal 1','Meal 2','Meal 3','Meal 4','Meal 5'].map(n=>({name:n,foods:[]}))
   )
   const meals    = dayType==='high'?highMeals:lowMeals
   const setMeals = dayType==='high'?setHighMeals:setLowMeals
 
   // Calculator
-  const [calc, setCalc] = useState({
+  const [calc, setCalc] = useState<any>({
     gender:'Male',weight:'',height:'',age:'',bodyfat:'',
     activity:ACTIVITY_LEVELS[1].label,ds:'Maintenance',
     protPct:40,fatPct:30,carbPct:30,
   })
-  const [results, setResults] = useState(null)
+  const [results, setResults] = useState<any>(null)
   // Targets from the last saved plan — kept separate from the calculator's
   // `results` (which also carries bmr/maintenance the saved shape lacks).
-  const [savedTargets, setSavedTargets] = useState(null)
+  const [savedTargets, setSavedTargets] = useState<any>(null)
   // When the latest saved diet plan was written (diet_plans.updated_at)
-  const [planUpdatedAt, setPlanUpdatedAt] = useState(null)
+  const [planUpdatedAt, setPlanUpdatedAt] = useState<any>(null)
   // No fallback numbers: if nothing was calculated/saved, meal totals render
   // without target lines (MacroBar hides the "/target" when target is missing).
   const targets = results||savedTargets||{}
 
   // Check-in — client owned
-  const [ci, setCi] = useState({
+  const [ci, setCi] = useState<any>({
     weight:'',temp:'',steps:'',bp:'',
     sleep:'5',sleepNotes:'',wakeTime:'',
     bloating:'5',brainFog:'5',sexDrive:'5',energy:'5',hunger:'5',
     bowelCount:'',bowelType:'',heartRate:'',hrv:'',
     cycleNotes:'',cyclePain:'5',notes:'',
   })
-  const setC = k=>v=>setCi(p=>({...p,[k]:v}))
+  const setC = (k: any)=>(v: any)=>setCi((p: any)=>({...p,[k]:v}))
   // Customizable check-in form: the client's coach's form → org form → standard.
   const ciForm = useCheckinForm(myCompanyId, myCoachId)
-  const on = k => !ciForm.off.includes(k)              // is a standard metric enabled?
+  const on = (k: any) => !ciForm.off.includes(k)              // is a standard metric enabled?
   // Vitals row for a submitted check-in — shows every metric on the coach's
   // form: filled values normally, skipped ones as a dimmed "not provided"
   // marker so it's obvious what the client left blank.
-  const VitalsRow = ({ci}) => {
+  const VitalsRow = ({ci}: any) => {
     const defs = [
-      ['weight','weight','⚖️','Weight',v=>`${v} lbs`],
-      ['temp','temp','🌡️','Temp',v=>`${v}°F`],
-      ['heartRate','heartRate','❤️','Heart rate',v=>`${v} BPM`],
-      ['hrv','hrv','📡','HRV',v=>`HRV ${v}`],
-      ['steps','steps','👟','Steps',v=>`${v} steps`],
-      ['bp','bloodPressure','🩺','Blood pressure',v=>v],
+      ['weight','weight','⚖️','Weight',(v: any)=>`${v} lbs`],
+      ['temp','temp','🌡️','Temp',(v: any)=>`${v}°F`],
+      ['heartRate','heartRate','❤️','Heart rate',(v: any)=>`${v} BPM`],
+      ['hrv','hrv','📡','HRV',(v: any)=>`HRV ${v}`],
+      ['steps','steps','👟','Steps',(v: any)=>`${v} steps`],
+      ['bp','bloodPressure','🩺','Blood pressure',(v: any)=>v],
     ].filter(([k])=>on(k))
     if(!defs.length) return null
-    return defs.map(([k,f,icon,label,fmt])=>{
+    return defs.map(([k,f,icon,label,fmt]: any)=>{
       const v=ci[f]
       return v
         ? <span key={k} style={{fontSize:12,color:C.muted}}>{icon} {fmt(v)}</span>
         : <span key={k} style={{fontSize:11,color:'#555',fontStyle:'italic'}}>{icon} {label} — not provided</span>
     })
   }
-  const [customAnswers, setCustomAnswers] = useState({})  // { customMetricLabel: value }
-  const [protocolDurations, setProtocolDurations] = useState({})  // { protocolName: duration string }
-  const setProtDur = (name,val) => setProtocolDurations(p=>({...p,[name]:val}))
-  const [otherProtocols, setOtherProtocols] = useState([])        // [{id,protocol,duration}] — user-added list
-  const [otherProtoDraft, setOtherProtoDraft] = useState({protocol:'',duration:''})
-  const [mealNotes, setMealNotes] = useState({})  // per-meal adjustment notes from client, keyed by meal name
+  const [customAnswers, setCustomAnswers] = useState<any>({})  // { customMetricLabel: value }
+  const [protocolDurations, setProtocolDurations] = useState<any>({})  // { protocolName: duration string }
+  const setProtDur = (name: any,val: any) => setProtocolDurations((p: any)=>({...p,[name]:val}))
+  const [otherProtocols, setOtherProtocols] = useState<any>([])        // [{id,protocol,duration}] — user-added list
+  const [otherProtoDraft, setOtherProtoDraft] = useState<any>({protocol:'',duration:''})
+  const [mealNotes, setMealNotes] = useState<any>({})  // per-meal adjustment notes from client, keyed by meal name
 
   // Check-in hub state
-  const [localCheckins,    setLocalCheckins]    = useState([])
-  const [expandedCi,       setExpandedCi]       = useState(null)
-  const [editingCi,        setEditingCi]        = useState(null)
-  const [draftNote,        setDraftNote]        = useState('')
-  const [draftLoom,        setDraftLoom]        = useState('')
-  const [clientViewTab,    setClientViewTab]    = useState('history')
-  const [coachCheckinTab,  setCoachCheckinTab]  = useState('checkins')
-  const [clientPhotos,     setClientPhotos]     = useState(null)
-  const [photoUploading,   setPhotoUploading]   = useState(false)
-  const [photoCompare,     setPhotoCompare]     = useState(false)
-  const [ciSubmitting,     setCiSubmitting]     = useState(false)
-  const photoFileRef = useRef(null)
-  const [updateDay, setUpdateDay] = useState(null)
+  const [localCheckins,    setLocalCheckins]    = useState<any>([])
+  const [expandedCi,       setExpandedCi]       = useState<any>(null)
+  const [editingCi,        setEditingCi]        = useState<any>(null)
+  const [draftNote,        setDraftNote]        = useState<any>('')
+  const [draftLoom,        setDraftLoom]        = useState<any>('')
+  const [clientViewTab,    setClientViewTab]    = useState<any>('history')
+  const [coachCheckinTab,  setCoachCheckinTab]  = useState<any>('checkins')
+  const [clientPhotos,     setClientPhotos]     = useState<any>(null)
+  const [photoUploading,   setPhotoUploading]   = useState<any>(false)
+  const [photoCompare,     setPhotoCompare]     = useState<any>(false)
+  const [ciSubmitting,     setCiSubmitting]     = useState<any>(false)
+  const photoFileRef = useRef<any>(null)
+  const [updateDay, setUpdateDay] = useState<any>(null)
   const deadline = useDeadline(currentUser?.email || '')
 
   const LOE_DEFAULT = [
@@ -947,10 +948,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     `• Updates due before ${deadline.text} on your assigned update day — fasted weight + photos`,
   ].join('\n')
   const loeKey = `eden_loe_${myUUID||email}`
-  const [loeContent, setLoeContent] = useState(()=>localStorage.getItem(loeKey)||LOE_DEFAULT)
-  const [loeEditing, setLoeEditing] = useState(false)
+  const [loeContent, setLoeContent] = useState<any>(()=>localStorage.getItem(loeKey)||LOE_DEFAULT)
+  const [loeEditing, setLoeEditing] = useState<any>(false)
   // Local echo while typing; the database copy is written on Done/Reset.
-  const saveLoe = (val) => { setLoeContent(val); localStorage.setItem(loeKey, val) }
+  const saveLoe = (val: any) => { setLoeContent(val); localStorage.setItem(loeKey, val) }
   // Org-wide copy lives in admin_settings (key 'loe_guidelines') so every
   // device — and every client in the org — sees the same edited standards.
   useEffect(()=>{
@@ -963,7 +964,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         }
       }).catch(()=>{})
   },[myCompanyId])
-  const persistLoe = (val) => {
+  const persistLoe = (val: any) => {
     if (!myCompanyId) return
     dbUpsert('admin_settings',
       { company_id: myCompanyId, key: 'loe_guidelines', value: val, updated_at: new Date().toISOString() },
@@ -971,9 +972,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   // ── Consultation data — client receives from coach (Week6 Consultation tab) ──
-  const [clientIntake,  setClientIntake]  = useState({notes:'',startDate:'',startWeight:''})
-  const [consultDocs,   setConsultDocs]   = useState([]) // onboarding / monthly / emergency docs from admin
-  const [callNotesList, setCallNotesList] = useState([])
+  const [clientIntake,  setClientIntake]  = useState<any>({notes:'',startDate:'',startWeight:''})
+  const [consultDocs,   setConsultDocs]   = useState<any>([]) // onboarding / monthly / emergency docs from admin
+  const [callNotesList, setCallNotesList] = useState<any>([])
 
   // ── Notifications: created here, but displayed only by the app's top bell ──
 
@@ -984,7 +985,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   useEffect(() => {
     // Seed with demo data immediately so the UI isn't blank
-    const demo = (demoCheckins||[]).map(ci => ({
+    const demo = (demoCheckins||[]).map((ci: any) => ({
       ...ci,
       coachNotes: ci.coachNotes || '',
       coachLoom:  ci.coachLoom  || '',
@@ -1038,9 +1039,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           custom:           r.protocol_durations?.__custom || null,
           _dbId:            r.id,
         }))
-        setLocalCheckins(prev => {
+        setLocalCheckins((prev: any) => {
           const dbDates = new Set(dbCheckins.map(c => c.date))
-          const demoOnly = prev.filter(dc => !dbDates.has(dc.date))
+          const demoOnly = prev.filter((dc: any) => !dbDates.has(dc.date))
           return [...dbCheckins, ...demoOnly]
         })
 
@@ -1049,9 +1050,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       })
       .then(respRows => {
         if (!Array.isArray(respRows) || respRows.length === 0) return
-        const byDate = {}
-        respRows.forEach(r => { byDate[r.checkin_date] = r })
-        setLocalCheckins(prev => prev.map(ci => {
+        const byDate: Record<string, any> = {}
+        respRows.forEach((r: any) => { byDate[r.checkin_date] = r })
+        setLocalCheckins((prev: any) => prev.map((ci: any) => {
           const resp = byDate[ci.date]
           if (!resp) return ci
           return { ...ci, coachNotes: resp.coach_notes||ci.coachNotes, coachLoom: resp.coach_loom||ci.coachLoom }
@@ -1071,7 +1072,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   // Week numbers are automatic and can't be edited: photos taken within 7 days
   // of the current week's first photo join that week; after that a new week starts.
-  function currentWeekLabel(photos) {
+  function currentWeekLabel(photos: any) {
     let maxWeek = 0
     for (const p of photos || []) {
       const m = /^week\s*(\d+)$/i.exec(String(p.week_label || '').trim())
@@ -1079,20 +1080,20 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     }
     if (!maxWeek) return 'Week 1'
     const label = `Week ${maxWeek}`
-    const group = (photos || []).filter(p => String(p.week_label || '').trim().toLowerCase() === label.toLowerCase())
-    const first = group.map(p => new Date(p.taken_at || p.created_at).getTime()).filter(t => !isNaN(t)).sort()[0]
+    const group = (photos || []).filter((p: any) => String(p.week_label || '').trim().toLowerCase() === label.toLowerCase())
+    const first = group.map((p: any) => new Date(p.taken_at || p.created_at).getTime()).filter((t: any) => !isNaN(t)).sort()[0]
     if (first && Date.now() - first < 7 * 86400000) return label
     return `Week ${maxWeek + 1}`
   }
   const DEFAULT_PHOTO_NAMES = ['Front', 'Side', 'Back']
 
-  async function uploadProgressPhoto(e) {
-    const files = Array.from(e.target.files || [])
+  async function uploadProgressPhoto(e: any) {
+    const files: any[] = Array.from(e.target.files || [])
     if (!files.length) return
     const uuid = myUUID
     if (!uuid) { alert('Could not identify your account.'); return }
     const label = currentWeekLabel(clientPhotos)
-    const existing = (clientPhotos || []).filter(p => (p.week_label || '') === label).length
+    const existing = (clientPhotos || []).filter((p: any) => (p.week_label || '') === label).length
     if (existing + files.length > 10) {
       alert(`${label} already has ${existing} photo${existing !== 1 ? 's' : ''} — you can add up to ${10 - existing} more (max 10 per week).`)
       if (photoFileRef.current) photoFileRef.current.value = ''
@@ -1130,54 +1131,54 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
 
   // Rename an individual photo (e.g. "Front", "Overhead thigh") — week can't change
-  async function renamePhoto(p) {
+  async function renamePhoto(p: any) {
     const next = window.prompt('Name for this photo:', p.notes || '')
     if (next == null) return
     const name = next.trim()
     if (!name || name === p.notes) return
     const ok = await dbUpdate('progress_photos', `id=eq.${p.id}`, { notes: name })
     if (ok === null) { alert('Could not rename — please try again.'); return }
-    setClientPhotos(prev => (prev || []).map(x => x.id === p.id ? { ...x, notes: name } : x))
+    setClientPhotos((prev: any) => (prev || []).map((x: any) => x.id === p.id ? { ...x, notes: name } : x))
   }
 
   // Habits — assigned by coach, frequency filled by client
-  const [assignedHabits,   setAssignedHabits]   = useState(MASTER_HABITS.slice(0,8).map(h=>({...h,target:h.defaultTarget})))
-  const [showHabitPicker,  setShowHabitPicker]  = useState(false)
-  const [customHabit,      setCustomHabit]      = useState('')
-  const [habitCounts,      setHabitCounts]      = useState({})
+  const [assignedHabits,   setAssignedHabits]   = useState<any>(MASTER_HABITS.slice(0,8).map((h: any)=>({...h,target:h.defaultTarget})))
+  const [showHabitPicker,  setShowHabitPicker]  = useState<any>(false)
+  const [customHabit,      setCustomHabit]      = useState<any>('')
+  const [habitCounts,      setHabitCounts]      = useState<any>({})
   // Company-wide habits managed by admin only
-  const [companyHabits,    setCompanyHabits]    = useState([])
-  const [newHabitName,     setNewHabitName]     = useState('')
-  const [newHabitTarget,   setNewHabitTarget]   = useState(7)
+  const [companyHabits,    setCompanyHabits]    = useState<any>([])
+  const [newHabitName,     setNewHabitName]     = useState<any>('')
+  const [newHabitTarget,   setNewHabitTarget]   = useState<any>(7)
   // Company-wide foods managed by admin only
-  const [companyFoods,     setCompanyFoods]     = useState([])
+  const [companyFoods,     setCompanyFoods]     = useState<any>([])
   // Built-ins the org's admin has hidden (company_hidden_items; kind→Set of names)
-  const [hiddenItems,      setHiddenItems]      = useState({food:new Set(),habit:new Set(),cardio:new Set()})
+  const [hiddenItems,      setHiddenItems]      = useState<any>({food:new Set(),habit:new Set(),cardio:new Set()})
   // Per-org "Helpful Resources & Lab Links" (company_resource_links); null = loading, []→fall back to Eden defaults
-  const [resourceLinks,    setResourceLinks]    = useState(null)
-  const [newFood,          setNewFood]          = useState({name:'',serving:'',cal:'',pro:'',carb:'',fat:'',fib:'',cat:'Proteins'})
-  const [showAddFood,      setShowAddFood]      = useState(false)
-  const setHabitCount = (id,v) => setHabitCounts(p=>({...p,[id]:Math.min(7,Math.max(0,parseInt(v)||0))}))
+  const [resourceLinks,    setResourceLinks]    = useState<any>(null)
+  const [newFood,          setNewFood]          = useState<any>({name:'',serving:'',cal:'',pro:'',carb:'',fat:'',fib:'',cat:'Proteins'})
+  const [showAddFood,      setShowAddFood]      = useState<any>(false)
+  const setHabitCount = (id: any,v: any) => setHabitCounts((p: any)=>({...p,[id]:Math.min(7,Math.max(0,parseInt(v)||0))}))
 
   // Coach-only updates — visible to client in their Check-In history
-  const [coachOnlyUpdates, setCoachOnlyUpdates] = useState([])
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newNote,     setNewNote]     = useState('')
-  const [newLoom,     setNewLoom]     = useState('')
-  const [newDate,     setNewDate]     = useState('2026-07-21')
+  const [coachOnlyUpdates, setCoachOnlyUpdates] = useState<any>([])
+  const [showAddForm, setShowAddForm] = useState<any>(false)
+  const [newNote,     setNewNote]     = useState<any>('')
+  const [newLoom,     setNewLoom]     = useState<any>('')
+  const [newDate,     setNewDate]     = useState<any>('2026-07-21')
 
   // Supplements — coach builds, client views + adds own notes
-  const [clientSupps,    setClientSupps]    = useState([])
-  const [showSuppPicker, setShowSuppPicker] = useState(false)
-  const [suppSearch,     setSuppSearch]     = useState('')
-  const [suppCategory,   setSuppCategory]   = useState(Object.keys(SUPP_DB)[0])
-  const [customSuppText, setCustomSuppText] = useState('')
+  const [clientSupps,    setClientSupps]    = useState<any>([])
+  const [showSuppPicker, setShowSuppPicker] = useState<any>(false)
+  const [suppSearch,     setSuppSearch]     = useState<any>('')
+  const [suppCategory,   setSuppCategory]   = useState<any>(Object.keys(SUPP_DB)[0])
+  const [customSuppText, setCustomSuppText] = useState<any>('')
   // White-label orgs use their own editable copy of the supplement library (company_supplements);
   // Eden users use the built-in SUPP_DB. null = not loaded yet.
-  const [orgSuppDB,  setOrgSuppDB]  = useState(null)
-  const [editSupp,   setEditSupp]   = useState(null) // {dbId?, category, name, dose, directions, code, link} — modal open when set
-  const [editHabit,  setEditHabit]  = useState(null) // {id, name, target} — company habit editor modal
-  const [coachNotes,     setCoachNotes]     = useState('')
+  const [orgSuppDB,  setOrgSuppDB]  = useState<any>(null)
+  const [editSupp,   setEditSupp]   = useState<any>(null) // {dbId?, category, name, dose, directions, code, link} — modal open when set
+  const [editHabit,  setEditHabit]  = useState<any>(null) // {id, name, target} — company habit editor modal
+  const [coachNotes,     setCoachNotes]     = useState<any>('')
   // The coach-built supplement protocol persists per client in admin_settings
   // (key 'supp_plan:<client uuid>') so it survives refreshes and shows for the client.
   useEffect(()=>{
@@ -1213,13 +1214,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           // started editing (any food added / protocol changed) by the time
           // this response lands, keep their in-progress work.
           if (typeof row.protocol==='string' && row.protocol)
-            setProtocol(cur => cur!=='Base Diet Protocol Male' ? cur : row.protocol)
+            setProtocol((cur: any) => cur!=='Base Diet Protocol Male' ? cur : row.protocol)
           const hi = typeof row.high_day_meals==='string' ? JSON.parse(row.high_day_meals) : row.high_day_meals
           const lo = typeof row.low_day_meals==='string'  ? JSON.parse(row.low_day_meals)  : row.low_day_meals
           if (Array.isArray(hi) && hi.length)
-            setHighMeals(cur => cur.some(m=>m.foods&&m.foods.length) ? cur : hi)
+            setHighMeals((cur: any) => cur.some((m: any)=>m.foods&&m.foods.length) ? cur : hi)
           if (Array.isArray(lo) && lo.length)
-            setLowMeals(cur => cur.some(m=>m.foods&&m.foods.length) ? cur : lo)
+            setLowMeals((cur: any) => cur.some((m: any)=>m.foods&&m.foods.length) ? cur : lo)
           const tg = typeof row.targets==='string' ? JSON.parse(row.targets) : row.targets
           if (tg && typeof tg==='object' && tg.cal) setSavedTargets(tg)
           if (row.updated_at) setPlanUpdatedAt(row.updated_at)
@@ -1240,36 +1241,36 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     alert('Supplement protocol saved!')
   }
   // Client's own notes on their supplement experience
-  const [clientSuppNotes, setClientSuppNotes] = useState('')
+  const [clientSuppNotes, setClientSuppNotes] = useState<any>('')
   // Client's own prescription notes
-  const [clientRxNotes, setClientRxNotes] = useState('')
+  const [clientRxNotes, setClientRxNotes] = useState<any>('')
 
   // Recipes — coach assigns individual recipes; client sees preview + buy
-  const [assignedRecipes,  setAssignedRecipes]  = useState([])
-  const [showRecipePicker, setShowRecipePicker] = useState(false)
-  const [recipeFilter,     setRecipeFilter]     = useState('All')
-  const [recipeSearch,     setRecipeSearch]     = useState('')
-  const [pendingRecipe,    setPendingRecipe]    = useState(null)  // recipe waiting for meal selection
+  const [assignedRecipes,  setAssignedRecipes]  = useState<any>([])
+  const [showRecipePicker, setShowRecipePicker] = useState<any>(false)
+  const [recipeFilter,     setRecipeFilter]     = useState<any>('All')
+  const [recipeSearch,     setRecipeSearch]     = useState<any>('')
+  const [pendingRecipe,    setPendingRecipe]    = useState<any>(null)  // recipe waiting for meal selection
 
   // ── Rx / Prescription tracker ─────────────────────────────
-  const [rxList,        setRxList]        = useState([])
-  const [showRxForm,    setShowRxForm]    = useState(false)
+  const [rxList,        setRxList]        = useState<any>([])
+  const [showRxForm,    setShowRxForm]    = useState<any>(false)
   // Fields for the Rx being drafted
-  const [rxName,        setRxName]        = useState('')
-  const [rxDose,        setRxDose]        = useState('')
-  const [rxDirections,  setRxDirections]  = useState('')
-  const [rxStartDate,   setRxStartDate]   = useState('')
+  const [rxName,        setRxName]        = useState<any>('')
+  const [rxDose,        setRxDose]        = useState<any>('')
+  const [rxDirections,  setRxDirections]  = useState<any>('')
+  const [rxStartDate,   setRxStartDate]   = useState<any>('')
   // Taper steps being drafted inside the add form
-  const [draftTapers,   setDraftTapers]   = useState([])
-  const [showTaperRow,  setShowTaperRow]  = useState(false)
-  const [tapDate,       setTapDate]       = useState('')
-  const [tapDose,       setTapDose]       = useState('')
-  const [tapNote,       setTapNote]       = useState('')
+  const [draftTapers,   setDraftTapers]   = useState<any>([])
+  const [showTaperRow,  setShowTaperRow]  = useState<any>(false)
+  const [tapDate,       setTapDate]       = useState<any>('')
+  const [tapDose,       setTapDose]       = useState<any>('')
+  const [tapNote,       setTapNote]       = useState<any>('')
   // Adding a taper to an already-saved entry
-  const [editTaperFor,  setEditTaperFor]  = useState(null)
-  const [editTapDate,   setEditTapDate]   = useState('')
-  const [editTapDose,   setEditTapDose]   = useState('')
-  const [editTapNote,   setEditTapNote]   = useState('')
+  const [editTaperFor,  setEditTaperFor]  = useState<any>(null)
+  const [editTapDate,   setEditTapDate]   = useState<any>('')
+  const [editTapDose,   setEditTapDose]   = useState<any>('')
+  const [editTapNote,   setEditTapNote]   = useState<any>('')
 
   function resetRxForm() {
     setRxName(''); setRxDose(''); setRxDirections(''); setRxStartDate('')
@@ -1281,15 +1282,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   function addDraftTaperStep() {
     if (!tapDate.trim() || !tapDose.trim()) return
-    setDraftTapers(prev => [...prev, { id: Date.now(), date: tapDate, dose: tapDose, note: tapNote }]
+    setDraftTapers((prev: any) => [...prev, { id: Date.now(), date: tapDate, dose: tapDose, note: tapNote }]
       .sort((a,b) => a.date.localeCompare(b.date)))
     setTapDate(''); setTapDose(''); setTapNote(''); setShowTaperRow(false)
   }
-  function removeDraftTaper(id) { setDraftTapers(prev => prev.filter(t => t.id !== id)) }
+  function removeDraftTaper(id: any) { setDraftTapers((prev: any) => prev.filter((t: any) => t.id !== id)) }
 
   function saveRx() {
     if (!rxName.trim() || !rxDose.trim()) return
-    setRxList(prev => [...prev, {
+    setRxList((prev: any) => [...prev, {
       id: Date.now(),
       name: rxName.trim(), dose: rxDose.trim(),
       directions: rxDirections.trim(), startDate: rxStartDate,
@@ -1297,24 +1298,24 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     }])
     closeRxForm()
   }
-  function removeRx(id) { setRxList(prev => prev.filter(r => r.id !== id)) }
+  function removeRx(id: any) { setRxList((prev: any) => prev.filter((r: any) => r.id !== id)) }
 
-  function saveEditTaper(rxId) {
+  function saveEditTaper(rxId: any) {
     if (!editTapDate.trim() || !editTapDose.trim()) return
-    setRxList(prev => prev.map(r => r.id === rxId ? {
+    setRxList((prev: any) => prev.map((r: any) => r.id === rxId ? {
       ...r,
       tapers: [...r.tapers, { id: Date.now(), date: editTapDate, dose: editTapDose, note: editTapNote }]
         .sort((a,b) => a.date.localeCompare(b.date))
     } : r))
     setEditTapDate(''); setEditTapDose(''); setEditTapNote(''); setEditTaperFor(null)
   }
-  function removeTaper(rxId, tapId) {
-    setRxList(prev => prev.map(r => r.id === rxId ? { ...r, tapers: r.tapers.filter(t => t.id !== tapId) } : r))
+  function removeTaper(rxId: any, tapId: any) {
+    setRxList((prev: any) => prev.map((r: any) => r.id === rxId ? { ...r, tapers: r.tapers.filter((t: any) => t.id !== tapId) } : r))
   }
 
-  const totals = meals.reduce((a,m)=>{
+  const totals = meals.reduce((a: any,m: any)=>{
     const mt = mealMacros(m)
-    const rs = assignedRecipes.filter(r=>(r.meal_name||'')=== m.name).reduce((ra,r)=>({
+    const rs = assignedRecipes.filter((r: any)=>(r.meal_name||'')=== m.name).reduce((ra: any,r: any)=>({
       cal: ra.cal+(r.cal||0)*(r.servings||1), pro: ra.pro+(r.pro||0)*(r.servings||1),
       fat: ra.fat+(r.fat||0)*(r.servings||1), carb:ra.carb+(r.carb||0)*(r.servings||1),
       fib: ra.fib+(r.fib||0)*(r.servings||1),
@@ -1326,16 +1327,16 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     }
   },{cal:0,pro:0,fat:0,carb:0,fib:0})
 
-  function addFood(food) {
+  function addFood(food: any) {
     if(activeMeal===null) return
-    setMeals(p=>p.map((m,i)=>i===activeMeal?{...m,foods:[...m.foods,{food,servings:1}]}:m))
+    setMeals((p: any)=>p.map((m: any,i: any)=>i===activeMeal?{...m,foods:[...m.foods,{food,servings:1}]}:m))
     setShowPicker(false); setFoodSearch('')
   }
-  function removeFood(mi,fi) {
-    setMeals(p=>p.map((m,i)=>i===mi?{...m,foods:m.foods.filter((_,j)=>j!==fi)}:m))
+  function removeFood(mi: any,fi: any) {
+    setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,foods:m.foods.filter((_: any,j: any)=>j!==fi)}:m))
   }
-  function updateServings(mi,fi,v) {
-    setMeals(p=>p.map((m,i)=>i===mi?{...m,foods:m.foods.map((f,j)=>j===fi?{...f,servings:parseFloat(v)||1}:f)}:m))
+  function updateServings(mi: any,fi: any,v: any) {
+    setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,foods:m.foods.map((f: any,j: any)=>j===fi?{...f,servings:parseFloat(v)||1}:f)}:m))
   }
 
   function runCalc() {
@@ -1351,29 +1352,29 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       carb:Math.round(calT*(calc.carbPct/100)/4),fib:30})
   }
 
-  function addSuppFromDB(supp) {
-    setClientSupps(p=>[...p,{...supp,id:Date.now()+'_'+supp.name,customDose:supp.dose,customDir:supp.directions}])
+  function addSuppFromDB(supp: any) {
+    setClientSupps((p: any)=>[...p,{...supp,id:Date.now()+'_'+supp.name,customDose:supp.dose,customDir:supp.directions}])
   }
-  function addSuppProtocol(cat) {
+  function addSuppProtocol(cat: any) {
     // protocolGroup marks these as a full protocol so the UI renders them under a named header
-    suppDB[cat]?.forEach(s=>addSuppFromDB({...s,category:cat,protocolGroup:cat}))
+    suppDB[cat]?.forEach((s: any)=>addSuppFromDB({...s,category:cat,protocolGroup:cat}))
     setShowSuppPicker(false)
   }
 
   // ── Org supplement library (white-label orgs manage their own copy) ──
-  async function loadOrgSupps(forCompanyId) {
+  async function loadOrgSupps(forCompanyId?: any) {
     const cid = forCompanyId || myCompanyId
     if (!cid) return
     const rows = await dbGet('company_supplements',`company_id=eq.${cid}&order=category.asc,sort_order.asc,created_at.asc`)
     // Guard against stale responses: only apply if the org context hasn't changed since we asked
     if (cid !== myCompanyIdRef.current) return
-    const grouped = {}
-    ;(rows||[]).forEach(r=>{
+    const grouped: Record<string, any> = {}
+    ;(rows||[]).forEach((r: any)=>{
       (grouped[r.category]=grouped[r.category]||[]).push({dbId:r.id,name:r.name,dose:r.dose||'',directions:r.directions||'',code:r.code||'',link:r.link||''})
     })
     setOrgSuppDB(grouped)
   }
-  const myCompanyIdRef = useRef(myCompanyId)
+  const myCompanyIdRef = useRef<any>(myCompanyId)
   useEffect(()=>{
     myCompanyIdRef.current = myCompanyId
     setOrgSuppDB(null) // reset so a stale org's library never renders for the new org
@@ -1398,15 +1399,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setEditSupp(null)
     loadOrgSupps()
   }
-  async function deleteOrgSupp(dbId) {
+  async function deleteOrgSupp(dbId: any) {
     if (!confirm('Remove this supplement from your library?')) return
     const r = await fetch(`${SUPABASE_URL}/rest/v1/company_supplements?id=eq.${dbId}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
     if (!r.ok) { alert('Could not delete — please try again.'); return }
     loadOrgSupps()
   }
-  function removeSupp(id) { setClientSupps(p=>p.filter(s=>s.id!==id)) }
-  function updateSuppField(id,field,val) {
-    setClientSupps(p=>p.map(s=>s.id===id?{...s,[field]:val}:s))
+  function removeSupp(id: any) { setClientSupps((p: any)=>p.filter((s: any)=>s.id!==id)) }
+  function updateSuppField(id: any,field: any,val: any) {
+    setClientSupps((p: any)=>p.map((s: any)=>s.id===id?{...s,[field]:val}:s))
   }
 
   function addCoachUpdate() {
@@ -1414,7 +1415,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     const clientId = myUUID
     const coachId  = myCoachId
     const entry = {id:Date.now(),date:newDate,note:newNote.trim(),loom:newLoom.trim()}
-    setCoachOnlyUpdates(p=>[entry,...p])
+    setCoachOnlyUpdates((p: any)=>[entry,...p])
     setNewNote(''); setNewLoom(''); setShowAddForm(false)
     if (clientId && coachId) {
       dbInsert('coach_updates',{coach_id:coachId,client_id:clientId,date:newDate,note:entry.note,loom:entry.loom,created_at:new Date().toISOString()})
@@ -1458,7 +1459,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   async function loadCompanyHabits() {
     if (!myCompanyId) return
     const data = await dbGet('company_habits',`company_id=eq.${myCompanyId}&order=created_at.asc`)
-    setCompanyHabits((data||[]).map(h=>({id:h.id,name:h.name,defaultTarget:h.default_target,fromDB:true})))
+    setCompanyHabits((data||[]).map((h: any)=>({id:h.id,name:h.name,defaultTarget:h.default_target,fromDB:true})))
   }
   async function addCompanyHabit() {
     if (!newHabitName.trim()||!myCompanyId) return
@@ -1467,17 +1468,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     })
     if (inserted) {
       const h = Array.isArray(inserted)?inserted[0]:inserted
-      setCompanyHabits(p=>[...p,{id:h.id,name:h.name,defaultTarget:h.default_target,fromDB:true}])
+      setCompanyHabits((p: any)=>[...p,{id:h.id,name:h.name,defaultTarget:h.default_target,fromDB:true}])
       setNewHabitName(''); setNewHabitTarget(7)
     }
   }
   // Eden admin: push a company habit to every white-label org's library (skipping name duplicates)
-  async function pushHabitToAllOrgs(habit) {
+  async function pushHabitToAllOrgs(habit: any) {
     if (!window.confirm(`Push "${habit.name}" to every white-label org's habit library?\nOrgs that already have a habit with this name are skipped.`)) return
     const orgs = await dbGet('organizations','is_white_label=eq.true&select=id,name')
     if (!Array.isArray(orgs)||!orgs.length) { alert('No white-label orgs found.'); return }
     const existing = await dbGet('company_habits',`name=eq.${encodeURIComponent(habit.name)}&select=company_id`)
-    const have = new Set((existing||[]).map(r=>r.company_id))
+    const have = new Set((existing||[]).map((r: any)=>r.company_id))
     const targets = orgs.filter(o=>!have.has(o.id))
     if (!targets.length) { alert(`All ${orgs.length} white-label orgs already have "${habit.name}".`); return }
     const res = await fetch(`${SUPABASE_URL}/rest/v1/company_habits`,{
@@ -1488,11 +1489,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     if (res.ok) alert(`"${habit.name}" pushed to ${targets.length} of ${orgs.length} white-label orgs${orgs.length-targets.length?` (${orgs.length-targets.length} already had it)`:''}.`)
     else { console.error('PUSH HABIT', await res.text()); alert('Push failed — please try again.') }
   }
-  async function removeCompanyHabit(id) {
+  async function removeCompanyHabit(id: any) {
     if (!confirm('Remove this habit from your company library?')) return
     await fetch(`${SUPABASE_URL}/rest/v1/company_habits?id=eq.${id}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
-    setCompanyHabits(p=>p.filter(h=>h.id!==id))
-    setAssignedHabits(p=>p.filter(h=>h.id!==id))
+    setCompanyHabits((p: any)=>p.filter((h: any)=>h.id!==id))
+    setAssignedHabits((p: any)=>p.filter((h: any)=>h.id!==id))
   }
   async function saveCompanyHabit() {
     if (!editHabit?.name?.trim()) { alert('Please enter a habit name.'); return }
@@ -1500,8 +1501,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       method:'PATCH', headers:H, body:JSON.stringify({name:editHabit.name.trim(), default_target:editHabit.target})
     })
     if (!r.ok) { alert('Could not save the habit — please try again.'); return }
-    setCompanyHabits(p=>p.map(h=>h.id===editHabit.id?{...h,name:editHabit.name.trim(),defaultTarget:editHabit.target}:h))
-    setAssignedHabits(p=>p.map(h=>h.id===editHabit.id?{...h,name:editHabit.name.trim()}:h))
+    setCompanyHabits((p: any)=>p.map((h: any)=>h.id===editHabit.id?{...h,name:editHabit.name.trim(),defaultTarget:editHabit.target}:h))
+    setAssignedHabits((p: any)=>p.map((h: any)=>h.id===editHabit.id?{...h,name:editHabit.name.trim()}:h))
     setEditHabit(null)
   }
 
@@ -1509,7 +1510,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   async function loadCompanyFoods() {
     if (!myCompanyId) return
     const data = await dbGet('company_foods',`company_id=eq.${myCompanyId}&order=created_at.asc`)
-    setCompanyFoods((data||[]).map(f=>({dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true})))
+    setCompanyFoods((data||[]).map((f: any)=>({dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true})))
   }
   async function addCompanyFood() {
     if (!newFood.name.trim()||!newFood.serving.trim()||!myCompanyId) return
@@ -1522,7 +1523,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     const inserted = await dbInsert('company_foods', body)
     if (inserted) {
       const f = Array.isArray(inserted)?inserted[0]:inserted
-      setCompanyFoods(p=>[...p,{dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true}])
+      setCompanyFoods((p: any)=>[...p,{dbId:f.id,name:f.name,serving:f.serving,cal:f.cal,pro:f.pro,carb:f.carb,fat:f.fat,fib:f.fib||0,cat:f.cat,fromDB:true}])
       setNewFood({name:'',serving:'',cal:'',pro:'',carb:'',fat:'',fib:'',cat:newFood.cat})
       setShowAddFood(false)
     } else {
@@ -1538,26 +1539,25 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       dbGet('company_resource_links',`company_id=eq.${cid}&order=sort_order.asc,created_at.asc`).catch(()=>[]),
     ])
     if (cid !== myCompanyIdRef.current) return // stale response guard
-    const h = {food:new Set(),habit:new Set(),cardio:new Set()}
-    ;(Array.isArray(hid)?hid:[]).forEach(r=>h[r.kind]?.add(r.name))
+    const h: Record<string, any> = {food:new Set(),habit:new Set(),cardio:new Set()}
+    ;(Array.isArray(hid)?hid:[]).forEach((r: any)=>h[r.kind]?.add(r.name))
     setHiddenItems(h)
     setResourceLinks(Array.isArray(links)?links:[])
     // Don't leave admin-hidden built-in habits pre-assigned by default
-    if (h.habit.size) setAssignedHabits(p=>p.filter(x=>!h.habit.has(x.name)))
+    if (h.habit.size) setAssignedHabits((p: any)=>p.filter((x: any)=>!h.habit.has(x.name)))
   }
 
-  async function removeCompanyFood(dbId) {
+  async function removeCompanyFood(dbId: any) {
     if (!window.confirm('Remove this company-wide food for all coaches?')) return
     await fetch(`${SUPABASE_URL}/rest/v1/company_foods?id=eq.${dbId}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
-    setCompanyFoods(p=>p.filter(f=>f.dbId!==dbId))
+    setCompanyFoods((p: any)=>p.filter((f: any)=>f.dbId!==dbId))
   }
 
   // ── Notification helpers ───────────────────────────────────
   // Delegates to the shared sendNotification helper (logs + retries + audit-trails failures)
-  async function insertNotification(recipientId, senderId, type, message, linkTo) {
+  async function insertNotification(recipientId: any, senderId: any, type: any, message: any, linkTo?: any) {
     await sendNotification({ recipientId, senderId, type, body: message, linkTo })
   }
-
 
 
   // Load assigned recipes from DB
@@ -1575,14 +1575,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .catch(()=>{})
   },[email, myUUID])
 
-  async function assignRecipe(recipe, mealName) {
+  async function assignRecipe(recipe: any, mealName: any) {
     const uuid    = myUUID
     const coachId = myCoachId
     if(!uuid||!coachId) return
     // Embed full recipe content (ingredients + method) so the client gets the complete recipe, not just macros
     const details    = getRecipeDetails(recipe)
     const fullRecipe = details ? {...recipe, ingredients:details.ingredients, method:details.method} : recipe
-    setAssignedRecipes(p=>[...p,{...fullRecipe,meal_name:mealName,db_id:null}])
+    setAssignedRecipes((p: any)=>[...p,{...fullRecipe,meal_name:mealName,db_id:null}])
     await dbInsert('client_recipes',{client_id:uuid,coach_id:coachId,recipe_name:recipe.name,recipe_data:fullRecipe,meal_name:mealName,assigned_at:new Date().toISOString()})
     const rows = await dbGet('client_recipes',`client_id=eq.${uuid}&order=assigned_at.desc`)
     // Only overwrite state if DB returned real rows (dbGet returns [] on error — must guard against wiping optimistic update)
@@ -1592,15 +1592,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     }))
   }
 
-  async function removeRecipe(dbId, recipeName) {
-    setAssignedRecipes(p=>p.filter(r=>r.db_id!==dbId&&(r.name||r.recipe_name)!==recipeName))
+  async function removeRecipe(dbId: any, recipeName: any) {
+    setAssignedRecipes((p: any)=>p.filter((r: any)=>r.db_id!==dbId&&(r.name||r.recipe_name)!==recipeName))
     if(dbId) await dbDelete('client_recipes',`id=eq.${dbId}`)
   }
 
-  const servingsSaveTimers = useRef({}) // debounce per recipe row so rapid +/- clicks save once
-  function updateRecipeServings(dbId, recipeName, newServings) {
+  const servingsSaveTimers = useRef<any>({}) // debounce per recipe row so rapid +/- clicks save once
+  function updateRecipeServings(dbId: any, recipeName: any, newServings: any) {
     const s = Math.max(0.25, Math.round((parseFloat(newServings)||1)*4)/4)  // snap to 0.25
-    setAssignedRecipes(p=>p.map(r=>
+    setAssignedRecipes((p: any)=>p.map((r: any)=>
       (r.db_id===dbId||(r.db_id==null&&(r.name||r.recipe_name)===recipeName))
         ? {...r, servings:s} : r
     ))
@@ -1608,8 +1608,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     if (dbId) {
       clearTimeout(servingsSaveTimers.current[dbId])
       servingsSaveTimers.current[dbId] = setTimeout(()=>{
-        setAssignedRecipes(p=>{
-          const row = p.find(r=>r.db_id===dbId)
+        setAssignedRecipes((p: any)=>{
+          const row = p.find((r: any)=>r.db_id===dbId)
           if (row) {
             const {db_id, recipe_name, meal_name, ...data} = row
             dbUpdate('client_recipes',`id=eq.${dbId}`,{recipe_data:{...data, servings:row.servings}}).catch(()=>{})
@@ -1620,22 +1620,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     }
   }
 
-  function toggleHabitAssign(habit) {
-    const exists=assignedHabits.find(h=>h.id===habit.id)
-    if(exists) setAssignedHabits(p=>p.filter(h=>h.id!==habit.id))
-    else setAssignedHabits(p=>[...p,{...habit,target:habit.defaultTarget}])
+  function toggleHabitAssign(habit: any) {
+    const exists=assignedHabits.find((h: any)=>h.id===habit.id)
+    if(exists) setAssignedHabits((p: any)=>p.filter((h: any)=>h.id!==habit.id))
+    else setAssignedHabits((p: any)=>[...p,{...habit,target:habit.defaultTarget}])
   }
   function addCustomHabit() {
     if(!customHabit.trim()) return
-    setAssignedHabits(p=>[...p,{id:'custom_'+Date.now(),name:customHabit.trim(),defaultTarget:7,target:7}])
+    setAssignedHabits((p: any)=>[...p,{id:'custom_'+Date.now(),name:customHabit.trim(),defaultTarget:7,target:7}])
     setCustomHabit('')
   }
 
   const habitScore = assignedHabits.length>0
-    ? Math.round(assignedHabits.reduce((a,h)=>a+(habitCounts[h.id]||0),0)/assignedHabits.reduce((a,h)=>a+h.target,0)*100)
+    ? Math.round(assignedHabits.reduce((a: any,h: any)=>a+(habitCounts[h.id]||0),0)/assignedHabits.reduce((a: any,h: any)=>a+h.target,0)*100)
     : 0
 
-  const filteredFoods = [...FOODS.filter(f=>!hiddenItems.food.has(f.name)),...companyFoods].filter(f=>
+  const filteredFoods = [...FOODS.filter((f: any)=>!hiddenItems.food.has(f.name)),...companyFoods].filter(f=>
     !foodSearch||f.name.toLowerCase().includes(foodSearch.toLowerCase())||f.cat.toLowerCase().includes(foodSearch.toLowerCase())
   )
 
@@ -1645,8 +1645,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const suppDB = suppDBReady ? orgSuppDB : {}
   const canEditSupps = isAdmin
 
-  const allSuppSearch = Object.entries(suppDB).flatMap(([cat,supps])=>
-    supps.filter(s=>s.name.toLowerCase().includes(suppSearch.toLowerCase())).map(s=>({...s,category:cat}))
+  const allSuppSearch = Object.entries(suppDB).flatMap(([cat,supps]: any)=>
+    supps.filter((s: any)=>s.name.toLowerCase().includes(suppSearch.toLowerCase())).map((s: any)=>({...s,category:cat}))
   )
 
   const TABS=[
@@ -1684,7 +1684,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             )}
           </div>
           {isCoach&&(
-            <button onClick={()=>setPrivacyMode(p=>!p)} title="Hide client roster for Loom recording"
+            <button onClick={()=>setPrivacyMode((p: any)=>!p)} title="Hide client roster for Loom recording"
               style={{background:privacyMode?`${C.danger}33`:C.card,border:`1px solid ${privacyMode?C.danger:C.border}`,borderRadius:8,padding:'5px 10px',color:privacyMode?C.danger:C.muted,fontSize:11,fontWeight:700,cursor:'pointer',marginRight:10,whiteSpace:'nowrap'}}>
               {privacyMode?'🎥 Recording':'🎥 Loom Mode'}
             </button>
@@ -1796,10 +1796,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           </Card>
 
           {/* Meals */}
-          {meals.map((meal,mi)=>{
+          {meals.map((meal: any,mi: any)=>{
             const mt = mealMacros(meal)
-            const mealRecs = assignedRecipes.filter(r=>(r.meal_name||'')=== meal.name)
-            const recM = mealRecs.reduce((a,r)=>({
+            const mealRecs = assignedRecipes.filter((r: any)=>(r.meal_name||'')=== meal.name)
+            const recM = mealRecs.reduce((a: any,r: any)=>({
               cal: a.cal+(r.cal||0)*(r.servings||1), pro: a.pro+(r.pro||0)*(r.servings||1),
               fat: a.fat+(r.fat||0)*(r.servings||1), carb:a.carb+(r.carb||0)*(r.servings||1),
             }),{cal:0,pro:0,fat:0,carb:0})
@@ -1828,7 +1828,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'6px 0'}}>
                     {isCoach?'Click + Food to build this meal':'No foods added yet'}
                   </div>
-                ):meal.foods.map((item,fi)=>(
+                ):meal.foods.map((item: any,fi: any)=>(
                   isCoach?(
                     // Coach: full editable row with actual unit input
                     (()=>{
@@ -1862,11 +1862,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                 {/* Recipes assigned to this meal */}
                 {(()=>{
-                  const mealRecipes = assignedRecipes.filter(r=>(r.meal_name||'')=== meal.name)
+                  const mealRecipes = assignedRecipes.filter((r: any)=>(r.meal_name||'')=== meal.name)
                   if(mealRecipes.length===0) return null
                   return (
                     <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${C.gold}33`}}>
-                      {mealRecipes.map((r,ri)=>{
+                      {mealRecipes.map((r: any,ri: any)=>{
                         const s = r.servings||1
                         const rName = r.name||r.recipe_name
                         return (
@@ -1936,7 +1936,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </div>
               ):(
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {assignedRecipes.map((r,i)=>(
+                  {assignedRecipes.map((r: any,i: any)=>(
                     <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 14px',display:'flex',alignItems:'center',gap:12}}>
                       <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                       <div onClick={()=>setViewRecipe(r)} style={{flex:1,minWidth:0,cursor:'pointer'}} title="View full recipe">
@@ -1961,7 +1961,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {assignedRecipes.length>0&&(
                 <div style={{marginBottom:14}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>📌 Your Recipes from Coach</div>
-                  {assignedRecipes.map((r,i)=>(
+                  {assignedRecipes.map((r: any,i: any)=>(
                     <div key={i} onClick={()=>setViewRecipe(r)} style={{background:'#0d1a00',border:`1px solid ${C.gold}44`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} title="View full recipe">
                       <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                       <div style={{flex:1,minWidth:0}}>
@@ -1997,7 +1997,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {/* Locked recipe list */}
                 <div style={{maxHeight:260,overflowY:'auto'}}>
                   {STATIC_RECIPES.map((r,i)=>{
-                    const unlocked = assignedRecipes.some(a=>(a.name||a.recipe_name)===r.name)
+                    const unlocked = assignedRecipes.some((a: any)=>(a.name||a.recipe_name)===r.name)
                     return (
                       <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderBottom:`1px solid ${C.border}22`}}>
                         <span style={{fontSize:14,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
@@ -2049,17 +2049,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Client Data"/>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-                  <Sel label="Gender" value={calc.gender} onChange={v=>setCalc(c=>({...c,gender:v}))} options={['Male','Female']}/>
-                  <Inp label="Bodyweight (lbs)" value={calc.weight} onChange={v=>setCalc(c=>({...c,weight:v}))} placeholder="e.g. 185" type="number"/>
-                  <Inp label="Height (inches)" value={calc.height} onChange={v=>setCalc(c=>({...c,height:v}))} placeholder="e.g. 70" type="number"/>
-                  <Inp label="Age" value={calc.age} onChange={v=>setCalc(c=>({...c,age:v}))} placeholder="e.g. 32" type="number"/>
-                  <Inp label="Body Fat %" value={calc.bodyfat} onChange={v=>setCalc(c=>({...c,bodyfat:v}))} placeholder="e.g. 18" type="number"/>
+                  <Sel label="Gender" value={calc.gender} onChange={(v: any)=>setCalc((c: any)=>({...c,gender:v}))} options={['Male','Female']}/>
+                  <Inp label="Bodyweight (lbs)" value={calc.weight} onChange={(v: any)=>setCalc((c: any)=>({...c,weight:v}))} placeholder="e.g. 185" type="number"/>
+                  <Inp label="Height (inches)" value={calc.height} onChange={(v: any)=>setCalc((c: any)=>({...c,height:v}))} placeholder="e.g. 70" type="number"/>
+                  <Inp label="Age" value={calc.age} onChange={(v: any)=>setCalc((c: any)=>({...c,age:v}))} placeholder="e.g. 32" type="number"/>
+                  <Inp label="Body Fat %" value={calc.bodyfat} onChange={(v: any)=>setCalc((c: any)=>({...c,bodyfat:v}))} placeholder="e.g. 18" type="number"/>
                 </div>
               </Card>
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Activity & Goal"/>
-                <Sel label="Activity Level" value={calc.activity} onChange={v=>setCalc(c=>({...c,activity:v}))} options={ACTIVITY_LEVELS.map(a=>a.label)}/>
-                <Sel label="Deficit / Surplus" value={calc.ds} onChange={v=>setCalc(c=>({...c,ds:v}))} options={DEFICIT_SURPLUS.map(d=>d.label)}/>
+                <Sel label="Activity Level" value={calc.activity} onChange={(v: any)=>setCalc((c: any)=>({...c,activity:v}))} options={ACTIVITY_LEVELS.map(a=>a.label)}/>
+                <Sel label="Deficit / Surplus" value={calc.ds} onChange={(v: any)=>setCalc((c: any)=>({...c,ds:v}))} options={DEFICIT_SURPLUS.map(d=>d.label)}/>
               </Card>
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Macro Split"/>
@@ -2067,7 +2067,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   {[['protPct','Protein %','#4FD89A'],['fatPct','Fat %','#f06060'],['carbPct','Carb %','#6FB8E8']].map(([k,l,col])=>(
                     <div key={k}>
                       <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{l}</div>
-                      <input type="number" min="0" max="100" value={calc[k]} onChange={e=>setCalc(c=>({...c,[k]:parseInt(e.target.value)||0}))}
+                      <input type="number" min="0" max="100" value={calc[k]} onChange={e=>setCalc((c: any)=>({...c,[k]:parseInt(e.target.value)||0}))}
                         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:col,fontSize:16,fontWeight:700,outline:'none',textAlign:'center',boxSizing:'border-box'}}/>
                     </div>
                   ))}
@@ -2128,7 +2128,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 <span style={{fontSize:14,fontWeight:800,color:C.white}}>Check-In Hub</span>
                 <span style={{fontSize:11,color:C.muted,marginLeft:10}}>{localCheckins.length} submissions · {coachOnlyUpdates.length} coach updates</span>
               </div>
-              <button onClick={()=>setShowAddForm(v=>!v)}
+              <button onClick={()=>setShowAddForm((v: any)=>!v)}
                 style={{background:showAddForm?`${C.gold}33`:`${C.gold}18`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'7px 14px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
                 {showAddForm?'✕ Cancel':'＋ Coach Update'}
               </button>
@@ -2185,9 +2185,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
               {/* Combined sorted list: client check-ins + coach-only updates */}
               {[
-                ...localCheckins.map((ci,i)=>({...ci,_type:'checkin',_idx:i})),
-                ...coachOnlyUpdates.map(u=>({...u,_type:'coach'}))
-              ].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>{
+                ...localCheckins.map((ci: any,i: any)=>({...ci,_type:'checkin',_idx:i})),
+                ...coachOnlyUpdates.map((u: any)=>({...u,_type:'coach'}))
+              ].sort((a: any,b: any)=>(new Date(b.date) as any)-(new Date(a.date) as any)).map((item: any)=>{
 
                 /* ── Coach-only standalone update ── */
                 if(item._type==='coach'){
@@ -2200,7 +2200,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
                         </div>
                         <button onClick={()=>{
-                          setCoachOnlyUpdates(p=>p.filter(u=>u.id!==item.id))
+                          setCoachOnlyUpdates((p: any)=>p.filter((u: any)=>u.id!==item.id))
                           if(typeof item.id==='string') dbDelete('coach_updates',`id=eq.${item.id}`)
                         }} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
                       </div>
@@ -2325,13 +2325,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         {((ci.custom&&Object.keys(ci.custom).length>0)||ciForm.custom.length>0)&&(
                           <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
                             <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>📋 Custom Metrics</div>
-                            {Object.entries(ci.custom||{}).map(([label,val])=>(
+                            {Object.entries(ci.custom||{}).map(([label,val]: any)=>(
                               <div key={label} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0'}}>
                                 <span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,flexShrink:0}}>{label}</span>
                                 <span style={{fontSize:12,color:C.white,whiteSpace:'pre-wrap'}}>{val}</span>
                               </div>
                             ))}
-                            {ciForm.custom.filter(cm=>!(ci.custom&&String(ci.custom[cm.label]??'').trim()!=='')).map(cm=>(
+                            {ciForm.custom.filter((cm: any)=>!(ci.custom&&String(ci.custom[cm.label]??'').trim()!=='')).map((cm: any)=>(
                               <div key={cm.label} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0'}}>
                                 <span style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,flexShrink:0}}>{cm.label}</span>
                                 <span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>— not provided</span>
@@ -2344,7 +2344,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         {ci.mealNotes&&Object.keys(ci.mealNotes).some(k=>ci.mealNotes[k])&&(
                           <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
                             <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>🍽 Meal Adjustments</div>
-                            {Object.entries(ci.mealNotes).filter(([,v])=>v).map(([mealName,note])=>(
+                            {Object.entries(ci.mealNotes).filter(([,v]: any)=>v).map(([mealName,note]: any)=>(
                               <div key={mealName} style={{marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${C.border}`}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:.5,marginBottom:3}}>{mealName}</div>
                                 <div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{note}</div>
@@ -2363,8 +2363,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                               )}
                             </div>
                             <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'6px 12px'}}>
-                              {Object.entries(ci.habits).map(([id,count])=>{
-                                const h=MASTER_HABITS.find(x=>x.id===id)
+                              {Object.entries(ci.habits).map(([id,count]: any)=>{
+                                const h=MASTER_HABITS.find((x: any)=>x.id===id)
                                 if(!h) return null
                                 const pct=Math.min(100,Math.round(count/h.defaultTarget*100))
                                 const col=pct>=85?C.success:pct>=60?C.gold:C.danger
@@ -2417,7 +2417,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                               ):null})()}
                               <div style={{display:'flex',gap:8}}>
                                 <button onClick={()=>{
-                                  setLocalCheckins(p=>p.map((r,i)=>i===idx?{...r,coachNotes:draftNote.trim(),coachLoom:draftLoom.trim()}:r))
+                                  setLocalCheckins((p: any)=>p.map((r: any,i: any)=>i===idx?{...r,coachNotes:draftNote.trim(),coachLoom:draftLoom.trim()}:r))
                                   setEditingCi(null)
                                   const clientId = myUUID
                                   const coachId  = myCoachId
@@ -2485,7 +2485,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {coachCheckinTab==='photos'&&(<>
                 {Array.isArray(clientPhotos)&&clientPhotos.filter(p=>p.photo_url).length>1&&(
                   <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
-                    <button onClick={()=>setPhotoCompare(v=>!v)}
+                    <button onClick={()=>setPhotoCompare((v: any)=>!v)}
                       style={{background:photoCompare?C.gold:'none',color:photoCompare?'#000':C.gold,
                         border:`1px solid ${C.gold}66`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
                       {photoCompare?'✕ Exit Compare':'🔀 Compare Side-by-Side'}
@@ -2503,13 +2503,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div style={{fontSize:12,color:C.muted}}>Photos the client uploads will appear here, grouped by week.</div>
                   </div>
                 ):(()=>{
-                  const byWeek={}
+                  const byWeek: Record<string, any>={}
                   for(const p of clientPhotos){
                     const k=p.week_label||'Uncategorized'
                     if(!byWeek[k]) byWeek[k]=[]
                     byWeek[k].push(p)
                   }
-                  return Object.entries(byWeek).map(([week,wPhotos])=>(
+                  return Object.entries(byWeek).map(([week,wPhotos]: any)=>(
                     <div key={week} style={{marginBottom:22}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                         <div>
@@ -2523,7 +2523,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         </span>
                       </div>
                       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:8}}>
-                        {wPhotos.map((p,i)=>(
+                        {wPhotos.map((p: any,i: any)=>(
                           p.photo_url?(
                             <div key={i}>
                               <a href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
@@ -2594,9 +2594,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                 {/* Check-in history cards + coach updates (client view) */}
                 {[
-                  ...localCheckins.map((ci,idx)=>({...ci,_type:'checkin',_idx:idx})),
-                  ...coachOnlyUpdates.map(u=>({...u,_type:'coach'}))
-                ].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>{
+                  ...localCheckins.map((ci: any,idx: any)=>({...ci,_type:'checkin',_idx:idx})),
+                  ...coachOnlyUpdates.map((u: any)=>({...u,_type:'coach'}))
+                ].sort((a: any,b: any)=>(new Date(b.date) as any)-(new Date(a.date) as any)).map((item: any)=>{
 
                   /* Coach-only update card */
                   if(item._type==='coach'){
@@ -2682,8 +2682,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                 )}
                               </div>
                               <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'6px 12px'}}>
-                                {Object.entries(ci.habits).map(([id,count])=>{
-                                  const h=MASTER_HABITS.find(x=>x.id===id)
+                                {Object.entries(ci.habits).map(([id,count]: any)=>{
+                                  const h=MASTER_HABITS.find((x: any)=>x.id===id)
                                   if(!h) return null
                                   const pct=Math.min(100,Math.round(count/h.defaultTarget*100))
                                   const col=pct>=85?C.success:pct>=60?C.gold:C.danger
@@ -2779,10 +2779,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   )}
 
                   {/* Onboarding documents from your coach/admin */}
-                  {consultDocs.filter(d=>d.doc_type==='onboarding').length>0&&(
+                  {consultDocs.filter((d: any)=>d.doc_type==='onboarding').length>0&&(
                     <div style={{marginTop:14}}>
                       <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Onboarding Documents</div>
-                      {consultDocs.filter(d=>d.doc_type==='onboarding').map(doc=>(
+                      {consultDocs.filter((d: any)=>d.doc_type==='onboarding').map((doc: any)=>(
                         <div key={doc.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
                           <span style={{fontSize:16,flexShrink:0}}>🌱</span>
                           <div style={{flex:1,minWidth:0}}>
@@ -2802,10 +2802,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 <div style={{fontSize:10,color:C.muted,marginBottom:12}}>Monthly calls, emergency calls, therapy sessions, strategy calls</div>
 
                 {/* Monthly / emergency call documents from your coach/admin */}
-                {consultDocs.filter(d=>d.doc_type==='monthly'||d.doc_type==='emergency').length>0&&(
+                {consultDocs.filter((d: any)=>d.doc_type==='monthly'||d.doc_type==='emergency').length>0&&(
                   <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'6px 16px 10px',marginBottom:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'8px 0 2px'}}>Call Documents</div>
-                    {consultDocs.filter(d=>d.doc_type==='monthly'||d.doc_type==='emergency').map(doc=>(
+                    {consultDocs.filter((d: any)=>d.doc_type==='monthly'||d.doc_type==='emergency').map((doc: any)=>(
                       <div key={doc.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
                         <span style={{fontSize:16,flexShrink:0}}>{doc.doc_type==='emergency'?'🚨':'📆'}</span>
                         <div style={{flex:1,minWidth:0}}>
@@ -2823,7 +2823,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:32,textAlign:'center'}}>
                     <div style={{fontSize:12,color:C.muted}}>No call notes yet. Your coach will add them after each session.</div>
                   </div>
-                ):callNotesList.map(note=>{
+                ):callNotesList.map((note: any)=>{
                   const raw  = note.loom_url||''
                   const embed = raw.replace('loom.com/share/','loom.com/embed/')
                   return (
@@ -2871,7 +2871,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       {note.other_links&&(
                         <div style={{marginTop:10}}>
                           <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🔗 Other Links</div>
-                          {note.other_links.split(/\s*\n\s*/).filter(Boolean).map((ln,i)=>(
+                          {note.other_links.split(/\s*\n\s*/).filter(Boolean).map((ln: any,i: any)=>(
                             /^https?:\/\//i.test(ln.trim())
                               ? <a key={i} href={ln.trim()} target="_blank" rel="noopener noreferrer"
                                   style={{display:'block',fontSize:12,color:C.gold,marginBottom:4,wordBreak:'break-all'}}>{ln.trim()}</a>
@@ -2894,10 +2894,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {adminFormDocs.length>0&&(
                   <div style={{marginTop:16}}>
                     <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>📎 Documents from Admin</div>
-                    {adminFormDocs.map(doc=>(
+                    {adminFormDocs.map((doc: any)=>(
                       <div key={doc.id} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:12,padding:14,marginBottom:8}}>
                         <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
-                          <span style={{fontSize:14}}>{{note:'📝',form:'📋',document:'📄'}[doc.doc_type]||'📄'}</span>
+                          <span style={{fontSize:14}}>{({note:'📝',form:'📋',document:'📄'} as any)[doc.doc_type]||'📄'}</span>
                           <div style={{fontSize:12,fontWeight:700,color:C.white}}>{doc.title}</div>
                         </div>
                         <div style={{fontSize:10,color:C.muted,marginBottom:6,textTransform:'capitalize'}}>{doc.doc_type} · {doc.added_by_name} · {doc.created_at?new Date(doc.created_at).toLocaleDateString():''}</div>
@@ -2926,7 +2926,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                 {Array.isArray(clientPhotos)&&clientPhotos.filter(p=>p.photo_url).length>1&&(
                   <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
-                    <button onClick={()=>setPhotoCompare(v=>!v)}
+                    <button onClick={()=>setPhotoCompare((v: any)=>!v)}
                       style={{background:photoCompare?C.gold:'none',color:photoCompare?'#000':C.gold,
                         border:`1px solid ${C.gold}66`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
                       {photoCompare?'✕ Exit Compare':'🔀 Compare Side-by-Side'}
@@ -2944,13 +2944,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div style={{fontSize:12,color:C.muted}}>Tap the button above to upload your first progress photos.</div>
                   </div>
                 ):(()=>{
-                  const byWeek={}
+                  const byWeek: Record<string, any>={}
                   for(const p of clientPhotos){
                     const k=p.week_label||'Uncategorized'
                     if(!byWeek[k]) byWeek[k]=[]
                     byWeek[k].push(p)
                   }
-                  return Object.entries(byWeek).map(([week,wPhotos])=>(
+                  return Object.entries(byWeek).map(([week,wPhotos]: any)=>(
                     <div key={week} style={{marginBottom:22}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                         <div>
@@ -2964,7 +2964,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         </span>
                       </div>
                       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:8}}>
-                        {wPhotos.map((p,i)=>(
+                        {wPhotos.map((p: any,i: any)=>(
                           p.photo_url?(
                             <div key={i}>
                               <a href={p.photo_url} target="_blank" rel="noreferrer" style={{display:'block'}}>
@@ -3067,7 +3067,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {ciForm.custom.length>0&&(
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="More From Your Coach"/>
-                  {ciForm.custom.map(cm=>(
+                  {ciForm.custom.map((cm: any)=>(
                     <div key={cm.id} style={{marginBottom:13}}>
                       {cm.type==='scale'?(<>
                         <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
@@ -3075,13 +3075,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:13,fontWeight:700,color:C.gold}}>{customAnswers[cm.label]||'5'}/10</span>
                         </div>
                         <input type="range" min="1" max="10" value={customAnswers[cm.label]||'5'}
-                          onChange={e=>setCustomAnswers(p=>({...p,[cm.label]:e.target.value}))} style={{width:'100%',accentColor:C.gold}}/>
+                          onChange={e=>setCustomAnswers((p: any)=>({...p,[cm.label]:e.target.value}))} style={{width:'100%',accentColor:C.gold}}/>
                       </>):cm.type==='number'?(
                         <Inp label={cm.label} value={customAnswers[cm.label]||''} type="number"
-                          onChange={v=>setCustomAnswers(p=>({...p,[cm.label]:v}))} placeholder="Enter a number"/>
+                          onChange={(v: any)=>setCustomAnswers((p: any)=>({...p,[cm.label]:v}))} placeholder="Enter a number"/>
                       ):(<>
                         <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{cm.label}</div>
-                        <textarea value={customAnswers[cm.label]||''} onChange={e=>setCustomAnswers(p=>({...p,[cm.label]:e.target.value}))}
+                        <textarea value={customAnswers[cm.label]||''} onChange={e=>setCustomAnswers((p: any)=>({...p,[cm.label]:e.target.value}))}
                           style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:50,fontFamily:'inherit'}}/>
                       </>)}
                     </div>
@@ -3097,8 +3097,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                   {/* Assigned supplement protocol rows (auto-populated from coach assignments) */}
                   {(()=>{
-                    const assignedProtocols=[...new Set(clientSupps.filter(s=>s.protocolGroup).map(s=>s.protocolGroup))]
-                    return assignedProtocols.map(proto=>(
+                    const assignedProtocols=[...new Set(clientSupps.filter((s: any)=>s.protocolGroup).map((s: any)=>s.protocolGroup))]
+                    return assignedProtocols.map((proto: any)=>(
                       <div key={proto} style={{marginBottom:10}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>{proto}</div>
                         <input
@@ -3131,7 +3131,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     </div>
 
                     {/* Submitted entries */}
-                    {otherProtocols.map(entry=>(
+                    {otherProtocols.map((entry: any)=>(
                       <div key={entry.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:6}}>
                         <div style={{flex:1,minWidth:0}}>
                           <span style={{fontSize:12,fontWeight:700,color:C.gold}}>{entry.protocol}</span>
@@ -3139,7 +3139,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:12,color:C.white}}>{entry.duration}</span>
                         </div>
                         <button
-                          onClick={()=>setOtherProtocols(p=>p.filter(e=>e.id!==entry.id))}
+                          onClick={()=>setOtherProtocols((p: any)=>p.filter((e: any)=>e.id!==entry.id))}
                           style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:15,padding:'0 2px',flexShrink:0,lineHeight:1}}>×</button>
                       </div>
                     ))}
@@ -3148,17 +3148,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div style={{display:'flex',flexDirection:'column',gap:6}}>
                       <input
                         value={otherProtoDraft.protocol}
-                        onChange={e=>setOtherProtoDraft(p=>({...p,protocol:e.target.value}))}
+                        onChange={e=>setOtherProtoDraft((p: any)=>({...p,protocol:e.target.value}))}
                         placeholder="Supplement protocol name…"
                         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
                       />
                       <div style={{display:'flex',gap:6}}>
                         <input
                           value={otherProtoDraft.duration}
-                          onChange={e=>setOtherProtoDraft(p=>({...p,duration:e.target.value}))}
+                          onChange={e=>setOtherProtoDraft((p: any)=>({...p,duration:e.target.value}))}
                           onKeyDown={e=>{
                             if(e.key==='Enter'&&otherProtoDraft.protocol.trim()&&otherProtoDraft.duration.trim()){
-                              setOtherProtocols(p=>[...p,{id:Date.now(),protocol:otherProtoDraft.protocol.trim(),duration:otherProtoDraft.duration.trim()}])
+                              setOtherProtocols((p: any)=>[...p,{id:Date.now(),protocol:otherProtoDraft.protocol.trim(),duration:otherProtoDraft.duration.trim()}])
                               setOtherProtoDraft({protocol:'',duration:''})
                             }
                           }}
@@ -3168,7 +3168,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         <button
                           onClick={()=>{
                             if(!otherProtoDraft.protocol.trim()||!otherProtoDraft.duration.trim()) return
-                            setOtherProtocols(p=>[...p,{id:Date.now(),protocol:otherProtoDraft.protocol.trim(),duration:otherProtoDraft.duration.trim()}])
+                            setOtherProtocols((p: any)=>[...p,{id:Date.now(),protocol:otherProtoDraft.protocol.trim(),duration:otherProtoDraft.duration.trim()}])
                             setOtherProtoDraft({protocol:'',duration:''})
                           }}
                           style={{
@@ -3193,7 +3193,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <span style={{fontSize:13,fontWeight:700,color:habitScore>=80?C.success:habitScore>=50?C.gold:C.danger}}>{habitScore}%</span>
                     </div>
                     <div style={{fontSize:10,color:C.muted,marginBottom:10}}>How many times did you complete each habit since your last check-in?</div>
-                    {assignedHabits.map(h=>{
+                    {assignedHabits.map((h: any)=>{
                       const count=habitCounts[h.id]||0
                       const pct=Math.round(count/h.target*100)
                       const col=pct>=85?C.success:pct>=60?C.gold:C.danger
@@ -3237,12 +3237,12 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.6}}>
                       Did you swap anything, skip a meal, or adjust portions? Let your coach know below. Fill this out as close to your check-in as possible.
                     </div>
-                    {meals.map((meal,mi)=>(
+                    {meals.map((meal: any,mi: any)=>(
                       <div key={mi} style={{marginBottom:mi<meals.length-1?14:0}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:5}}>{meal.name}</div>
                         <textarea
                           value={mealNotes[meal.name]||''}
-                          onChange={e=>setMealNotes(p=>({...p,[meal.name]:e.target.value}))}
+                          onChange={e=>setMealNotes((p: any)=>({...p,[meal.name]:e.target.value}))}
                           placeholder={`Any changes to ${meal.name} this week…`}
                           style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box',resize:'vertical',minHeight:48,fontFamily:'inherit'}}/>
                       </div>
@@ -3256,10 +3256,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   setCiSubmitting(true)
                   try{
                   // Only submit metrics that are ON the coach's form (disabled ones save as null)
-                  const V=(k,v)=>on(k)?v:null
+                  const V=(k: any,v: any)=>on(k)?v:null
                   // Custom metric answers (+ cycle data, which has no dedicated columns)
-                  const custom={}
-                  ciForm.custom.forEach(cm=>{
+                  const custom: Record<string, any>={}
+                  ciForm.custom.forEach((cm: any)=>{
                     const val=customAnswers[cm.label] ?? (cm.type==='scale'?'5':'')
                     if(String(val).trim()!=='') custom[cm.label]=String(val)
                   })
@@ -3318,7 +3318,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   // Show the new check-in in History immediately (no reload needed)
                   const _now=new Date()
                   const _newId=Array.isArray(inserted)?inserted[0]?.id:inserted?.id
-                  setLocalCheckins(prev=>[{
+                  setLocalCheckins((prev: any)=>[{
                     date:_now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
                     time:_now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
                     weight:V('weight',ci.weight)||'', temp:V('temp',ci.temp)||'',
@@ -3361,16 +3361,16 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   + Assign Habits
                 </button>
               </div>
-              {assignedHabits.map(h=>(
+              {assignedHabits.map((h: any)=>(
                 <div key={h.id} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:`1px solid ${C.border}`}}>
                   <div style={{flex:1,fontSize:12,color:C.white}}>{h.name}</div>
                   <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                     <span style={{fontSize:10,color:C.muted}}>Target:</span>
                     <input type="number" min="1" max="7" value={h.target}
-                      onChange={e=>setAssignedHabits(p=>p.map(x=>x.id===h.id?{...x,target:parseInt(e.target.value)||1}:x))}
+                      onChange={e=>setAssignedHabits((p: any)=>p.map((x: any)=>x.id===h.id?{...x,target:parseInt(e.target.value)||1}:x))}
                       style={{width:40,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.gold,fontSize:12,outline:'none',textAlign:'center'}}/>
                     <span style={{fontSize:10,color:C.muted}}>x/wk</span>
-                    <button onClick={()=>setAssignedHabits(p=>p.filter(x=>x.id!==h.id))}
+                    <button onClick={()=>setAssignedHabits((p: any)=>p.filter((x: any)=>x.id!==h.id))}
                       style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:15,padding:'0 2px'}}>×</button>
                   </div>
                 </div>
@@ -3387,7 +3387,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             <div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.5}}>
               {isClient?'Enter how many times you completed each habit since your last check-in (0–7)':'Client habit completion this week'}
             </div>
-            {assignedHabits.map(h=>{
+            {assignedHabits.map((h: any)=>{
               const count=habitCounts[h.id]||0
               const pct=Math.round(count/h.target*100)
               return (
@@ -3448,14 +3448,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'8px 0'}}>Click + Add Supplements to build this client's protocol</div>
                 )}
                 {(()=>{
-                  const seenGroups=new Set(); const groups=[]; const ungrouped=[]
-                  clientSupps.forEach(s=>{
+                  const seenGroups=new Set(); const groups: any[]=[]; const ungrouped: any[]=[]
+                  clientSupps.forEach((s: any)=>{
                     if(s.protocolGroup){
                       if(!seenGroups.has(s.protocolGroup)){seenGroups.add(s.protocolGroup);groups.push({name:s.protocolGroup,items:[]})}
                       groups.find(g=>g.name===s.protocolGroup).items.push(s)
                     } else { ungrouped.push(s) }
                   })
-                  const renderSuppItem=s=>(
+                  const renderSuppItem=(s: any)=>(
                     <div key={s.id} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
                         <div>
@@ -3579,7 +3579,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       {draftTapers.length===0&&!showTaperRow&&(
                         <div style={{fontSize:11,color:C.dim,fontStyle:'italic'}}>Optional — add dose changes, holds, or stops before saving.</div>
                       )}
-                      {draftTapers.map(t=>(
+                      {draftTapers.map((t: any)=>(
                         <div key={t.id} style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:6}}>
                           <div style={{width:7,height:7,borderRadius:4,background:C.gold,marginTop:5,flexShrink:0}}/>
                           <div style={{flex:1}}>
@@ -3651,7 +3651,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )}
 
                 {/* ── Saved Rx entries ── */}
-                {rxList.map(rx=>(
+                {rxList.map((rx: any)=>(
                   <div key={rx.id} style={{borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:12}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
                       <div>
@@ -3670,7 +3670,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     {rx.tapers.length>0&&(
                       <div style={{marginLeft:10,marginBottom:8,borderLeft:`2px solid ${C.border}`,paddingLeft:10}}>
                         <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>Taper Schedule</div>
-                        {rx.tapers.map(t=>(
+                        {rx.tapers.map((t: any)=>(
                           <div key={t.id} style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:7}}>
                             <div style={{width:7,height:7,borderRadius:4,background:C.gold,marginTop:4,flexShrink:0}}/>
                             <div style={{flex:1}}>
@@ -3759,14 +3759,14 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 ):(
                   <>
                     {(()=>{
-                      const seenGroups=new Set(); const groups=[]; const ungrouped=[]
-                      clientSupps.forEach(s=>{
+                      const seenGroups=new Set(); const groups: any[]=[]; const ungrouped: any[]=[]
+                      clientSupps.forEach((s: any)=>{
                         if(s.protocolGroup){
                           if(!seenGroups.has(s.protocolGroup)){seenGroups.add(s.protocolGroup);groups.push({name:s.protocolGroup,items:[]})}
                           groups.find(g=>g.name===s.protocolGroup).items.push(s)
                         } else { ungrouped.push(s) }
                       })
-                      const renderItem=s=>(
+                      const renderItem=(s: any)=>(
                         <div key={s.id} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
                           <div style={{fontSize:13,color:C.white,fontWeight:600,marginBottom:3}}>{s.name}</div>
                           <div style={{fontSize:12,color:C.gold}}>{s.customDose}</div>
@@ -3811,7 +3811,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <ReadOnlyBadge/>
                   </div>
 
-                  {rxList.map((rx,i)=>(
+                  {rxList.map((rx: any,i: any)=>(
                     <div key={rx.id} style={{borderTop:i>0?`1px solid ${C.border}`:undefined,paddingTop:i>0?12:0,marginTop:i>0?12:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:2}}>{rx.name}</div>
                       <div style={{fontSize:12,color:C.gold,marginBottom:2}}>{rx.dose}</div>
@@ -3821,7 +3821,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       {rx.tapers.length>0&&(
                         <div style={{marginLeft:12,borderLeft:`2px solid ${C.border}`,paddingLeft:12}}>
                           <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>Taper Schedule</div>
-                          {rx.tapers.map(t=>(
+                          {rx.tapers.map((t: any)=>(
                             <div key={t.id} style={{display:'flex',gap:8,marginBottom:7,alignItems:'flex-start'}}>
                               <div style={{width:8,height:8,borderRadius:4,background:C.gold,marginTop:4,flexShrink:0}}/>
                               <div>
@@ -3924,19 +3924,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div>
                     <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>⚙️ Add Company-Wide Food</div>
                     <div style={{display:'flex',gap:6,marginBottom:6}}>
-                      <input value={newFood.name} onChange={e=>setNewFood(p=>({...p,name:e.target.value}))} placeholder="Food name"
+                      <input value={newFood.name} onChange={e=>setNewFood((p: any)=>({...p,name:e.target.value}))} placeholder="Food name"
                         style={{flex:2,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',minWidth:0}}/>
-                      <input value={newFood.serving} onChange={e=>setNewFood(p=>({...p,serving:e.target.value}))} placeholder="Serving (e.g. 4oz)"
+                      <input value={newFood.serving} onChange={e=>setNewFood((p: any)=>({...p,serving:e.target.value}))} placeholder="Serving (e.g. 4oz)"
                         style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',minWidth:0}}/>
                     </div>
                     <div style={{display:'flex',gap:6,marginBottom:6}}>
                       {[['cal','Cal'],['pro','Protein g'],['carb','Carbs g'],['fat','Fat g'],['fib','Fiber g']].map(([k,ph])=>(
-                        <input key={k} value={newFood[k]} onChange={e=>setNewFood(p=>({...p,[k]:e.target.value}))} placeholder={ph} inputMode="decimal"
+                        <input key={k} value={newFood[k]} onChange={e=>setNewFood((p: any)=>({...p,[k]:e.target.value}))} placeholder={ph} inputMode="decimal"
                           style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 6px',color:C.white,fontSize:11,outline:'none',minWidth:0}}/>
                       ))}
                     </div>
                     <div style={{display:'flex',gap:6,marginBottom:6}}>
-                      <select value={newFood.cat} onChange={e=>setNewFood(p=>({...p,cat:e.target.value}))}
+                      <select value={newFood.cat} onChange={e=>setNewFood((p: any)=>({...p,cat:e.target.value}))}
                         style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px',color:C.white,fontSize:12,outline:'none',cursor:'pointer'}}>
                         {['Proteins','Carbohydrates','Fats','Fruits/Vegetables','Supplements','Drinks/Condiments'].map(c=><option key={c} value={c}>{c}</option>)}
                       </select>
@@ -3970,8 +3970,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               <div style={{fontSize:11,color:C.muted}}>Select which habits this client should track this week</div>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:'8px 16px'}}>
-              {[...MASTER_HABITS.filter(h=>!hiddenItems.habit.has(h.name)),...companyHabits].map(h=>{
-                const assigned=assignedHabits.find(x=>x.id===h.id)
+              {[...MASTER_HABITS.filter((h: any)=>!hiddenItems.habit.has(h.name)),...companyHabits].map(h=>{
+                const assigned=assignedHabits.find((x: any)=>x.id===h.id)
                 return (
                   <div key={h.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
                     <button onClick={()=>toggleHabitAssign(h)}
@@ -4040,10 +4040,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:14,width:'100%',maxWidth:380,padding:18}}>
                   <div style={{fontSize:14,fontWeight:800,color:C.white,marginBottom:12}}>Edit Company Habit</div>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Habit Name</div>
-                  <input value={editHabit.name} onChange={e=>setEditHabit(p=>({...p,name:e.target.value}))}
+                  <input value={editHabit.name} onChange={e=>setEditHabit((p: any)=>({...p,name:e.target.value}))}
                     style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',marginBottom:10}}/>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Default Target</div>
-                  <select value={editHabit.target} onChange={e=>setEditHabit(p=>({...p,target:Number(e.target.value)}))}
+                  <select value={editHabit.target} onChange={e=>setEditHabit((p: any)=>({...p,target:Number(e.target.value)}))}
                     style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',cursor:'pointer',boxSizing:'border-box'}}>
                     {[1,2,3,4,5,6,7].map(n=><option key={n} value={n}>{n}x/week</option>)}
                   </select>
@@ -4093,7 +4093,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {STATIC_RECIPES
                 .filter(r=>(recipeFilter==='All'||r.category===recipeFilter)&&(!recipeSearch||r.name.toLowerCase().includes(recipeSearch.toLowerCase())))
                 .map((r,i)=>{
-                  const already = assignedRecipes.some(a=>(a.name||a.recipe_name)===r.name)
+                  const already = assignedRecipes.some((a: any)=>(a.name||a.recipe_name)===r.name)
                   const isPending = pendingRecipe?.name===r.name
                   const isPreviewing = previewRecipe===r.name
                   const details = getRecipeDetails(r)
@@ -4125,11 +4125,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         <div style={{padding:'0 16px 14px 52px'}}>
                           <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Ingredients</div>
                           <ul style={{margin:'0 0 10px',paddingLeft:16}}>
-                            {details.ingredients.map((ing,ii)=>(<li key={ii} style={{fontSize:11,color:C.white,lineHeight:1.7}}>{ing}</li>))}
+                            {details.ingredients.map((ing: any,ii: any)=>(<li key={ii} style={{fontSize:11,color:C.white,lineHeight:1.7}}>{ing}</li>))}
                           </ul>
                           <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Method</div>
                           <ol style={{margin:0,paddingLeft:16}}>
-                            {details.method.map((st,si)=>(<li key={si} style={{fontSize:11,color:C.muted,lineHeight:1.7,marginBottom:3}}>{st}</li>))}
+                            {details.method.map((st: any,si: any)=>(<li key={si} style={{fontSize:11,color:C.muted,lineHeight:1.7,marginBottom:3}}>{st}</li>))}
                           </ol>
                         </div>
                       )}
@@ -4156,7 +4156,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <span style={{fontSize:18}}>{RECIPE_CAT_EMOJI[pendingRecipe.category]||'🍽'}</span>
                     <span>{pendingRecipe.name} · {pendingRecipe.cal} cal</span>
                   </div>
-                  {meals.map((meal,mi)=>(
+                  {meals.map((meal: any,mi: any)=>(
                     <button key={mi} onClick={()=>{assignRecipe(pendingRecipe,meal.name);setPendingRecipe(null)}}
                       style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,
                         padding:'12px 16px',color:C.white,fontSize:13,fontWeight:600,cursor:'pointer',
@@ -4236,7 +4236,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       </div>
                       {suppCategory===cat&&(
                         <div style={{background:C.surface,borderTop:`1px solid ${C.border}`}}>
-                          {suppDB[cat].map((s,i)=>(
+                          {suppDB[cat].map((s: any,i: any)=>(
                             <div key={s.dbId||i} style={{display:'flex',alignItems:'center',borderBottom:`1px solid ${C.border}`}}>
                               <button onClick={()=>addSuppFromDB({...s,category:cat})}
                                 style={{flex:1,minWidth:0,textAlign:'left',background:'none',border:'none',padding:'8px 20px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
@@ -4289,7 +4289,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   {[['category','Protocol / Category','e.g. Extra Supplements'],['name','Supplement Name','e.g. Magnesium Glycinate'],['dose','Dose / Directions For Use','e.g. 350mg 1hr before bed'],['directions','Notes','e.g. Weeks 1-6 only'],['code','Discount Code','e.g. YOURCODE10'],['link','Purchase Link','https://…']].map(([f,label,ph])=>(
                     <div key={f} style={{marginBottom:10}}>
                       <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>{label}</div>
-                      <input value={editSupp[f]||''} onChange={e=>setEditSupp(p=>({...p,[f]:e.target.value}))} placeholder={ph}
+                      <input value={editSupp[f]||''} onChange={e=>setEditSupp((p: any)=>({...p,[f]:e.target.value}))} placeholder={ph}
                         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
                     </div>
                   ))}
@@ -4348,11 +4348,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <>
                     <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🛒 Ingredients{vs!==1?' (per 1 serving)':''}</div>
                     <ul style={{margin:'0 0 16px',paddingLeft:18}}>
-                      {vDetails.ingredients.map((ing,ii)=>(<li key={ii} style={{fontSize:13,color:C.white,lineHeight:1.8}}>{ing}</li>))}
+                      {vDetails.ingredients.map((ing: any,ii: any)=>(<li key={ii} style={{fontSize:13,color:C.white,lineHeight:1.8}}>{ing}</li>))}
                     </ul>
                     <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>👨‍🍳 Method</div>
                     <ol style={{margin:0,paddingLeft:18}}>
-                      {vDetails.method.map((st,si)=>(<li key={si} style={{fontSize:13,color:C.white,lineHeight:1.7,marginBottom:8}}>{st}</li>))}
+                      {vDetails.method.map((st: any,si: any)=>(<li key={si} style={{fontSize:13,color:C.white,lineHeight:1.7,marginBottom:8}}>{st}</li>))}
                     </ol>
                   </>
                 ):(

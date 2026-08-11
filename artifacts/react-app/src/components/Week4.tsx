@@ -23,6 +23,7 @@ function useIsMobile(bp = 768) {
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
+
 // GHL calendar URL for Lifestyle of Eden
 // White-label coaches replace this with their own GHL or Calendly link
 const DEFAULT_CALENDAR_URL = 'https://links.lifestyleofeden.com/widget/booking/2kKUGzYZqAaNBVpd5uzA'
@@ -40,19 +41,19 @@ const H = {
   'Prefer':'return=representation',
 }
 
-async function dbGet(table, params='') {
+async function dbGet(table: any, params: any='') {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
   if (!res.ok) return []
   return res.json()
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
   if (!res.ok) { console.error('INSERT', await res.text()); return null }
   const t = await res.text(); return t ? JSON.parse(t) : null
 }
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     method:'PATCH', headers:H, body:JSON.stringify(body)
   })
@@ -127,13 +128,13 @@ const LAB_TYPES = [
 ]
 
 // ── Helpers ───────────────────────────────────────────────────
-function formatTime(ts) {
+function formatTime(ts: any) {
   if (!ts) return ''
   const d = new Date(ts)
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
 }
 
-function formatBytes(b) {
+function formatBytes(b: any) {
   if (!b) return ''
   if (b < 1024) return b+' B'
   if (b < 1048576) return Math.round(b/1024)+' KB'
@@ -144,27 +145,27 @@ function formatBytes(b) {
 // of notes (the lab_results table has no date column and we can't add one).
 // Labs sort by this date so out-of-order uploads land in the right place.
 const LABDATE_RE = /^\[\[labdate\|(\d{4}-\d{2}-\d{2})\]\]\s*/
-function labDateOf(lab)  { const m = LABDATE_RE.exec(lab?.notes||''); return m ? m[1] : null }
-function labNotesOf(lab) { return String(lab?.notes||'').replace(LABDATE_RE,'') }
-function labSortKey(lab) { return labDateOf(lab) || String(lab?.created_at||'').slice(0,10) }
-function fmtLabDate(d) {
+function labDateOf(lab: any)  { const m = LABDATE_RE.exec(lab?.notes||''); return m ? m[1] : null }
+function labNotesOf(lab: any) { return String(lab?.notes||'').replace(LABDATE_RE,'') }
+function labSortKey(lab: any) { return labDateOf(lab) || String(lab?.created_at||'').slice(0,10) }
+function fmtLabDate(d: any) {
   if (!d) return ''
   const [y,m,day] = d.split('-').map(Number)
   return new Date(y, m-1, day).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
 }
-function withLabDate(notes, date) {
+function withLabDate(notes: any, date: any) {
   const clean = String(notes||'').replace(LABDATE_RE,'')
   return date ? `[[labdate|${date}]] ${clean}`.trimEnd() : clean
 }
 
 // ── Mini UI ───────────────────────────────────────────────────
-function Lbl({t}) {
+function Lbl({t}: any) {
   return <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'14px 0 7px'}}>{t}</div>
 }
-function Card({children,sx={}}) {
+function Card({children,sx={}}: any) {
   return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,...sx}}>{children}</div>
 }
-function Inp({label,value,onChange,type='text',placeholder,sx={}}) {
+function Inp({label,value,onChange,type='text',placeholder,sx={}}: any) {
   return (
     <div style={{marginBottom:10,...sx}}>
       {label&&<div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
@@ -173,13 +174,13 @@ function Inp({label,value,onChange,type='text',placeholder,sx={}}) {
     </div>
   )
 }
-function Sel({label,value,onChange,options}) {
+function Sel({label,value,onChange,options}: any) {
   return (
     <div style={{marginBottom:10}}>
       {label&&<div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
       <select value={value} onChange={e=>onChange(e.target.value)}
         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none'}}>
-        {options.map(o=><option key={o} value={o}>{o}</option>)}
+        {options.map((o: any)=><option key={o} value={o}>{o}</option>)}
       </select>
     </div>
   )
@@ -188,7 +189,7 @@ function Sel({label,value,onChange,options}) {
 
 // Day ordering helpers
 const ALL_DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-function orderedDays(startDay) {
+function orderedDays(startDay: any) {
   const i = ALL_DAYS.indexOf(startDay)
   if (i < 0) return ALL_DAYS
   return [...ALL_DAYS.slice(i), ...ALL_DAYS.slice(0, i)]
@@ -196,9 +197,9 @@ function orderedDays(startDay) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week4({currentUser, initialTab='labs', onBack}) {
+export default function Week4({currentUser, initialTab='labs', onBack}: any) {
   const isMobile = useIsMobile()
-  const [adminLabDocs, setAdminLabDocs] = useState([])
+  const [adminLabDocs, setAdminLabDocs] = useState<any[]>([])
   useEffect(()=>{
     const em = currentUser?.email||''
     if (!em) return
@@ -217,7 +218,7 @@ export default function Week4({currentUser, initialTab='labs', onBack}) {
 
   // Real identity: every user resolves their own profile (and assigned coach)
   // from the DB so labs/workouts save to the right person.
-  const [dbProfile, setDbProfile] = useState(null)
+  const [dbProfile, setDbProfile] = useState<any>(null)
   useEffect(()=>{
     if (!email) { setDbProfile(null); return }
     dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id,name,full_name,coach_id`)
@@ -233,9 +234,9 @@ export default function Week4({currentUser, initialTab='labs', onBack}) {
   const [tab, setTab] = useState(initialTab)
 
   // ── Labs state ────────────────────────────────────────────
-  const [labs,        setLabs]        = useState([])
-  const [labComments, setLabComments] = useState({})
-  const [activeLab,   setActiveLab]   = useState(null)
+  const [labs,        setLabs]        = useState<any[]>([])
+  const [labComments, setLabComments] = useState<Record<string, any>>({})
+  const [activeLab,   setActiveLab]   = useState<any>(null)
   const [newComment,  setNewComment]  = useState('')
   const [labFilter,   setLabFilter]   = useState('All')
   const [uploading,   setUploading]   = useState(false)
@@ -243,7 +244,7 @@ export default function Week4({currentUser, initialTab='labs', onBack}) {
   const [newLabDate,    setNewLabDate]    = useState(()=>new Date().toISOString().slice(0,10))
   const [newLabType,    setNewLabType]    = useState('Blood Work')
   const [newLabLoomUrl, setNewLabLoomUrl] = useState('')
-  const labFileRef = useRef(null)
+  const labFileRef = useRef<any>(null)
 
   // ── Workout state ─────────────────────────────────────────
   const DEFAULT_PRINCIPLES = `I firmly believe in high-intensity training. Here's how we do it:
@@ -255,21 +256,21 @@ Training Principles:
 3. Each set should start with warm-ups leading to the working sets. The last set should push you to absolute failure at 10 to 12 reps.
 4. Increase weight progressively so that if you achieve 12 reps on your last set, increase the weight next session to maintain the challenge.`
 
-  const [workouts,           setWorkouts]           = useState([])
+  const [workouts,           setWorkouts]           = useState<any[]>([])
   const [trainingPrinciples, setTrainingPrinciples] = useState(DEFAULT_PRINCIPLES)
   const [activeWorkout,      setActiveWorkout]      = useState(0)
   const [showExPicker,       setShowExPicker]        = useState(false)
   const [exSearch,           setExSearch]            = useState('')
   const [exCategory,         setExCategory]          = useState('Push')
   const [activeWeek,         setActiveWeek]          = useState(1)
-  const [workoutLogs,        setWorkoutLogs]         = useState({})
+  const [workoutLogs,        setWorkoutLogs]         = useState<Record<string, any>>({})
   const [logSaving,          setLogSaving]           = useState(false)
   const [principlesEditing,  setPrinciplesEditing]   = useState(false)
   // weekHistory: [{week, saved_at}] sorted most-recent first
-  const [weekHistory,        setWeekHistory]         = useState([])
+  const [weekHistory,        setWeekHistory]         = useState<any[]>([])
 
   // ── Cardio state ──────────────────────────────────────────
-  const [cardio, setCardio] = useState([
+  const [cardio, setCardio] = useState<any[]>([
     {type:'Brisk Walk', duration:'45-60 min', frequency:'Daily', notes:'Fasted morning walk preferred'},
   ])
   // Coach-configurable day the tracking week starts on (default Wed)
@@ -277,8 +278,8 @@ Training Principles:
   // Per-client daily step goal set by the coach (stored in the workouts JSON blob)
   const [stepGoal, setStepGoal] = useState('')
   // Company-wide cardio types managed by admin only
-  const [companyCardioTypes, setCompanyCardioTypes] = useState([])
-  const [hiddenCardio,       setHiddenCardio]       = useState(new Set()) // built-ins hidden by the org's admin
+  const [companyCardioTypes, setCompanyCardioTypes] = useState<any[]>([])
+  const [hiddenCardio,       setHiddenCardio]       = useState<Set<any>>(new Set()) // built-ins hidden by the org's admin
   const [newCardioType,      setNewCardioType]      = useState('')
 
   // ── Calendar state ────────────────────────────────────────
@@ -286,7 +287,7 @@ Training Principles:
 
   // Which organization this user belongs to — scopes the cardio-type library per org
   const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
-  const [myCompanyId, setMyCompanyId] = useState(null)
+  const [myCompanyId, setMyCompanyId] = useState<any>(null)
   useEffect(()=>{ (async()=>{
     if (!email) { setMyCompanyId(EDEN_ORG_ID); return }
     try {
@@ -296,20 +297,20 @@ Training Principles:
   })() },[email])
 
   // Per-org "Helpful Resources & Lab Links" (company_resource_links); Eden defaults until the org has its own rows
-  const [resourceLinks, setResourceLinks] = useState(null)
+  const [resourceLinks, setResourceLinks] = useState<any>(null)
   useEffect(()=>{ if (!myCompanyId) return
     dbGet('company_resource_links',`company_id=eq.${myCompanyId}&order=sort_order.asc,created_at.asc`)
       .then(rows=>setResourceLinks(Array.isArray(rows)?rows:[])).catch(()=>setResourceLinks([]))
   },[myCompanyId])
 
   // ── Company cardio types (each org's admin manages their own library) ──
-  async function loadCompanyCardioTypes(cid) {
+  async function loadCompanyCardioTypes(cid: any) {
     const [data, hid] = await Promise.all([
       dbGet('company_cardio_types',`company_id=eq.${cid}&order=created_at.asc`),
       dbGet('company_hidden_items',`company_id=eq.${cid}&kind=eq.cardio&select=name`).catch(()=>[]),
     ])
-    setCompanyCardioTypes((data||[]).map(r=>r.name))
-    setHiddenCardio(new Set((Array.isArray(hid)?hid:[]).map(r=>r.name)))
+    setCompanyCardioTypes((data||[]).map((r: any)=>r.name))
+    setHiddenCardio(new Set((Array.isArray(hid)?hid:[]).map((r: any)=>r.name)))
   }
   async function addCompanyCardioType() {
     if (!newCardioType.trim()||!myCompanyId) return
@@ -322,12 +323,12 @@ Training Principles:
     setNewCardioType('')
   }
   // Eden admin: push a cardio type to every white-label org's library (skipping name duplicates)
-  async function pushCardioTypeToAllOrgs(name) {
+  async function pushCardioTypeToAllOrgs(name: any) {
     if (!window.confirm(`Push "${name}" to every white-label org's cardio type library?\nOrgs that already have a type with this name are skipped.`)) return
     const orgs = await dbGet('organizations','is_white_label=eq.true&select=id,name')
     if (!Array.isArray(orgs)||!orgs.length) { alert('No white-label orgs found.'); return }
     const existing = await dbGet('company_cardio_types',`name=eq.${encodeURIComponent(name)}&select=company_id`)
-    const have = new Set((existing||[]).map(r=>r.company_id))
+    const have = new Set((existing||[]).map((r: any)=>r.company_id))
     const targets = orgs.filter(o=>!have.has(o.id))
     if (!targets.length) { alert(`All ${orgs.length} white-label orgs already have "${name}".`); return }
     const res = await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types`,{
@@ -338,14 +339,14 @@ Training Principles:
     if (res.ok) alert(`"${name}" pushed to ${targets.length} of ${orgs.length} white-label orgs${orgs.length-targets.length?` (${orgs.length-targets.length} already had it)`:''}.`)
     else { console.error('PUSH CARDIO TYPE', await res.text()); alert('Push failed — please try again.') }
   }
-  async function removeCompanyCardioType(name) {
+  async function removeCompanyCardioType(name: any) {
     if (!myCompanyId) return
     if (!window.confirm(`Remove "${name}" from your company's cardio types?`)) return
     // Scope by org so one org's removal never touches another org's identically-named type
     await fetch(`${SUPABASE_URL}/rest/v1/company_cardio_types?name=eq.${encodeURIComponent(name)}&company_id=eq.${myCompanyId}`,{method:'DELETE',headers:H})
     setCompanyCardioTypes(p=>p.filter(t=>t!==name))
   }
-  async function renameCompanyCardioType(oldName) {
+  async function renameCompanyCardioType(oldName: any) {
     if (!myCompanyId) return
     const newName = window.prompt(`Rename cardio type "${oldName}" to:`, oldName)
     if (!newName || !newName.trim() || newName.trim()===oldName) return
@@ -370,20 +371,20 @@ Training Principles:
     setLabs(data||[])
   }
 
-  async function loadComments(labId) {
+  async function loadComments(labId: any) {
     const data = await dbGet('lab_comments',
       `lab_id=eq.${labId}&order=created_at.asc`
     )
     setLabComments(p=>({...p,[labId]:data||[]}))
   }
 
-  async function openLab(lab) {
+  async function openLab(lab: any) {
     setActiveLab(lab)
     loadComments(lab.id)
   }
 
   // ── Upload lab file ───────────────────────────────────────
-  async function handleLabUpload(e) {
+  async function handleLabUpload(e: any) {
     const file = e.target.files?.[0]
     if (!file) return
     if (!CLIENT_UUID) { alert('Still loading this client\'s profile — try again in a second.'); return }
@@ -444,7 +445,7 @@ Training Principles:
 
   // Bell notification helper — alerts everyone involved with a lab except
   // whoever performed the action (the bell picks these up instantly via realtime).
-  function notifyLabPeople(recipientIds, type, body) {
+  function notifyLabPeople(recipientIds: any, type: any, body: any) {
     const seen = new Set()
     for (const rid of recipientIds) {
       if (!rid || rid === myUUID || seen.has(rid)) continue
@@ -456,7 +457,7 @@ Training Principles:
     }
   }
 
-  async function postComment(labId) {
+  async function postComment(labId: any) {
     if (!newComment.trim()) return
     const text = newComment.trim()
     const inserted = await dbInsert('lab_comments',{
@@ -471,8 +472,8 @@ Training Principles:
       setLabComments(p=>({...p,[labId]:[...(p[labId]||[]),arr[0]]}))
       setNewComment('')
       // Alert the lab's client, their coach, and anyone else who has commented
-      const lab = labs.find(l => l.id === labId) || activeLab
-      const prior = (labComments[labId] || []).map(c => c.author_id)
+      const lab = labs.find((l: any) => l.id === labId) || activeLab
+      const prior = (labComments[labId] || []).map((c: any) => c.author_id)
       notifyLabPeople(
         [lab?.client_id, lab?.coach_id, lab?.uploaded_by, ...prior],
         'update_note',
@@ -523,7 +524,7 @@ Training Principles:
   }
 
   // ── Load workout logs for a given week ────────────────────
-  async function loadWorkoutLog(week) {
+  async function loadWorkoutLog(week: any) {
     try {
       const data = await dbGet('client_workout_logs',
         `client_id=eq.${CLIENT_UUID}&week=eq.${week}&limit=1`
@@ -573,8 +574,8 @@ Training Principles:
   }
 
   // ── Workout builder ───────────────────────────────────────
-  function addExercise(name) {
-    setWorkouts(p=>p.map((w,i)=>i===activeWorkout
+  function addExercise(name: any) {
+    setWorkouts(p=>p.map((w: any,i: any)=>i===activeWorkout
       ?{...w,exercises:[...w.exercises,{
           name, sets:4, reps:'10-12', rest:'90 sec',
           cues:'', videoLink:'', id:Date.now()+'_'+name,
@@ -584,23 +585,23 @@ Training Principles:
     setShowExPicker(false); setExSearch('')
   }
 
-  function removeExercise(exId) {
-    setWorkouts(p=>p.map((w,i)=>i===activeWorkout
-      ?{...w,exercises:w.exercises.filter(e=>e.id!==exId)}:w
+  function removeExercise(exId: any) {
+    setWorkouts(p=>p.map((w: any,i: any)=>i===activeWorkout
+      ?{...w,exercises:w.exercises.filter((e: any)=>e.id!==exId)}:w
     ))
   }
 
-  function updateExercise(exId, field, val) {
-    setWorkouts(p=>p.map((w,i)=>i===activeWorkout
-      ?{...w,exercises:w.exercises.map(e=>e.id===exId?{...e,[field]:val}:e)}:w
+  function updateExercise(exId: any, field: any, val: any) {
+    setWorkouts(p=>p.map((w: any,i: any)=>i===activeWorkout
+      ?{...w,exercises:w.exercises.map((e: any)=>e.id===exId?{...e,[field]:val}:e)}:w
     ))
   }
 
   // Client workout logging
-  function getLog(exId, setIdx) {
+  function getLog(exId: any, setIdx: any) {
     return workoutLogs[`${activeWeek}_${exId}_${setIdx}`]||{weight:'',reps:''}
   }
-  function setLog(exId, setIdx, field, val) {
+  function setLog(exId: any, setIdx: any, field: any, val: any) {
     const key = `${activeWeek}_${exId}_${setIdx}`
     setWorkoutLogs(p=>({...p,[key]:{...p[key],[field]:val}}))
   }
@@ -628,6 +629,7 @@ Training Principles:
     // Audit trail: record who saved this client's workout/cardio plan.
     // The server derives the actor from the JWT — identity can't be forged.
     try {
+      const info: any = dbProfile
       fetch('/api/audit/event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
@@ -648,12 +650,12 @@ Training Principles:
   // ── Cardio ────────────────────────────────────────────────
   function addCardio() {
     // Default to the first cardio type still visible for this org (built-ins minus hidden, then company types)
-    const visible = [...CARDIO_TYPES.filter(t=>!hiddenCardio.has(t)),...companyCardioTypes]
+    const visible = [...CARDIO_TYPES.filter((t: any)=>!hiddenCardio.has(t)),...companyCardioTypes]
     setCardio(p=>[...p,{type:visible[0]||'Brisk Walk',duration:'30 min',frequency:'3x/week',notes:''}])
   }
-  function removeCardio(i) { setCardio(p=>p.filter((_,j)=>j!==i)) }
-  function updateCardio(i,field,val) {
-    setCardio(p=>p.map((c,j)=>j===i?{...c,[field]:val}:c))
+  function removeCardio(i: any) { setCardio(p=>p.filter((_: any,j: any)=>j!==i)) }
+  function updateCardio(i: any,field: any,val: any) {
+    setCardio(p=>p.map((c: any,j: any)=>j===i?{...c,[field]:val}:c))
   }
 
   const filteredExercises = Object.entries(EXERCISE_LIBRARY).flatMap(([cat,exs])=>
@@ -792,9 +794,9 @@ Training Principles:
                 <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Helpful Resources &amp; Lab Links</div>
                   {(resourceLinks&&resourceLinks.length
-                    ? resourceLinks.map(r=>[r.label,r.url,r.note||''])
+                    ? resourceLinks.map((r: any)=>[r.label,r.url,r.note||''])
                     : DEFAULT_RESOURCE_LINKS
-                  ).map(([l,u,note])=>(
+                  ).map(([l,u,note]: any)=>(
                     <a key={l} href={u} target="_blank" rel="noreferrer"
                       style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 0',borderBottom:`1px solid ${C.border}`,textDecoration:'none'}}>
                       <div>
@@ -832,7 +834,7 @@ Training Principles:
                         const d = e.target.value; if (!d) return
                         const notes = withLabDate(activeLab.notes, d)
                         await dbUpdate('lab_results', `id=eq.${activeLab.id}`, { notes })
-                        setActiveLab(p=>({...p, notes}))
+                        setActiveLab((p: any)=>({...p, notes}))
                         setLabs(p=>p.map(l=>l.id===activeLab.id?{...l, notes}:l))
                       }}
                       style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,color:C.gold,fontSize:10,padding:'2px 6px',outline:'none',colorScheme:'dark'}}/>
@@ -894,7 +896,7 @@ Training Principles:
                 {(labComments[activeLab.id]||[]).length===0&&(
                   <div style={{color:C.muted,fontSize:13,fontStyle:'italic',marginBottom:16}}>No comments yet. Add the first one below.</div>
                 )}
-                {(labComments[activeLab.id]||[]).map(c=>(
+                {(labComments[activeLab.id]||[]).map((c: any)=>(
                   <div key={c.id} style={{marginBottom:12,display:'flex',gap:10}}>
                     <div style={{width:30,height:30,borderRadius:15,background:c.author_role==='coach'?C.gold:C.surface,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:c.author_role==='coach'?C.black:C.white,flexShrink:0}}>
                       {c.author_name?.[0]}
@@ -1052,7 +1054,7 @@ Training Principles:
                 )}
               </div>
 
-              {workouts[activeWorkout].exercises.map((ex,ei)=>(
+              {workouts[activeWorkout].exercises.map((ex: any,ei: any)=>(
                 <div key={ex.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:14,marginBottom:10}}>
                   {/* Exercise header */}
                   <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
@@ -1352,9 +1354,9 @@ Training Principles:
               <div key={i} style={{padding:'12px 0',borderTop:`1px solid ${C.border}`}}>
                 {isCoach?(
                   <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-                    <Sel label="Type" value={c.type} onChange={v=>updateCardio(i,'type',v)} options={(v=>[...(v.includes(c.type)?[]:[c.type]),...v])([...CARDIO_TYPES.filter(t=>!hiddenCardio.has(t)),...companyCardioTypes])}/>
-                    <Inp label="Duration" value={c.duration} onChange={v=>updateCardio(i,'duration',v)} placeholder="e.g. 45-60 min"/>
-                    <Inp label="Frequency" value={c.frequency} onChange={v=>updateCardio(i,'frequency',v)} placeholder="e.g. Daily"/>
+                    <Sel label="Type" value={c.type} onChange={(v: any)=>updateCardio(i,'type',v)} options={((v: any)=>[...(v.includes(c.type)?[]:[c.type]),...v])([...CARDIO_TYPES.filter((t: any)=>!hiddenCardio.has(t)),...companyCardioTypes])}/>
+                    <Inp label="Duration" value={c.duration} onChange={(v: any)=>updateCardio(i,'duration',v)} placeholder="e.g. 45-60 min"/>
+                    <Inp label="Frequency" value={c.frequency} onChange={(v: any)=>updateCardio(i,'frequency',v)} placeholder="e.g. Daily"/>
                     <div style={{display:'flex',alignItems:'flex-end',paddingBottom:10}}>
                       <button onClick={()=>removeCardio(i)}
                         style={{background:`${C.danger}22`,border:`1px solid ${C.danger}44`,borderRadius:6,padding:'8px 12px',color:C.danger,fontSize:11,fontWeight:700,cursor:'pointer',width:'100%'}}>
@@ -1362,7 +1364,7 @@ Training Principles:
                       </button>
                     </div>
                     <div style={{gridColumn:'1 / -1'}}>
-                      <Inp label="Notes" value={c.notes} onChange={v=>updateCardio(i,'notes',v)} placeholder="e.g. Fasted morning walk preferred"/>
+                      <Inp label="Notes" value={c.notes} onChange={(v: any)=>updateCardio(i,'notes',v)} placeholder="e.g. Fasted morning walk preferred"/>
                     </div>
                   </div>
                 ):(

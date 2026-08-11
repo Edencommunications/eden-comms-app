@@ -20,7 +20,7 @@ import { AUD_PAGE, auditPageQuery, fetchAuditFacet } from '../lib/auditKeyset'
 // Create a full account (login + profile + access records) atomically on the
 // API server. The server owns the whole workflow, so a raced or retried
 // request can never leave a duplicate profile — it answers 409 instead.
-async function createAccount(payload) {
+async function createAccount(payload: any) {
   try {
     const { data } = await authClient.auth.getSession()
     const token = data?.session?.access_token
@@ -41,7 +41,7 @@ async function createAccount(payload) {
 // Fix a typo in an existing user's name or email via the API server.
 // The server verifies the admin JWT, updates user_profiles AND the Supabase
 // Auth login email, and writes a 'profile_updated' audit row (old → new).
-async function updateIdentity(id, name, email) {
+async function updateIdentity(id: any, name: any, email: any) {
   try {
     const { data } = await authClient.auth.getSession()
     const token = data?.session?.access_token
@@ -60,7 +60,7 @@ async function updateIdentity(id, name, email) {
 }
 
 function useIsMobile(bp = 768) {
-  const [m, setM] = useState(() => window.innerWidth < bp)
+  const [m, setM] = useState<any>(() => window.innerWidth < bp)
   useEffect(() => {
     const h = () => setM(window.innerWidth < bp)
     window.addEventListener('resize', h)
@@ -71,6 +71,7 @@ function useIsMobile(bp = 768) {
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
+
 
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
@@ -87,12 +88,12 @@ const H = {
   'Prefer':'return=representation',
 }
 
-async function dbGet(table, params='') {
+async function dbGet(table: any, params='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
   if (!r.ok) return []
   return r.json()
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
@@ -101,7 +102,7 @@ async function dbInsert(table, body) {
 }
 // Upload an org logo to real file storage (server endpoint → org-logos bucket)
 // and return its public https URL, or null if the upload failed.
-async function uploadOrgLogo(prefix, file) {
+async function uploadOrgLogo(prefix: any, file: any) {
   try {
     const dataBase64 = await new Promise((resolve, reject) => {
       const rd = new FileReader()
@@ -120,13 +121,13 @@ async function uploadOrgLogo(prefix, file) {
     return typeof body?.url === 'string' && body.url ? body.url : null
   } catch { return null }
 }
-async function dbDelete(table, params) {
+async function dbDelete(table: any, params: any) {
   try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:H}) } catch {}
 }
 // Returns true only when the PATCH succeeded AND at least one row was actually
 // updated (H sends Prefer: return=representation, so the response body holds
 // the updated rows — an empty array means RLS silently rejected the write).
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
       method:'PATCH', headers:H, body:JSON.stringify(body)
@@ -141,9 +142,9 @@ async function dbUpdate(table, params, body) {
 
 // ── Demo data (Week 6 — replace with real DB calls once auth live) ──
 // Demo seed data removed — all rosters load live from the database.
-const DEMO_COACHES = []
-const DEMO_CLIENTS = []
-const DEMO_ORGS = []
+const DEMO_COACHES: any[] = []
+const DEMO_CLIENTS: any[] = []
+const DEMO_ORGS: any[] = []
 
 const CHECK_IN_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 const CALL_TYPES = ['Monthly Check-In','Intake / Onboarding','Lab Review','Therapy / Support','Strategy Call','Emergency Call','Other']
@@ -156,19 +157,19 @@ const DOC_TYPES = [
   {v:'note',       l:'Note',                                       icon:'📝', dest:'Appears in the client\u2019s Documents list'},
   {v:'document',   l:'Other Document',                             icon:'📄', dest:'Appears in the client\u2019s Documents list'},
 ]
-const docTypeLabel = t=>DOC_TYPES.find(d=>d.v===t)?.l||t
+const docTypeLabel = (t: any)=>DOC_TYPES.find(d=>d.v===t)?.l||t
 
 // ── Mini UI ───────────────────────────────────────────────────
-function Card({children,sx={}}) {
+function Card({children,sx={}}: any) {
   return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,...sx}}>{children}</div>
 }
 // ── Login Health — safety net: every login must have a profile record,
 //    or the security rules silently reject all of their saves. ─────────
-function LoginHealthCard({orgs=[], isEden=false}) {
-  const [missing, setMissing] = useState(null) // null = loading, [] = all good
-  const [fixing,  setFixing]  = useState('')
-  const [fixRole, setFixRole] = useState({})
-  const [fixOrg,  setFixOrg]  = useState({})
+function LoginHealthCard({orgs=[], isEden=false}: any) {
+  const [missing, setMissing] = useState<any>(null) // null = loading, [] = all good
+  const [fixing,  setFixing]  = useState<any>('')
+  const [fixRole, setFixRole] = useState<any>({})
+  const [fixOrg,  setFixOrg]  = useState<any>({})
   const load = () => {
     fetch('/api/profile-audit', { headers: { Authorization: sbBearer() } })
       .then(r => r.ok ? r.json() : null)
@@ -176,7 +177,7 @@ function LoginHealthCard({orgs=[], isEden=false}) {
       .catch(() => setMissing(null))
   }
   useEffect(load, [])
-  const fix = async (email, orphan) => {
+  const fix = async (email: any, orphan: any) => {
     const role = fixRole[email] || orphan?.intended_role || 'client'
     const company_id = orphan?.company_id || fixOrg[email] || EDEN_ORG_ID
     setFixing(email)
@@ -204,7 +205,7 @@ function LoginHealthCard({orgs=[], isEden=false}) {
         Every login needs a matching profile record — without one, that person can sign in but none of their changes save.
       </div>
       {Array.isArray(missing) && missing.map(m => {
-        const knownOrg = m.company_id ? (orgs.find(o=>o.id===m.company_id)?.name || 'your organization') : null
+        const knownOrg = m.company_id ? (orgs.find((o: any)=>o.id===m.company_id)?.name || 'your organization') : null
         return (
         <div key={m.email} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 0',borderTop:`1px solid ${C.border}`,flexWrap:'wrap'}}>
           <div style={{flex:1,minWidth:160}}>
@@ -214,14 +215,14 @@ function LoginHealthCard({orgs=[], isEden=false}) {
           {knownOrg
             ? <span style={{fontSize:11,color:'#D4A8F0',fontWeight:600}}>{knownOrg}</span>
             : isEden && (
-              <select value={fixOrg[m.email]||EDEN_ORG_ID} onChange={e=>setFixOrg(p=>({...p,[m.email]:e.target.value}))}
+              <select value={fixOrg[m.email]||EDEN_ORG_ID} onChange={e=>setFixOrg((p: any)=>({...p,[m.email]:e.target.value}))}
                 title="Which company does this person belong to?"
                 style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:'#D4A8F0',fontSize:11,outline:'none',cursor:'pointer',maxWidth:150}}>
-                {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden'}]).map(o=>
+                {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden'}]).map((o: any)=>
                   <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             )}
-          <select value={fixRole[m.email]||m.intended_role||'client'} onChange={e=>setFixRole(p=>({...p,[m.email]:e.target.value}))}
+          <select value={fixRole[m.email]||m.intended_role||'client'} onChange={e=>setFixRole((p: any)=>({...p,[m.email]:e.target.value}))}
             title="What role should this person have?"
             style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
             <option value="client">Client</option>
@@ -239,10 +240,10 @@ function LoginHealthCard({orgs=[], isEden=false}) {
   )
 }
 
-function Lbl({t}) {
+function Lbl({t}: any) {
   return <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'13px 0 7px'}}>{t}</div>
 }
-function Inp({label,value,onChange,type='text',placeholder,disabled=false}) {
+function Inp({label,value,onChange,type='text',placeholder,disabled=false}: any) {
   return (
     <div style={{marginBottom:10}}>
       {label&&<div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
@@ -251,11 +252,11 @@ function Inp({label,value,onChange,type='text',placeholder,disabled=false}) {
     </div>
   )
 }
-function ColorRow({primary, colors=[], onPrimary, onColors}) {
-  const [hexP,   setHexP]   = useState(primary||'#ffa600')
-  const [hexNew, setHexNew] = useState('#')
+function ColorRow({primary, colors=[], onPrimary, onColors}: any) {
+  const [hexP,   setHexP]   = useState<any>(primary||'#ffa600')
+  const [hexNew, setHexNew] = useState<any>('#')
   useEffect(()=>{ setHexP(primary||'#ffa600') },[primary])
-  const norm = v=>{ v=(v||'').trim(); if(v&&!v.startsWith('#')) v='#'+v; return /^#[0-9a-fA-F]{6}$/.test(v)?v.toLowerCase():null }
+  const norm = (v: any)=>{ v=(v||'').trim(); if(v&&!v.startsWith('#')) v='#'+v; return /^#[0-9a-fA-F]{6}$/.test(v)?v.toLowerCase():null }
   return (
     <div style={{marginBottom:14}}>
       <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Brand Colors</div>
@@ -268,11 +269,11 @@ function ColorRow({primary, colors=[], onPrimary, onColors}) {
         <span style={{fontSize:10,color:C.muted}}>Primary — type a hex code or use the picker</span>
       </div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-        {(colors||[]).map((c,i)=>(
+        {(colors||[]).map((c: any,i: any)=>(
           <span key={i} style={{display:'flex',alignItems:'center',gap:5,background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:'3px 8px 3px 4px'}}>
             <span style={{width:16,height:16,borderRadius:8,background:c,display:'inline-block',border:'1px solid #333'}}/>
             <span style={{fontSize:11,color:C.muted}}>{c}</span>
-            <span onClick={()=>onColors((colors||[]).filter((_,j)=>j!==i))} style={{cursor:'pointer',color:C.muted,fontSize:12,fontWeight:700}}>×</span>
+            <span onClick={()=>onColors((colors||[]).filter((_: any,j: any)=>j!==i))} style={{cursor:'pointer',color:C.muted,fontSize:12,fontWeight:700}}>×</span>
           </span>
         ))}
         <input value={hexNew} maxLength={7} placeholder="#hex"
@@ -288,10 +289,10 @@ function ColorRow({primary, colors=[], onPrimary, onColors}) {
   )
 }
 // ── GHL intake webhook config (per-org URL + secret, from the API server) ──
-function GhlWebhookSection({ companyId, adminId }) {
-  const [cfg, setCfg]       = useState(null)
-  const [err, setErr]       = useState(false)
-  const [copied, setCopied] = useState('')
+function GhlWebhookSection({ companyId, adminId }: any) {
+  const [cfg, setCfg]       = useState<any>(null)
+  const [err, setErr]       = useState<any>(false)
+  const [copied, setCopied] = useState<any>('')
   useEffect(() => {
     let alive = true
     setCfg(null); setErr(false)
@@ -301,10 +302,10 @@ function GhlWebhookSection({ companyId, adminId }) {
       .catch(() => { if (alive) setErr(true) })
     return () => { alive = false }
   }, [companyId, adminId])
-  const copy = (label, text) => {
+  const copy = (label: any, text: any) => {
     navigator.clipboard?.writeText(text).then(()=>{ setCopied(label); setTimeout(()=>setCopied(''),1500) }).catch(()=>{})
   }
-  const Row = ({ label, value }) => (
+  const Row = ({ label, value }: any) => (
     <div style={{marginBottom:8}}>
       <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:3}}>{label}</div>
       <div style={{display:'flex',gap:6,alignItems:'center'}}>
@@ -336,18 +337,18 @@ function GhlWebhookSection({ companyId, adminId }) {
   )
 }
 
-function Sel({label,value,onChange,options}) {
+function Sel({label,value,onChange,options}: any) {
   return (
     <div style={{marginBottom:10}}>
       {label&&<div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
       <select value={value} onChange={e=>onChange(e.target.value)}
         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none'}}>
-        {options.map(o=>{const v=typeof o==='object'?o.value:o, l=typeof o==='object'?o.label:o; return <option key={v} value={v}>{l}</option>})}
+        {options.map((o: any)=>{const v=typeof o==='object'?o.value:o, l=typeof o==='object'?o.label:o; return <option key={v} value={v}>{l}</option>})}
       </select>
     </div>
   )
 }
-function Stat({label,value,color=C.gold,sub}) {
+function Stat({label,value,color=C.gold,sub}: any) {
   return (
     <div style={{background:C.surface,borderRadius:10,padding:'14px 16px',flex:1,minWidth:120}}>
       <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{label}</div>
@@ -360,14 +361,14 @@ function Stat({label,value,color=C.gold,sub}) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}, onClientFocus = () => {}}) {
+export default function Week6({currentUser, onNavigate, initialClient, loomMode = false, loomFeatured = new Set(), setLoomFeatured = () => {}, onClientFocus = () => {}}: any) {
   useLoomOn() // re-render when the app-wide visible-names list changes
   const isMobile = useIsMobile()
   const email    = currentUser?.email||''
   // Logins carry their role/name from App.tsx (loaded from user_profiles).
   const info     = {role:currentUser?.role||'client',name:currentUser?.name||'User',uuid:null}
   // Resolve the profile id from the DB.
-  const [dbUUID, setDbUUID] = useState(null)
+  const [dbUUID, setDbUUID] = useState<any>(null)
   useEffect(()=>{
     if (!email) return
     dbGet('user_profiles',`email=eq.${encodeURIComponent(email)}&select=id`)
@@ -381,19 +382,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [tab, setTab] = useState(isAdmin?'dashboard':isCoach?'clients':'consultation')
 
   // ── Client list state ─────────────────────────────────────
-  const [clients,        setClients]        = useState(DEMO_CLIENTS)
-  const [selectedClient, setSelectedClient] = useState(initialClient||null)
+  const [clients,        setClients]        = useState<any>(DEMO_CLIENTS)
+  const [selectedClient, setSelectedClient] = useState<any>(initialClient||null)
   const deadline = useDeadline(selectedClient?.email || email)
   const [clientSearch,   setClientSearch]   = useState('')
   const [filterCoach,    setFilterCoach]    = useState('All Coaches')
 
   // ── Check-in counter ──────────────────────────────────────
   const todayDay = new Date().toLocaleDateString('en-US',{weekday:'long'})
-  const isCheckInDay = clients.some(c=>c.checkInDay===todayDay)
-  const pendingUpdates = clients.filter(c=>c.hasUpdate).length
+  const isCheckInDay = clients.some((c: any)=>c.checkInDay===todayDay)
+  const pendingUpdates = clients.filter((c: any)=>c.hasUpdate).length
 
   // Real submissions this week (from weekly_checkins) — drives "X/Y submitted"
-  const [weekSubs, setWeekSubs] = useState(new Set())
+  const [weekSubs, setWeekSubs] = useState<any>(new Set())
   useEffect(()=>{
     dbGet('weekly_checkins',`submitted_at=gte.${new Date(Date.now()-7*86400000).toISOString()}&select=client_id`)
       .then(rows=>{ if(Array.isArray(rows)) setWeekSubs(new Set(rows.map(r=>r.client_id))) })
@@ -402,29 +403,29 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const totalClients   = clients.length
 
   // ── Consultation state ────────────────────────────────────
-  const [intake, setIntake] = useState({
+  const [intake, setIntake] = useState<any>({
     notes:'', startDate:'', startWeight:'',
   })
-  const setI = k=>v=>setIntake(p=>({...p,[k]:v}))
+  const setI = (k: any)=>(v: any)=>setIntake((p: any)=>({...p,[k]:v}))
 
-  const [callNotes, setCallNotes] = useState([])
+  const [callNotes, setCallNotes] = useState<any[]>([])
   const [showNewCall,   setShowNewCall]   = useState(false)
-  const [newCall, setNewCall] = useState({
+  const [newCall, setNewCall] = useState<any>({
     callDate: new Date().toISOString().slice(0,10),
     callType:'Monthly Check-In', summary:'', focusPoints:'', actionItems:'', nextCallDate:'', loomUrl:'', otherLinks:'',
   })
-  const setNC = k=>v=>setNewCall(p=>({...p,[k]:v}))
+  const setNC = (k: any)=>(v: any)=>setNewCall((p: any)=>({...p,[k]:v}))
 
   // ── Add new user ──────────────────────────────────────────
   const [showNewUser,  setShowNewUser]  = useState(false)
-  const [newUser, setNewUser] = useState({
+  const [newUser, setNewUser] = useState<any>({
     name:'', email:'', role:'client', coachId:'', checkInDay:'Wednesday',
     title:'', accessHome:true, accessMsgs:true, accessTeam:true,
   })
-  const setNU = k=>v=>setNewUser(p=>({...p,[k]:v}))
+  const setNU = (k: any)=>(v: any)=>setNewUser((p: any)=>({...p,[k]:v}))
 
   // ── Reusable staff role names (Closer, Sales Mentor…) — org-level list in admin_settings ──
-  const [staffRoles, setStaffRoles]       = useState([])
+  const [staffRoles, setStaffRoles]       = useState<any[]>([])
   const [newRoleName, setNewRoleName]     = useState('')
   const [addingRole, setAddingRole]       = useState(false)
   useEffect(()=>{
@@ -436,20 +437,20 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       } catch {}
     }).catch(()=>{})
   },[])
-  const [editingRole, setEditingRole]     = useState(null)   // role name being renamed
+  const [editingRole, setEditingRole]     = useState<any>(null)   // role name being renamed
   const [editRoleName, setEditRoleName]   = useState('')
   // ── Voice memo tier gating — Eden-level admin_settings key `voice_memo_tiers`
   // null = never configured → every tier includes voice memos
-  const [voiceTiers, setVoiceTiers] = useState(null)
+  const [voiceTiers, setVoiceTiers] = useState<any>(null)
   useEffect(()=>{
     dbGet('admin_settings','key=eq.voice_memo_tiers&select=value').then(rows=>{
       try { const v = rows?.[0]?.value; const arr = typeof v==='string'?JSON.parse(v):v; if (Array.isArray(arr)) setVoiceTiers(arr.map(String)) } catch{}
     }).catch(()=>{})
   },[])
-  async function toggleVoiceTier(pkg) {
+  async function toggleVoiceTier(pkg: any) {
     const base = voiceTiers===null ? packages.map(p=>String(p.id)) : voiceTiers
     const id = String(pkg.id)
-    const next = base.includes(id) ? base.filter(x=>x!==id) : [...base, id]
+    const next = base.includes(id) ? base.filter((x: any)=>x!==id) : [...base, id]
     setVoiceTiers(next)
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
@@ -458,26 +459,26 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       })
     } catch(e) {}
   }
-  const tierHasVoice = pkg => voiceTiers===null || voiceTiers.includes(String(pkg.id))
+  const tierHasVoice = (pkg: any) => voiceTiers===null || voiceTiers.includes(String(pkg.id))
 
   // ── DBA (sub-brand) tier gating — Eden-level admin_settings key `dba_tiers`
   // null = never configured → default: only the highest-priced active tier
   // includes DBAs (must match the API server's default).
-  const [dbaTiers, setDbaTiers] = useState(null)
+  const [dbaTiers, setDbaTiers] = useState<any>(null)
   useEffect(()=>{
     dbGet('admin_settings','key=eq.dba_tiers&select=value').then(rows=>{
       try { const v = rows?.[0]?.value; const arr = typeof v==='string'?JSON.parse(v):v; if (Array.isArray(arr)) setDbaTiers(arr.map(String)) } catch{}
     }).catch(()=>{})
   },[])
-  const tierHasDba = pkg => {
+  const tierHasDba = (pkg: any) => {
     if (dbaTiers!==null) return dbaTiers.includes(String(pkg.id))
     const top = packages.reduce((a,b)=>Number(b.price||0)>Number(a.price||0)?b:a, packages[0])
     return top && String(pkg.id)===String(top.id)
   }
-  async function toggleDbaTier(pkg) {
+  async function toggleDbaTier(pkg: any) {
     const base = dbaTiers===null ? packages.filter(tierHasDba).map(p=>String(p.id)) : dbaTiers
     const id = String(pkg.id)
-    const next = base.includes(id) ? base.filter(x=>x!==id) : [...base, id]
+    const next = base.includes(id) ? base.filter((x: any)=>x!==id) : [...base, id]
     setDbaTiers(next)
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
@@ -487,7 +488,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     } catch(e) {}
   }
 
-  async function persistStaffRoles(next) {
+  async function persistStaffRoles(next: any) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
         method:'POST', headers:{...H,'Prefer':'resolution=merge-duplicates,return=minimal'},
@@ -504,7 +505,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setNewRoleName(''); setAddingRole(false)
     await persistStaffRoles(next)
   }
-  async function deleteStaffRole(name) {
+  async function deleteStaffRole(name: any) {
     if (!window.confirm(`Delete the saved role "${name}"? Existing team members keep their current title.`)) return
     const next = staffRoles.filter(r=>r!==name)
     setStaffRoles(next)
@@ -512,7 +513,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (editingRole===name) { setEditingRole(null); setEditRoleName('') }
     await persistStaffRoles(next)
   }
-  async function renameStaffRole(oldName) {
+  async function renameStaffRole(oldName: any) {
     const name = editRoleName.trim()
     if (!name || name===oldName) { setEditingRole(null); setEditRoleName(''); return }
     const next = staffRoles.map(r=>r===oldName?name:r).filter((r,i,a)=>a.indexOf(r)===i)
@@ -523,7 +524,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Optionally cascade the rename to existing staff whose title matches the old name
     try {
       const rows = await dbGet('admin_settings', `key=like.${encodeURIComponent('staff_meta:*')}&select=key,value`)
-      const matches = (rows||[]).filter(r=>{
+      const matches = (rows||[]).filter((r: any)=>{
         try {
           const v = typeof r.value==='string' ? JSON.parse(r.value) : r.value
           return v && v.label===oldName
@@ -546,12 +547,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   // ── Invites list (who was invited, resend / uninvite) ──
   const [showInvites,   setShowInvites]   = useState(false)
-  const [inviteRows,    setInviteRows]    = useState(null)   // null = loading
+  const [inviteRows,    setInviteRows]    = useState<any>(null)   // null = loading
   const [inviteErr,     setInviteErr]     = useState('')
   const [inviteBusy,    setInviteBusy]    = useState('')     // email currently being acted on
   const [inviteNotice,  setInviteNotice]  = useState('')
 
-  async function inviteApi(path, body) {
+  async function inviteApi(path: any, body?: any) {
     const { data } = await authClient.auth.getSession()
     const token = data?.session?.access_token
     if (!token) return { ok:false, error:"Your session can't authorize this — sign out and back in" }
@@ -570,7 +571,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (r.ok) setInviteRows(r.invites||[])
     else { setInviteRows([]); setInviteErr(r.error||'Could not load the invite list') }
   }
-  async function resendInvite(row) {
+  async function resendInvite(row: any) {
     if (!confirm(`Re-send the welcome email to ${row.name} (${row.email})?\n\nThis gives them a NEW temporary password — any old one stops working.`)) return
     setInviteBusy(row.email); setInviteNotice('')
     const r = await inviteApi('/invites/resend', { email: row.email })
@@ -578,7 +579,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (r.ok) { setInviteNotice(`✉️ Invite re-sent to ${row.email}`); loadInvites() }
     else setInviteNotice(`⚠️ ${r.error||'Could not resend'}`)
   }
-  async function revokeInvite(row) {
+  async function revokeInvite(row: any) {
     if (!confirm(`Uninvite ${row.name} (${row.email})?\n\nThis deletes their login and profile entirely. They have never signed in, so no data is lost.`)) return
     setInviteBusy(row.email); setInviteNotice('')
     const r = await inviteApi('/invites/revoke', { email: row.email })
@@ -592,9 +593,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [acCoachId,      setAcCoachId]      = useState('')
   const [acSingle,       setAcSingle]       = useState({name:'',email:'',phone:''})
   const [acCheckInDay,   setAcCheckInDay]   = useState('Wednesday')
-  const [acRows,         setAcRows]         = useState([])        // preview rows: {name,email,phone,status,reason}
+  const [acRows,         setAcRows]         = useState<any[]>([])        // preview rows: {name,email,phone,status,reason}
   const [acStep,         setAcStep]         = useState('input')   // 'input' | 'preview' | 'saving' | 'done'
-  const [acResults,      setAcResults]      = useState(null)      // {created:[{name,email,tempPass}], skipped:[{email,reason}]}
+  const [acResults,      setAcResults]      = useState<any>(null)      // {created:[{name,email,tempPass}], skipped:[{email,reason}]}
 
   function resetAddClients() {
     setShowAddClients(false); setAcCoachId('')
@@ -641,7 +642,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const ready = acRows.filter(r=>r.status==='ready')
     if (!ready.length) { alert('There are no new clients to add — every row is a duplicate or invalid.'); return }
     setAcStep('saving')
-    const created=[], failed=[]
+    const created: any[]=[], failed: any[]=[]
     const coachName = allCoaches.find(c=>c.uuid===acCoachId)?.name||''
     for (const r of ready) {
       const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
@@ -656,7 +657,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       const emailed = !!authRes.emailed
       const profileId = authRes.profileId
       created.push({name:r.name, email:r.email, tempPass, emailed})
-      setClients(prev=>[...prev,{
+      setClients((prev: any)=>[...prev,{
         uuid:profileId, name:r.name, email:r.email, role:'client',
         coachId:acCoachId, coachName, checkInDay:acCheckInDay,
         hasUpdate:false, lastSeen:'Never', active:true,
@@ -675,16 +676,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
 
   // ── White-label org ───────────────────────────────────────
-  const [orgs,       setOrgs]       = useState(DEMO_ORGS)
+  const [orgs,       setOrgs]       = useState<any>(DEMO_ORGS)
   const [showNewOrg, setShowNewOrg] = useState(false)
-  const [newOrg, setNewOrg] = useState({
+  const [newOrg, setNewOrg] = useState<any>({
     name:'', slug:'', brandColor:'#ffa600', brandColors:[], calendarUrl:'',
     billingEmail:'', plan:'standard', logoUrl:'',
   })
   const [orgLogoBusy, setOrgLogoBusy] = useState(false)
   const [orgLogoErr,  setOrgLogoErr]  = useState('')
-  const orgLogoFileRef = useRef(null)
-  async function onNewOrgLogoFile(file) {
+  const orgLogoFileRef = useRef<any>(null)
+  async function onNewOrgLogoFile(file: any) {
     if (!file) return
     if (!file.type.startsWith('image/')) { setOrgLogoErr('Please choose an image file.'); return }
     if (file.size > 5*1024*1024) { setOrgLogoErr('Image too large — please use a file under 5 MB.'); return }
@@ -692,39 +693,39 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     try {
       // Real file storage — the logo lands in the org-logos bucket and only its URL is saved
       const url = await uploadOrgLogo('neworg', file)
-      if (url) { setNewOrg(p=>({...p, logoUrl:url})); return }
+      if (url) { setNewOrg((p: any)=>({...p, logoUrl:url})); return }
       setOrgLogoErr('Upload failed — try again or paste a hosted image URL.')
     } catch { setOrgLogoErr('Upload failed — try again or paste a hosted image URL.') }
     finally { setOrgLogoBusy(false) }
   }
   const [colorsColSupported, setColorsColSupported] = useState(false) // organizations.brand_colors exists?
-  const setNO = k=>v=>setNewOrg(p=>({...p,[k]:v}))
+  const setNO = (k: any)=>(v: any)=>setNewOrg((p: any)=>({...p,[k]:v}))
 
   // ── Packages / pricing tiers (drive org plans + MRR) ─────
-  const [packages,    setPackages]    = useState([])   // [{id,name,price,active}]
+  const [packages,    setPackages]    = useState<any[]>([])   // [{id,name,price,active}]
   const [pkgsLoaded,  setPkgsLoaded]  = useState(false)
-  const [newPkg,      setNewPkg]      = useState({name:'',price:'',includes_recipes:false,includes_courses:false})
-  const [editPkg,     setEditPkg]     = useState(null)  // {id,name,price,includes_recipes} being edited
-  const [edenCourses, setEdenCourses] = useState([])    // Eden courses w/ per-course tier distribution (courses.tiers)
-  const [pkgCoursesOpen, setPkgCoursesOpen] = useState(null) // package id whose Eden course list is expanded
-  const [orgCoursesOpen, setOrgCoursesOpen] = useState(null) // org id whose Eden course list is expanded
-  const [manageOrg,   setManageOrg]   = useState(null)  // org being edited in the Manage modal
+  const [newPkg,      setNewPkg]      = useState<any>({name:'',price:'',includes_recipes:false,includes_courses:false})
+  const [editPkg,     setEditPkg]     = useState<any>(null)  // {id,name,price,includes_recipes} being edited
+  const [edenCourses, setEdenCourses] = useState<any[]>([])    // Eden courses w/ per-course tier distribution (courses.tiers)
+  const [pkgCoursesOpen, setPkgCoursesOpen] = useState<any>(null) // package id whose Eden course list is expanded
+  const [orgCoursesOpen, setOrgCoursesOpen] = useState<any>(null) // org id whose Eden course list is expanded
+  const [manageOrg,   setManageOrg]   = useState<any>(null)  // org being edited in the Manage modal
   // Per-coach check-in deadline settings (admin can edit each coach's from the overview)
-  const [coachDeadlines, setCoachDeadlines] = useState({})  // uuid -> { tz, time }
+  const [coachDeadlines, setCoachDeadlines] = useState<any>({})  // uuid -> { tz, time }
   useEffect(()=>{
     dbGet('user_profiles','role=in.(coach,head_coach)&select=id,timezone,deadline_time')
       .then(rows=>{
         if (!Array.isArray(rows)) return
-        const map = {}
+        const map: Record<string, any> = {}
         rows.forEach(r=>{ map[r.id] = { tz:r.timezone||null, time:r.deadline_time?r.deadline_time.slice(0,5):null } })
         setCoachDeadlines(map)
       }).catch(()=>{})
   },[])
-  async function saveCoachDeadline(uuid, patch, local) {
+  async function saveCoachDeadline(uuid: any, patch: any, local: any) {
     const prev = coachDeadlines[uuid]||{}
-    setCoachDeadlines(m=>({...m,[uuid]:{...prev,...local}}))
+    setCoachDeadlines((m: any)=>({...m,[uuid]:{...prev,...local}}))
     const ok = await dbUpdate('user_profiles',`id=eq.${uuid}`,patch)
-    if (!ok) { setCoachDeadlines(m=>({...m,[uuid]:prev})); alert("Couldn't save the deadline change — try again."); return }
+    if (!ok) { setCoachDeadlines((m: any)=>({...m,[uuid]:prev})); alert("Couldn't save the deadline change — try again."); return }
     clearTzCache()
   }
 
@@ -739,8 +740,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     return dbGet('organizations','select=id,name,slug,plan,is_white_label,brand_color,calendar_url,billing_email,is_active&order=created_at.asc')
       .then(rows=>{
         if (Array.isArray(rows)&&rows.length)
-          setOrgs(prev=>rows.map(o=>{
-            const old = prev.find(p=>p.id===o.id)
+          setOrgs((prev: any)=>rows.map(o=>{
+            const old = prev.find((p: any)=>p.id===o.id)
             return { id:o.id, name:o.name, slug:o.slug, isWhiteLabel:o.is_white_label,
               plan:o.plan, coachCount:old?.coachCount||0, clientCount:old?.clientCount||0,
               active:o.is_active!==false, brandColor:o.brand_color||'#ffa600',
@@ -756,7 +757,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .then(rows=>{
         if (Array.isArray(rows)&&rows.length) {
           setColorsColSupported(true)
-          setOrgs(prev=>prev.map(o=>{ const m=rows.find(r=>r.id===o.id); return m?{...o,brandColors:m.brand_colors||[]}:o }))
+          setOrgs((prev: any)=>prev.map((o: any)=>{ const m=rows.find(r=>r.id===o.id); return m?{...o,brandColors:m.brand_colors||[]}:o }))
         }
       }).catch(()=>{})
   }
@@ -778,13 +779,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     return dbGet('user_profiles','role=in.(coach,head_coach,client)&select=company_id,role,is_active')
       .then(rows=>{
         if (!Array.isArray(rows)) return
-        const counts = {}
+        const counts: Record<string, any> = {}
         rows.forEach(r=>{
           if (!r.company_id || r.is_active===false) return
           const c = counts[r.company_id] ||= { coaches:0, clients:0 }
           if (r.role==='client') c.clients++; else c.coaches++
         })
-        setOrgs(prev=>prev.map(o=>{
+        setOrgs((prev: any)=>prev.map((o: any)=>{
           const c = counts[o.id]
           return c ? { ...o, coachCount:c.coaches, clientCount:c.clients } : { ...o, coachCount:0, clientCount:0 }
         }))
@@ -825,13 +826,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       ...(colorsColSupported ? { brand_colors: manageOrg.brandColors||[] } : {}),
     })
     if (!ok) { alert("Couldn't save the organization changes — try again."); return }
-    setOrgs(prev=>prev.map(o=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
+    setOrgs((prev: any)=>prev.map((o: any)=>o.id===manageOrg.id?{...o,...manageOrg,name:manageOrg.name.trim()}:o))
     dbInsert('audit_logs',{ action:'org_updated', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'organization', target_id:manageOrg.id, details:{ name:manageOrg.name.trim(), plan:manageOrg.plan, active:!!manageOrg.active } }).catch(()=>{})
     setManageOrg(null)
   }
-  const tierOf = planName => packages.find(p=>(p.name||'').toLowerCase()===(planName||'').toLowerCase())
-  async function deletePackage(pkg) {
+  const tierOf = (planName: any) => packages.find(p=>(p.name||'').toLowerCase()===(planName||'').toLowerCase())
+  async function deletePackage(pkg: any) {
     if (!confirm(`Remove the "${pkg.name}" tier? Existing orgs on this tier will stop counting toward MRR until you move them to another tier.`)) return
     const ok = await dbUpdate('packages',`id=eq.${pkg.id}`,{ active:false })
     if (!ok) { alert("Couldn't remove this tier — try again."); return }
@@ -841,13 +842,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
 
   // ── Admin org context (loaded from Supabase) ─────────────
-  const [adminCompanyId,  setAdminCompanyId]  = useState(null)
-  const [adminProfileId,  setAdminProfileId]  = useState(null)
+  const [adminCompanyId,  setAdminCompanyId]  = useState<any>(null)
+  const [adminProfileId,  setAdminProfileId]  = useState<any>(null)
 
   // Admin notification bell removed — all notifications live in the app's top bell.
 
   // Real coaches from the database (merged with the demo coach so transfers/pickers show everyone)
-  const [dbCoaches, setDbCoaches] = useState([])
+  const [dbCoaches, setDbCoaches] = useState<any[]>([])
   useEffect(()=>{
     // Wait for the admin's company to resolve, then always scope — never expose other companies' coaches
     if (!adminCompanyId) return
@@ -867,22 +868,22 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbGet('user_profiles',`role=eq.client&company_id=eq.${adminCompanyId}&is_active=not.is.false${scope}&select=id,name,email,coach_id,update_day,created_at`)
       .then(rows=>{
         if (!Array.isArray(rows)) return
-        setClients(prev=>{
+        setClients((prev: any)=>{
           // Demo clients belong to the Eden org only — never show them to white-label admins
           const base = adminCompanyId===EDEN_ORG_ID
             ? prev
-            : prev.filter(c=>!DEMO_CLIENTS.some(d=>d.uuid===c.uuid))
+            : prev.filter((c: any)=>!DEMO_CLIENTS.some(d=>d.uuid===c.uuid))
           const byId = new Map(rows.map(r=>[r.id,r]))
-          const coachFor = id => [...DEMO_COACHES,...dbCoaches].find(c=>c.uuid===id)
+          const coachFor = (id: any) => [...DEMO_COACHES,...dbCoaches].find(c=>c.uuid===id)
           // Refresh coach assignment / check-in day on rows we already have
-          const updated = base.map(c=>{
+          const updated = base.map((c: any)=>{
             const r = byId.get(c.uuid)
             if (!r) return c
             const coach = coachFor(r.coach_id)
             return {...c, coachId:r.coach_id||null, coachName:coach?.name||c.coachName||'—', checkInDay:r.update_day||c.checkInDay}
           })
-          const have = new Set(updated.map(c=>c.uuid))
-          const haveEmail = new Set(updated.map(c=>(c.email||'').toLowerCase()))
+          const have = new Set(updated.map((c: any)=>c.uuid))
+          const haveEmail = new Set(updated.map((c: any)=>(c.email||'').toLowerCase()))
           const fresh = rows
             .filter(r=>!have.has(r.id)&&!haveEmail.has((r.email||'').toLowerCase()))
             .map(r=>{
@@ -913,12 +914,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     ...(adminCompanyId === EDEN_ORG_ID ? DEMO_COACHES : []),
     ...dbCoaches,
   ].filter(c=>!removedCoaches.includes(c.uuid))
-  const [lastAdded,       setLastAdded]       = useState(null) // shows setup card after addUser
+  const [lastAdded,       setLastAdded]       = useState<any>(null) // shows setup card after addUser
 
   // ── Admin Documents ───────────────────────────────────────
-  const [adminDocs,   setAdminDocs]   = useState([])
+  const [adminDocs,   setAdminDocs]   = useState<any[]>([])
   const [showAddDoc,  setShowAddDoc]  = useState(false)
-  const [newDoc,      setNewDoc]      = useState({doc_type:'note',title:'',content:'',file_url:''})
+  const [newDoc,      setNewDoc]      = useState<any>({doc_type:'note',title:'',content:'',file_url:''})
 
   useEffect(()=>{
     if (!email || isClient) return // resolve org context for all staff (admin, coach, head coach, VA)
@@ -933,7 +934,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   // Load admin docs for the currently selected client — a ref keeps the id
   // reachable from the long-lived realtime subscription without re-subscribing.
-  const selectedClientUuidRef = useRef(null)
+  const selectedClientUuidRef = useRef<any>(null)
   selectedClientUuidRef.current = selectedClient?.uuid||null
   function refreshAdminDocs() {
     const uuid = selectedClientUuidRef.current
@@ -944,7 +945,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
   useEffect(()=>{ refreshAdminDocs() },[selectedClient?.uuid])
 
-  const docTypeIcon = t=>DOC_TYPES.find(d=>d.v===t)?.icon||'📄'
+  const docTypeIcon = (t: any)=>DOC_TYPES.find(d=>d.v===t)?.icon||'📄'
 
   async function addAdminDoc() {
     if (!newDoc.title.trim()||!selectedClient?.uuid) return
@@ -964,13 +965,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setShowAddDoc(false)
   }
 
-  async function deleteAdminDoc(id) {
+  async function deleteAdminDoc(id: any) {
     await dbDelete('client_documents',`id=eq.${id}`)
     setAdminDocs(prev=>prev.filter(d=>d.id!==id))
   }
 
   // Compact renderer for documents routed into the Consultation tab sections
-  const renderDocRow = doc=>(
+  const renderDocRow = (doc: any)=>(
     <div key={doc.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
       <span style={{fontSize:16,flexShrink:0}}>{docTypeIcon(doc.doc_type)}</span>
       <div style={{flex:1,minWidth:0}}>
@@ -984,11 +985,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   )
 
   // ── Audit log ─────────────────────────────────────────────
-  const [auditLog, setAuditLog] = useState([])
+  const [auditLog, setAuditLog] = useState<any[]>([])
   // The REAL audit trail — same audit_logs table the Eden Admin Panel reads,
   // so both screens always show identical, permanent data.
-  const [dbAudit, setDbAudit] = useState(null)
-  const AUDIT_VERBS = {
+  const [dbAudit, setDbAudit] = useState<any>(null)
+  const AUDIT_VERBS: Record<string, any> = {
     login:'logged in', message_deleted:'deleted a message', message_restored:'restored a message',
     community_archived:'archived a community', community_restored:'restored a community', community_created:'created a community',
     course_granted:'granted a course', course_revoked:'revoked a course',
@@ -1004,13 +1005,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     checkin_day_changed:'changed check-in day for',
     profile_updated:'fixed name/email for',
   }
-  const auditIcon = a => a==='login'?'🔐':a==='profile_updated'?'✏️':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
+  const auditIcon = (a: any) => a==='login'?'🔐':a==='profile_updated'?'✏️':a==='login_failed'?'⚠️':a==='checkin_submitted'?'📋':a==='checkin_day_changed'?'🗓':a?.includes('course')?'🎓':a?.includes('package')?'📦':a?.includes('org')?'🏢':a?.includes('staff')||a==='user_added'?'👤':a?.includes('community')?'🏘':a?.includes('message')?'💬':a?.includes('client')?'👥':a==='start_date_changed'?'🗓':'⚡'
   const [audHasMore, setAudHasMore] = useState(false)
   const [audLoadingMore, setAudLoadingMore] = useState(false)
   // Request generation: every fresh query bumps the sequence; responses from an
   // older generation (superseded filters, stale Load-older) are discarded so a
   // slow request can't overwrite newer results or pagination state.
-  const audReqSeq = useRef(0)
+  const audReqSeq = useRef<number>(0)
   // Debounced copy of the search box — server queries fire on this, not each keystroke.
   // Declared before the load functions/effects below so first-load always sees it.
   const [audSearchQ, setAudSearchQ] = useState('')
@@ -1032,8 +1033,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       .then(r=>{
         if (seq!==audReqSeq.current) return // filters changed while loading — drop stale page
         if (Array.isArray(r)) {
-          setDbAudit(prev=>{
-            const seen = new Set((prev||[]).map(x=>x.id))
+          setDbAudit((prev: any)=>{
+            const seen = new Set((prev||[]).map((x: any)=>x.id))
             return [...(prev||[]), ...r.filter(x=>!seen.has(x.id))]
           })
           setAudHasMore(r.length>=AUD_PAGE)
@@ -1048,8 +1049,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [audSearch, setAudSearch] = useState('')
   useEffect(()=>{ const t=setTimeout(()=>setAudSearchQ(audSearch.trim()),350); return ()=>clearTimeout(t) },[audSearch])
   const [audTz, setAudTz] = useState(()=>{ try { return localStorage.getItem('audit_tz')||'local' } catch { return 'local' } })
-  function setAudTzPersist(v){ setAudTz(v); try { localStorage.setItem('audit_tz',v) } catch {} }
-  const audTime = iso => { try {
+  function setAudTzPersist(v: any){ setAudTz(v); try { localStorage.setItem('audit_tz',v) } catch {} }
+  const audTime = (iso: any) => { try {
     return new Date(iso).toLocaleString(undefined, audTz==='local' ? {} : { timeZone: audTz })
   } catch { return String(iso||'') } }
   const [audAction, setAudAction] = useState('all')
@@ -1059,23 +1060,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // Filter changes (incl. debounced search) re-query the server so results aren't limited to the loaded page
   useEffect(()=>{ if(isAdmin && tab==='audit') loadDbAudit() },[audFrom,audTo,audPerson,audAction,audSearchQ])
   // Preset ranges & jump-to-date — both just set audFrom/audTo, which re-query the server
-  const audDateStr = d => { const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` }
-  function audPreset(days){ const from=new Date(); from.setDate(from.getDate()-days); setAudFrom(audDateStr(from)); setAudTo('') }
-  const audPresetActive = days => { const from=new Date(); from.setDate(from.getDate()-days); return audFrom===audDateStr(from) && !audTo }
-  function audJumpToDate(v){ if(!v){ return } setAudFrom(v); setAudTo(v) }
-  const [audRestoring, setAudRestoring] = useState(null)
+  const audDateStr = (d: any) => { const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` }
+  function audPreset(days: any){ const from=new Date(); from.setDate(from.getDate()-days); setAudFrom(audDateStr(from)); setAudTo('') }
+  const audPresetActive = (days: any) => { const from=new Date(); from.setDate(from.getDate()-days); return audFrom===audDateStr(from) && !audTo }
+  function audJumpToDate(v: any){ if(!v){ return } setAudFrom(v); setAudTo(v) }
+  const [audRestoring, setAudRestoring] = useState<any>(null)
   const [audRestoredNow, setAudRestoredNow] = useState(new Set())
   // Dropdown options come from the WHOLE history (RLS-scoped single-column
   // queries, deduped client-side) — not just loaded pages — so an admin can
   // filter by a person/action whose events are all older than page 1.
-  const [audFacets, setAudFacets] = useState({ people:[], actions:[] })
+  const [audFacets, setAudFacets] = useState<any>({ people:[], actions:[] })
   const [audFacetsErr, setAudFacetsErr] = useState(false)
   const [audFacetsRetry, setAudFacetsRetry] = useState(0)
   useEffect(()=>{
     if (!isAdmin || tab!=='audit') return
     let alive = true
     setAudFacetsErr(false)
-    const fetcher = params => dbGet('audit_logs', params)
+    const fetcher = (params: any) => dbGet('audit_logs', params)
     Promise.all([
       fetchAuditFacet(fetcher, 'actor_name'),
       fetchAuditFacet(fetcher, 'action'),
@@ -1085,36 +1086,36 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   },[tab,audFacetsRetry])
   // Merge loaded rows + facets + current selection so options never vanish
   const audActions = useMemo(()=>Array.from(new Set([
-    ...audFacets.actions, ...(dbAudit||[]).map(r=>r.action), ...(audAction!=='all'?[audAction]:[]),
+    ...audFacets.actions, ...(dbAudit||[]).map((r: any)=>r.action), ...(audAction!=='all'?[audAction]:[]),
   ].filter(Boolean))),[audFacets,dbAudit,audAction])
   const audPeople  = useMemo(()=>Array.from(new Set([
-    ...audFacets.people, ...(dbAudit||[]).map(r=>r.actor_name), ...(audPerson!=='all'?[audPerson]:[]),
+    ...audFacets.people, ...(dbAudit||[]).map((r: any)=>r.actor_name), ...(audPerson!=='all'?[audPerson]:[]),
   ].filter(Boolean))).sort(),[audFacets,dbAudit,audPerson])
   const audShown   = useMemo(()=>{
     let list = dbAudit||[]
-    if (audAction!=='all') list = list.filter(r=>r.action===audAction)
-    if (audPerson!=='all') list = list.filter(r=>r.actor_name===audPerson)
-    if (audFrom) list = list.filter(r=>(r.created_at||'')>=audFrom)
-    if (audTo)   list = list.filter(r=>(r.created_at||'').slice(0,10)<=audTo)
+    if (audAction!=='all') list = list.filter((r: any)=>r.action===audAction)
+    if (audPerson!=='all') list = list.filter((r: any)=>r.actor_name===audPerson)
+    if (audFrom) list = list.filter((r: any)=>(r.created_at||'')>=audFrom)
+    if (audTo)   list = list.filter((r: any)=>(r.created_at||'').slice(0,10)<=audTo)
     const q = audSearch.trim().toLowerCase()
-    if (q) list = list.filter(r=>
+    if (q) list = list.filter((r: any)=>
       (r.actor_name||'').toLowerCase().includes(q) ||
       (r.action||'').toLowerCase().includes(q) ||
       JSON.stringify(r.details||{}).toLowerCase().includes(q) ||
       (r.target_type||'').toLowerCase().includes(q))
     return list
   },[dbAudit,audAction,audPerson,audFrom,audTo,audSearch])
-  const AUD_RESTORE_TABLE = { community:'communities', community_message:'community_messages', team_message:'team_messages', message:'messages' }
+  const AUD_RESTORE_TABLE: Record<string, any> = { community:'communities', community_message:'community_messages', team_message:'team_messages', message:'messages' }
   const audUndone = useMemo(()=>{
     const s = new Set()
-    ;(dbAudit||[]).forEach(r=>{ if(r.action==='community_restored'||r.action==='message_restored') s.add(`${r.target_type}:${r.target_id}`) })
+    ;(dbAudit||[]).forEach((r: any)=>{ if(r.action==='community_restored'||r.action==='message_restored') s.add(`${r.target_type}:${r.target_id}`) })
     return s
   },[dbAudit])
-  const audCanRestore = r =>
+  const audCanRestore = (r: any) =>
     (r.action==='community_archived'||r.action==='message_deleted') &&
     r.target_id && AUD_RESTORE_TABLE[r.target_type] &&
     !audUndone.has(`${r.target_type}:${r.target_id}`) && !audRestoredNow.has(r.id)
-  async function audRestore(r) {
+  async function audRestore(r: any) {
     const table = AUD_RESTORE_TABLE[r.target_type]
     const label = r.target_type==='community' ? `community "${r.details?.name||''}"` : 'this message'
     if (!confirm(`Restore ${label}? It will become visible again.`)) return
@@ -1129,7 +1130,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       target_type:r.target_type, target_id:r.target_id, details:{ ...(r.details||{}), restored_from:r.id } })
       .then(()=>loadDbAudit()).catch(()=>{})
   }
-  const dbAuditRow = r => {
+  const dbAuditRow = (r: any) => {
     const d = r.details||{}
     // profile_updated rows carry { old:{name,email}, new:{name,email} } — show plain-language old → new lines
     const profChanges = r.action==='profile_updated' && d.old && d.new ? [
@@ -1154,9 +1155,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     }
   }
   function audExportCsv() {
-    const esc = v => { const s = String(v==null?'':v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s }
+    const esc = (v: any) => { const s = String(v==null?'':v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s }
     const lines = [['Timestamp','Actor','Action','Target','Details'].join(',')]
-    audShown.forEach(r=>{ const a=dbAuditRow(r); lines.push([a.time,a.actor,a.action,a.target,a.detail].map(esc).join(',')) })
+    audShown.forEach((r: any)=>{ const a=dbAuditRow(r); lines.push([a.time,a.actor,a.action,a.target,a.detail].map(esc).join(',')) })
     const blob = new Blob(['\uFEFF'+lines.join('\r\n')], { type:'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const aEl = document.createElement('a')
@@ -1176,7 +1177,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     try { return JSON.parse(localStorage.getItem('eden_client_coach_map') || '{}') } catch { return {} }
   })
   // Support staff (VAs, head coaches, etc.) loaded from the database
-  const [supportStaff, setSupportStaff] = useState([])
+  const [supportStaff, setSupportStaff] = useState<any[]>([])
   useEffect(()=>{
     dbGet('user_profiles','role=in.(va,head_coach,staff)&select=id,name,full_name,email,role&order=created_at.asc')
       .then(rows=>{ if(Array.isArray(rows)) setSupportStaff(rows) }).catch(()=>{})
@@ -1185,7 +1186,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [headCoaches, setHeadCoaches] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eden_head_coaches') || '[]') } catch { return [] }
   })
-  function promoteToHeadCoach(coach) {
+  function promoteToHeadCoach(coach: any) {
     const next = [...new Set([...headCoaches, coach.uuid])]
     setHeadCoaches(next)
     localStorage.setItem('eden_head_coaches', JSON.stringify(next))
@@ -1196,8 +1197,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbInsert('audit_logs',{ action:'staff_promoted', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:coach.uuid||null, details:{ name:coach.name } }).catch(()=>{})
   }
-  function demoteFromHeadCoach(coach) {
-    const next = headCoaches.filter(id=>id!==coach.uuid)
+  function demoteFromHeadCoach(coach: any) {
+    const next = headCoaches.filter((id: any)=>id!==coach.uuid)
     setHeadCoaches(next)
     localStorage.setItem('eden_head_coaches', JSON.stringify(next))
     dbUpdate('user_profiles',`email=eq.${encodeURIComponent(coach.email)}`,{role:'coach'})
@@ -1211,7 +1212,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // every device (coach, admin, anywhere) sees the same state. Runs on mount
   // and then polls, so a second open admin session picks up changes made
   // elsewhere without a page reload.
-  const allCoachesRef = useRef([])
+  const allCoachesRef = useRef<any[]>([])
   allCoachesRef.current = allCoaches
   function syncLifecycleFromDb() {
     // Head coach designations from DB (source of truth)
@@ -1229,7 +1230,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbGet('user_profiles','role=eq.client&select=email,is_active,coach_id')
       .then(rows=>{
         if (!Array.isArray(rows)) return
-        setDeactivatedMap(prev=>{
+        setDeactivatedMap((prev: any)=>{
           const next = { ...prev }
           rows.forEach(r=>{
             if (r.is_active===false && !next[r.email]) next[r.email] = { at:'', name:'', fromDb:true }
@@ -1239,7 +1240,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
           return next
         })
-        setClientCoachMap(prev=>{
+        setClientCoachMap((prev: any)=>{
           const next = { ...prev }
           rows.forEach(r=>{ if (r.coach_id) next[r.email] = r.coach_id })
           localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
@@ -1252,9 +1253,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         if (!Array.isArray(rows)) return
         const inactive = new Set(rows.filter(r=>r.is_active===false).map(r=>r.id))
         const active   = new Set(rows.filter(r=>r.is_active!==false).map(r=>r.id))
-        setRemovedCoaches(prev=>{
+        setRemovedCoaches((prev: any)=>{
           // DB is the source of truth: add coaches removed elsewhere, drop restored ones
-          const next = [...new Set([...prev.filter(id=>!active.has(id)), ...inactive])]
+          const next = [...new Set([...prev.filter((id: any)=>!active.has(id)), ...inactive])]
           if (next.length===prev.length && next.every(id=>prev.includes(id))) return prev
           localStorage.setItem('eden_removed_coaches', JSON.stringify(next))
           return next
@@ -1271,7 +1272,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // With RLS on, realtime only delivers rows the subscriber may see — authenticate the channel.
     try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
     let realtimeUp = false
-    let debounce = null
+    let debounce: any = null
     const scheduleSync = ()=>{
       // Coalesce bursts of row events into a single refresh
       clearTimeout(debounce)
@@ -1279,8 +1280,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     }
     // Same debounce pattern for the other admin-visible tables — each table gets
     // its own timer so a burst on one doesn't delay a refresh of another.
-    const timers = {}
-    const debounced = fn => ()=>{ clearTimeout(timers[fn.name]); timers[fn.name] = setTimeout(fn, 250) }
+    const timers: Record<string, any> = {}
+    const debounced = (fn: any) => ()=>{ clearTimeout(timers[fn.name]); timers[fn.name] = setTimeout(fn, 250) }
     let channel = sb
       .channel('admin-lifecycle')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, scheduleSync)
@@ -1313,28 +1314,28 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   const [archiveOpen,       setArchiveOpen]       = useState(false)
   const [showTransferModal, setShowTransferModal]  = useState(false)  // coach removal modal
-  const [pendingRemoval,    setPendingRemoval]     = useState(null)   // coach being removed
+  const [pendingRemoval,    setPendingRemoval]     = useState<any>(null)   // coach being removed
   const [transferTargetId,  setTransferTargetId]   = useState('')
 
   // ── Lifecycle helpers ─────────────────────────────────────────
-  function isDeactivated(client) { return !!deactivatedMap[client.email] }
+  function isDeactivated(client: any) { return !!deactivatedMap[client.email] }
 
-  function effectiveCoachId(client) {
+  function effectiveCoachId(client: any) {
     return clientCoachMap[client.email] || client.coachId
   }
-  function effectiveCoachName(client) {
+  function effectiveCoachName(client: any) {
     const cid = effectiveCoachId(client)
     return allCoaches.find(c=>c.uuid===cid)?.name || client.coachName || 'Unassigned'
   }
 
-  function addAudit(actor, action, target, detail) {
+  function addAudit(actor: any, action: any, target: any, detail: any) {
     setAuditLog(prev=>[{
       id: Date.now(), actor, action, target, detail,
       time: new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
     }, ...prev])
   }
 
-  function deactivateClient(client) {
+  function deactivateClient(client: any) {
     const next = { ...deactivatedMap, [client.email]: { at: new Date().toISOString(), name: client.name, coachName: effectiveCoachName(client) } }
     setDeactivatedMap(next)
     localStorage.setItem('eden_deactivated_clients', JSON.stringify(next))
@@ -1348,7 +1349,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (selectedClient?.uuid === client.uuid) setSelectedClient({ ...client, _deactivated: true })
   }
 
-  function reactivateClient(client) {
+  function reactivateClient(client: any) {
     const next = { ...deactivatedMap }
     delete next[client.email]
     setDeactivatedMap(next)
@@ -1363,7 +1364,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setSelectedClient({ ...client, _deactivated: false })
   }
 
-  function transferClient(clientEmail, newCoachUuid, hadCoach = true) {
+  function transferClient(clientEmail: any, newCoachUuid: any, hadCoach = true) {
     const next = { ...clientCoachMap, [clientEmail]: newCoachUuid }
     setClientCoachMap(next)
     localStorage.setItem('eden_client_coach_map', JSON.stringify(next))
@@ -1386,7 +1387,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       target_type:'user_profile', details:{ name:clientEmail } }).catch(()=>{})
   }
 
-  function confirmRemoveCoach(coach) {
+  function confirmRemoveCoach(coach: any) {
     const available = allCoaches.filter(c=>c.uuid!==coach.uuid&&!removedCoaches.includes(c.uuid))
     setPendingRemoval(coach)
     setTransferTargetId(available[0]?.uuid||'')
@@ -1395,7 +1396,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
   function executeRemoveCoach() {
     if (!pendingRemoval) return
-    const activeCoachClients = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
+    const activeCoachClients = clients.filter((c: any)=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
     // Guard: never remove a coach while active clients have nowhere to go
     if (activeCoachClients.length>0 && !transferTargetId) {
       alert('This coach still has active clients. Select a coach to transfer them to first.')
@@ -1403,7 +1404,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     }
     const targetCoach = allCoaches.find(c=>c.uuid===transferTargetId)
     let transferred = 0
-    activeCoachClients.forEach(c=>{
+    activeCoachClients.forEach((c: any)=>{
       transferClient(c.email, transferTargetId)
       addAudit(info.name,'Transferred client',c.name,`→ ${targetCoach?.name||'New Coach'}`)
       transferred++
@@ -1424,14 +1425,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     setPendingRemoval(null)
   }
 
-  function markViewed(clientId) {
-    setClients(prev=>prev.map(c=>c.uuid===clientId?{...c,hasUpdate:false}:c))
-    setSelectedClient(prev=>prev?.uuid===clientId?{...prev,hasUpdate:false}:prev)
+  function markViewed(clientId: any) {
+    setClients((prev: any)=>prev.map((c: any)=>c.uuid===clientId?{...c,hasUpdate:false}:c))
+    setSelectedClient((prev: any)=>prev?.uuid===clientId?{...prev,hasUpdate:false}:prev)
   }
 
-  const [consultBack, setConsultBack] = useState(null) // client to return to when Consultation was opened from Client Tools
-  const openClientRef = useRef(null) // which client's consultation data is currently loading
-  function openClient(client) {
+  const [consultBack, setConsultBack] = useState<any>(null) // client to return to when Consultation was opened from Client Tools
+  const openClientRef = useRef<any>(null) // which client's consultation data is currently loading
+  function openClient(client: any) {
     setSelectedClient(client)
     // The last-clicked client is the Loom spotlight: only they show by name when
     // Loom Mode is (or gets turned) on — everyone else stays hidden
@@ -1456,8 +1457,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         if (Array.isArray(rows) && rows.length > 0) {
           const day = rows[0].update_day
           const sd  = rows[0].start_date || ''
-          setClients(prev => prev.map(c => c.uuid === client.uuid ? {...c, ...(day?{checkInDay:day}:{}), startDate: sd} : c))
-          setSelectedClient(prev => prev?.uuid === client.uuid ? {...prev, ...(day?{checkInDay:day}:{}), startDate: sd} : prev)
+          setClients((prev: any) => prev.map((c: any) => c.uuid === client.uuid ? {...c, ...(day?{checkInDay:day}:{}), startDate: sd} : c))
+          setSelectedClient((prev: any) => prev?.uuid === client.uuid ? {...prev, ...(day?{checkInDay:day}:{}), startDate: sd} : prev)
         }
       })
   }
@@ -1538,8 +1539,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
 
   // ── Fix a typo in a user's name or email (admin only, audited server-side) ──
-  const [editIdentity, setEditIdentity] = useState(null) // {id, oldName, oldEmail, name, email, saving}
-  function openEditIdentity(u) { // u: {uuid/id, name, email}
+  const [editIdentity, setEditIdentity] = useState<any>(null) // {id, oldName, oldEmail, name, email, saving}
+  function openEditIdentity(u: any) { // u: {uuid/id, name, email}
     setEditIdentity({ id: u.uuid || u.id, oldName: u.name || u.full_name || '', oldEmail: u.email || '',
       name: u.name || u.full_name || '', email: u.email || '', saving: false })
   }
@@ -1552,17 +1553,17 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const nameChanged  = name !== editIdentity.oldName
     const emailChanged = emailNew !== (editIdentity.oldEmail||'').toLowerCase()
     if (!nameChanged && !emailChanged) { setEditIdentity(null); return }
-    setEditIdentity(p=>({ ...p, saving:true }))
+    setEditIdentity((p: any)=>({ ...p, saving:true }))
     const res = await updateIdentity(editIdentity.id, name, emailNew)
     if (!res.ok) {
-      setEditIdentity(p=>({ ...p, saving:false }))
+      setEditIdentity((p: any)=>({ ...p, saving:false }))
       alert(`Couldn't save the changes: ${res.error||'please try again'}`)
       return
     }
     const oldEmail = editIdentity.oldEmail
     // Sync every place the old name/email lives in local state
-    setClients(prev=>prev.map(c=>c.uuid===editIdentity.id?{...c,name,email:emailNew}:c))
-    setSelectedClient(prev=>prev?.uuid===editIdentity.id?{...prev,name,email:emailNew}:prev)
+    setClients((prev: any)=>prev.map((c: any)=>c.uuid===editIdentity.id?{...c,name,email:emailNew}:c))
+    setSelectedClient((prev: any)=>prev?.uuid===editIdentity.id?{...prev,name,email:emailNew}:prev)
     setSupportStaff(prev=>prev.map(s=>s.id===editIdentity.id?{...s,name,email:emailNew}:s))
     if (emailChanged && oldEmail) {
       // Local lifecycle caches are keyed by email — migrate the keys
@@ -1591,7 +1592,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   // Nudge a staff member's open session to re-read their staff_meta instantly.
   // Uses a Supabase broadcast channel (no table publication needed) — App.tsx
   // listens on 'staff-meta-<profileId>' for the 'staff-meta-changed' event.
-  function notifyStaffMetaChanged(profileId) {
+  function notifyStaffMetaChanged(profileId: any) {
     try {
       const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
       try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
@@ -1610,8 +1611,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
 
   // ── Edit an existing staff member's title + tab access (staff_meta:<id>) ──
-  const [editStaff, setEditStaff] = useState(null) // {id, name, label, tabs:{home,msgs,team}, saving}
-  async function openEditStaff(s) {
+  const [editStaff, setEditStaff] = useState<any>(null) // {id, name, label, tabs:{home,msgs,team}, saving}
+  async function openEditStaff(s: any) {
     // Load their current staff_meta (may not exist yet — defaults to all tabs)
     let label = '', tabs = { home:true, msgs:true, team:true }
     try {
@@ -1630,7 +1631,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (!editStaff) return
     const tabList = ['home','msgs','team'].filter(k=>editStaff.tabs[k])
     const meta = { label: editStaff.label.trim() || null, tabs: tabList.length ? tabList : ['team'] }
-    setEditStaff(p=>({ ...p, saving:true }))
+    setEditStaff((p: any)=>({ ...p, saving:true }))
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
         method:'POST',
@@ -1645,7 +1646,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       setEditStaff(null)
       alert('Saved. The change applies to their session right away.')
     } catch(e) {
-      setEditStaff(p=>({ ...p, saving:false }))
+      setEditStaff((p: any)=>({ ...p, saving:false }))
       alert("Couldn't save these changes — please try again.")
     }
   }
@@ -1671,7 +1672,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const tempPass = `Eden${Math.random().toString(36).slice(2,6).toUpperCase()}${Math.floor(10+Math.random()*90)}!`
 
     // org_admin = a white-label company's admin: stored as super_admin scoped to their org
-    const targetOrg = newUser.role==='org_admin' ? orgs.find(o=>o.name===newUser.orgName&&o.isWhiteLabel) : null
+    const targetOrg = newUser.role==='org_admin' ? orgs.find((o: any)=>o.name===newUser.orgName&&o.isWhiteLabel) : null
     if (newUser.role==='org_admin' && !targetOrg) { alert('Pick which organization this admin belongs to.'); return }
 
     // Staff custom title + tab access ride along so the server saves them too
@@ -1730,7 +1731,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       lastSeen:   'Never',
       active:     true,
     }
-    if (newUser.role==='client') setClients(prev=>[...prev,localUser])
+    if (newUser.role==='client') setClients((prev: any)=>[...prev,localUser])
     if (newUser.role==='va'||newUser.role==='head_coach')
       setSupportStaff(prev=>[...prev,{ id:localUser.uuid, name:localUser.name, email:localUser.email, role:newUser.role }])
 
@@ -1788,25 +1789,25 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       ])
       let seedOk = true
       if (edenHabits?.length) {
-        const r = await dbInsert('company_habits', edenHabits.map(h=>({name:h.name, default_target:h.default_target, company_id:dbId})))
+        const r = await dbInsert('company_habits', edenHabits.map((h: any)=>({name:h.name, default_target:h.default_target, company_id:dbId})))
         if (!r) seedOk = false
       }
       if (edenCardio?.length) {
-        const r = await dbInsert('company_cardio_types', edenCardio.map(t=>({name:t.name, company_id:dbId})))
+        const r = await dbInsert('company_cardio_types', edenCardio.map((t: any)=>({name:t.name, company_id:dbId})))
         if (!r) seedOk = false
       }
       if (edenSupps?.length) {
-        const r = await dbInsert('company_supplements', edenSupps.map(s=>({...s, company_id:dbId})))
+        const r = await dbInsert('company_supplements', edenSupps.map((s: any)=>({...s, company_id:dbId})))
         if (!r) seedOk = false
       }
       if (edenFoods?.length) {
-        const r = await dbInsert('company_foods', edenFoods.map(f=>({...f, company_id:dbId})))
+        const r = await dbInsert('company_foods', edenFoods.map((f: any)=>({...f, company_id:dbId})))
         if (!r) seedOk = false
       }
       // Resource links: copy Eden's list if Eden has customized one; otherwise seed the built-in defaults
       const linkSeed = (Array.isArray(edenLinks)&&edenLinks.length)
         ? edenLinks.map(l=>({...l, company_id:dbId}))
-        : DEFAULT_RESOURCE_LINKS.map(([label,url,note],i)=>({label,url,note:note||'',sort_order:i,company_id:dbId}))
+        : DEFAULT_RESOURCE_LINKS.map(([label,url,note]: any,i: any)=>({label,url,note:note||'',sort_order:i,company_id:dbId}))
       const rl = await dbInsert('company_resource_links', linkSeed)
       if (!rl) seedOk = false
       if (!seedOk) alert('The organization was created, but copying your starter habit/cardio/supplement lists into it failed. You can re-add them manually, or delete and recreate the organization.')
@@ -1824,25 +1825,25 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       active:       true,
       brandColor:   newOrg.brandColor,
     }
-    setOrgs(prev=>[...prev,org])
+    setOrgs((prev: any)=>[...prev,org])
     setNewOrg({name:'',slug:'',brandColor:'#ffa600',brandColors:[],calendarUrl:'',billingEmail:'',plan:'standard'})
     setShowNewOrg(false)
     alert(`${newOrg.name} organization created. Now add their admin user using the + Add User button.`)
   }
 
   // ── Filtered client lists (active vs archived) ───────────
-  const filteredClients = clients.filter(c=>{
+  const filteredClients = clients.filter((c: any)=>{
     if (isDeactivated(c)) return false  // active only
     const ms = !clientSearch||c.name.toLowerCase().includes(clientSearch.toLowerCase())||c.email.toLowerCase().includes(clientSearch.toLowerCase())
     const mc = filterCoach==='All Coaches'||effectiveCoachName(c)===filterCoach
     return ms&&mc
-  }).sort((a,b)=>{
+  }).sort((a: any,b: any)=>{
     if (a.hasUpdate && !b.hasUpdate) return -1
     if (!a.hasUpdate && b.hasUpdate) return 1
     return 0
   })
 
-  const archivedClients = clients.filter(c=>{
+  const archivedClients = clients.filter((c: any)=>{
     if (!isDeactivated(c)) return false
     const ms = !clientSearch||c.name.toLowerCase().includes(clientSearch.toLowerCase())||c.email.toLowerCase().includes(clientSearch.toLowerCase())
     const mc = filterCoach==='All Coaches'||effectiveCoachName(c)===filterCoach
@@ -1919,8 +1920,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <span style={{fontSize:11,color:C.muted}}>{todayDay}</span>
             </div>
             {allCoaches.map(coach=>{
-              const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
-              const submitted    = coachClients.filter(c=>weekSubs.has(c.uuid)).length
+              const coachClients = clients.filter((c: any)=>effectiveCoachId(c)===coach.uuid)
+              const submitted    = coachClients.filter((c: any)=>weekSubs.has(c.uuid)).length
               const dl = coachDeadlines[coach.uuid]||{}
               return (
                 <div key={coach.uuid} style={{padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
@@ -1962,7 +1963,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           <Card sx={{marginBottom:14}}>
             <Lbl t="Recent Activity"/>
             {(dbAudit||[]).length===0&&<div style={{fontSize:11,color:C.muted,padding:'6px 0'}}>No recent activity yet.</div>}
-            {(dbAudit||[]).slice(0,5).map(dbAuditRow).map(a=>(
+            {(dbAudit||[]).slice(0,5).map(dbAuditRow).map((a: any)=>(
               <div key={a.id} style={{padding:'9px 0',borderTop:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'flex-start'}}>
                 <div style={{width:32,height:32,borderRadius:8,background:`${C.gold}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>
                   {a.icon}
@@ -2029,14 +2030,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               {filteredClients.length===0&&(
                 <div style={{padding:24,textAlign:'center',color:C.muted,fontSize:13}}>No clients found</div>
               )}
-              {filteredClients.map((client, idx)=>{
+              {filteredClients.map((client: any, idx: any)=>{
                 const featured = loomFeatured.has(client.name) || loomIsShown(client.name)
                 const hidden   = loomMode && !featured
                 const dispName = hidden ? `Client ${String.fromCharCode(65 + idx)}` : client.name
                 const dispInitial = hidden ? '?' : client.name[0]
-                function toggleFeatured(e) {
+                function toggleFeatured(e: any) {
                   e.stopPropagation()
-                  setLoomFeatured(prev => {
+                  setLoomFeatured((prev: any) => {
                     const next = new Set(prev)
                     if (next.has(client.name)) next.delete(client.name)
                     else next.add(client.name)
@@ -2096,7 +2097,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   </span>
                   <span style={{fontSize:14,color:C.muted,transform:archiveOpen?'rotate(0)':'rotate(-90deg)',transition:'transform .2s'}}>▾</span>
                 </button>
-                {archiveOpen&&archivedClients.map(client=>(
+                {archiveOpen&&archivedClients.map((client: any)=>(
                   <div key={client.uuid} style={{borderTop:`1px solid ${C.border}`,position:'relative'}}>
                     <button onClick={()=>openClient(client)}
                       style={{width:'100%',textAlign:'left',background:selectedClient?.uuid===client.uuid?`${C.dim}33`:C.surface,border:'none',padding:'10px 14px 10px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,opacity:0.7}}>
@@ -2150,14 +2151,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     onChange={async e=>{
                       const day = e.target.value
                       const prevDay = selectedClient.checkInDay
-                      setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,checkInDay:day}:c))
-                      setSelectedClient(prev=>({...prev,checkInDay:day}))
+                      setClients((prev: any)=>prev.map((c: any)=>c.uuid===selectedClient.uuid?{...c,checkInDay:day}:c))
+                      setSelectedClient((prev: any)=>({...prev,checkInDay:day}))
                       const ok = await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{update_day:day})
                       if (ok) dbInsert('audit_logs',{ action:'checkin_day_changed', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
                         target_type:'user_profile', target_id:selectedClient.uuid, details:{ name:selectedClient.name, from:prevDay||null, to:day } }).catch(()=>{})
                       if (!ok) {
-                        setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,checkInDay:prevDay}:c))
-                        setSelectedClient(prev=>({...prev,checkInDay:prevDay}))
+                        setClients((prev: any)=>prev.map((c: any)=>c.uuid===selectedClient.uuid?{...c,checkInDay:prevDay}:c))
+                        setSelectedClient((prev: any)=>({...prev,checkInDay:prevDay}))
                         alert("Couldn't save the update day — try again.")
                       }
                     }}
@@ -2174,14 +2175,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       onChange={async e=>{
                         const sd = e.target.value
                         const prevSd = selectedClient.startDate
-                        setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,startDate:sd}:c))
-                        setSelectedClient(prev=>({...prev,startDate:sd}))
+                        setClients((prev: any)=>prev.map((c: any)=>c.uuid===selectedClient.uuid?{...c,startDate:sd}:c))
+                        setSelectedClient((prev: any)=>({...prev,startDate:sd}))
                         const ok = await dbUpdate('user_profiles',`id=eq.${selectedClient.uuid}`,{start_date:sd||null})
                         if (ok) dbInsert('audit_logs',{ action:'start_date_changed', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
                           target_type:'user_profile', target_id:selectedClient.uuid, details:{ name:selectedClient.name, from:prevSd||null, to:sd||null } }).catch(()=>{})
                         if (!ok) {
-                          setClients(prev=>prev.map(c=>c.uuid===selectedClient.uuid?{...c,startDate:prevSd}:c))
-                          setSelectedClient(prev=>({...prev,startDate:prevSd}))
+                          setClients((prev: any)=>prev.map((c: any)=>c.uuid===selectedClient.uuid?{...c,startDate:prevSd}:c))
+                          setSelectedClient((prev: any)=>({...prev,startDate:prevSd}))
                           alert("Couldn't save the start date — try again.")
                         }
                       }}
@@ -2257,7 +2258,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         <div style={{display:'flex',gap:8}}>
                           <select
                             defaultValue=""
-                            onChange={e=>{ if(e.target.value){ transferClient(selectedClient.email,e.target.value,!!effectiveCoachId(selectedClient)); setSelectedClient(prev=>({...prev,coachName:allCoaches.find(c=>c.uuid===e.target.value)?.name||prev.coachName})) }}}
+                            onChange={e=>{ if(e.target.value){ transferClient(selectedClient.email,e.target.value,!!effectiveCoachId(selectedClient)); setSelectedClient((prev: any)=>({...prev,coachName:allCoaches.find(c=>c.uuid===e.target.value)?.name||prev.coachName})) }}}
                             style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}>
                             <option value="">Current: {effectiveCoachName(selectedClient)}</option>
                             {allCoaches.filter(c=>!removedCoaches.includes(c.uuid)).map(c=>(
@@ -2373,7 +2374,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.muted,fontSize:12,cursor:'pointer'}}>
                 🏷 Manage Roles
               </button>
-              <button onClick={()=>{setShowNewUser(true);setNewUser(p=>({...p,role:'staff'}))}}
+              <button onClick={()=>{setShowNewUser(true);setNewUser((p: any)=>({...p,role:'staff'}))}}
                 style={{background:'none',border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.gold,fontSize:12,cursor:'pointer'}}>
                 + Add Team Member
               </button>
@@ -2382,10 +2383,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           {allCoaches.map(coach=>{
             const isRemoved    = removedCoaches.includes(coach.uuid)
             const isHC         = headCoaches.includes(coach.uuid)
-            const coachClients = clients.filter(c=>effectiveCoachId(c)===coach.uuid)
-            const activeClients   = coachClients.filter(c=>!isDeactivated(c))
-            const archivedByCoach = coachClients.filter(c=>isDeactivated(c))
-            const pending      = activeClients.filter(c=>c.hasUpdate).length
+            const coachClients = clients.filter((c: any)=>effectiveCoachId(c)===coach.uuid)
+            const activeClients   = coachClients.filter((c: any)=>!isDeactivated(c))
+            const archivedByCoach = coachClients.filter((c: any)=>isDeactivated(c))
+            const pending      = activeClients.filter((c: any)=>c.hasUpdate).length
             return (
               <Card key={coach.uuid} sx={{marginBottom:10,opacity:isRemoved?0.55:1,border:`1px solid ${isRemoved?C.danger+'33':C.border}`}}>
                 <div style={{display:'flex',flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center',gap:12}}>
@@ -2442,7 +2443,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
                     <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Active Clients — click to open</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {activeClients.map(c=>(
+                      {activeClients.map((c: any)=>(
                         <button key={c.uuid}
                           onClick={()=>{ openClient(c); setTab('clients') }}
                           style={{fontSize:11,background:c.hasUpdate?`${C.gold}22`:C.surface,border:`1px solid ${c.hasUpdate?C.gold+'44':C.border}`,borderRadius:6,padding:'4px 10px',color:c.hasUpdate?C.gold:C.white,cursor:'pointer'}}>
@@ -2457,7 +2458,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
                     <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🗄 Archived / Deactivated</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {archivedByCoach.map(c=>(
+                      {archivedByCoach.map((c: any)=>(
                         <button key={c.uuid}
                           onClick={()=>{ openClient(c); setTab('clients') }}
                           style={{fontSize:11,background:`${C.danger}11`,border:`1px solid ${C.danger}33`,borderRadius:6,padding:'4px 10px',color:C.muted,cursor:'pointer'}}>
@@ -2510,7 +2511,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     </button>
                   </div>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Custom Title</div>
-                  <input value={editStaff.label} onChange={e=>setEditStaff(p=>({...p,label:e.target.value}))}
+                  <input value={editStaff.label} onChange={e=>setEditStaff((p: any)=>({...p,label:e.target.value}))}
                     placeholder="e.g. Closer, Sales Mentor (blank = default role)"
                     style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',marginBottom:10}}/>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Access</div>
@@ -2518,13 +2519,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     {[['home','Dashboard'],['msgs','Messages'],['team','Team Hub']].map(([k,lbl])=>(
                       <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
                         <input type="checkbox" checked={!!editStaff.tabs[k]}
-                          onChange={e=>setEditStaff(p=>({...p,tabs:{...p.tabs,[k]:e.target.checked}}))}/>
+                          onChange={e=>setEditStaff((p: any)=>({...p,tabs:{...p.tabs,[k]:e.target.checked}}))}/>
                         {lbl}
                       </label>
                     ))}
                   </div>
                   {!editStaff.tabs.home&&!editStaff.tabs.msgs&&!editStaff.tabs.team&&(
-                    <div style={{fontSize:10,color:C.warning||'#e8b74f',marginBottom:8}}>With nothing checked they'll get Team Hub only.</div>
+                    <div style={{fontSize:10,color:(C as any).warning||'#e8b74f',marginBottom:8}}>With nothing checked they'll get Team Hub only.</div>
                   )}
                   <div style={{display:'flex',gap:8}}>
                     <button onClick={saveEditStaff} disabled={editStaff.saving}
@@ -2566,7 +2567,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </div>
             {!pkgsLoaded && <div style={{fontSize:11,color:C.muted}}>Loading tiers…</div>}
             {pkgsLoaded && packages.length===0 && (
-              <div style={{fontSize:11,color:C.warning||'#e8b74f',marginBottom:10}}>
+              <div style={{fontSize:11,color:(C as any).warning||'#e8b74f',marginBottom:10}}>
                 No tiers yet — add your first one below. (If adding fails, the packages table hasn't been created in the database yet.)
               </div>
             )}
@@ -2574,19 +2575,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <div key={pkg.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:C.surface,borderRadius:8,marginBottom:6}}>
                 {editPkg?.id===pkg.id ? (
                   <>
-                    <input value={editPkg.name} onChange={e=>setEditPkg(p=>({...p,name:e.target.value}))}
+                    <input value={editPkg.name} onChange={e=>setEditPkg((p: any)=>({...p,name:e.target.value}))}
                       style={{flex:2,background:C.card,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none'}}/>
                     <div style={{display:'flex',alignItems:'center',gap:4,flex:1}}>
                       <span style={{fontSize:12,color:C.muted}}>$</span>
-                      <input value={editPkg.price} onChange={e=>setEditPkg(p=>({...p,price:e.target.value}))} inputMode="decimal"
+                      <input value={editPkg.price} onChange={e=>setEditPkg((p: any)=>({...p,price:e.target.value}))} inputMode="decimal"
                         style={{width:'100%',background:C.card,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:12,outline:'none'}}/>
                       <span style={{fontSize:11,color:C.muted}}>/mo</span>
                     </div>
                     <label style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>
-                      <input type="checkbox" checked={!!editPkg.includes_recipes} onChange={e=>setEditPkg(p=>({...p,includes_recipes:e.target.checked}))}/>🍽 Recipe Book
+                      <input type="checkbox" checked={!!editPkg.includes_recipes} onChange={e=>setEditPkg((p: any)=>({...p,includes_recipes:e.target.checked}))}/>🍽 Recipe Book
                     </label>
                     <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
-                      <input type="checkbox" checked={!!editPkg.includes_courses} onChange={e=>setEditPkg(p=>({...p,includes_courses:e.target.checked}))}/>🎓 Learn tab (make their own courses)
+                      <input type="checkbox" checked={!!editPkg.includes_courses} onChange={e=>setEditPkg((p: any)=>({...p,includes_courses:e.target.checked}))}/>🎓 Learn tab (make their own courses)
                     </label>
                     <button onClick={savePackage}
                       style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>Save</button>
@@ -2616,7 +2617,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       </button>
                       {(()=>{ const list = edenCourses.filter(c=>Array.isArray(c.tiers)&&c.tiers.includes(pkg.id)); return (
                         <div style={{marginTop:4}}>
-                          <button onClick={()=>setPkgCoursesOpen(o=>o===pkg.id?null:pkg.id)} disabled={!list.length}
+                          <button onClick={()=>setPkgCoursesOpen((o: any)=>o===pkg.id?null:pkg.id)} disabled={!list.length}
                             style={{background:'none',border:'none',padding:0,fontSize:9,color:list.length?C.gold:C.muted,cursor:list.length?'pointer':'default',fontWeight:700}}>
                             🎓 {list.length} Eden course{list.length===1?'':'s'} distributed to this tier{list.length?(pkgCoursesOpen===pkg.id?' ▾':' ▸'):''}
                           </button>
@@ -2642,9 +2643,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               </div>
             ))}
             <div style={{display:'flex',gap:8,marginTop:10}}>
-              <input value={newPkg.name} onChange={e=>setNewPkg(p=>({...p,name:e.target.value}))} placeholder="Tier name (e.g. Standard)"
+              <input value={newPkg.name} onChange={e=>setNewPkg((p: any)=>({...p,name:e.target.value}))} placeholder="Tier name (e.g. Standard)"
                 style={{flex:2,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
-              <input value={newPkg.price} onChange={e=>setNewPkg(p=>({...p,price:e.target.value}))} placeholder="Price / mo" inputMode="decimal"
+              <input value={newPkg.price} onChange={e=>setNewPkg((p: any)=>({...p,price:e.target.value}))} placeholder="Price / mo" inputMode="decimal"
                 style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
               <button onClick={addPackage} disabled={!newPkg.name.trim()||isNaN(parseFloat(newPkg.price))}
                 style={{background:C.gold,border:'none',borderRadius:6,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',
@@ -2652,15 +2653,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </div>
             <div style={{display:'flex',gap:14,marginTop:8}}>
               <label style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:C.muted,cursor:'pointer'}}>
-                <input type="checkbox" checked={newPkg.includes_recipes} onChange={e=>setNewPkg(p=>({...p,includes_recipes:e.target.checked}))}/>Includes 🍽 Recipe Book
+                <input type="checkbox" checked={newPkg.includes_recipes} onChange={e=>setNewPkg((p: any)=>({...p,includes_recipes:e.target.checked}))}/>Includes 🍽 Recipe Book
               </label>
               <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
-                <input type="checkbox" checked={newPkg.includes_courses} onChange={e=>setNewPkg(p=>({...p,includes_courses:e.target.checked}))}/>Includes 🎓 Learn tab (make their own courses)
+                <input type="checkbox" checked={newPkg.includes_courses} onChange={e=>setNewPkg((p: any)=>({...p,includes_courses:e.target.checked}))}/>Includes 🎓 Learn tab (make their own courses)
               </label>
             </div>
           </Card>
 
-          {orgs.map(org=>(
+          {orgs.map((org: any)=>(
             <Card key={org.id} sx={{marginBottom:10}}>
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
                 <div style={{width:40,height:40,borderRadius:10,background:org.brandColor+'22',border:`2px solid ${org.brandColor}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:org.brandColor,flexShrink:0}}>
@@ -2710,7 +2711,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
                   <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Included by their tier{t?` (${t.name})`:''}</div>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    {[['🍽 Recipe Book',!!t?.includes_recipes],['🎓 Learn tab & own courses',!!t?.includes_courses]].map(([label,on])=>(
+                    {[['🍽 Recipe Book',!!t?.includes_recipes],['🎓 Learn tab & own courses',!!t?.includes_courses]].map(([label,on]: any)=>(
                       <span key={label} style={{fontSize:10,background:on?`${C.success}22`:`${C.danger}15`,border:`1px solid ${on?C.success:C.danger}33`,borderRadius:6,padding:'3px 8px',color:on?C.success:C.danger}}>
                         {on?'✓':'✕'} {label}
                       </span>
@@ -2723,7 +2724,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   </div>
                   {t&&(()=>{ const list = edenCourses.filter(c=>Array.isArray(c.tiers)&&c.tiers.includes(t.id)); return (
                     <div style={{marginTop:8}}>
-                      <button onClick={()=>setOrgCoursesOpen(o=>o===org.id?null:org.id)} disabled={!list.length}
+                      <button onClick={()=>setOrgCoursesOpen((o: any)=>o===org.id?null:org.id)} disabled={!list.length}
                         style={{background:'none',border:'none',padding:0,fontSize:9,color:list.length?C.gold:C.muted,cursor:list.length?'pointer':'default',fontWeight:700}}>
                         🎓 {list.length} Eden course{list.length===1?'':'s'} their clients can access{list.length?(orgCoursesOpen===org.id?' ▾':' ▸'):''}
                       </button>
@@ -2817,7 +2818,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
           {dbAudit===null&&<div style={{fontSize:12,color:C.muted}}>Loading audit trail…</div>}
           {dbAudit!==null&&audShown.length===0&&<div style={{fontSize:12,color:C.muted}}>No audit events match.</div>}
-          {audShown.map(r=>{ const a=dbAuditRow(r); return (
+          {audShown.map((r: any)=>{ const a=dbAuditRow(r); return (
             <div key={a.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',marginBottom:8,display:'flex',gap:12,alignItems:'flex-start'}}>
               <div style={{width:34,height:34,borderRadius:8,background:`${C.gold}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>
                 {a.icon}
@@ -2980,7 +2981,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               {(note.otherLinks||note.other_links)&&(
                 <div style={{marginTop:12}}>
                   <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🔗 Other Links</div>
-                  {(note.otherLinks||note.other_links||'').split(/\s*\n\s*/).filter(Boolean).map((ln,i)=>(
+                  {(note.otherLinks||note.other_links||'').split(/\s*\n\s*/).filter(Boolean).map((ln: any,i: any)=>(
                     /^https?:\/\//i.test(ln.trim())
                       ? <a key={i} href={ln.trim()} target="_blank" rel="noopener noreferrer"
                           style={{display:'block',fontSize:12,color:C.gold,marginBottom:4,wordBreak:'break-all'}}>{ln.trim()}</a>
@@ -3059,16 +3060,16 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:420,padding:24}}>
             <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:4}}>Add Document</div>
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>For {selectedClient?.name} — visible to their coach and to them in the app</div>
-            <Sel label="Type" value={newDoc.doc_type} onChange={v=>setNewDoc(p=>({...p,doc_type:v}))}
+            <Sel label="Type" value={newDoc.doc_type} onChange={(v: any)=>setNewDoc((p: any)=>({...p,doc_type:v}))}
               options={DOC_TYPES.map(d=>({value:d.v,label:d.l}))}/>
             <div style={{fontSize:10,color:C.gold,margin:'-4px 0 10px'}}>
               {DOC_TYPES.find(d=>d.v===newDoc.doc_type)?.dest}
             </div>
-            <Inp label="Title *" value={newDoc.title} onChange={v=>setNewDoc(p=>({...p,title:v}))}
+            <Inp label="Title *" value={newDoc.title} onChange={(v: any)=>setNewDoc((p: any)=>({...p,title:v}))}
               placeholder="e.g. GI Map Results · July 2026"/>
-            <Inp label="Content / Notes" value={newDoc.content} onChange={v=>setNewDoc(p=>({...p,content:v}))}
+            <Inp label="Content / Notes" value={newDoc.content} onChange={(v: any)=>setNewDoc((p: any)=>({...p,content:v}))}
               placeholder="Summary, instructions, or any relevant notes…" multiline/>
-            <Inp label="File URL (optional)" value={newDoc.file_url} onChange={v=>setNewDoc(p=>({...p,file_url:v}))}
+            <Inp label="File URL (optional)" value={newDoc.file_url} onChange={(v: any)=>setNewDoc((p: any)=>({...p,file_url:v}))}
               placeholder="https://drive.google.com/…"/>
             <div style={{display:'flex',gap:10,marginTop:6}}>
               <button onClick={()=>setShowAddDoc(false)}
@@ -3146,9 +3147,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               {inviteRows===null&&<div style={{fontSize:12,color:C.muted,padding:'16px 0'}}>Loading…</div>}
               {inviteRows!==null&&inviteErr&&<div style={{fontSize:12,color:C.danger||'#e5484d',padding:'8px 0'}}>{inviteErr}</div>}
               {inviteRows!==null&&!inviteErr&&inviteRows.length===0&&<div style={{fontSize:12,color:C.muted,padding:'16px 0'}}>No one has been added yet.</div>}
-              {(inviteRows||[]).map(row=>{
+              {(inviteRows||[]).map((row: any)=>{
                 const busy = inviteBusy===row.email
-                const fmt = d => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null
+                const fmt = (d: any) => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null
                 return (
                   <div key={row.email} style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:7,flexWrap:'wrap'}}>
                     <div style={{flex:'1 1 180px',minWidth:0}}>
@@ -3197,8 +3198,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             <Inp label="Email Address" value={newUser.email} onChange={setNU('email')} placeholder="e.g. sarah@email.com" type="email"/>
             <Sel label="Role"
               value={newUser.role==='staff'&&newUser.title&&staffRoles.includes(newUser.title)?`saved:${newUser.title}`:newUser.role}
-              onChange={v=>{
-                if (v.startsWith('saved:')) { const t=v.slice(6); setNewUser(p=>({...p,role:'staff',title:t})) }
+              onChange={(v: any)=>{
+                if (v.startsWith('saved:')) { const t=v.slice(6); setNewUser((p: any)=>({...p,role:'staff',title:t})) }
                 else setNU('role')(v)
               }}
               options={[
@@ -3270,9 +3271,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               </>
             )}
             {newUser.role==='org_admin'&&(
-              orgs.filter(o=>o.isWhiteLabel).length
+              orgs.filter((o: any)=>o.isWhiteLabel).length
                 ? <Sel label="Their Organization" value={newUser.orgName||''} onChange={setNU('orgName')}
-                    options={['— select org —',...orgs.filter(o=>o.isWhiteLabel).map(o=>o.name)]}/>
+                    options={['— select org —',...orgs.filter((o: any)=>o.isWhiteLabel).map((o: any)=>o.name)]}/>
                 : <div style={{fontSize:11,color:C.danger,marginBottom:10}}>No white-label orgs yet — create the org first in the Orgs tab.</div>
             )}
             {newUser.role==='client'&&(
@@ -3314,9 +3315,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   <Sel label="Check-In Day" value={acCheckInDay} onChange={setAcCheckInDay} options={CHECK_IN_DAYS}/>
 
                   <div style={{marginTop:14}}>
-                    <Inp label="Full Name *" value={acSingle.name} onChange={v=>setAcSingle(p=>({...p,name:v}))} placeholder="e.g. Sarah Johnson"/>
-                    <Inp label="Email Address *" value={acSingle.email} onChange={v=>setAcSingle(p=>({...p,email:v}))} placeholder="e.g. sarah@email.com" type="email"/>
-                    <Inp label="Phone (optional)" value={acSingle.phone} onChange={v=>setAcSingle(p=>({...p,phone:v}))} placeholder="e.g. +1 555 123 4567"/>
+                    <Inp label="Full Name *" value={acSingle.name} onChange={(v: any)=>setAcSingle(p=>({...p,name:v}))} placeholder="e.g. Sarah Johnson"/>
+                    <Inp label="Email Address *" value={acSingle.email} onChange={(v: any)=>setAcSingle(p=>({...p,email:v}))} placeholder="e.g. sarah@email.com" type="email"/>
+                    <Inp label="Phone (optional)" value={acSingle.phone} onChange={(v: any)=>setAcSingle(p=>({...p,phone:v}))} placeholder="e.g. +1 555 123 4567"/>
                   </div>
 
                 </>
@@ -3364,7 +3365,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   {acResults.created.length>0&&(
                     <div style={{background:C.surface,borderRadius:10,padding:'12px 14px',marginBottom:12}}>
                       <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Send These Credentials</div>
-                      {acResults.created.map((c,i)=>(
+                      {acResults.created.map((c: any,i: any)=>(
                         <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'5px 0',borderTop:i?`1px solid ${C.border}`:'none'}}>
                           <span style={{fontSize:11,color:C.white,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.email}</span>
                           <span style={{fontSize:11,color:C.gold,fontWeight:700,fontFamily:'monospace',flexShrink:0}}>{c.tempPass}</span>
@@ -3374,12 +3375,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                           </span>
                         </div>
                       ))}
-                      {acResults.created.some(c=>!c.emailed)&&(
+                      {acResults.created.some((c: any)=>!c.emailed)&&(
                         <div style={{marginTop:8,fontSize:10,color:C.danger,lineHeight:1.5}}>
-                          ⚠️ {acResults.created.filter(c=>!c.emailed).length} welcome email{acResults.created.filter(c=>!c.emailed).length>1?'s':''} didn't send — those clients haven't received their login details. Use ✉️ Invites → Resend, or copy the credentials and send them manually.
+                          ⚠️ {acResults.created.filter((c: any)=>!c.emailed).length} welcome email{acResults.created.filter((c: any)=>!c.emailed).length>1?'s':''} didn't send — those clients haven't received their login details. Use ✉️ Invites → Resend, or copy the credentials and send them manually.
                         </div>
                       )}
-                      <button onClick={()=>{navigator.clipboard?.writeText(acResults.created.map(c=>`${c.name}\t${c.email}\t${c.tempPass}`).join('\n')).then(()=>alert('Copied to clipboard.')).catch(()=>{})}}
+                      <button onClick={()=>{navigator.clipboard?.writeText(acResults.created.map((c: any)=>`${c.name}\t${c.email}\t${c.tempPass}`).join('\n')).then(()=>alert('Copied to clipboard.')).catch(()=>{})}}
                         style={{marginTop:10,width:'100%',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'8px',color:C.gold,fontWeight:700,fontSize:11,cursor:'pointer'}}>
                         📋 Copy All Credentials
                       </button>
@@ -3388,7 +3389,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   {acResults.skipped.length>0&&(
                     <div style={{background:`${C.gold}0d`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'12px 14px'}}>
                       <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Skipped ({acResults.skipped.length})</div>
-                      {acResults.skipped.map((s,i)=>(
+                      {acResults.skipped.map((s: any,i: any)=>(
                         <div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:11,padding:'4px 0'}}>
                           <span style={{color:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.email}</span>
                           <span style={{color:C.muted,flexShrink:0}}>{s.reason}</span>
@@ -3514,19 +3515,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:440,padding:24,maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,color:C.white,marginBottom:4}}>Manage — <LN>{manageOrg.name}</LN></div>
             <div style={{fontSize:11,color:C.muted,marginBottom:16}}>Change their tier, branding, or status. MRR updates automatically when the tier changes.</div>
-            <Inp label="Company Name" value={manageOrg.name} onChange={v=>setManageOrg(p=>({...p,name:v}))}/>
+            <Inp label="Company Name" value={manageOrg.name} onChange={(v: any)=>setManageOrg((p: any)=>({...p,name:v}))}/>
             {manageOrg.isWhiteLabel
-              ? <Sel label="Tier / Package" value={manageOrg.plan} onChange={v=>setManageOrg(p=>({...p,plan:v}))}
+              ? <Sel label="Tier / Package" value={manageOrg.plan} onChange={(v: any)=>setManageOrg((p: any)=>({...p,plan:v}))}
                   options={planOptions.includes(manageOrg.plan)?planOptions:[manageOrg.plan,...planOptions]}/>
               : <div style={{fontSize:11,color:C.muted,margin:'6px 0 10px'}}>Platform owner — no tier applies.</div>}
-            <Inp label="Billing Email" value={manageOrg.billingEmail||''} onChange={v=>setManageOrg(p=>({...p,billingEmail:v}))} type="email"/>
-            <Inp label="Calendar / Booking URL" value={manageOrg.calendarUrl||''} onChange={v=>setManageOrg(p=>({...p,calendarUrl:v}))} placeholder="Their booking link (they can also manage this)"/>
+            <Inp label="Billing Email" value={manageOrg.billingEmail||''} onChange={(v: any)=>setManageOrg((p: any)=>({...p,billingEmail:v}))} type="email"/>
+            <Inp label="Calendar / Booking URL" value={manageOrg.calendarUrl||''} onChange={(v: any)=>setManageOrg((p: any)=>({...p,calendarUrl:v}))} placeholder="Their booking link (they can also manage this)"/>
             <ColorRow primary={manageOrg.brandColor} colors={manageOrg.brandColors||[]}
-              onPrimary={v=>setManageOrg(p=>({...p,brandColor:v}))}
-              onColors={v=>setManageOrg(p=>({...p,brandColors:v}))}/>
+              onPrimary={(v: any)=>setManageOrg((p: any)=>({...p,brandColor:v}))}
+              onColors={(v: any)=>setManageOrg((p: any)=>({...p,brandColors:v}))}/>
             {manageOrg.isWhiteLabel&&(
               <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.white,cursor:'pointer',marginBottom:14}}>
-                <input type="checkbox" checked={!!manageOrg.active} onChange={e=>setManageOrg(p=>({...p,active:e.target.checked}))}/>
+                <input type="checkbox" checked={!!manageOrg.active} onChange={e=>setManageOrg((p: any)=>({...p,active:e.target.checked}))}/>
                 Organization active {!manageOrg.active&&<span style={{fontSize:10,color:C.danger}}>(inactive orgs don't count toward MRR)</span>}
               </label>
             )}
@@ -3612,10 +3613,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               Fix a typo in this user's name or email. Changing the email also updates the address they sign in with. Every change is recorded in the audit log.
             </div>
             <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Name</div>
-            <input value={editIdentity.name} onChange={e=>setEditIdentity(p=>({...p,name:e.target.value}))}
+            <input value={editIdentity.name} onChange={e=>setEditIdentity((p: any)=>({...p,name:e.target.value}))}
               style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',marginBottom:14}}/>
             <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Login Email</div>
-            <input value={editIdentity.email} onChange={e=>setEditIdentity(p=>({...p,email:e.target.value}))} type="email"
+            <input value={editIdentity.email} onChange={e=>setEditIdentity((p: any)=>({...p,email:e.target.value}))} type="email"
               style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',marginBottom:6}}/>
             {editIdentity.email.trim().toLowerCase()!==(editIdentity.oldEmail||'').toLowerCase()&&(
               <div style={{fontSize:10,color:'#e8b74f',marginBottom:8,lineHeight:1.5}}>
@@ -3645,8 +3646,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </div>
 
             {(()=>{
-              const activeC    = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
-              const archivedC  = clients.filter(c=>effectiveCoachId(c)===pendingRemoval.uuid&&isDeactivated(c))
+              const activeC    = clients.filter((c: any)=>effectiveCoachId(c)===pendingRemoval.uuid&&!isDeactivated(c))
+              const archivedC  = clients.filter((c: any)=>effectiveCoachId(c)===pendingRemoval.uuid&&isDeactivated(c))
               const available  = allCoaches.filter(c=>c.uuid!==pendingRemoval.uuid&&!removedCoaches.includes(c.uuid))
               return (
                 <>
@@ -3661,7 +3662,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         {available.map(c=><option key={c.uuid} value={c.uuid}>{c.name}</option>)}
                       </select>
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                        {activeC.map(c=>(
+                        {activeC.map((c: any)=>(
                           <span key={c.uuid} style={{fontSize:10,background:`${C.gold}15`,border:`1px solid ${C.gold}33`,borderRadius:6,padding:'3px 9px',color:C.gold}}>
                             {c.name}
                           </span>
@@ -3712,28 +3713,28 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 // ════════════════════════════════════════════════════════════
 const FOOD_CATS = ['Proteins','Carbohydrates','Fats','Fruits/Vegetables','Supplements','Drinks/Condiments']
 
-function LibInput({value,onChange,placeholder,flex=1,type='text'}) {
+function LibInput({value,onChange,placeholder,flex=1,type='text'}: any) {
   return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} type={type}
     style={{flex,minWidth:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
 }
-function LibBtn({onClick,children,kind='gold'}) {
+function LibBtn({onClick,children,kind='gold'}: any) {
   const bg = kind==='gold'?C.gold:kind==='danger'?`${C.danger}22`:C.surface
   const col= kind==='gold'?C.black:kind==='danger'?C.danger:C.muted
   const bd = kind==='gold'?'none':`1px solid ${kind==='danger'?C.danger+'44':C.border}`
   return <button onClick={onClick} style={{background:bg,border:bd,borderRadius:8,padding:'8px 14px',fontWeight:700,color:col,fontSize:12,cursor:'pointer',flexShrink:0}}>{children}</button>
 }
 
-function LibraryTab({companyId}) {
-  const [sub,     setSub]     = useState('foods')
-  const [loading, setLoading] = useState(true)
-  const [foods,   setFoods]   = useState([])
-  const [supps,   setSupps]   = useState([])
-  const [habits,  setHabits]  = useState([])
-  const [cardio,  setCardio]  = useState([])
-  const [links,   setLinks]   = useState([])           // company_resource_links rows
-  const [hidden,  setHidden]  = useState(new Set())    // hidden built-ins, keys "kind:name"
-  const [editRow, setEditRow] = useState(null)  // {kind, ...fields}
-  const [addRow,  setAddRow]  = useState(null)  // {kind, ...fields}
+function LibraryTab({companyId}: any) {
+  const [sub,     setSub]     = useState<any>('foods')
+  const [loading, setLoading] = useState<any>(true)
+  const [foods,   setFoods]   = useState<any>([])
+  const [supps,   setSupps]   = useState<any>([])
+  const [habits,  setHabits]  = useState<any>([])
+  const [cardio,  setCardio]  = useState<any>([])
+  const [links,   setLinks]   = useState<any>([])           // company_resource_links rows
+  const [hidden,  setHidden]  = useState<any>(new Set())    // hidden built-ins, keys "kind:name"
+  const [editRow, setEditRow] = useState<any>(null)  // {kind, ...fields}
+  const [addRow,  setAddRow]  = useState<any>(null)  // {kind, ...fields}
 
   useEffect(()=>{ let stale=false; (async()=>{
     setLoading(true)
@@ -3753,41 +3754,41 @@ function LibraryTab({companyId}) {
   })(); return ()=>{ stale=true } },[companyId])
 
   // ── Hide / restore built-in items (foods, habits, cardio) ──
-  async function hideBuiltIn(kind, name) {
+  async function hideBuiltIn(kind: any, name: any) {
     if (!window.confirm(`Hide the built-in "${name}" for all coaches in this company? You can restore it any time.`)) return
     const ins = await dbInsert('company_hidden_items',{company_id:companyId,kind,name})
     const r = Array.isArray(ins)?ins[0]:ins
     if (!r?.id) { alert('Could not hide it — please try again. (The company_hidden_items table may not exist yet.)'); return }
-    setHidden(p=>new Set([...p,`${kind}:${name}`]))
+    setHidden((p: any)=>new Set([...p,`${kind}:${name}`]))
   }
-  async function restoreBuiltIn(kind, name) {
+  async function restoreBuiltIn(kind: any, name: any) {
     await dbDelete('company_hidden_items',`company_id=eq.${companyId}&kind=eq.${kind}&name=eq.${encodeURIComponent(name)}`)
-    setHidden(p=>{const n=new Set(p); n.delete(`${kind}:${name}`); return n})
+    setHidden((p: any)=>{const n=new Set(p); n.delete(`${kind}:${name}`); return n})
   }
 
   // ── Resource links ──
-  async function saveLink(row) {
+  async function saveLink(row: any) {
     const body = { label:row.label?.trim(), url:row.url?.trim(), note:row.note?.trim()||'' }
     if (!body.label||!body.url) { alert('Name and link are required.'); return }
     if (row.id) {
       const ok = await dbUpdate('company_resource_links',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
       if (!ok) { alert('Could not save the change — please try again.'); return }
-      setLinks(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+      setLinks((p: any)=>p.map((x: any)=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_resource_links',{...body,company_id:companyId,sort_order:links.length})
       const r = Array.isArray(ins)?ins[0]:ins
       if (!r?.id) { alert('Could not save the link — please try again.'); return }
-      setLinks(p=>[...p,r]); setAddRow(null)
+      setLinks((p: any)=>[...p,r]); setAddRow(null)
     }
   }
-  async function deleteLink(row) {
+  async function deleteLink(row: any) {
     if (!window.confirm(`Remove "${row.label}" from your resources list?`)) return
     await dbDelete('company_resource_links',`id=eq.${row.id}&company_id=eq.${companyId}`)
-    setLinks(p=>p.filter(x=>x.id!==row.id))
+    setLinks((p: any)=>p.filter((x: any)=>x.id!==row.id))
   }
 
   // ── Foods ──
-  async function saveFood(row) {
+  async function saveFood(row: any) {
     const body = { name:row.name?.trim(), serving:row.serving?.trim(), cat:row.cat||FOOD_CATS[0],
       cal:parseFloat(row.cal)||0, pro:parseFloat(row.pro)||0, carb:parseFloat(row.carb)||0,
       fat:parseFloat(row.fat)||0, fib:parseFloat(row.fib)||0 }
@@ -3795,87 +3796,87 @@ function LibraryTab({companyId}) {
     if (row.id) {
       const ok = await dbUpdate('company_foods',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
       if (!ok) { alert('Could not save the change — please try again.'); return }
-      setFoods(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+      setFoods((p: any)=>p.map((x: any)=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_foods',{...body,company_id:companyId})
       const r = Array.isArray(ins)?ins[0]:ins
       if (!r?.id) { alert('Could not save the food — please try again.'); return }
-      setFoods(p=>[...p,r]); setAddRow(null)
+      setFoods((p: any)=>[...p,r]); setAddRow(null)
     }
   }
-  async function deleteFood(row) {
+  async function deleteFood(row: any) {
     if (!window.confirm(`Remove "${row.name}" for all coaches?`)) return
     await dbDelete('company_foods',`id=eq.${row.id}&company_id=eq.${companyId}`)
-    setFoods(p=>p.filter(x=>x.id!==row.id))
+    setFoods((p: any)=>p.filter((x: any)=>x.id!==row.id))
   }
 
   // ── Supplements ──
-  async function saveSupp(row) {
+  async function saveSupp(row: any) {
     const body = { category:row.category?.trim()||'Other', name:row.name?.trim(), dose:row.dose?.trim()||'',
       directions:row.directions?.trim()||'', code:row.code?.trim()||'', link:row.link?.trim()||'' }
     if (!body.name) { alert('Name is required.'); return }
     if (row.id) {
       const ok = await dbUpdate('company_supplements',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
       if (!ok) { alert('Could not save the change — please try again.'); return }
-      setSupps(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+      setSupps((p: any)=>p.map((x: any)=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_supplements',{...body,company_id:companyId,sort_order:supps.length})
       const r = Array.isArray(ins)?ins[0]:ins
       if (!r?.id) { alert('Could not save the supplement — please try again.'); return }
-      setSupps(p=>[...p,r]); setAddRow(null)
+      setSupps((p: any)=>[...p,r]); setAddRow(null)
     }
   }
-  async function deleteSupp(row) {
+  async function deleteSupp(row: any) {
     if (!window.confirm(`Remove "${row.name}" for all coaches?`)) return
     await dbDelete('company_supplements',`id=eq.${row.id}&company_id=eq.${companyId}`)
-    setSupps(p=>p.filter(x=>x.id!==row.id))
+    setSupps((p: any)=>p.filter((x: any)=>x.id!==row.id))
   }
 
   // ── Habits ──
-  async function saveHabit(row) {
+  async function saveHabit(row: any) {
     const body = { name:row.name?.trim(), default_target:parseInt(row.default_target)||7 }
     if (!body.name) { alert('Name is required.'); return }
     if (row.id) {
       const ok = await dbUpdate('company_habits',`id=eq.${row.id}&company_id=eq.${companyId}`,body)
       if (!ok) { alert('Could not save the change — please try again.'); return }
-      setHabits(p=>p.map(x=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
+      setHabits((p: any)=>p.map((x: any)=>x.id===row.id?{...x,...body}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_habits',{...body,company_id:companyId})
       const r = Array.isArray(ins)?ins[0]:ins
       if (!r?.id) { alert('Could not save the habit — please try again.'); return }
-      setHabits(p=>[...p,r]); setAddRow(null)
+      setHabits((p: any)=>[...p,r]); setAddRow(null)
     }
   }
-  async function deleteHabit(row) {
+  async function deleteHabit(row: any) {
     if (!window.confirm(`Remove habit "${row.name}" for all coaches?`)) return
     await dbDelete('company_habits',`id=eq.${row.id}&company_id=eq.${companyId}`)
-    setHabits(p=>p.filter(x=>x.id!==row.id))
+    setHabits((p: any)=>p.filter((x: any)=>x.id!==row.id))
   }
 
   // ── Cardio types ──
-  async function saveCardio(row) {
+  async function saveCardio(row: any) {
     const name = row.name?.trim()
     if (!name) { alert('Name is required.'); return }
     if (row.id) {
       const ok = await dbUpdate('company_cardio_types',`id=eq.${row.id}&company_id=eq.${companyId}`,{name})
       if (!ok) { alert('Could not save the change — please try again.'); return }
-      setCardio(p=>p.map(x=>x.id===row.id?{...x,name}:x)); setEditRow(null)
+      setCardio((p: any)=>p.map((x: any)=>x.id===row.id?{...x,name}:x)); setEditRow(null)
     } else {
       const ins = await dbInsert('company_cardio_types',{name,company_id:companyId})
       const r = Array.isArray(ins)?ins[0]:ins
       if (!r?.id) { alert('Could not save the cardio type — please try again.'); return }
-      setCardio(p=>[...p,r]); setAddRow(null)
+      setCardio((p: any)=>[...p,r]); setAddRow(null)
     }
   }
-  async function deleteCardio(row) {
+  async function deleteCardio(row: any) {
     if (!window.confirm(`Remove cardio type "${row.name}" for all coaches?`)) return
     await dbDelete('company_cardio_types',`id=eq.${row.id}&company_id=eq.${companyId}`)
-    setCardio(p=>p.filter(x=>x.id!==row.id))
+    setCardio((p: any)=>p.filter((x: any)=>x.id!==row.id))
   }
 
   const SUBS = [['foods','🥗 Foods'],['supps','💊 Supplements'],['habits','✅ Habits'],['cardio','🏃 Cardio Types'],['links','🔗 Resources']]
   // Built-in chip with hide/restore — used by foods, habits and cardio sections
-  const builtInRow = (kind, name, sub2) => {
+  const builtInRow = (kind: any, name: any, sub2: any) => {
     const isHidden = hidden.has(`${kind}:${name}`)
     return (
       <div key={`bi_${name}`} style={{...rowStyle,opacity:isHidden?0.45:1}}>
@@ -3890,44 +3891,44 @@ function LibraryTab({companyId}) {
       </div>
     )
   }
-  const suppCats = [...new Set(supps.map(s=>s.category||'Other'))]
+  const suppCats = [...new Set(supps.map((s: any)=>s.category||'Other'))]
 
-  const foodForm = (row,setRow,onSave,onCancel)=>(
+  const foodForm = (row: any,setRow: any,onSave: any,onCancel: any)=>(
     <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8}}>
       <div style={{display:'flex',gap:6,marginBottom:6}}>
-        <LibInput flex={2} value={row.name||''}    onChange={v=>setRow(p=>({...p,name:v}))}    placeholder="Food name"/>
-        <LibInput value={row.serving||''} onChange={v=>setRow(p=>({...p,serving:v}))} placeholder="Serving (e.g. 4oz)"/>
-        <select value={row.cat||FOOD_CATS[0]} onChange={e=>setRow(p=>({...p,cat:e.target.value}))}
+        <LibInput flex={2} value={row.name||''}    onChange={(v: any)=>setRow((p: any)=>({...p,name:v}))}    placeholder="Food name"/>
+        <LibInput value={row.serving||''} onChange={(v: any)=>setRow((p: any)=>({...p,serving:v}))} placeholder="Serving (e.g. 4oz)"/>
+        <select value={row.cat||FOOD_CATS[0]} onChange={e=>setRow((p: any)=>({...p,cat:e.target.value}))}
           style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:8,color:C.white,fontSize:12,outline:'none',cursor:'pointer'}}>
           {FOOD_CATS.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:8}}>
         {[['cal','Cal'],['pro','Protein g'],['carb','Carbs g'],['fat','Fat g'],['fib','Fiber g']].map(([k,ph])=>(
-          <LibInput key={k} value={row[k]??''} onChange={v=>setRow(p=>({...p,[k]:v}))} placeholder={ph}/>
+          <LibInput key={k} value={row[k]??''} onChange={(v: any)=>setRow((p: any)=>({...p,[k]:v}))} placeholder={ph}/>
         ))}
       </div>
       <div style={{display:'flex',gap:6}}><LibBtn onClick={onSave}>Save</LibBtn><LibBtn kind="plain" onClick={onCancel}>Cancel</LibBtn></div>
     </div>
   )
-  const suppForm = (row,setRow,onSave,onCancel)=>(
+  const suppForm = (row: any,setRow: any,onSave: any,onCancel: any)=>(
     <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8}}>
       <div style={{display:'flex',gap:6,marginBottom:6}}>
-        <LibInput value={row.category||''} onChange={v=>setRow(p=>({...p,category:v}))} placeholder="Protocol / category"/>
-        <LibInput flex={2} value={row.name||''} onChange={v=>setRow(p=>({...p,name:v}))} placeholder="Supplement name"/>
-        <LibInput value={row.dose||''} onChange={v=>setRow(p=>({...p,dose:v}))} placeholder="Dose"/>
+        <LibInput value={row.category||''} onChange={(v: any)=>setRow((p: any)=>({...p,category:v}))} placeholder="Protocol / category"/>
+        <LibInput flex={2} value={row.name||''} onChange={(v: any)=>setRow((p: any)=>({...p,name:v}))} placeholder="Supplement name"/>
+        <LibInput value={row.dose||''} onChange={(v: any)=>setRow((p: any)=>({...p,dose:v}))} placeholder="Dose"/>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:8}}>
-        <LibInput flex={2} value={row.directions||''} onChange={v=>setRow(p=>({...p,directions:v}))} placeholder="Directions"/>
-        <LibInput value={row.code||''} onChange={v=>setRow(p=>({...p,code:v}))} placeholder="Discount code (optional)"/>
-        <LibInput flex={2} value={row.link||''} onChange={v=>setRow(p=>({...p,link:v}))} placeholder="Purchase link (optional)"/>
+        <LibInput flex={2} value={row.directions||''} onChange={(v: any)=>setRow((p: any)=>({...p,directions:v}))} placeholder="Directions"/>
+        <LibInput value={row.code||''} onChange={(v: any)=>setRow((p: any)=>({...p,code:v}))} placeholder="Discount code (optional)"/>
+        <LibInput flex={2} value={row.link||''} onChange={(v: any)=>setRow((p: any)=>({...p,link:v}))} placeholder="Purchase link (optional)"/>
       </div>
       <div style={{display:'flex',gap:6}}><LibBtn onClick={onSave}>Save</LibBtn><LibBtn kind="plain" onClick={onCancel}>Cancel</LibBtn></div>
     </div>
   )
 
   const rowStyle={background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',marginBottom:6,display:'flex',alignItems:'center',gap:10}
-  const editBtn=(row,kind)=><button onClick={()=>{setAddRow(null);setEditRow({kind,...row})}} title="Edit"
+  const editBtn=(row: any,kind: any)=><button onClick={()=>{setAddRow(null);setEditRow({kind,...row})}} title="Edit"
     style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',color:C.muted,fontSize:11,cursor:'pointer',flexShrink:0}}>✎</button>
 
   return (
@@ -3949,11 +3950,11 @@ function LibraryTab({companyId}) {
       {sub==='foods'&&(<>
         {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'food'})}}>＋ Add Food</LibBtn></div>}
         {addRow?.kind==='food'&&foodForm(addRow,setAddRow,()=>saveFood(addRow),()=>setAddRow(null))}
-        {FOOD_CATS.filter(cat=>foods.some(f=>f.cat===cat)||FOODS.some(f=>f.cat===cat)).map(cat=>(
+        {FOOD_CATS.filter(cat=>foods.some((f: any)=>f.cat===cat)||FOODS.some((f: any)=>f.cat===cat)).map(cat=>(
           <div key={cat} style={{marginBottom:12}}>
             <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>{cat}</div>
-            {FOODS.filter(f=>f.cat===cat).map(f=>builtInRow('food',f.name,`${f.serving} · ${f.cal} cal · P:${f.pro}g C:${f.carb}g F:${f.fat}g`))}
-            {foods.filter(f=>f.cat===cat).map(f=> editRow?.kind==='food'&&editRow.id===f.id
+            {FOODS.filter((f: any)=>f.cat===cat).map((f: any)=>builtInRow('food',f.name,`${f.serving} · ${f.cal} cal · P:${f.pro}g C:${f.carb}g F:${f.fat}g`))}
+            {foods.filter((f: any)=>f.cat===cat).map((f: any)=> editRow?.kind==='food'&&editRow.id===f.id
               ? <div key={f.id}>{foodForm(editRow,setEditRow,()=>saveFood(editRow),()=>setEditRow(null))}</div>
               : (
               <div key={f.id} style={rowStyle}>
@@ -3973,10 +3974,10 @@ function LibraryTab({companyId}) {
       {sub==='supps'&&(<>
         {!addRow&&<div style={{marginBottom:10}}><LibBtn onClick={()=>{setEditRow(null);setAddRow({kind:'supp'})}}>＋ Add Supplement</LibBtn></div>}
         {addRow?.kind==='supp'&&suppForm(addRow,setAddRow,()=>saveSupp(addRow),()=>setAddRow(null))}
-        {suppCats.map(cat=>(
+        {suppCats.map((cat: any)=>(
           <div key={cat} style={{marginBottom:12}}>
             <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>{cat}</div>
-            {supps.filter(s=>(s.category||'Other')===cat).map(s=> editRow?.kind==='supp'&&editRow.id===s.id
+            {supps.filter((s: any)=>(s.category||'Other')===cat).map((s: any)=> editRow?.kind==='supp'&&editRow.id===s.id
               ? <div key={s.id}>{suppForm(editRow,setEditRow,()=>saveSupp(editRow),()=>setEditRow(null))}</div>
               : (
               <div key={s.id} style={rowStyle}>
@@ -3998,13 +3999,13 @@ function LibraryTab({companyId}) {
         {(addRow?.kind==='habit'||editRow?.kind==='habit')&&(()=>{ const row=addRow?.kind==='habit'?addRow:editRow, setRow=addRow?.kind==='habit'?setAddRow:setEditRow
           return (
           <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8,display:'flex',gap:6}}>
-            <LibInput flex={3} value={row.name||''} onChange={v=>setRow(p=>({...p,name:v}))} placeholder="Habit name"/>
-            <LibInput value={row.default_target??7} onChange={v=>setRow(p=>({...p,default_target:v}))} placeholder="Target / week"/>
+            <LibInput flex={3} value={row.name||''} onChange={(v: any)=>setRow((p: any)=>({...p,name:v}))} placeholder="Habit name"/>
+            <LibInput value={row.default_target??7} onChange={(v: any)=>setRow((p: any)=>({...p,default_target:v}))} placeholder="Target / week"/>
             <LibBtn onClick={()=>saveHabit(row)}>Save</LibBtn>
             <LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn>
           </div>)})()}
-        {MASTER_HABITS.map(h=>builtInRow('habit',h.name,`target ${h.defaultTarget}×/week`))}
-        {habits.filter(h=>!(editRow?.kind==='habit'&&editRow.id===h.id)).map(h=>(
+        {MASTER_HABITS.map((h: any)=>builtInRow('habit',h.name,`target ${h.defaultTarget}×/week`))}
+        {habits.filter((h: any)=>!(editRow?.kind==='habit'&&editRow.id===h.id)).map((h: any)=>(
           <div key={h.id} style={rowStyle}>
             <div style={{flex:1}}>
               <span style={{fontSize:13,color:C.white,fontWeight:600}}>{h.name}</span>
@@ -4022,12 +4023,12 @@ function LibraryTab({companyId}) {
         {(addRow?.kind==='cardio'||editRow?.kind==='cardio')&&(()=>{ const row=addRow?.kind==='cardio'?addRow:editRow, setRow=addRow?.kind==='cardio'?setAddRow:setEditRow
           return (
           <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8,display:'flex',gap:6}}>
-            <LibInput flex={3} value={row.name||''} onChange={v=>setRow(p=>({...p,name:v}))} placeholder="Cardio type (e.g. Incline Walk)"/>
+            <LibInput flex={3} value={row.name||''} onChange={(v: any)=>setRow((p: any)=>({...p,name:v}))} placeholder="Cardio type (e.g. Incline Walk)"/>
             <LibBtn onClick={()=>saveCardio(row)}>Save</LibBtn>
             <LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn>
           </div>)})()}
         <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10}}>
-          {CARDIO_TYPES.map(name=>{
+          {CARDIO_TYPES.map((name: any)=>{
             const isHidden = hidden.has(`cardio:${name}`)
             return (
               <div key={`bi_${name}`} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'7px 8px 7px 16px',display:'flex',alignItems:'center',gap:6,opacity:isHidden?0.45:1}}>
@@ -4040,7 +4041,7 @@ function LibraryTab({companyId}) {
           })}
         </div>
         <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-          {cardio.filter(t=>!(editRow?.kind==='cardio'&&editRow.id===t.id)).map(t=>(
+          {cardio.filter((t: any)=>!(editRow?.kind==='cardio'&&editRow.id===t.id)).map((t: any)=>(
             <div key={t.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'7px 8px 7px 16px',display:'flex',alignItems:'center',gap:6}}>
               <span style={{fontSize:12,color:C.white,fontWeight:600}}>{t.name}</span>
               {editBtn(t,'cardio')}
@@ -4057,13 +4058,13 @@ function LibraryTab({companyId}) {
           return (
           <div style={{background:C.card,border:`1px solid ${C.gold}44`,borderRadius:10,padding:12,marginBottom:8}}>
             <div style={{display:'flex',gap:6,marginBottom:8}}>
-              <LibInput flex={2} value={row.label||''} onChange={v=>setRow(p=>({...p,label:v}))} placeholder="Name (e.g. Blood Work Panel)"/>
-              <LibInput flex={3} value={row.url||''}   onChange={v=>setRow(p=>({...p,url:v}))}   placeholder="Link (https://…)"/>
-              <LibInput flex={2} value={row.note||''}  onChange={v=>setRow(p=>({...p,note:v}))}  placeholder="Note (e.g. Code: YOURCODE10)"/>
+              <LibInput flex={2} value={row.label||''} onChange={(v: any)=>setRow((p: any)=>({...p,label:v}))} placeholder="Name (e.g. Blood Work Panel)"/>
+              <LibInput flex={3} value={row.url||''}   onChange={(v: any)=>setRow((p: any)=>({...p,url:v}))}   placeholder="Link (https://…)"/>
+              <LibInput flex={2} value={row.note||''}  onChange={(v: any)=>setRow((p: any)=>({...p,note:v}))}  placeholder="Note (e.g. Code: YOURCODE10)"/>
             </div>
             <div style={{display:'flex',gap:6}}><LibBtn onClick={()=>saveLink(row)}>Save</LibBtn><LibBtn kind="plain" onClick={()=>{setAddRow(null);setEditRow(null)}}>Cancel</LibBtn></div>
           </div>)})()}
-        {links.filter(l=>!(editRow?.kind==='link'&&editRow.id===l.id)).map(l=>(
+        {links.filter((l: any)=>!(editRow?.kind==='link'&&editRow.id===l.id)).map((l: any)=>(
           <div key={l.id} style={rowStyle}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,color:C.white,fontWeight:600}}>{l.label}{l.note&&<span style={{color:C.gold,fontWeight:400,fontSize:11,marginLeft:8}}>{l.note}</span>}</div>
@@ -4075,7 +4076,7 @@ function LibraryTab({companyId}) {
         ))}
         {links.length===0&&!addRow&&(<>
           <div style={{color:C.muted,fontSize:12,padding:'12px 12px 4px'}}>Your coaches and clients currently see the default resource list below (in Diet Builder → Supps). Add your own links above to replace it.</div>
-          {DEFAULT_RESOURCE_LINKS.map(([label,url,note])=>(
+          {DEFAULT_RESOURCE_LINKS.map(([label,url,note]: any)=>(
             <div key={label} style={{...rowStyle,opacity:0.55}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,color:C.white,fontWeight:600}}>{label}{note&&<span style={{color:C.gold,fontWeight:400,fontSize:11,marginLeft:8}}>{note}</span>}</div>

@@ -15,13 +15,13 @@ const SUPABASE_URL = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
-const lsKey = (uuid) => `teamhub_seen_${uuid}`
+const lsKey = (uuid: any) => `teamhub_seen_${uuid}`
 
-export function loadSeen(uuid) {
+export function loadSeen(uuid: any) {
   try { return JSON.parse(localStorage.getItem(lsKey(uuid)) || '{}') || {} } catch { return {} }
 }
 
-export function saveSeen(uuid, map, delta) {
+export function saveSeen(uuid: any, map: any, delta?: any) {
   try { localStorage.setItem(lsKey(uuid), JSON.stringify(map)) } catch {}
   try { window.dispatchEvent(new CustomEvent('teamhub-seen')) } catch {}
   // Sync only what changed (falls back to the full map for older callers)
@@ -31,13 +31,13 @@ export function saveSeen(uuid, map, delta) {
 // ── Cross-device sync (DB is the source of truth; localStorage is cache) ──
 // The api-server merges per-key with max(), so a stale device can never
 // roll another device's newer read state backwards.
-const API = (p) => `${(import.meta.env.BASE_URL || '/')}api/${p}`
+const API = (p: any) => `${(import.meta.env.BASE_URL || '/')}api/${p}`
 
 // Push state is scoped per user AND the bearer token is captured at enqueue
 // time — after an account switch a delayed flush goes out with the OLD
 // session's token (server rejects it) instead of writing under the new user.
-const pushState = {} // uuid -> { timer, queue, token }
-function pushSeen(uuid, map) {
+const pushState: any = {} // uuid -> { timer, queue, token }
+function pushSeen(uuid: any, map: any) {
   if (!uuid) return
   const st = (pushState[uuid] ||= { timer: null, queue: null, token: null })
   st.queue = { ...(st.queue || {}), ...map }
@@ -59,8 +59,8 @@ function pushSeen(uuid, map) {
 
 // Fetch the DB copy, merge (per-key max) into localStorage, return merged map.
 // Never throws — falls back to the local cache on any failure.
-export async function syncSeen(uuid) {
-  const local = loadSeen(uuid)
+export async function syncSeen(uuid: any): Promise<any> {
+  const local: any = loadSeen(uuid)
   try {
     const r = await fetch(API('team/seen'), { headers: { Authorization: sbBearer() } })
     const b = r.ok ? await r.json() : null
@@ -83,7 +83,7 @@ export async function syncSeen(uuid) {
 // Merge a delta (per-key max) into the local cache WITHOUT pushing to the
 // server — used when another device broadcasts its own "seen" event, which
 // that device already persisted. Returns the merged map.
-export function mergeSeenLocal(uuid, delta) {
+export function mergeSeenLocal(uuid: any, delta: any) {
   const local = loadSeen(uuid)
   let changed = false
   for (const [k, t] of Object.entries(delta || {})) {
@@ -98,20 +98,20 @@ export function mergeSeenLocal(uuid, delta) {
 }
 
 // Timestamp a conversation was last viewed (0 = never)
-export const seenAt = (seen, key) => seen?.[key] ?? 0
+export const seenAt = (seen: any, key: any) => seen?.[key] ?? 0
 
 // App-shell hook: true when Team Hub chat has anything unread for this user.
 // Polls lightly (20s) and re-checks instantly whenever Week7 marks a
 // conversation as seen. Only relevant for staff — clients never see Team Hub.
-export function useTeamHubUnread(user) {
+export function useTeamHubUnread(user: any) {
   const [unread, setUnread] = useState(false)
   const email = user?.email || ''
   const role = user?.role || ''
   useEffect(() => {
     if (!email || role === 'client' || user?.communityOnly) { setUnread(false); return }
     let stopped = false
-    let me = null
-    let liveChan = null
+    let me: any = null
+    let liveChan: any = null
     const H = { apikey: SUPABASE_ANON, get Authorization() { return sbBearer() } }
     async function check() {
       try {
@@ -141,7 +141,7 @@ export function useTeamHubUnread(user) {
         // device clears this device's badge within a poll cycle.
         const seen = await syncSeen(me.id)
         if (stopped) return
-        const any = rows.some(m => {
+        const any = rows.some((m: any) => {
           const t = new Date(m.created_at).getTime()
           if (m.is_dm) {
             if (m.dm_to_id !== me.id) return false
@@ -167,13 +167,13 @@ export function useTeamHubUnread(user) {
 // App-shell hook: true when any client↔staff conversation has unread messages
 // addressed to this user (messages.is_read=false, sender != me). Messaging.jsx
 // marks messages read when the conversation is opened.
-export function useMessagesUnread(user) {
+export function useMessagesUnread(user: any) {
   const [unread, setUnread] = useState(false)
   const email = user?.email || ''
   useEffect(() => {
     if (!email || user?.communityOnly) { setUnread(false); return }
     let stopped = false
-    let me = null
+    let me: any = null
     const H = { apikey: SUPABASE_ANON, get Authorization() { return sbBearer() } }
     async function check() {
       try {
@@ -186,7 +186,7 @@ export function useMessagesUnread(user) {
         const rc = await fetch(`${SUPABASE_URL}/rest/v1/conversations?or=(participant_a_id.eq.${me.id},participant_b_id.eq.${me.id})&select=id&limit=200`, { headers: H })
         const convos = rc.ok ? await rc.json() : []
         if (!convos.length) { if (!stopped) setUnread(false); return }
-        const ids = convos.map(c => c.id).join(',')
+        const ids = convos.map((c: any) => c.id).join(',')
         const rm = await fetch(`${SUPABASE_URL}/rest/v1/messages?conversation_id=in.(${ids})&is_read=eq.false&sender_id=neq.${me.id}&select=id&limit=1`, { headers: H })
         const rows = rm.ok ? await rm.json() : []
         if (!stopped) setUnread(rows.length > 0)

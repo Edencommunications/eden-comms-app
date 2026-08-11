@@ -14,8 +14,8 @@ const T = {
   border: '#2a2a2a', text: '#f2f2f2', muted: '#9a9a9a', success: '#4FD89A', danger: '#ff6b6b',
 }
 
-export default function CheckinFormEditor({ companyId, coachId = null, coachName = '', onClose }) {
-  const [form, setForm]         = useState(null)     // null = loading
+export default function CheckinFormEditor({ companyId, coachId = null, coachName = '', onClose }: any) {
+  const [form, setForm]         = useState<any>(null)     // null = loading
   const [inherited, setInherited] = useState(false)  // coach scope with no own row yet
   const [saving, setSaving]     = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -32,7 +32,7 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
         // No customization at this scope yet — start from what's inherited
         const eff = coachId ? await resolveCheckinForm(companyId, coachId) : { ...DEFAULT_FORM }
         if (!live) return
-        setForm({ off: [...eff.off], custom: eff.custom.map(c => ({ ...c })) })
+        setForm({ off: [...eff.off], custom: eff.custom.map((c: any) => ({ ...c })) })
         setInherited(true)
       }
     })()
@@ -41,14 +41,14 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
 
   if (!form) return <p style={{ fontSize: 12, color: T.muted, margin: '8px 0' }}>Loading form…</p>
 
-  const isOff = k => form.off.includes(k)
-  const toggle = k => setForm(f => ({ ...f, off: isOff(k) ? f.off.filter(x => x !== k) : [...f.off, k] }))
+  const isOff = (k: any) => form.off.includes(k)
+  const toggle = (k: any) => setForm((f: any) => ({ ...f, off: isOff(k) ? f.off.filter((x: any) => x !== k) : [...f.off, k] }))
 
   function addCustom() {
     const label = draft.label.trim()
     if (!label) return
-    if (form.custom.some(c => c.label.toLowerCase() === label.toLowerCase())) return
-    setForm(f => ({ ...f, custom: [...f.custom, { id: `${Date.now()}`, label, type: draft.type }] }))
+    if (form.custom.some((c: any) => c.label.toLowerCase() === label.toLowerCase())) return
+    setForm((f: any) => ({ ...f, custom: [...f.custom, { id: `${Date.now()}`, label, type: draft.type }] }))
     setDraft({ label: '', type: draft.type })
   }
 
@@ -73,7 +73,7 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
     setSaving(false)
     if (!ok) { alert("Couldn't reset — try again."); return }
     const eff = coachId ? await resolveCheckinForm(companyId, coachId) : { ...DEFAULT_FORM }
-    setForm({ off: [...eff.off], custom: eff.custom.map(c => ({ ...c })) })
+    setForm({ off: [...eff.off], custom: eff.custom.map((c: any) => ({ ...c })) })
     setInherited(true)
   }
 
@@ -90,11 +90,11 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
                 : `${coachName || 'This coach'} has a custom form. Their clients see it automatically.`)}
         </p>
       )}
-      {CHECKIN_SECTIONS.map(sec => (
+      {CHECKIN_SECTIONS.map((sec: any) => (
         <div key={sec.id} style={{ marginBottom: 12 }}>
           <p style={{ fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 6px' }}>{sec.label}</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {sec.items.map(it => {
+            {sec.items.map((it: any) => {
               const off = isOff(it.key)
               return (
                 <button key={it.key} onClick={() => toggle(it.key)}
@@ -116,22 +116,22 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
 
       <div style={{ marginBottom: 12 }}>
         <p style={{ fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 6px' }}>Custom Metrics</p>
-        {form.custom.map(c => (
+        {form.custom.map((c: any) => (
           <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6 }}>
             <span style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 600 }}>{c.label}</span>
-            <span style={{ fontSize: 10, color: T.muted }}>{(CUSTOM_TYPES.find(t => t.value === c.type) || {}).label}</span>
-            <button onClick={() => setForm(f => ({ ...f, custom: f.custom.filter(x => x.id !== c.id) }))}
+            <span style={{ fontSize: 10, color: T.muted }}>{((CUSTOM_TYPES.find((t: any) => t.value === c.type) || {}) as any).label}</span>
+            <button onClick={() => setForm((f: any) => ({ ...f, custom: f.custom.filter((x: any) => x.id !== c.id) }))}
               style={{ background: 'none', border: 'none', color: T.danger, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px' }}>×</button>
           </div>
         ))}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <input value={draft.label} onChange={e => setDraft(d => ({ ...d, label: e.target.value }))}
+          <input value={draft.label} onChange={e => setDraft((d: any) => ({ ...d, label: e.target.value }))}
             onKeyDown={e => { if (e.key === 'Enter') addCustom() }}
             placeholder="e.g. Morning fasted glucose"
             style={{ flex: 1, minWidth: 160, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', color: T.text, fontSize: 12, outline: 'none' }}/>
-          <select value={draft.type} onChange={e => setDraft(d => ({ ...d, type: e.target.value }))}
+          <select value={draft.type} onChange={e => setDraft((d: any) => ({ ...d, type: e.target.value }))}
             style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', color: T.text, fontSize: 12, outline: 'none', cursor: 'pointer' }}>
-            {CUSTOM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            {CUSTOM_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
           <button onClick={addCustom} disabled={!draft.label.trim()}
             style={{ background: draft.label.trim() ? T.gold : '#333', border: 'none', borderRadius: 8, padding: '8px 14px', color: draft.label.trim() ? T.black : T.muted, fontSize: 12, fontWeight: 800, cursor: draft.label.trim() ? 'pointer' : 'default' }}>

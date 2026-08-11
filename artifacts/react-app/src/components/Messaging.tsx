@@ -7,7 +7,7 @@ import { supabase } from '../supabaseClient'
 import { sendNotification } from './Notifications'
 import { TZ_OPTIONS, DEFAULT_TZ, zonedTimeToIso, tzShort } from '../lib/tz'
 import Communities from './Communities'
-import { loomIsShown, useLoomOn } from './LoomPrivacy'
+import { loomIsShown, useLoomOn, LN } from './LoomPrivacy'
 import { ReactionBar, fetchReactions } from './Reactions'
 
 function useIsMobile(bp = 640) {
@@ -40,12 +40,12 @@ const H = {
   'Content-Type': 'application/json',
   'Prefer': 'return=representation',
 }
-async function dbGet(table, params = '') {
+async function dbGet(table: any, params = '') {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: H })
   if (!res.ok) { console.error('GET error', await res.text()); return [] }
   return res.json()
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST', headers: H, body: JSON.stringify(body)
   })
@@ -53,33 +53,33 @@ async function dbInsert(table, body) {
   const text = await res.text()
   return text ? JSON.parse(text) : null
 }
-async function dbDelete(table, params) {
+async function dbDelete(table: any, params: any) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method: 'DELETE', headers: H })
   return res.ok
 }
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     method: 'PATCH', headers: H, body: JSON.stringify(body)
   })
   if (!res.ok) console.error('UPDATE error', await res.text())
 }
 
-function formatTime(ts) {
+function formatTime(ts: any) {
   if (!ts) return ''
   const d = new Date(ts)
-  const diffDays = Math.floor((new Date() - d) / 86400000)
+  const diffDays = Math.floor(((new Date() as any) - (d as any)) / 86400000)
   if (diffDays === 0) return d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
   if (diffDays === 1) return 'Yesterday'
   return d.toLocaleDateString([], { month:'short', day:'numeric' })
 }
 function fileIcon(name = '') {
-  const ext = name.split('.').pop().toLowerCase()
+  const ext = (name.split('.').pop() || '').toLowerCase()
   if (['jpg','jpeg','png','gif','webp'].includes(ext)) return '🖼'
   if (ext === 'pdf') return '📄'
   if (['xls','xlsx','csv'].includes(ext)) return '📊'
   return '📎'
 }
-function formatBytes(b) {
+function formatBytes(b: any) {
   if (!b) return ''
   if (b < 1024) return b + ' B'
   if (b < 1048576) return Math.round(b/1024) + ' KB'
@@ -88,11 +88,11 @@ function formatBytes(b) {
 
 
 // ── Broadcast Composer ────────────────────────────────────────
-function BroadcastComposer({ onClose, senderName, senderEmail }) {
+function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
   const [audienceType,    setAudienceType]    = useState('company_wide')
-  const [senderId,        setSenderId]        = useState(null)   // sender's own profile id — needed for real delivery
+  const [senderId,        setSenderId]        = useState<any>(null)   // sender's own profile id — needed for real delivery
   // Real coach → client roster from the database (for broadcast targeting)
-  const [broadcastCoaches, setBroadcastCoaches] = useState([])
+  const [broadcastCoaches, setBroadcastCoaches] = useState<any[]>([])
   useEffect(() => { (async () => {
     try {
       const me = await dbGet('user_profiles', `email=eq.${encodeURIComponent(senderEmail || '')}&select=id,company_id`)
@@ -103,24 +103,24 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
         dbGet('user_profiles', `company_id=eq.${cid}&role=in.(coach,head_coach)&is_active=not.is.false&select=id,name&order=name.asc`),
         dbGet('user_profiles', `company_id=eq.${cid}&role=eq.client&is_active=not.is.false&select=id,name,coach_id,update_day&order=name.asc`),
       ])
-      setBroadcastCoaches((coachRows || []).map(c => ({
+      setBroadcastCoaches((coachRows || []).map((c: any) => ({
         id: c.id, name: c.name,
-        clients: (clientRows || []).filter(cl => cl.coach_id === c.id)
-          .map(cl => ({ id: cl.id, name: cl.name, checkInDay: cl.update_day || 'Unassigned' })),
+        clients: (clientRows || []).filter((cl: any) => cl.coach_id === c.id)
+          .map((cl: any) => ({ id: cl.id, name: cl.name, checkInDay: cl.update_day || 'Unassigned' })),
       })))
     } catch {}
   })() }, [senderEmail])
   const [selectedCoachId, setSelectedCoachId] = useState('')
-  const [selectedDays,    setSelectedDays]    = useState([])
-  const [selectedClients, setSelectedClients] = useState(new Set())
+  const [selectedDays,    setSelectedDays]    = useState<any[]>([])
+  const [selectedClients, setSelectedClients] = useState<any>(new Set())
   const [message,         setMessage]         = useState('')
   const [sending,         setSending]         = useState(false)
   const [sent,            setSent]            = useState(false)
-  const [history,         setHistory]         = useState([])
+  const [history,         setHistory]         = useState<any[]>([])
   const [view,            setView]            = useState('compose') // 'compose' | 'history'
   // ── Scheduling ────────────────────────────────────────────
   const [sendMode,      setSendMode]      = useState('now')   // 'now' | 'schedule'
-  const [scheduleDates, setScheduleDates] = useState([])      // [{id, date, time}]
+  const [scheduleDates, setScheduleDates] = useState<any[]>([])      // [{id, date, time}]
   const [newSchedDate,  setNewSchedDate]  = useState('')
   const [newSchedTime,  setNewSchedTime]  = useState('09:00')
   const [schedTz,       setSchedTz]       = useState(DEFAULT_TZ)
@@ -139,37 +139,37 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
   function addScheduleDate() {
     if (!newSchedDate || !newSchedTime) return
     const iso = zonedTimeToIso(newSchedDate, newSchedTime, schedTz)
-    if (scheduleDates.find(d => d.iso === iso)) return  // dedupe
-    setScheduleDates(prev => [...prev, { id: Date.now(), date: newSchedDate, time: newSchedTime, tz: schedTz, iso }])
+    if (scheduleDates.find((d: any) => d.iso === iso)) return  // dedupe
+    setScheduleDates((prev: any) => [...prev, { id: Date.now(), date: newSchedDate, time: newSchedTime, tz: schedTz, iso }])
     setNewSchedDate(''); setNewSchedTime('09:00')
   }
 
-  function removeScheduleDate(id) {
-    setScheduleDates(prev => prev.filter(d => d.id !== id))
+  function removeScheduleDate(id: any) {
+    setScheduleDates((prev: any) => prev.filter((d: any) => d.id !== id))
   }
 
-  async function cancelScheduled(id) {
+  async function cancelScheduled(id: any) {
     try {
       await dbUpdate('broadcast_messages', `id=eq.${id}`, { status: 'cancelled' })
       await loadHistory()
     } catch {}
   }
 
-  const coach = broadcastCoaches.find(c => c.id === selectedCoachId)
+  const coach = broadcastCoaches.find((c: any) => c.id === selectedCoachId)
 
   const availableDays = coach
-    ? [...new Set(coach.clients.map(c => c.checkInDay))].sort()
+    ? [...new Set(coach.clients.map((c: any) => c.checkInDay))].sort()
     : []
 
   const filteredClients = (() => {
     if (!coach) return []
     if (audienceType === 'coach_day' && selectedDays.length)
-      return coach.clients.filter(c => selectedDays.includes(c.checkInDay))
+      return coach.clients.filter((c: any) => selectedDays.includes(c.checkInDay))
     return coach.clients
   })()
 
-  function toggleClient(id) {
-    setSelectedClients(prev => {
+  function toggleClient(id: any) {
+    setSelectedClients((prev: any) => {
       const n = new Set(prev)
       n.has(id) ? n.delete(id) : n.add(id)
       return n
@@ -183,7 +183,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
       case 'coach_roster': return coach ? `All clients of ${coach.name} (${coach.clients.length} clients)` : '— pick a coach —'
       case 'coach_day':    return (coach && selectedDays.length) ? `${coach.name} · ${selectedDays.join(' + ')} clients (${filteredClients.length})` : '— pick coach & day(s) —'
       case 'individuals':  return selectedClients.size > 0
-        ? `${selectedClients.size} selected: ${[...selectedClients].map(id => coach?.clients.find(c=>c.id===id)?.name).filter(Boolean).join(', ')}`
+        ? `${selectedClients.size} selected: ${[...selectedClients].map((id: any) => coach?.clients.find((c: any)=>c.id===id)?.name).filter(Boolean).join(', ')}`
         : '— pick coach, then select clients —'
       default: return ''
     }
@@ -207,13 +207,13 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
   // Resolve exactly who this broadcast goes to — client ids + staff ids —
   // so the server can deliver real messages & notifications to each person.
   function resolveRecipients() {
-    const allClients = broadcastCoaches.flatMap(c => c.clients.map(cl => cl.id))
-    const allCoaches = broadcastCoaches.map(c => c.id)
+    const allClients = broadcastCoaches.flatMap((c: any) => c.clients.map((cl: any) => cl.id))
+    const allCoaches = broadcastCoaches.map((c: any) => c.id)
     switch (audienceType) {
       case 'company_wide': return { ids: allClients, staff: allCoaches }
       case 'coaches_only': return { ids: [], staff: allCoaches }
-      case 'coach_roster': return { ids: (coach?.clients || []).map(c => c.id), staff: [] }
-      case 'coach_day':    return { ids: filteredClients.map(c => c.id), staff: [] }
+      case 'coach_roster': return { ids: (coach?.clients || []).map((c: any) => c.id), staff: [] }
+      case 'coach_day':    return { ids: filteredClients.map((c: any) => c.id), staff: [] }
       case 'individuals':  return { ids: [...selectedClients], staff: [] }
       default:             return { ids: [], staff: [] }
     }
@@ -290,7 +290,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
             <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Send to a targeted group</div>
           </div>
         </div>
-        <button onClick={() => setView(v => v === 'history' ? 'compose' : 'history')}
+        <button onClick={() => setView((v: any) => v === 'history' ? 'compose' : 'history')}
           style={{ background:view==='history'?`${C.gold}22`:'#1a1a1a', border:`1px solid ${view==='history'?C.gold:C.border}`,
             borderRadius:8, padding:'6px 12px', color:view==='history'?C.gold:C.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
           {view === 'history' ? '✏️ Compose' : '📋 Sent History'}
@@ -302,14 +302,14 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
           {/* Sent / Scheduled tabs */}
           <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-            {[{key:'sent',label:'📤 Sent'},{key:'scheduled',label:'🕐 Scheduled'}].map(t=>(
+            {[{key:'sent',label:'📤 Sent'},{key:'scheduled',label:'🕐 Scheduled'}].map((t: any)=>(
               <button key={t.key} onClick={()=>setHistTab(t.key)}
                 style={{ flex:1, padding:'10px', background:histTab===t.key?`${C.gold}18`:'none', border:'none',
                   borderBottom:`2px solid ${histTab===t.key?C.gold:'transparent'}`,
                   color:histTab===t.key?C.gold:C.muted, fontSize:12, fontWeight:histTab===t.key?700:500, cursor:'pointer' }}>
                 {t.label}
                 <span style={{ marginLeft:6, fontSize:10, color:C.muted }}>
-                  ({history.filter(b=> t.key==='scheduled' ? b.status==='scheduled' : (b.status==='sent'||!b.status)).length})
+                  ({history.filter((b: any)=> t.key==='scheduled' ? b.status==='scheduled' : (b.status==='sent'||!b.status)).length})
                 </span>
               </button>
             ))}
@@ -318,9 +318,9 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
           <div style={{ flex:1, overflowY:'auto', padding:16 }}>
             {/* Sent tab */}
             {histTab==='sent'&&(()=>{
-              const sent = history.filter(b=>b.status==='sent'||!b.status)
+              const sent = history.filter((b: any)=>b.status==='sent'||!b.status)
               if (!sent.length) return <div style={{ textAlign:'center', padding:40, color:C.muted }}>No broadcasts sent yet</div>
-              return sent.map((b,i)=>(
+              return sent.map((b: any,i: any)=>(
                 <div key={b.id||i} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
                     <span style={{ fontSize:11, fontWeight:700, color:C.gold, background:`${C.gold}18`, border:`1px solid ${C.gold}33`, borderRadius:6, padding:'2px 8px', maxWidth:'70%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -338,14 +338,14 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
 
             {/* Scheduled tab */}
             {histTab==='scheduled'&&(()=>{
-              const pending = history.filter(b=>b.status==='scheduled')
+              const pending = history.filter((b: any)=>b.status==='scheduled')
               if (!pending.length) return (
                 <div style={{ textAlign:'center', padding:40, color:C.muted }}>
                   <div style={{ fontSize:32, marginBottom:10 }}>🕐</div>
                   No scheduled broadcasts
                 </div>
               )
-              return pending.sort((a,b)=>a.scheduled_for?.localeCompare(b.scheduled_for||'')||0).map((b,i)=>(
+              return pending.sort((a: any,b: any)=>a.scheduled_for?.localeCompare(b.scheduled_for||'')||0).map((b: any,i: any)=>(
                 <div key={b.id||i} style={{ background:C.card, border:`1px solid ${C.gold}33`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -378,7 +378,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
           <div style={{ marginBottom:20 }}>
             <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:10 }}>1 · Choose Audience</div>
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-              {aud.map(a => (
+              {aud.map((a: any) => (
                 <button key={a.key} onClick={() => { setAudienceType(a.key); setSelectedCoachId(''); setSelectedDays([]); setSelectedClients(new Set()) }}
                   style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:`2px solid ${audienceType===a.key ? C.gold : C.border}`,
                     background: audienceType===a.key ? `${C.gold}12` : C.card, cursor:'pointer', textAlign:'left' }}>
@@ -398,7 +398,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>2 · Select Coach</div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {broadcastCoaches.map(c => (
+                {broadcastCoaches.map((c: any) => (
                   <button key={c.id} onClick={() => { setSelectedCoachId(c.id); setSelectedDays([]); setSelectedClients(new Set()) }}
                     style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:10,
                       border:`2px solid ${selectedCoachId===c.id ? C.gold : C.border}`,
@@ -419,14 +419,14 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>3 · Check-In Day(s) — pick one or more</div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {availableDays.map(d => { const on = selectedDays.includes(d); return (
-                  <button key={d} onClick={() => setSelectedDays(prev => on ? prev.filter(x=>x!==d) : [...prev, d])}
+                {availableDays.map((d: any) => { const on = selectedDays.includes(d); return (
+                  <button key={d} onClick={() => setSelectedDays((prev: any) => on ? prev.filter((x: any)=>x!==d) : [...prev, d])}
                     style={{ padding:'8px 16px', borderRadius:20, border:`2px solid ${on ? C.gold : C.border}`,
                       background: on ? `${C.gold}18` : C.card, color: on ? C.gold : C.muted,
                       fontWeight: on ? 700 : 400, fontSize:12, cursor:'pointer' }}>
                     {on ? '✓ ' : ''}{d}
                     <span style={{ fontSize:10, marginLeft:6, color:C.muted }}>
-                      ({coach?.clients.filter(c=>c.checkInDay===d).length})
+                      ({coach?.clients.filter((c: any)=>c.checkInDay===d).length})
                     </span>
                   </button>
                 )})}
@@ -435,7 +435,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
                 <div style={{ marginTop:10, padding:'8px 12px', background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:8 }}>
                   <div style={{ fontSize:11, color:C.gold, fontWeight:600, marginBottom:4 }}>Recipients:</div>
                   <div style={{ fontSize:12, color:C.white }}>
-                    {filteredClients.map(c => c.name).join(', ')}
+                    {filteredClients.map((c: any) => c.name).join(', ')}
                   </div>
                 </div>
               )}
@@ -449,13 +449,13 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
                 <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase' }}>3 · Select Clients</div>
                 <button onClick={() => {
                   if (selectedClients.size === coach?.clients.length) setSelectedClients(new Set())
-                  else setSelectedClients(new Set(coach?.clients.map(c=>c.id)))
+                  else setSelectedClients(new Set(coach?.clients.map((c: any)=>c.id)))
                 }} style={{ background:'none', border:'none', color:C.gold, fontSize:11, fontWeight:700, cursor:'pointer' }}>
                   {selectedClients.size === coach?.clients.length ? 'Deselect all' : 'Select all'}
                 </button>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {coach?.clients.map(cl => (
+                {coach?.clients.map((cl: any) => (
                   <button key={cl.id} onClick={() => toggleClient(cl.id)}
                     style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:10,
                       border:`2px solid ${selectedClients.has(cl.id) ? C.gold : C.border}`,
@@ -622,14 +622,14 @@ function BroadcastComposer({ onClose, senderName, senderEmail }) {
 
 // ── Multi-tenant helpers ──────────────────────────────────────
 function makeInitials(name = '') {
-  return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '??'
+  return name.split(' ').filter(Boolean).map((w: any) => w[0]).join('').toUpperCase().slice(0, 2) || '??'
 }
-async function dbGetOne(table, params = '') {
+async function dbGetOne(table: any, params = '') {
   const rows = await dbGet(table, params + '&limit=1')
   return rows?.[0] ?? null
 }
 // Convert a user_profiles row into the shape the sidebar / chat expect
-function profileToConvo(profile, supabaseConvoId) {
+function profileToConvo(profile: any, supabaseConvoId: any) {
   return {
     id:              profile.id,
     name:            profile.name,
@@ -644,7 +644,7 @@ function profileToConvo(profile, supabaseConvoId) {
 }
 // Find existing conversation between two users, or create one.
 // IDs are sorted before insert so the unique constraint (a,b) is always satisfied.
-async function findOrCreateConvo(aId, bId, companyId) {
+async function findOrCreateConvo(aId: any, bId: any, companyId?: any) {
   const [pA, pB] = [aId, bId].sort()
   const rows = await dbGet('conversations',
     `participant_a_id=eq.${pA}&participant_b_id=eq.${pB}&select=id&limit=1`)
@@ -659,7 +659,7 @@ async function findOrCreateConvo(aId, bId, companyId) {
 // MAIN COMPONENT
 // Props: currentUser = { email, name, role }
 // ════════════════════════════════════════════════════════════════
-export default function Messaging({ currentUser, loomMode = false, loomFeatured = new Set(), initialConvoName = null }) {
+export default function Messaging({ currentUser, loomMode = false, loomFeatured = new Set(), initialConvoName = null }: any) {
   useLoomOn() // re-render when the app-wide visible-names list changes
   const isMobile = useIsMobile()
 
@@ -671,7 +671,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
   // ── Dynamic multi-tenant conversations (loaded from Supabase) ─
   // Falls back to hardcoded demo data when user_profiles isn't set up yet.
-  const [dynConversations, setDynConversations] = useState(null) // null = not loaded
+  const [dynConversations, setDynConversations] = useState<any>(null) // null = not loaded
   const [myProfileId,      setMyProfileId]      = useState(myUUID)
 
   const [showBroadcast, setShowBroadcast] = useState(false)
@@ -682,7 +682,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
   // Clients see their coach + admin; ALL staff (coach, admin, VA, head coach) see client threads only —
   // teammate conversations live in the Team Hub, never here.
-  const demoConversations = []
+  const demoConversations: any[] = []
   // Only switch to Supabase-loaded convos when they are strictly richer than the demo set.
   // A partial load (e.g. only some participants found in the DB) must not wipe
   // demo conversations that have pre-seeded threads — otherwise the chat shows blank.
@@ -694,27 +694,27 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     : (isRealDbUser ? [] : demoConversations) // real users never see demo threads
 
   // Extra stub conversations created on the fly when Follow Up targets a client not yet in the list
-  const [extraConvos, setExtraConvos] = useState([])
+  const [extraConvos, setExtraConvos] = useState<any[]>([])
   const conversations = extraConvos.length
-    ? [...baseConversations.filter(c => !extraConvos.find(e => e.id === c.id)), ...extraConvos]
+    ? [...baseConversations.filter((c: any) => !extraConvos.find((e: any) => e.id === c.id)), ...extraConvos]
     : baseConversations
 
   // ── Conversation selection ────────────────────────────────
   // null = no conversation open (list-only view)
-  const [activeId, setActiveId] = useState(null)
-  const activeConvo = activeId ? (conversations.find(c => c.id === activeId) ?? null) : null
+  const [activeId, setActiveId] = useState<any>(null)
+  const activeConvo = activeId ? (conversations.find((c: any) => c.id === activeId) ?? null) : null
 
   // ── Auto-open a specific conversation when navigated here from Follow Up ──
   // If the client has a demo thread, open it directly.
   // If not, create a blank stub conversation so the coach can start one.
   useEffect(() => {
     if (!initialConvoName) return
-    const match = conversations.find(c => c.name === initialConvoName)
+    const match = conversations.find((c: any) => c.name === initialConvoName)
     if (match) {
       openConvo(match.id)
     } else {
       // No existing conversation — create a stub so the coach can message them
-      const initials = initialConvoName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+      const initials = initialConvoName.split(' ').map((w: any) => w[0]).join('').slice(0, 2).toUpperCase()
       const stub = {
         id:              'stub-' + initialConvoName.toLowerCase().replace(/\s+/g, '-'),
         name:            initialConvoName,
@@ -726,70 +726,70 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         online:          false,
         thread:          [],
       }
-      setExtraConvos(prev => prev.find(e => e.id === stub.id) ? prev : [...prev, stub])
+      setExtraConvos((prev: any) => prev.find((e: any) => e.id === stub.id) ? prev : [...prev, stub])
       setActiveId(stub.id)
     }
   }, [initialConvoName, baseConversations.length])
 
   // ── Mark-as-unread ────────────────────────────────────────
-  const [openedConvos, setOpenedConvos] = useState(() => new Set())
-  const [markedUnread, setMarkedUnread] = useState(() => new Set())
+  const [openedConvos, setOpenedConvos] = useState<any>(() => new Set())
+  const [markedUnread, setMarkedUnread] = useState<any>(() => new Set())
 
-  function openConvo(id) {
+  function openConvo(id: any) {
     setActiveId(id)
-    setOpenedConvos(prev => new Set([...prev, id]))
-    setMarkedUnread(prev => { const n = new Set(prev); n.delete(id); return n })
+    setOpenedConvos((prev: any) => new Set([...prev, id]))
+    setMarkedUnread((prev: any) => { const n = new Set(prev); n.delete(id); return n })
   }
 
   function closeConvo() { setActiveId(null) }
 
   function markCurrentUnread() {
     if (!activeId) return
-    setMarkedUnread(prev => new Set([...prev, activeId]))
+    setMarkedUnread((prev: any) => new Set([...prev, activeId]))
     // On mobile go back to list so user sees the badge immediately
     if (isMobile) setActiveId(null)
   }
 
-  function effectiveUnread(convo) {
+  function effectiveUnread(convo: any) {
     if (markedUnread.has(convo.id)) return 1
     if (openedConvos.has(convo.id)) return 0
     return convo.unread || 0
   }
 
   // ── Live Supabase messages ────────────────────────────────
-  const [liveMessages, setLiveMessages] = useState([])
-  const [liveFiles,    setLiveFiles]    = useState([])
+  const [liveMessages, setLiveMessages] = useState<any[]>([])
+  const [liveFiles,    setLiveFiles]    = useState<any[]>([])
   const [newMsg,       setNewMsg]       = useState('')
   const [tab,          setTab]          = useState('chat')
   const [fileTab,      setFileTab]      = useState('all')
   const [uploading,    setUploading]    = useState(false)
-  const bottomRef = useRef(null)
-  const listRef = useRef(null)          // messages scroll container
+  const bottomRef = useRef<any>(null)
+  const listRef = useRef<any>(null)          // messages scroll container
   const msgCountRef = useRef(-1)        // -1 = convo just opened (force scroll once)
-  const fileRef   = useRef(null)
+  const fileRef   = useRef<any>(null)
 
   const isLive = !!activeConvo?.supabaseConvoId
 
   // ── Threads (Slack-style replies on any message) ─────────────
-  const [threadRootId, setThreadRootId] = useState(null)   // message id whose thread panel is open
+  const [threadRootId, setThreadRootId] = useState<any>(null)   // message id whose thread panel is open
   const [threadMsg,    setThreadMsg]    = useState('')
   const [showThreads,  setShowThreads]  = useState(false)  // Threads inbox panel
-  const [threadInbox,  setThreadInbox]  = useState([])     // [{root, replies, convo}]
-  const [threadReads,  setThreadReads]  = useState(() => {
+  const [threadInbox,  setThreadInbox]  = useState<any[]>([])     // [{root, replies, convo}]
+  const [threadReads,  setThreadReads]  = useState<any>(() => {
     try { return JSON.parse(localStorage.getItem(`eden_thread_reads_${email}`) || '{}') } catch { return {} }
   })
-  function markThreadRead(rootId) {
-    setThreadReads(prev => {
+  function markThreadRead(rootId: any) {
+    setThreadReads((prev: any) => {
       const next = { ...prev, [rootId]: new Date().toISOString() }
       try { localStorage.setItem(`eden_thread_reads_${email}`, JSON.stringify(next)) } catch {}
       return next
     })
   }
-  function openThread(rootId) {
+  function openThread(rootId: any) {
     setThreadRootId(rootId)
     markThreadRead(rootId)
   }
-  function threadUnread(item) {
+  function threadUnread(item: any) {
     const last = item.replies[item.replies.length - 1]
     if (!last || last.sender_id === myProfileId) return false
     const readAt = threadReads[item.root.id]
@@ -801,22 +801,22 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     try {
       // Own conversations only — monitor (oversight) convos are excluded so the
       // inbox query stays bounded and the inbox only shows threads the admin is part of.
-      const ids = conversations.filter(c => !c.monitor).map(c => c.supabaseConvoId).filter(Boolean)
+      const ids = conversations.filter((c: any) => !c.monitor).map((c: any) => c.supabaseConvoId).filter(Boolean)
       if (!ids.length) return
       const replies = await dbGet('messages',
         `conversation_id=in.(${ids.join(',')})&parent_id=not.is.null&order=created_at.desc&limit=200`)
       if (!Array.isArray(replies) || !replies.length) { setThreadInbox([]); return }
-      const rootIds = [...new Set(replies.map(r => r.parent_id))]
+      const rootIds = [...new Set(replies.map((r: any) => r.parent_id))]
       const roots = await dbGet('messages', `id=in.(${rootIds.join(',')})`)
-      const items = rootIds.map(rid => {
-        const root = (roots || []).find(r => r.id === rid)
+      const items = rootIds.map((rid: any) => {
+        const root = (roots || []).find((r: any) => r.id === rid)
         if (!root) return null
-        const reps = replies.filter(r => r.parent_id === rid)
-          .sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
-        const convo = conversations.find(c => c.supabaseConvoId === root.conversation_id)
+        const reps = replies.filter((r: any) => r.parent_id === rid)
+          .sort((a: any, b: any) => (a.created_at < b.created_at ? -1 : 1))
+        const convo = conversations.find((c: any) => c.supabaseConvoId === root.conversation_id)
         return convo ? { root, replies: reps, convo } : null
       }).filter(Boolean)
-      items.sort((a, b) => (b.replies[b.replies.length-1].created_at > a.replies[a.replies.length-1].created_at ? 1 : -1))
+      items.sort((a: any, b: any) => (b.replies[b.replies.length-1].created_at > a.replies[a.replies.length-1].created_at ? 1 : -1))
       setThreadInbox(items)
     } catch {}
   }
@@ -831,7 +831,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     if (activeConvo?.monitor) return  // oversight threads are read-only
     const text = threadMsg.trim()
     if (!text || !myProfileId || !threadRootId) return
-    const root = liveMessages.find(m => m.id === threadRootId) || threadInbox.find(t => t.root.id === threadRootId)?.root
+    const root = liveMessages.find((m: any) => m.id === threadRootId) || threadInbox.find((t: any) => t.root.id === threadRootId)?.root
     const convoId = root?.conversation_id || activeConvo?.supabaseConvoId
     if (!convoId) return
     setThreadMsg('')
@@ -840,7 +840,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       content: text, message_type: 'text', parent_id: threadRootId,
     })
     // Alert the other side of whichever conversation this thread lives in
-    const convo = conversations.find(c => c.supabaseConvoId === convoId)
+    const convo = conversations.find((c: any) => c.supabaseConvoId === convoId)
     if (convo?.id && convo.id !== myProfileId && !convo.monitor) {
       sendNotification({
         recipientId: convo.id, senderId: myProfileId, senderName: myName,
@@ -865,18 +865,18 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       if (!me?.id) return  // table not set up yet → stay on demo data
       setMyProfileId(me.id)
 
-      const convos = []
+      const convos: any[] = []
 
       // Helper: dedup by profile id so the same person never appears twice
       const seen = new Set()
-      function pushConvo(profile, convoId) {
+      function pushConvo(profile: any, convoId: any) {
         if (!profile?.id || seen.has(profile.id)) return
         seen.add(profile.id)
         convos.push(profileToConvo(profile, convoId))
       }
 
       // Helper: load all staff assigned to a client via client_access (messages enabled)
-      async function loadAccessedStaff(clientId, companyId) {
+      async function loadAccessedStaff(clientId: any, companyId: any) {
         const rows = await dbGet('client_access',
           `company_id=eq.${companyId}&client_id=eq.${clientId}`)
         const companyWide = await dbGet('client_access',
@@ -892,7 +892,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       }
 
       // Helper: load all clients a staff member has messaging access to
-      async function loadAccessedClients(staffId, companyId) {
+      async function loadAccessedClients(staffId: any, companyId: any) {
         const rows = await dbGet('client_access',
           `company_id=eq.${companyId}&staff_id=eq.${staffId}`)
         for (const row of rows || []) {
@@ -975,12 +975,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       if (convos.length) {
         // Real unread counts: messages sent TO me that are still unread, per conversation
         try {
-          const ids = convos.map(c => c.supabaseConvoId).filter(Boolean)
+          const ids = convos.map((c: any) => c.supabaseConvoId).filter(Boolean)
           if (ids.length) {
             const rows = await dbGet('messages',
               `conversation_id=in.(${ids.join(',')})&is_read=eq.false&sender_id=neq.${me.id}&select=id,conversation_id`)
             if (Array.isArray(rows)) {
-              const counts = {}
+              const counts: Record<string, any> = {}
               for (const r of rows) counts[r.conversation_id] = (counts[r.conversation_id] || 0) + 1
               for (const c of convos) c.unread = counts[c.supabaseConvoId] || 0
             }
@@ -1000,7 +1000,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // Team Hub chat). The 4s poll below only fires while realtime is unproven —
   // a channel can report SUBSCRIBED even when no events ever arrive, so we
   // only trust it once a real event has landed recently.
-  const convoChanRef = useRef(null)
+  const convoChanRef = useRef<any>(null)
   useEffect(() => {
     setLiveMessages([])
     setLiveFiles([])
@@ -1014,7 +1014,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       try { const tok = sbAccessToken(); if (tok) supabase.realtime.setAuth(tok) } catch {}
       let realtimeUp = false
       let lastEventAt = 0
-      let debounce = null
+      let debounce: any = null
       const scheduleLoad = () => {
         lastEventAt = Date.now()
         clearTimeout(debounce)
@@ -1043,6 +1043,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         supabase.removeChannel(ch)
       }
     }
+    return undefined
   }, [activeId])
 
   // ── Realtime inbox: one per-user channel so new messages update the
@@ -1055,16 +1056,16 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   useEffect(() => {
     if (!myProfileId) return
     try { const tok = sbAccessToken(); if (tok) supabase.realtime.setAuth(tok) } catch {}
-    let debounce = null
+    let debounce: any = null
     const ch = supabase.channel(`msgs-user-${myProfileId}`)
-      .on('broadcast', { event: 'new-message' }, ({ payload }) => {
+      .on('broadcast', { event: 'new-message' }, ({ payload }: any) => {
         const convoId = payload?.conversationId
         if (!convoId) return
         // Flag the conversation unread in the list the moment the message lands
-        const convo = conversationsRef.current.find(c => c.supabaseConvoId === convoId)
+        const convo = conversationsRef.current.find((c: any) => c.supabaseConvoId === convoId)
         if (convo && convo.id !== activeIdRef.current) {
-          setMarkedUnread(prev => prev.has(convo.id) ? prev : new Set([...prev, convo.id]))
-          setDynConversations(prev => Array.isArray(prev) ? prev.map(c =>
+          setMarkedUnread((prev: any) => prev.has(convo.id) ? prev : new Set([...prev, convo.id]))
+          setDynConversations((prev: any) => Array.isArray(prev) ? prev.map((c: any) =>
             c.supabaseConvoId === convoId
               ? { ...c, lastMessage: payload?.preview ?? c.lastMessage, lastTime: 'now' }
               : c) : prev)
@@ -1078,19 +1079,19 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   }, [myProfileId])
 
   // Cached, never-subscribed channels used purely for HTTP broadcast sends
-  const sendChansRef = useRef({})
+  const sendChansRef = useRef<any>({})
   useEffect(() => () => {
-    for (const ch of Object.values(sendChansRef.current)) { try { supabase.removeChannel(ch) } catch {} }
+    for (const ch of Object.values(sendChansRef.current)) { try { supabase.removeChannel(ch as any) } catch {} }
     sendChansRef.current = {}
   }, [])
   // Tell the other participant a message just landed — instantly updates their
   // open conversation (convo channel) and their inbox (user channel).
-  function broadcastNewMessage(convoId, preview = '') {
+  function broadcastNewMessage(convoId: any, preview = '') {
     if (!convoId) return
     const payload = { conversationId: convoId, senderId: myProfileId, preview: String(preview).slice(0, 80) }
     try {
       convoChanRef.current?.send({ type: 'broadcast', event: 'new-message', payload })
-      const other = conversationsRef.current.find(c => c.supabaseConvoId === convoId)
+      const other = conversationsRef.current.find((c: any) => c.supabaseConvoId === convoId)
       if (other?.id && other.id !== myProfileId) {
         const topic = `msgs-user-${other.id}`
         // send() on an unjoined channel goes over HTTP — no subscribe needed
@@ -1113,10 +1114,10 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       msgCountRef.current = data.length
       setLiveMessages(data)
       // Opening/viewing the conversation marks messages to me as read (feeds the sidebar badges)
-      if (myProfileId && data.some(m => m.sender_id !== myProfileId && !m.is_read)) {
+      if (myProfileId && data.some((m: any) => m.sender_id !== myProfileId && !m.is_read)) {
         dbUpdate('messages', `conversation_id=eq.${activeConvo.supabaseConvoId}&sender_id=neq.${myProfileId}&is_read=eq.false`, { is_read: true, read_at: new Date().toISOString() }).catch(() => {})
       }
-      fetchReactions('messages', data.map(m => m.id)).then(setReactions).catch(() => {})
+      fetchReactions('messages', data.map((m: any) => m.id)).then(setReactions).catch(() => {})
       if (firstLoad || (grew && nearBottom)) {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
       }
@@ -1129,17 +1130,17 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   }
 
   // ── Message pins (per-user — pinning never affects the other person) ──
-  const [pins, setPins] = useState([])
-  const [reactions, setReactions] = useState({})   // { msgId: { '👍': [{id,n}] } }
+  const [pins, setPins] = useState<any[]>([])
+  const [reactions, setReactions] = useState<any>({})   // { msgId: { '👍': [{id,n}] } }
   async function loadPins() {
     if (!activeConvo?.supabaseConvoId || !myProfileId) return
     const data = await dbGet('message_pins', `conversation_id=eq.${activeConvo.supabaseConvoId}&user_id=eq.${myProfileId}`)
     if (Array.isArray(data)) setPins(data)
   }
   useEffect(() => { setPins([]); if (activeConvo?.supabaseConvoId) loadPins() }, [activeId, myProfileId])
-  const pinnedIds = new Set(pins.map(p => p.message_id))
+  const pinnedIds = new Set(pins.map((p: any) => p.message_id))
 
-  function jumpToMsg(id) {
+  function jumpToMsg(id: any) {
     const el = document.getElementById(`msg-${id}`)
     if (!el) return
     el.scrollIntoView({ behavior:'smooth', block:'center' })
@@ -1149,7 +1150,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     setTimeout(() => { el.style.background = 'transparent' }, 1600)
   }
 
-  async function togglePin(msg) {
+  async function togglePin(msg: any) {
     if (!myProfileId) return
     if (pinnedIds.has(msg.id)) {
       await dbDelete('message_pins', `message_id=eq.${msg.id}&user_id=eq.${myProfileId}`)
@@ -1163,7 +1164,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
     loadPins()
   }
   // Admin/VA: pin a message for every participant in this conversation
-  async function pinForAll(msg) {
+  async function pinForAll(msg: any) {
     const convo = await dbGetOne('conversations', `id=eq.${msg.conversation_id}&select=participant_a_id,participant_b_id`)
     const targets = [...new Set([myProfileId, convo?.participant_a_id, convo?.participant_b_id].filter(Boolean))]
     for (const uid of targets) {
@@ -1178,9 +1179,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
 
   // ── Message delete (soft delete — always visible in the admin audit log) ──
   const canDeleteAnyMsg = ['coach', 'head_coach', 'super_admin', 'company_admin'].includes(myRole)
-  async function deleteMsg(msg) {
+  async function deleteMsg(msg: any) {
     if (!window.confirm('Delete this message for everyone in the chat?\nIt stays permanently visible in the admin audit log.')) return
-    const ok = await dbUpdate('messages', `id=eq.${msg.id}`, {
+    const ok: any = await dbUpdate('messages', `id=eq.${msg.id}`, {
       deleted_at: new Date().toISOString(), deleted_by: myProfileId, deleted_by_name: myName,
     })
     if (!ok) { alert('Could not delete the message — run the database update first.'); return }
@@ -1196,7 +1197,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // Bell notification for the person on the other side of this conversation —
   // they get an instant alert (the bell listens via realtime) that links back
   // to the Messages tab. activeConvo.id is the other person's profile id.
-  function notifyRecipient(preview) {
+  function notifyRecipient(preview: any) {
     const otherId = activeConvo?.id
     if (!otherId || !myProfileId || otherId === myProfileId || activeConvo?.monitor) return
     sendNotification({
@@ -1230,9 +1231,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // then sends as an audio file message with the transcript in content.
   const [recording,  setRecording]  = useState(false)
   const [recSecs,    setRecSecs]    = useState(0)
-  const recRef      = useRef(null)
-  const recChunks   = useRef([])
-  const recTimerRef = useRef(null)
+  const recRef      = useRef<any>(null)
+  const recChunks   = useRef<any[]>([])
+  const recTimerRef = useRef<any>(null)
 
   async function startVoiceMemo() {
     if (recording || !isLive) return
@@ -1240,9 +1241,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       const stream = await navigator.mediaDevices.getUserMedia({ audio:true })
       const mr = new MediaRecorder(stream)
       recChunks.current = []
-      mr.ondataavailable = ev => { if (ev.data?.size) recChunks.current.push(ev.data) }
+      mr.ondataavailable = (ev: any) => { if (ev.data?.size) recChunks.current.push(ev.data) }
       mr.onstop = async () => {
-        stream.getTracks().forEach(t=>t.stop())
+        stream.getTracks().forEach((t: any)=>t.stop())
         clearInterval(recTimerRef.current)
         const blob = new Blob(recChunks.current, { type:'audio/webm' })
         setRecording(false); setRecSecs(0)
@@ -1280,13 +1281,13 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       recRef.current = mr
       mr.start()
       setRecording(true); setRecSecs(0)
-      recTimerRef.current = setInterval(()=>setRecSecs(s=>s+1), 1000)
+      recTimerRef.current = setInterval(()=>setRecSecs((s: any)=>s+1), 1000)
     } catch { alert('Microphone access was blocked. Allow mic access in your browser and try again.') }
   }
   function stopVoiceMemo() { try { recRef.current?.stop() } catch {} }
   const recClock = `${Math.floor(recSecs/60)}:${String(recSecs%60).padStart(2,'0')}`
 
-  async function handleUpload(e) {
+  async function handleUpload(e: any) {
     const file = e.target.files?.[0]
     if (!file || !myProfileId || !isLive) return
     setUploading(true)
@@ -1333,27 +1334,27 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // ── Which messages to show ─────────────────────────────────
   // Live messages when connected to Supabase; otherwise the conversation thread from state.
   // Group thread replies under their parent; the main chat only shows root messages
-  const repliesByParent = {}
+  const repliesByParent: Record<string, any> = {}
   for (const m of liveMessages) if (m.parent_id) (repliesByParent[m.parent_id] ||= []).push(m)
-  const rootLiveMessages = liveMessages.filter(m => !m.parent_id)
+  const rootLiveMessages = liveMessages.filter((m: any) => !m.parent_id)
   const displayMessages = isLive && liveMessages.length > 0
     ? rootLiveMessages
     : (activeConvo?.thread ?? [])
   const threadRoot = threadRootId
-    ? (liveMessages.find(m => m.id === threadRootId) || threadInbox.find(t => t.root.id === threadRootId)?.root || null)
+    ? (liveMessages.find((m: any) => m.id === threadRootId) || threadInbox.find((t: any) => t.root.id === threadRootId)?.root || null)
     : null
   const threadReplies = threadRootId
-    ? (repliesByParent[threadRootId] || threadInbox.find(t => t.root.id === threadRootId)?.replies || [])
+    ? (repliesByParent[threadRootId] || threadInbox.find((t: any) => t.root.id === threadRootId)?.replies || [])
     : []
-  function isMine(msg) {
+  function isMine(msg: any) {
     if (isLive) return msg.sender_id === myProfileId
     if (myRole === 'coach') return msg.from === 'coach'
     return msg.from === 'client'
   }
-  function msgText(msg)  { return isLive ? msg.content  : msg.text }
+  function msgText(msg: any)  { return isLive ? msg.content  : msg.text }
   // Turn pasted http(s) URLs into clickable links (only http/https — never js:/data:)
-  function linkify(text, mine = false) {
-    return String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g).map((p, i) => {
+  function linkify(text: any, mine = false) {
+    return String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g).map((p: any, i: any) => {
       if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{p}</span>
       const href = /^www\./.test(p) ? `https://${p}` : p
       try { const proto = new URL(href).protocol; if (proto !== 'http:' && proto !== 'https:') return <span key={i}>{p}</span> } catch { return <span key={i}>{p}</span> }
@@ -1361,11 +1362,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         style={{ color: mine ? C.black : C.gold, fontWeight:700, textDecoration:'underline', wordBreak:'break-all' }}>{p}</a>
     })
   }
-  function msgTime(msg)  { return isLive ? formatTime(msg.created_at) : msg.time }
-  function msgType(msg)  { return isLive ? msg.message_type : 'text' }
+  function msgTime(msg: any)  { return isLive ? formatTime(msg.created_at) : msg.time }
+  function msgType(msg: any)  { return isLive ? msg.message_type : 'text' }
   function otherInitial(){ return activeConvo?.initials?.[0] ?? '' }
 
-  const shownFiles = liveFiles.filter(f => {
+  const shownFiles = liveFiles.filter((f: any) => {
     if (fileTab === 'all')       return true
     if (fileTab === 'images')    return f.file_type === 'image'
     if (fileTab === 'documents') return f.file_type === 'document'
@@ -1522,14 +1523,14 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         {/* Conversation list */}
         {!showThreads && (
         <div style={{ flex:1, overflowY:'auto' }}>
-          {conversations.filter(c => !convoSearch.trim() ||
+          {conversations.filter((c: any) => !convoSearch.trim() ||
               c.name.toLowerCase().includes(convoSearch.trim().toLowerCase())).length === 0 && (
             <div style={{ padding:'28px 16px', textAlign:'center', color:C.muted, fontSize:12 }}>
               No chats match "{convoSearch}"
             </div>
           )}
-          {conversations.filter(c => !convoSearch.trim() ||
-              c.name.toLowerCase().includes(convoSearch.trim().toLowerCase())).map((convo, i) => {
+          {conversations.filter((c: any) => !convoSearch.trim() ||
+              c.name.toLowerCase().includes(convoSearch.trim().toLowerCase())).map((convo: any, i: any) => {
             const isActive  = convo.id === activeId
             // In Loom Mode: active conversation always shows real name;
             // all others are anonymised so they can't be read on camera
@@ -1622,7 +1623,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             <div style={{ flex:1 }}>
               <div style={{ fontSize:13, fontWeight:800, color:C.white }}>🧵 Thread</div>
               <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
-                {(conversations.find(c => c.supabaseConvoId === threadRoot.conversation_id)?.name) || activeConvo?.name || ''}
+                {(conversations.find((c: any) => c.supabaseConvoId === threadRoot.conversation_id)?.name) || activeConvo?.name || ''}
               </div>
             </div>
             {!isMobile && (
@@ -1636,7 +1637,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px' }}>
               <div style={{ fontSize:11, fontWeight:700, color: threadRoot.sender_id === myProfileId ? C.gold : C.white, marginBottom:3 }}>
                 {threadRoot.sender_id === myProfileId ? 'You' :
-                  (conversations.find(c => c.supabaseConvoId === threadRoot.conversation_id)?.name || 'Them')}
+                  (conversations.find((c: any) => c.supabaseConvoId === threadRoot.conversation_id)?.name || 'Them')}
                 <span style={{ fontSize:10, fontWeight:400, color:C.muted, marginLeft:6 }}>{formatTime(threadRoot.created_at)}</span>
               </div>
               <div style={{ fontSize:12, color:C.white, lineHeight:1.5, wordBreak:'break-word' }}>{threadRoot.content || '📎 Attachment'}</div>
@@ -1647,7 +1648,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             {threadReplies.length === 0 && (
               <div style={{ textAlign:'center', color:C.muted, fontSize:12, padding:'24px 12px' }}>No replies yet — start the thread below.</div>
             )}
-            {threadReplies.map(r => {
+            {threadReplies.map((r: any) => {
               const mine = r.sender_id === myProfileId
               return (
                 <div key={r.id} style={{ display:'flex', justifyContent: mine ? 'flex-end' : 'flex-start', marginBottom:8 }}>
@@ -1671,7 +1672,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                     {!r.deleted_at && r.id && (
                       <ReactionBar table="messages" messageId={r.id} myId={myProfileId}
                         reactions={reactions[r.id]} accent={C.gold} alignRight={mine}
-                        onChange={map => setReactions(p => ({ ...p, [r.id]: map }))} />
+                        onChange={(map: any) => setReactions((p: any) => ({ ...p, [r.id]: map }))} />
                     )}
                     <div style={{ fontSize:9, color:C.muted, marginTop:2, textAlign: mine ? 'right' : 'left' }}>{formatTime(r.created_at)}</div>
                   </div>
@@ -1834,7 +1835,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   No messages yet.
                 </div>
               )}
-              {displayMessages.map((msg, i) => {
+              {displayMessages.map((msg: any, i: any) => {
                 const mine = isMine(msg)
                 const type = msgType(msg)
                 // Soft-deleted messages: admins still see the content (flagged); everyone else sees a placeholder
@@ -1924,7 +1925,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                       {isLive && msg.id && !msg.deleted_at && (
                         <ReactionBar table="messages" messageId={msg.id} myId={myProfileId}
                           reactions={reactions[msg.id]} accent={C.gold} alignRight={mine}
-                          onChange={map => setReactions(p => ({ ...p, [msg.id]: map }))} />
+                          onChange={(map: any) => setReactions((p: any) => ({ ...p, [msg.id]: map }))} />
                       )}
                       <div style={{ fontSize:10, color:C.muted, marginTop:3,
                         textAlign:mine?'right':'left',

@@ -19,15 +19,15 @@ const C = {
   border:'#2a2a2a', muted:'#888', success:'#4FD89A', danger:'#ff4444',
 }
 
-const API = (p) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`
+const API = (p: any) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`
 
-async function apiGet(path) {
+async function apiGet(path: any) {
   try {
     const r = await fetch(API(path), { headers: { Authorization: sbBearer() } })
     return await r.json().catch(() => null)
   } catch { return null }
 }
-async function apiPost(path, body) {
+async function apiPost(path: any, body: any) {
   try {
     const r = await fetch(API(path), {
       method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
@@ -41,30 +41,30 @@ async function apiPost(path, body) {
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DOWS = ['Su','Mo','Tu','We','Th','Fr','Sa']
 
-const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-const evDayKey = (iso) => dayKey(new Date(iso))
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' })
-const fmtDate = (iso) => new Date(iso).toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' })
+const dayKey = (d: any) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+const evDayKey = (iso: any) => dayKey(new Date(iso))
+const fmtTime = (iso: any) => new Date(iso).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' })
+const fmtDate = (iso: any) => new Date(iso).toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' })
 
 // Local datetime-input value ⇄ ISO
-const toLocalInput = (iso) => {
+const toLocalInput = (iso: any) => {
   if (!iso) return ''
   const d = new Date(iso)
-  const p = (n) => String(n).padStart(2,'0')
+  const p = (n: any) => String(n).padStart(2,'0')
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 const EMPTY_FORM = { id:null, title:'', start:'', end:'', description:'', link:'' }
 
-export default function DbaCalendar({ dba, primary, palette = null, isMobile }) {
+export default function DbaCalendar({ dba, primary, palette = null, isMobile }: any) {
   // Event dots use the single primary brand color (no palette cycling)
-  const eventColor = (_i) => primary
-  const [data, setData]   = useState(null)  // {can_manage, can_set_booking, my_booking, events, bookings, roster?}
+  const eventColor = (_i: any) => primary
+  const [data, setData]   = useState<any>(null)  // {can_manage, can_set_booking, my_booking, events, bookings, roster?}
   const [busy, setBusy]   = useState(false)
   const [view, setView]   = useState(() => { const n = new Date(); return { y:n.getFullYear(), m:n.getMonth() } })
-  const [selDay, setSelDay] = useState(null)     // 'YYYY-MM-DD' or null
-  const [form, setForm]   = useState(null)       // null = closed, else EMPTY_FORM shape
-  const [bookOpen, setBookOpen] = useState(null) // booking entry id whose embed is open
+  const [selDay, setSelDay] = useState<any>(null)     // 'YYYY-MM-DD' or null
+  const [form, setForm]   = useState<any>(null)       // null = closed, else EMPTY_FORM shape
+  const [bookOpen, setBookOpen] = useState<any>(null) // booking entry id whose embed is open
   const [myUrl, setMyUrl] = useState('')
   const [showGrants, setShowGrants] = useState(false)
 
@@ -79,11 +79,11 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
   }, [dba?.id]) // eslint-disable-line
 
   const events = data?.events || []
-  const byDay = {}
+  const byDay: any = {}
   for (const e of events) { const k = evDayKey(e.start); (byDay[k] = byDay[k] || []).push(e) }
 
   const now = new Date()
-  const upcoming = events.filter(e => new Date(e.end || e.start) >= new Date(now.getTime() - 3600000))
+  const upcoming = events.filter((e: any) => new Date(e.end || e.start) >= new Date(now.getTime() - 3600000))
 
   async function saveEvent() {
     if (!form.title.trim()) { alert('Give the event a title.'); return }
@@ -102,7 +102,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
     setForm(null)
     load()
   }
-  async function deleteEvent(e) {
+  async function deleteEvent(e: any) {
     if (!confirm(`Delete "${e.title}"?`)) return
     const b = await apiPost('event-delete', { dbaId: dba.id, eventId: e.id })
     if (!b.ok) { alert(b.error || 'Could not delete the event.'); return }
@@ -116,7 +116,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
     if (!b.ok) { alert(b.error || 'Could not save your booking link.'); return }
     load()
   }
-  async function toggleGrant(m) {
+  async function toggleGrant(m: any) {
     const b = await apiPost('cal-authority-set', { dbaId: dba.id, userId: m.id, allowed: !m.allowed })
     if (!b.ok) { alert(b.error || 'Could not update calendar access.'); return }
     load()
@@ -130,11 +130,11 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(view.y, view.m, d))
   const todayK = dayKey(new Date())
 
-  const inp = { width:'100%', boxSizing:'border-box', background:C.surface, color:C.white, border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', fontSize:13, outline:'none' }
-  const btn = (bg, fg = C.black) => ({ background:bg, color:fg, border:'none', borderRadius:8, padding:'9px 16px', fontSize:12, fontWeight:800, cursor:'pointer' })
-  const lbl = { fontSize:11, fontWeight:700, color:C.muted, margin:'10px 0 4px', letterSpacing:.4, textTransform:'uppercase' }
+  const inp: any = { width:'100%', boxSizing:'border-box', background:C.surface, color:C.white, border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 11px', fontSize:13, outline:'none' }
+  const btn = (bg: any, fg: any = C.black): any => ({ background:bg, color:fg, border:'none', borderRadius:8, padding:'9px 16px', fontSize:12, fontWeight:800, cursor:'pointer' })
+  const lbl: any = { fontSize:11, fontWeight:700, color:C.muted, margin:'10px 0 4px', letterSpacing:.4, textTransform:'uppercase' }
 
-  const EventRow = ({ e, showDate }) => (
+  const EventRow = ({ e, showDate }: any) => (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'11px 13px', display:'flex', gap:10, alignItems:'flex-start', flexWrap:'wrap' }}>
       <div style={{ flex:1, minWidth:150 }}>
         <p style={{ fontSize:13.5, fontWeight:800, color:C.white, margin:0 }}>{e.title}</p>
@@ -175,7 +175,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
             </button>
           )}
           {data?.can_manage && (
-            <button onClick={() => setForm(f => f ? null : { ...EMPTY_FORM })} style={btn(primary)}>
+            <button onClick={() => setForm((f: any) => f ? null : { ...EMPTY_FORM })} style={btn(primary)}>
               {form && !form.id ? 'Cancel' : '+ Add event'}
             </button>
           )}
@@ -190,7 +190,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
             People you check can add, edit and delete events — and publish their own booking calendar below so members can book calls with them.
           </p>
           {data.roster.length === 0 && <p style={{ fontSize:12, color:C.muted, margin:0 }}>No members yet.</p>}
-          {data.roster.map(m => (
+          {data.roster.map((m: any) => (
             <label key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', fontSize:13, color:C.white, cursor:'pointer' }}>
               <input type="checkbox" checked={!!m.allowed} onChange={() => toggleGrant(m)} />
               {m.name}
@@ -203,21 +203,21 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
       {form && (
         <div style={{ background:C.card, border:`1px solid ${primary}44`, borderRadius:12, padding:16, marginBottom:16 }}>
           <p style={{ fontSize:13, fontWeight:800, color:C.white, margin:'0 0 8px' }}>{form.id ? 'Edit event' : 'New event'}</p>
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title:e.target.value }))} placeholder="Event title" maxLength={120} style={inp} />
+          <input value={form.title} onChange={e => setForm((f: any) => ({ ...f, title:e.target.value }))} placeholder="Event title" maxLength={120} style={inp} />
           <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             <div style={{ flex:1, minWidth:170 }}>
               <p style={lbl}>Starts</p>
-              <input type="datetime-local" value={form.start} onChange={e => setForm(f => ({ ...f, start:e.target.value }))} style={inp} />
+              <input type="datetime-local" value={form.start} onChange={e => setForm((f: any) => ({ ...f, start:e.target.value }))} style={inp} />
             </div>
             <div style={{ flex:1, minWidth:170 }}>
               <p style={lbl}>Ends (optional)</p>
-              <input type="datetime-local" value={form.end} onChange={e => setForm(f => ({ ...f, end:e.target.value }))} style={inp} />
+              <input type="datetime-local" value={form.end} onChange={e => setForm((f: any) => ({ ...f, end:e.target.value }))} style={inp} />
             </div>
           </div>
           <p style={lbl}>Link members can click to join (optional)</p>
-          <input value={form.link} onChange={e => setForm(f => ({ ...f, link:e.target.value }))} placeholder="https:// meeting or resource link" style={inp} />
+          <input value={form.link} onChange={e => setForm((f: any) => ({ ...f, link:e.target.value }))} placeholder="https:// meeting or resource link" style={inp} />
           <p style={lbl}>Details (optional)</p>
-          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description:e.target.value }))} rows={3} maxLength={2000}
+          <textarea value={form.description} onChange={e => setForm((f: any) => ({ ...f, description:e.target.value }))} rows={3} maxLength={2000}
             placeholder="What's this event about?" style={{ ...inp, resize:'vertical', fontFamily:'inherit' }} />
           <div style={{ display:'flex', gap:8, marginTop:12 }}>
             <button onClick={saveEvent} disabled={busy} style={{ ...btn(primary), opacity: busy ? .6 : 1 }}>
@@ -255,7 +255,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
                       border:`1px solid ${isSel ? primary+'66' : k === todayK ? C.border : 'transparent'}` }}>
                     <span style={{ fontSize:11, fontWeight: k === todayK ? 800 : 600, color: k === todayK ? primary : C.white }}>{d.getDate()}</span>
                     <div style={{ display:'flex', gap:2, flexWrap:'wrap', marginTop:3 }}>
-                      {evs.slice(0,4).map((e, ei) => <span key={e.id} style={{ width:6, height:6, borderRadius:3, background:eventColor(ei) }} />)}
+                      {evs.slice(0,4).map((e: any, ei: any) => <span key={e.id} style={{ width:6, height:6, borderRadius:3, background:eventColor(ei) }} />)}
                       {evs.length > 4 && <span style={{ fontSize:8, color:C.muted }}>+{evs.length-4}</span>}
                     </div>
                   </div>
@@ -273,7 +273,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
                 </p>
                 {(byDay[selDay] || []).length === 0
                   ? <p style={{ fontSize:12.5, color:C.muted, margin:0 }}>Nothing scheduled this day.</p>
-                  : (byDay[selDay] || []).map(e => <EventRow key={e.id} e={e} />)}
+                  : (byDay[selDay] || []).map((e: any) => <EventRow key={e.id} e={e} />)}
               </>
             ) : (
               <>
@@ -282,7 +282,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
                   ? <p style={{ fontSize:12.5, color:C.muted, margin:0 }}>
                       {data.can_manage ? 'No upcoming events — add the first one.' : 'No upcoming events yet.'}
                     </p>
-                  : upcoming.slice(0, 12).map(e => <EventRow key={e.id} e={e} showDate />)}
+                  : upcoming.slice(0, 12).map((e: any) => <EventRow key={e.id} e={e} showDate />)}
               </>
             )}
           </div>
@@ -296,8 +296,8 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
               <p style={{ fontSize:12.5, color:C.muted, margin:'0 0 12px' }}>No booking calendars have been added yet.</p>
             )}
             <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
-              {(data.bookings || []).map(b => (
-                <button key={b.id} onClick={() => setBookOpen(o => o === b.id ? null : b.id)}
+              {(data.bookings || []).map((b: any) => (
+                <button key={b.id} onClick={() => setBookOpen((o: any) => o === b.id ? null : b.id)}
                   style={{ background: bookOpen === b.id ? `${primary}22` : 'none', color: bookOpen === b.id ? primary : C.white,
                     border:`1px solid ${bookOpen === b.id ? primary+'66' : C.border}`, borderRadius:10, padding:'9px 14px', fontSize:12.5, fontWeight:700, cursor:'pointer' }}>
                   📅 {b.name}{b.is_coach ? ' · Coach' : ''}
@@ -305,7 +305,7 @@ export default function DbaCalendar({ dba, primary, palette = null, isMobile }) 
               ))}
             </div>
             {bookOpen && (() => {
-              const b = (data.bookings || []).find(x => x.id === bookOpen)
+              const b = (data.bookings || []).find((x: any) => x.id === bookOpen)
               if (!b) return null
               return (
                 <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>

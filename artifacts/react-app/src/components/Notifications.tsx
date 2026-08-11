@@ -27,29 +27,29 @@ const H = {
   'Prefer': 'return=representation',
 }
 
-async function dbGet(table, params='') {
+async function dbGet(table: any, params='') {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: H })
   if (!res.ok) return []
   return res.json()
 }
 
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
   if (!res.ok) console.error('INSERT', await res.text())
 }
 
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     method:'PATCH', headers:H, body:JSON.stringify(body)
   })
 }
 
 // ── Format relative time ──────────────────────────────────────
-function timeAgo(ts) {
+function timeAgo(ts: any) {
   if (!ts) return ''
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000)
+  const diff = Math.floor((Date.now() - (new Date(ts) as any)) / 1000)
   if (diff < 60)  return 'Just now'
   if (diff < 3600)  return Math.floor(diff/60) + 'm ago'
   if (diff < 86400) return Math.floor(diff/3600) + 'h ago'
@@ -76,18 +76,18 @@ const NOTIF_CONFIG = {
 // MAIN COMPONENT
 // Renders as a bell icon with badge count + dropdown panel
 // ════════════════════════════════════════════════════════════════
-export default function Notifications({ currentUser, onNavigate }) {
+export default function Notifications({ currentUser, onNavigate }: any) {
   const [open,    setOpen]    = useState(false)
-  const [notifs,  setNotifs]  = useState([])
+  const [notifs,  setNotifs]  = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const panelRef = useRef(null)
+  const panelRef = useRef<any>(null)
 
   const email  = currentUser?.email || ''
   const info   = { role: currentUser?.role || 'client', name: currentUser?.name || 'User', uuid:null }
   const role   = info.role
 
   // Resolve the real profile UUID from the database by email.
-  const [myUUID, setMyUUID] = useState(null)
+  const [myUUID, setMyUUID] = useState<any>(null)
   useEffect(() => {
     let live = true
     if (!email) { setMyUUID(null); return }
@@ -96,7 +96,7 @@ export default function Notifications({ currentUser, onNavigate }) {
     return () => { live = false }
   }, [email])
 
-  const unreadCount = notifs.filter(n => !n.is_read).length
+  const unreadCount = notifs.filter((n: any) => !n.is_read).length
 
   // ── Phone push notifications (Web Push) ─────────────────────
   // Fallback labels in case an older server doesn't send `categories` yet.
@@ -107,12 +107,12 @@ export default function Notifications({ currentUser, onNavigate }) {
     { id: 'reminders', label: 'Reminders' },
     { id: 'ads_recaps', label: 'Ads recaps' },
   ]
-  const [pushState, setPushState] = useState(null)   // null loading · {enabled, devices, supported, needsInstall}
+  const [pushState, setPushState] = useState<any>(null)   // null loading · {enabled, devices, supported, needsInstall}
   const [pushBusy, setPushBusy] = useState(false)
   const [pushMsg, setPushMsg] = useState('')
   const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-  const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
+  const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || (window.navigator as any).standalone === true
 
   // ── One-time "turn on phone notifications" nudge ────────────
   // Dismissal is remembered per-user SERVER-SIDE (push prefs), so dismissing
@@ -181,7 +181,7 @@ export default function Notifications({ currentUser, onNavigate }) {
       const sd = await sr.json().catch(() => null)
       if (!sr.ok) { setPushMsg(sd?.error || 'Could not turn on notifications.'); setPushBusy(false); return }
       // Preserve saved per-category choices — the server echoes them back.
-      setPushState(p => ({
+      setPushState((p: any) => ({
         enabled: true, devices: sd?.devices || 1,
         cats: sd?.cats ?? p?.cats ?? {},
         categories: sd?.categories ?? p?.categories ?? PUSH_CATEGORIES_FALLBACK,
@@ -190,15 +190,15 @@ export default function Notifications({ currentUser, onNavigate }) {
       setPushMsg('✅ Phone notifications are on for this device.')
       dismissNudge() // enabled — never nudge again
     } catch (e) {
-      setPushMsg('Could not turn on notifications — ' + (e?.message || 'unknown error'))
+      setPushMsg('Could not turn on notifications — ' + ((e as any)?.message || 'unknown error'))
     }
     setPushBusy(false)
   }
 
-  async function toggleCat(catId) {
+  async function toggleCat(catId: any) {
     const next = !(pushState?.cats?.[catId] !== false)
     // optimistic flip
-    setPushState(p => ({ ...(p || {}), cats: { ...(p?.cats || {}), [catId]: next } }))
+    setPushState((p: any) => ({ ...(p || {}), cats: { ...(p?.cats || {}), [catId]: next } }))
     try {
       const r = await fetch('/api/push/prefs', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
@@ -206,21 +206,21 @@ export default function Notifications({ currentUser, onNavigate }) {
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) throw new Error(d?.error || 'save failed')
-      if (d?.cats) setPushState(p => ({ ...(p || {}), cats: d.cats }))
+      if (d?.cats) setPushState((p: any) => ({ ...(p || {}), cats: d.cats }))
     } catch {
       // revert on failure
-      setPushState(p => ({ ...(p || {}), cats: { ...(p?.cats || {}), [catId]: !next } }))
+      setPushState((p: any) => ({ ...(p || {}), cats: { ...(p?.cats || {}), [catId]: !next } }))
       setPushMsg('Could not save that preference — try again.')
     }
   }
 
-  async function saveQuiet(patch) {
+  async function saveQuiet(patch: any) {
     const prev = pushState?.quiet || { on: false, start: '22:00', end: '07:00' }
     const next = { ...prev, ...patch }
     // Save with the phone's own timezone so "10pm" means 10pm where the user is.
     let tz
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone } catch {}
-    setPushState(p => ({ ...(p || {}), quiet: next })) // optimistic
+    setPushState((p: any) => ({ ...(p || {}), quiet: next })) // optimistic
     try {
       const r = await fetch('/api/push/prefs', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
@@ -228,9 +228,9 @@ export default function Notifications({ currentUser, onNavigate }) {
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) throw new Error(d?.error || 'save failed')
-      if (d?.quiet) setPushState(p => ({ ...(p || {}), quiet: d.quiet }))
+      if (d?.quiet) setPushState((p: any) => ({ ...(p || {}), quiet: d.quiet }))
     } catch {
-      setPushState(p => ({ ...(p || {}), quiet: prev })) // revert on failure
+      setPushState((p: any) => ({ ...(p || {}), quiet: prev })) // revert on failure
       setPushMsg('Could not save quiet hours — try again.')
     }
   }
@@ -242,7 +242,7 @@ export default function Notifications({ currentUser, onNavigate }) {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
         body: JSON.stringify({ enabled: false }),
       })
-      if (r.ok) { setPushState(p => ({ ...(p || {}), enabled: false })); setPushMsg('Phone notifications are off (all devices).') }
+      if (r.ok) { setPushState((p: any) => ({ ...(p || {}), enabled: false })); setPushMsg('Phone notifications are off (all devices).') }
       else setPushMsg('Could not turn off — try again.')
     } catch { setPushMsg('Could not turn off — try again.') }
     setPushBusy(false)
@@ -261,7 +261,7 @@ export default function Notifications({ currentUser, onNavigate }) {
     // report SUBSCRIBED even when the table isn't in the supabase_realtime
     // publication, in which case no events are ever delivered.
     let lastEventAt = 0
-    let debounce = null
+    let debounce: any = null
     const scheduleLoad = () => { lastEventAt = Date.now(); clearTimeout(debounce); debounce = setTimeout(loadNotifs, 250) }
     const channel = sb
       .channel('notifs-' + myUUID)
@@ -284,7 +284,7 @@ export default function Notifications({ currentUser, onNavigate }) {
 
   // ── Close panel when clicking outside ─────────────────────
   useEffect(() => {
-    function handleClick(e) {
+    function handleClick(e: any) {
       if (panelRef.current && !panelRef.current.contains(e.target)) {
         setOpen(false)
       }
@@ -303,12 +303,12 @@ export default function Notifications({ currentUser, onNavigate }) {
     setLoading(false)
   }
 
-  async function markRead(id) {
+  async function markRead(id: any) {
     await dbUpdate('notifications', `id=eq.${id}`, {
       is_read: true,
       read_at: new Date().toISOString(),
     })
-    setNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read:true } : n))
+    setNotifs((prev: any) => prev.map((n: any) => n.id === id ? { ...n, is_read:true } : n))
   }
 
   async function markAllRead() {
@@ -316,10 +316,10 @@ export default function Notifications({ currentUser, onNavigate }) {
       is_read: true,
       read_at: new Date().toISOString(),
     })
-    setNotifs(prev => prev.map(n => ({ ...n, is_read:true })))
+    setNotifs((prev: any) => prev.map((n: any) => ({ ...n, is_read:true })))
   }
 
-  async function handleNotifClick(notif) {
+  async function handleNotifClick(notif: any) {
     markRead(notif.id)
     setOpen(false)
     if (!onNavigate || !notif.link_to) return
@@ -350,7 +350,7 @@ export default function Notifications({ currentUser, onNavigate }) {
     onNavigate(notif.link_to)
   }
 
-  const cfg = (type) => NOTIF_CONFIG[type] || { icon:'🔔', label:'Notification', color:C.gold }
+  const cfg = (type: any) => (NOTIF_CONFIG as any)[type] || { icon:'🔔', label:'Notification', color:C.gold }
 
   return (
     <div ref={panelRef} style={{ position:'relative', display:'inline-flex' }}>
@@ -572,7 +572,7 @@ export default function Notifications({ currentUser, onNavigate }) {
             </div>
             {pushState?.enabled && (
               <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:6 }}>
-                {(pushState.categories || PUSH_CATEGORIES_FALLBACK).map(cat => {
+                {(pushState.categories || PUSH_CATEGORIES_FALLBACK).map((cat: any) => {
                   const on = pushState.cats?.[cat.id] !== false
                   return (
                     <div key={cat.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, paddingLeft:6 }}>
@@ -677,7 +677,7 @@ export default function Notifications({ currentUser, onNavigate }) {
 // Failures are never swallowed: the insert is checked, retried once, and if it
 // still fails it's logged to the console AND to the server-side audit trail so
 // a missing bell alert always leaves a trace.
-export async function sendNotification({ recipientId, senderId, senderName, type, body, linkTo }) {
+export async function sendNotification({ recipientId, senderId, senderName, type, body, linkTo }: any) {
   if (!recipientId) return false
   if (senderId && recipientId === senderId) return false // never notify yourself
   const row = {
@@ -695,10 +695,10 @@ export async function sendNotification({ recipientId, senderId, senderName, type
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text().catch(()=>'')).slice(0,300)}`)
   }
-  let lastErr = null
+  let lastErr: any = null
   for (let i = 0; i < 2; i++) {
     try { await attempt(); return true }
-    catch (e) {
+    catch (e: any) {
       lastErr = e
       if (i === 0) await new Promise(r => setTimeout(r, 800)) // brief pause, then retry once
     }

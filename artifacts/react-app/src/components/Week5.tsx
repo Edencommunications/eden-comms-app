@@ -14,6 +14,7 @@ const SHEET_ID      = '1lckx8AWxzxxddhWESgj7R-FVHoE6g2JBC9NG1J72QTA'
 const SHEET_NAME    = 'FoodList'
 const RECIPE_BUY    = 'https://funnel.lifestyleofeden.com/loe-recipes-5482'
 
+
 // ── Demo roster (Week 6 pulls this from Supabase dynamically) ─
 // Demo roster removed — rosters load live from the database.
 const DEMO_COACHES = []
@@ -36,19 +37,19 @@ const H = {
 import { getRecipeDetails, loadLiveRecipeDetails } from './recipeDetails'
 import { planLessonMove, planLessonDrop, rollbackLessonDrop, executeLessonDrop, staleProgressIds } from './courseMoveUtils'
 
-async function dbGet(table, params='') {
+async function dbGet(table: any, params: any='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
   if (!r.ok) return []
   return r.json()
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
   if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
       method:'PATCH', headers:H, body:JSON.stringify(body)
@@ -63,7 +64,7 @@ async function dbUpdate(table, params, body) {
 
 // Accept a REGULAR link (YouTube watch/short, Vimeo page, Loom share, Google Drive)
 // or an embed link — always returns something an <iframe> can play.
-export function toEmbedUrl(raw) {
+export function toEmbedUrl(raw: any) {
   const url = (raw || '').trim()
   if (!url) return ''
   try {
@@ -99,14 +100,14 @@ export function toEmbedUrl(raw) {
 // Like dbGet, but returns null (not []) when the read FAILED — callers that
 // must distinguish "no rows" from "could not read" (e.g. pre-move snapshots)
 // use this so a failed read can never masquerade as an empty result.
-async function dbGetOrNull(table, params='') {
+async function dbGetOrNull(table: any, params='') {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
     if (!r.ok) return null
     return await r.json()
   } catch { return null }
 }
-async function dbDelete(table, params) {
+async function dbDelete(table: any, params: any) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers:H })
     return r.ok
@@ -153,10 +154,10 @@ const STATIC_RECIPES = [
   {name:'Date Caramel Frosting',        servings:1,cal:136,pro:2,  fat:4.5,carb:24, fib:3, category:'Desserts', tags:['dessert']},
 ]
 const RECIPE_CATS = ['All',...new Set(STATIC_RECIPES.map(r=>r.category))]
-const MCOLS = {cal:'#ffa600',pro:'#4FD89A',carb:'#6FB8E8',fat:'#f06060',fib:'#D4A8F0'}
+const MCOLS: Record<string, any> = {cal:'#ffa600',pro:'#4FD89A',carb:'#6FB8E8',fat:'#f06060',fib:'#D4A8F0'}
 
 // ── Mini UI ───────────────────────────────────────────────────
-function Ring({pct,size=64,stroke=5,color=C.gold}) {
+function Ring({pct,size=64,stroke=5,color=C.gold}: any) {
   const r=(size-stroke)/2, circ=2*Math.PI*r, off=circ*(1-pct/100)
   return (
     <svg width={size} height={size} style={{transform:'rotate(-90deg)',flexShrink:0}}>
@@ -166,7 +167,7 @@ function Ring({pct,size=64,stroke=5,color=C.gold}) {
     </svg>
   )
 }
-function MacroChip({label,val,unit=''}) {
+function MacroChip({label,val,unit=''}: any) {
   return (
     <div style={{textAlign:'center',minWidth:50}}>
       <div style={{fontSize:14,fontWeight:700,color:MCOLS[label]||C.gold}}>{val}{unit}</div>
@@ -174,10 +175,10 @@ function MacroChip({label,val,unit=''}) {
     </div>
   )
 }
-function Card({children,sx={}}) {
+function Card({children,sx={}}: any) {
   return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,...sx}}>{children}</div>
 }
-function Lbl({t}) {
+function Lbl({t}: any) {
   return <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',margin:'14px 0 7px'}}>{t}</div>
 }
 
@@ -186,10 +187,10 @@ function Lbl({t}) {
 // ════════════════════════════════════════════════════════════════
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
-export default function Week5({currentUser, onAddRecipeToDiet}) {
+export default function Week5({currentUser, onAddRecipeToDiet}: any) {
   const email   = currentUser?.email||''
-  const [dbProfile,  setDbProfile]  = useState(null)   // resolved from user_profiles by email
-  const [companyCtx, setCompanyCtx] = useState(null)   // {companyId,isWhiteLabel,tierRecipes,packageId} — null = Eden
+  const [dbProfile,  setDbProfile]  = useState<any>(null)   // resolved from user_profiles by email
+  const [companyCtx, setCompanyCtx] = useState<any>(null)   // {companyId,isWhiteLabel,tierRecipes,packageId} — null = Eden
   const myUUID  = dbProfile?.id || null
   const roleEff = dbProfile?.role || currentUser?.role || 'client'
   const isAdmin = roleEff==='super_admin'
@@ -228,14 +229,14 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   const [tab, setTab] = useState('course')
 
   // ── Course state ──────────────────────────────────────────
-  const [courses,      setCourses]      = useState([])
-  const [activeCourse, setActiveCourse] = useState(null)
-  const [modules,      setModules]      = useState([])
-  const [completed,    setCompleted]    = useState(new Set())
-  const [seqSet,       setSeqSet]       = useState(new Set()) // course ids whose lessons unlock in order
+  const [courses,      setCourses]      = useState<any[]>([])
+  const [activeCourse, setActiveCourse] = useState<any>(null)
+  const [modules,      setModules]      = useState<any[]>([])
+  const [completed,    setCompleted]    = useState<Set<any>>(new Set())
+  const [seqSet,       setSeqSet]       = useState<Set<any>>(new Set()) // course ids whose lessons unlock in order
   const [courseView,   setCourseView]   = useState('catalog')
-  const [activeSection,setActiveSection]= useState(null)
-  const [activeModule, setActiveModule] = useState(null)
+  const [activeSection,setActiveSection]= useState<any>(null)
+  const [activeModule, setActiveModule] = useState<any>(null)
 
   // Admin: video URL editing
   const [showUrlInput, setShowUrlInput] = useState(false)
@@ -244,14 +245,14 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
 
   // Admin: access management
   const [showAccess,   setShowAccess]   = useState(false)
-  const [accessList,   setAccessList]   = useState([])
-  const [accessCourse, setAccessCourse] = useState(null)
+  const [accessList,   setAccessList]   = useState<any[]>([])
+  const [accessCourse, setAccessCourse] = useState<any>(null)
 
   // Admin (Eden only): per-course tier distribution
   const [showTiers,    setShowTiers]    = useState(false)
-  const [tiersCourse,  setTiersCourse]  = useState(null)
-  const [allPackages,  setAllPackages]  = useState([])
-  const [tierSel,      setTierSel]      = useState(new Set())
+  const [tiersCourse,  setTiersCourse]  = useState<any>(null)
+  const [allPackages,  setAllPackages]  = useState<any[]>([])
+  const [tierSel,      setTierSel]      = useState<Set<any>>(new Set())
   const [savingTiers,  setSavingTiers]  = useState(false)
 
   // Admin: new course
@@ -267,34 +268,34 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // Admin: edit course title/description
-  const [courseEdit,   setCourseEdit]   = useState(null) // {title,description}
+  const [courseEdit,   setCourseEdit]   = useState<any>(null) // {title,description}
   const [savingCourseEdit, setSavingCourseEdit] = useState(false)
 
   // Admin: course content builder (sections & lessons)
   const [showBuilder,  setShowBuilder]  = useState(false)
-  const [draftSecs,    setDraftSecs]    = useState([])   // [{id,title,color}] incl. not-yet-saved empty sections
-  const [secEdit,      setSecEdit]      = useState(null) // {id,title}
-  const [modEdit,      setModEdit]      = useState(null) // {id,title,duration}
-  const [newModFor,    setNewModFor]    = useState(null) // section id gaining a lesson
+  const [draftSecs,    setDraftSecs]    = useState<any[]>([])   // [{id,title,color}] incl. not-yet-saved empty sections
+  const [secEdit,      setSecEdit]      = useState<any>(null) // {id,title}
+  const [modEdit,      setModEdit]      = useState<any>(null) // {id,title,duration}
+  const [newModFor,    setNewModFor]    = useState<any>(null) // section id gaining a lesson
   const [newModTitle,  setNewModTitle]  = useState('')
   const [newModDur,    setNewModDur]    = useState('')
   const [newSecTitle,  setNewSecTitle]  = useState('')
   const [builderBusy,  setBuilderBusy]  = useState(false)
-  const [dragMod,      setDragMod]      = useState(null)  // lesson being dragged
-  const [dragOver,     setDragOver]     = useState(null)  // {secId,index} insertion point
+  const [dragMod,      setDragMod]      = useState<any>(null)  // lesson being dragged
+  const [dragOver,     setDragOver]     = useState<any>(null)  // {secId,index} insertion point
 
   // Coach: client progress view
   const [showProgress, setShowProgress]  = useState(false)
-  const [clientProgress,setClientProgress]= useState([])
+  const [clientProgress,setClientProgress]= useState<any[]>([])
 
   // Recipe state
   const [recipes,       setRecipes]       = useState(STATIC_RECIPES)
   const [liveLoading,   setLiveLoading]   = useState(false)
   const [recipeSearch,  setRecipeSearch]  = useState('')
   const [recipeCat,     setRecipeCat]     = useState('All')
-  const [selectedRecipe,setSelectedRecipe]= useState(null)
+  const [selectedRecipe,setSelectedRecipe]= useState<any>(null)
   const [hasRecipeAccess,setHasRecipeAccess]= useState(false)
-  const [assignedRecipeNames,setAssignedRecipeNames]= useState(new Set()) // per-recipe unlocks from coach assignments
+  const [assignedRecipeNames,setAssignedRecipeNames]= useState<Set<any>>(new Set()) // per-recipe unlocks from coach assignments
   const [,setLiveDetailsReady]                = useState(false) // re-render once live doc details arrive
 
   useEffect(()=>{
@@ -307,7 +308,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
 
   // ── Load courses based on role ────────────────────────────
   // A course belongs to Eden when it has no company_id (or Eden's)
-  const isEdenCourse = c => !c.company_id || c.company_id===EDEN_ORG_ID
+  const isEdenCourse = (c: any) => !c.company_id || c.company_id===EDEN_ORG_ID
 
   async function loadCourses() {
     let data
@@ -321,12 +322,12 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       // Coach/client: only courses they have access to
       const access = await dbGet('course_access',`user_id=eq.${myUUID}&revoked=eq.false`)
       if (!access?.length) { setCourses([]); return }
-      const ids = access.map(a=>a.course_id).join(',')
+      const ids = access.map((a: any)=>a.course_id).join(',')
       data = await dbGet('courses',`id=in.(${ids})&is_active=eq.true&order=sort_order.asc`)
       // White-label users: own company's courses always; Eden courses only if that
       // course's per-course distribution (courses.tiers) includes their org's package.
       // A course with no tiers set is "Eden only" and never shown to white-label users.
-      if (isWL) data = (data||[]).filter(c=>
+      if (isWL) data = (data||[]).filter((c: any)=>
         c.company_id===companyCtx.companyId ||
         (isEdenCourse(c)&&Array.isArray(c.tiers)&&companyCtx.packageId&&c.tiers.includes(companyCtx.packageId)))
     }
@@ -335,37 +336,37 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     // report their mode to every org (RLS blocks the direct read cross-org)
     if (data?.length) {
       try {
-        const r=await fetch(`${import.meta.env.BASE_URL||'/'}api/course-modes?ids=${data.map(c=>c.id).join(',')}`,{headers:{Authorization:sbBearer()}})
+        const r=await fetch(`${import.meta.env.BASE_URL||'/'}api/course-modes?ids=${data.map((c: any)=>c.id).join(',')}`,{headers:{Authorization:sbBearer()}})
         const b=r.ok?await r.json():null
         setSeqSet(new Set(Object.keys(b?.modes||{}).filter(id=>b.modes[id])))
       } catch { setSeqSet(new Set()) }
     } else setSeqSet(new Set())
     if (data?.length>0) {
       // Keep the open course only if it's still in the visible list
-      if (!activeCourse || !data.some(c=>c.id===activeCourse.id)) openCourse(data[0])
+      if (!activeCourse || !data.some((c: any)=>c.id===activeCourse.id)) openCourse(data[0])
     } else {
       setActiveCourse(null); setModules([]); setCourseView('catalog')
     }
   }
 
   // Order by section first so per-section sort_order works for admin-built courses
-  const sortMods = mods => [...(mods||[])].sort((a,b)=>(a.section_id-b.section_id)||(a.sort_order-b.sort_order))
+  const sortMods = (mods: any) => [...(mods||[])].sort((a,b)=>(a.section_id-b.section_id)||(a.sort_order-b.sort_order))
 
-  async function openCourse(course) {
+  async function openCourse(course: any) {
     setActiveCourse(course)
     setCourseView('home')
     const mods = await dbGet('course_modules',`course_id=eq.${course.id}&order=sort_order.asc`)
     setModules(sortMods(mods))
     if (myUUID) {
       const prog = await dbGet('course_progress',`user_id=eq.${myUUID}&course_id=eq.${course.id}`)
-      setCompleted(new Set((prog||[]).filter(p=>p.completed).map(p=>p.module_id)))
+      setCompleted(new Set((prog||[]).filter((p: any)=>p.completed).map((p: any)=>p.module_id)))
     }
   }
 
   // ── Mark module complete ───────────────────────────────────
   // Completions go through the api-server so "lessons unlock in order" is
   // enforced server-side (a direct REST write could skip locked lessons).
-  async function markComplete(moduleId) {
+  async function markComplete(moduleId: any) {
     if (!myUUID||!activeCourse) return
     setCompleted(prev=>new Set([...prev,moduleId]))
     try {
@@ -397,7 +398,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setSavingUrl(false)
     if (!ok) { alert('Could not save the video link — please check your connection and try again.'); return }
     setModules(prev=>prev.map(m=>m.id===activeModule.id?{...m,video_url:url}:m))
-    setActiveModule(prev=>({...prev,video_url:url}))
+    setActiveModule((prev: any)=>({...prev,video_url:url}))
     setShowUrlInput(false); setTempUrl('')
     alert('Video link saved and live for everyone with course access.')
   }
@@ -447,13 +448,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setSavingCourseEdit(false)
     if (!ok || !modeOk) { alert('Could not save the course details — please check your connection and try again.'); return }
     setCourses(prev=>prev.map(c=>c.id===activeCourse.id?{...c,title,description}:c))
-    setActiveCourse(prev=>prev?{...prev,title,description}:prev)
+    setActiveCourse((prev: any)=>prev?{...prev,title,description}:prev)
     setCourseEdit(null)
   }
 
   // ── ADMIN: Reorder courses in the catalog ─────────────────
-  const [movingCourse, setMovingCourse] = useState(false)
-  async function moveCourse(course, dir) {
+  const [movingCourse, setMovingCourse] = useState<any>(false)
+  async function moveCourse(course: any, dir: any) {
     if (movingCourse) return
     const idx = courses.findIndex(c=>c.id===course.id)
     const j = idx + dir
@@ -474,22 +475,22 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setCourses(renumbered)
     if (activeCourse) {
       const upd = renumbered.find(c=>c.id===activeCourse.id)
-      if (upd) setActiveCourse(prev=>({...prev, sort_order:upd.sort_order}))
+      if (upd) setActiveCourse((prev: any)=>({...prev, sort_order:upd.sort_order}))
     }
   }
 
   // ── ADMIN: Toggle course published ────────────────────────
-  async function togglePublish(course) {
+  async function togglePublish(course: any) {
     await dbUpdate('courses',`id=eq.${course.id}`,{ is_active:!course.is_active })
     setCourses(prev=>prev.map(c=>c.id===course.id?{...c,is_active:!c.is_active}:c))
-    if (activeCourse?.id===course.id) setActiveCourse(prev=>({...prev,is_active:!prev.is_active}))
+    if (activeCourse?.id===course.id) setActiveCourse((prev: any)=>({...prev,is_active:!prev.is_active}))
   }
 
   // ── ADMIN: Course content builder ─────────────────────────
   // Eden admin edits Eden courses; a white-label admin edits their own org's courses
-  const canEditCourse = c => isAdmin && (isWL ? c.company_id===companyCtx.companyId : isEdenCourse(c))
+  const canEditCourse = (c: any) => isAdmin && (isWL ? c.company_id===companyCtx.companyId : isEdenCourse(c))
 
-  async function refreshModules(courseId) {
+  async function refreshModules(courseId: any) {
     const mods = await dbGet('course_modules',`course_id=eq.${courseId}&order=sort_order.asc`)
     const sorted = sortMods(mods)
     setModules(sorted)
@@ -527,7 +528,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setShowBuilder(false)
   }
   function openBuilder() {
-    setDraftSecs(sections.map(s=>({id:s.id,title:s.title,color:s.color})))
+    setDraftSecs(sections.map((s: any)=>({id:s.id,title:s.title,color:s.color})))
     setSecEdit(null); setModEdit(null); setNewModFor(null); setNewModTitle(''); setNewModDur(''); setNewSecTitle('')
     setCourseEdit(null)
     setShowBuilder(true)
@@ -538,7 +539,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     setDraftSecs(prev=>[...prev,{id:nextId,title,color:SECTION_COLORS[(nextId-1)%SECTION_COLORS.length]}])
     setNewSecTitle('')
   }
-  async function saveSectionTitle(sec, title) {
+  async function saveSectionTitle(sec: any, title: any) {
     title = title.trim(); if (!title) return
     setDraftSecs(prev=>prev.map(s=>s.id===sec.id?{...s,title}:s))
     setSecEdit(null)
@@ -547,7 +548,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       await refreshModules(activeCourse.id)
     }
   }
-  async function deleteSection(sec) {
+  async function deleteSection(sec: any) {
     const count = modules.filter(m=>m.section_id===sec.id).length
     if (count>0 && !window.confirm(`Delete section "${sec.title}" and its ${count} lesson${count>1?'s':''}? This cannot be undone.`)) return
     if (count>0) {
@@ -558,7 +559,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     }
     setDraftSecs(prev=>prev.filter(s=>s.id!==sec.id))
   }
-  async function addModule(sec) {
+  async function addModule(sec: any) {
     const title = newModTitle.trim(); if (!title||builderBusy) return
     setBuilderBusy(true)
     try {
@@ -591,11 +592,11 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     await refreshModules(activeCourse.id)
     if (activeModule?.id===modEdit.id) {
       const url = modEdit.video_url?.trim() ? toEmbedUrl(modEdit.video_url) : null
-      setActiveModule(prev=>prev?{...prev,title:modEdit.title.trim(),duration:modEdit.duration?.trim()||null,admin_notes:modEdit.admin_notes?.trim()||null,video_url:url}:prev)
+      setActiveModule((prev: any)=>prev?{...prev,title:modEdit.title.trim(),duration:modEdit.duration?.trim()||null,admin_notes:modEdit.admin_notes?.trim()||null,video_url:url}:prev)
     }
     setModEdit(null)
   }
-  async function deleteModule(m) {
+  async function deleteModule(m: any) {
     if (!window.confirm(`Delete lesson "${m.title}"?`)) return
     await dbDelete('course_modules',`id=eq.${m.id}`)
     await refreshModules(activeCourse.id)
@@ -607,8 +608,8 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   // A two-pass rename (via a "tmp." prefix) makes swaps safe.
   // Returns true only when no progress rows are left under an old or temporary
   // id — a plain "update returned false" can just mean nobody had progress yet.
-  async function remapProgress(pairs) {
-    const changed = pairs.filter(p=>p.from!==p.to)
+  async function remapProgress(pairs: any) {
+    const changed = pairs.filter((p: any)=>p.from!==p.to)
     if (!changed.length) return true
     for (const p of changed)
       await dbUpdate('course_progress',`course_id=eq.${activeCourse.id}&module_id=eq.${encodeURIComponent(p.from)}`,{module_id:`tmp.${p.to}`})
@@ -616,7 +617,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       await dbUpdate('course_progress',`course_id=eq.${activeCourse.id}&module_id=eq.${encodeURIComponent(`tmp.${p.to}`)}`,{module_id:p.to})
     try {
       const stale = staleProgressIds(changed)
-      const list  = stale.map(id=>`"${id.replace(/"/g,'')}"`).join(',')
+      const list  = stale.map((id: any)=>`"${id.replace(/"/g,'')}"`).join(',')
       const left  = await dbGet('course_progress',`course_id=eq.${activeCourse.id}&module_id=in.(${encodeURIComponent(list)})&select=id,module_id`)
       if ((left||[]).length===0) return true
       // Second pass for stragglers stuck on a temporary id, then re-verify
@@ -629,10 +630,10 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   async function reloadCompleted() {
     if (!myUUID||!activeCourse) return
     const prog = await dbGet('course_progress',`user_id=eq.${myUUID}&course_id=eq.${activeCourse.id}`)
-    setCompleted(new Set((prog||[]).filter(p=>p.completed).map(p=>p.module_id)))
+    setCompleted(new Set((prog||[]).filter((p: any)=>p.completed).map((p: any)=>p.module_id)))
   }
   // Move a lesson up/down within its section (dir = -1 or +1)
-  async function moveModule(m, dir) {
+  async function moveModule(m: any, dir: any) {
     if (builderBusy) return
     const inSection = modules.filter(x=>x.section_id===m.section_id).sort((a,b)=>a.sort_order-b.sort_order)
     const i = inSection.findIndex(x=>x.id===m.id)
@@ -656,7 +657,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
   // Move a lesson into a different section: appended at the end of the target
   // section, module_id renumbered, and course_progress rows remapped with it.
-  async function moveModuleToSection(m, targetSecId) {
+  async function moveModuleToSection(m: any, targetSecId: any) {
     if (builderBusy) return
     const target = draftSecs.find(s=>String(s.id)===String(targetSecId))
     const plan = planLessonMove(modules, m, target)
@@ -685,7 +686,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   // Drop a dragged lesson at an exact position in any section. The whole
   // target section is renumbered (two-pass via tmp ids so rows never collide
   // on module_id mid-move) and course_progress rows are remapped along.
-  async function dropModule(lesson, targetSec, targetIndex) {
+  async function dropModule(lesson: any, targetSec: any, targetIndex: any) {
     if (builderBusy) return
     const plan = planLessonDrop(modules, lesson, targetSec, targetIndex)
     if (!plan) return
@@ -715,7 +716,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
   // Move a whole section up/down: the two sections trade numeric ids so the
   // section_id ordering (which drives display everywhere) follows the move.
-  async function moveSection(sec, dir) {
+  async function moveSection(sec: any, dir: any) {
     if (builderBusy) return
     const i = draftSecs.findIndex(s=>s.id===sec.id)
     const j = i+dir
@@ -747,7 +748,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── ADMIN: Delete course ──────────────────────────────────
-  async function deleteCourse(course) {
+  async function deleteCourse(course: any) {
     if (!window.confirm(`Delete the course "${course.title}" for everyone?\n\nThis removes all its sections, lessons, access grants, and progress. This cannot be undone.`)) return
     // Children first so a mid-way failure never leaves an orphaned course invisible in the UI
     const okChildren = (await Promise.all([
@@ -768,7 +769,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
 
   // ── ADMIN (Eden): Per-course tier distribution ────────────
   // Which white-label tiers include this Eden course. Empty = Eden only.
-  async function openTierManager(course) {
+  async function openTierManager(course: any) {
     setTiersCourse(course)
     setTierSel(new Set(Array.isArray(course.tiers)?course.tiers:[]))
     const pkgs = await dbGet('packages','active=eq.true&order=price.asc')
@@ -781,27 +782,27 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
     const tiers = [...tierSel]
     await dbUpdate('courses',`id=eq.${tiersCourse.id}`,{ tiers })
     setCourses(prev=>prev.map(c=>c.id===tiersCourse.id?{...c,tiers}:c))
-    if (activeCourse?.id===tiersCourse.id) setActiveCourse(prev=>({...prev,tiers}))
+    if (activeCourse?.id===tiersCourse.id) setActiveCourse((prev: any)=>({...prev,tiers}))
     setSavingTiers(false); setShowTiers(false)
   }
 
   // ── ADMIN: Open access management ─────────────────────────
   // Real coaches & clients from the DB (scoped to the admin's org) — the access
   // manager must grant to real profile IDs, never the old demo placeholder list.
-  const [rosterCoaches, setRosterCoaches] = useState([])
-  const [rosterClients, setRosterClients] = useState([])
+  const [rosterCoaches, setRosterCoaches] = useState<any[]>([])
+  const [rosterClients, setRosterClients] = useState<any[]>([])
   async function loadRoster() {
     const cid = companyCtx?.companyId || EDEN_ORG_ID
     const rows = await dbGet('user_profiles',
       `company_id=eq.${cid}&role=in.(coach,client)&select=id,name,role,coach_id,is_active&order=name.asc`)
-    const coaches = (rows||[]).filter(r=>r.role==='coach')
-    const nameById = Object.fromEntries(coaches.map(c=>[c.id,c.name]))
-    setRosterCoaches(coaches.map(c=>({uuid:c.id,name:c.name,role:'coach'})))
-    setRosterClients((rows||[]).filter(r=>r.role==='client'&&r.is_active!==false)
-      .map(c=>({uuid:c.id,name:c.name,role:'client',coachId:c.coach_id,coachName:nameById[c.coach_id]||''})))
+    const coaches = (rows||[]).filter((r: any)=>r.role==='coach')
+    const nameById = Object.fromEntries(coaches.map((c: any)=>[c.id,c.name]))
+    setRosterCoaches(coaches.map((c: any)=>({uuid:c.id,name:c.name,role:'coach'})))
+    setRosterClients((rows||[]).filter((r: any)=>r.role==='client'&&r.is_active!==false)
+      .map((c: any)=>({uuid:c.id,name:c.name,role:'client',coachId:c.coach_id,coachName:nameById[c.coach_id]||''})))
   }
 
-  async function openAccessManager(course) {
+  async function openAccessManager(course: any) {
     setAccessCourse(course)
     const [data] = await Promise.all([
       dbGet('course_access',`course_id=eq.${course.id}&revoked=eq.false`),
@@ -812,7 +813,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── ADMIN: Grant access to specific user ─────────────────
-  async function grantAccess(user, course, opts={}) {
+  async function grantAccess(user: any, course: any, opts: any={}) {
     const already = accessList.find(a=>a.user_id===user.uuid)
     if (already) { if(!opts.silent) alert(`${user.name} already has access.`); return }
     await fetch(`${SUPABASE_URL}/rest/v1/course_access`,{
@@ -832,7 +833,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── ADMIN: Grant access to ALL clients under a coach ─────
-  async function grantToCoachClients(coachId, coachName, course) {
+  async function grantToCoachClients(coachId: any, coachName: any, course: any) {
     const clients = rosterClients.filter(c=>c.coachId===coachId)
     // Always grant to the coach, even if they have no clients yet
     const coach = rosterCoaches.find(c=>c.uuid===coachId)
@@ -844,7 +845,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── ADMIN: Grant access to everyone ──────────────────────
-  async function grantToEveryone(course) {
+  async function grantToEveryone(course: any) {
     const everyone = [...rosterCoaches, ...rosterClients]
     for (const user of everyone) {
       await grantAccess(user, course)
@@ -853,7 +854,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── ADMIN: Revoke access ──────────────────────────────────
-  async function revokeAccess(userId, course) {
+  async function revokeAccess(userId: any, course: any) {
     await dbUpdate('course_access',`course_id=eq.${course.id}&user_id=eq.${userId}`,{ revoked:true })
     const revoked = accessList.find(a=>a.user_id===userId)
     dbInsert('audit_logs',{ action:'course_revoked', actor_id:myUUID, actor_name:(dbProfile?.name||currentUser?.name||'User'),
@@ -863,12 +864,12 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
   }
 
   // ── COACH: Load client progress ───────────────────────────
-  async function loadClientProgress(course) {
+  async function loadClientProgress(course: any) {
     // Get all clients under this coach who have access
     const access = await dbGet('course_access',`course_id=eq.${course.id}&coach_id=eq.${myUUID}&revoked=eq.false`)
     // Always count against THIS course's real lesson list (the open course may be a different one)
     const courseMods = await dbGet('course_modules',`course_id=eq.${course.id}&select=module_id`)
-    const validIds   = new Set((courseMods||[]).map(m=>m.module_id))
+    const validIds   = new Set((courseMods||[]).map((m: any)=>m.module_id))
     const totalMods  = validIds.size
     const progressData = []
     for (const a of (access||[])) {
@@ -876,8 +877,8 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
         `user_id=eq.${a.user_id}&course_id=eq.${course.id}&completed=eq.true`
       )
       // Only count lessons that still exist, once each — deleted lessons or stray duplicate rows can't inflate the %
-      const done = new Set((prog||[]).map(p=>p.module_id).filter(id=>validIds.has(id))).size
-      const lastDone = (prog||[]).slice().sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))[0]
+      const done = new Set((prog||[]).map((p: any)=>p.module_id).filter((id: any)=>validIds.has(id))).size
+      const lastDone = (prog||[]).slice().sort((a: any,b: any)=>(new Date(b.completed_at) as any)-(new Date(a.completed_at) as any))[0]
       progressData.push({
         name:     a.user_name||'Client',
         userId:   a.user_id,
@@ -910,13 +911,13 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
       const json=JSON.parse(text.replace(/^.*?\(/,'').replace(/\);?\s*$/,''))
       const rows=json?.table?.rows||[]
       if(rows.length>1){
-        const parsed=rows.slice(1).map(row=>{
+        const parsed=rows.slice(1).map((row: any)=>{
           const c=row.c||[]
           // c[1] (Recipe/Method column) only has a value for actual recipes — grocery/food rows in the same sheet range are skipped
           return{name:c[0]?.v||'',hasMethod:!!c[1]?.v,servings:c[2]?.v||1,cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,category:'Recipe',tags:[],isLive:true}
-        }).filter(r=>r.name&&r.cal>0&&r.hasMethod)
+        }).filter((r: any)=>r.name&&r.cal>0&&r.hasMethod)
         if(parsed.length>0){
-          const names=new Set(parsed.map(r=>r.name))
+          const names=new Set(parsed.map((r: any)=>r.name))
           setRecipes([...parsed,...STATIC_RECIPES.filter(r=>!names.has(r.name))])
         }
       }
@@ -925,7 +926,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
 
   // ── Derived data ──────────────────────────────────────────
   const sections = modules.reduce((acc,m)=>{
-    if(!acc.find(s=>s.id===m.section_id)){
+    if(!acc.find((s: any)=>s.id===m.section_id)){
       acc.push({id:m.section_id,title:m.section_title,color:m.section_color,modules:modules.filter(x=>x.section_id===m.section_id)})
     }
     return acc
@@ -1085,7 +1086,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                 </Card>
 
                 {nextMod&&(
-                  <button onClick={()=>{setActiveModule(nextMod);setActiveSection(sections.find(s=>s.id===nextMod.section_id));setCourseView('module')}}
+                  <button onClick={()=>{setActiveModule(nextMod);setActiveSection(sections.find((s: any)=>s.id===nextMod.section_id));setCourseView('module')}}
                     style={{width:'100%',background:C.card,border:`1px solid ${C.gold}44`,borderRadius:12,padding:'13px 16px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',textAlign:'left',marginBottom:14}}>
                     <div style={{width:40,height:40,borderRadius:10,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>▶</div>
                     <div style={{flex:1,minWidth:0}}>
@@ -1096,10 +1097,10 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   </button>
                 )}
 
-                {sections.map(s=>{
-                  const done=s.modules.filter(m=>completed.has(m.module_id)).length
+                {sections.map((s: any)=>{
+                  const done=s.modules.filter((m: any)=>completed.has(m.module_id)).length
                   const pct=Math.round(done/s.modules.length*100)
-                  const videosAdded=s.modules.filter(m=>m.video_url).length
+                  const videosAdded=s.modules.filter((m: any)=>m.video_url).length
                   return (
                     <button key={s.id} onClick={()=>{setActiveSection(s);setCourseView('section')}}
                       style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 16px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',textAlign:'left',marginBottom:8}}>
@@ -1134,9 +1135,9 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   <div style={{fontSize:15,fontWeight:700,color:C.white}}>{activeSection.title}</div>
                 </div>
                 <div style={{flex:1,overflowY:'auto',padding:12}}>
-                  {activeSection.modules.map((m,mi)=>{
+                  {activeSection.modules.map((m: any,mi: any)=>{
                     const isDone=completed.has(m.module_id)
-                    const isNext=!isDone&&activeSection.modules.slice(0,mi).every(p=>completed.has(p.module_id))
+                    const isNext=!isDone&&activeSection.modules.slice(0,mi).every((p: any)=>completed.has(p.module_id))
                     // Sequential courses: lock a lesson until every earlier one
                     // (across ALL sections, in course order) is complete. Admins exempt.
                     const flatIdx=modules.findIndex(x=>x.id===m.id)
@@ -1275,7 +1276,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                     const next=modules[idx+1]
                     if(!next) return null
                     return (
-                      <button onClick={()=>{setActiveModule(next);setActiveSection(sections.find(s=>s.id===next.section_id))}}
+                      <button onClick={()=>{setActiveModule(next);setActiveSection(sections.find((s: any)=>s.id===next.section_id))}}
                         style={{width:'100%',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',textAlign:'left'}}>
                         <div style={{width:36,height:36,borderRadius:8,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:C.gold,flexShrink:0}}>▶</div>
                         <div style={{flex:1,minWidth:0}}>
@@ -1342,7 +1343,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,color:selectedRecipe?.name===r.name?C.gold:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
                     <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.cal} cal · P:{r.pro}g C:{r.carb}g F:{r.fat}g</div>
-                    {r.isLive&&<span style={{fontSize:8,background:`${C.success}22`,color:C.success,padding:'1px 5px',borderRadius:4,fontWeight:700}}>LIVE</span>}
+                    {(r as any).isLive&&<span style={{fontSize:8,background:`${C.success}22`,color:C.success,padding:'1px 5px',borderRadius:4,fontWeight:700}}>LIVE</span>}
                     {!hasRecipeAccess&&isClient&&assignedRecipeNames.has(r.name)&&<span style={{fontSize:8,background:`${C.gold}22`,color:C.gold,padding:'1px 5px',borderRadius:4,fontWeight:700}}>✓ UNLOCKED</span>}
                   </div>
                 </button>
@@ -1393,11 +1394,11 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
                         <>
                           <Lbl t="🛒 Ingredients"/>
                           <ul style={{margin:'0 0 14px',paddingLeft:18}}>
-                            {det.ingredients.map((ing,ii)=>(<li key={ii} style={{fontSize:13,color:C.white,lineHeight:1.8}}>{ing}</li>))}
+                            {det.ingredients.map((ing: any,ii: any)=>(<li key={ii} style={{fontSize:13,color:C.white,lineHeight:1.8}}>{ing}</li>))}
                           </ul>
                           <Lbl t="👨‍🍳 Method"/>
                           <ol style={{margin:0,paddingLeft:18}}>
-                            {det.method.map((st,si)=>(<li key={si} style={{fontSize:13,color:C.white,lineHeight:1.7,marginBottom:8}}>{st}</li>))}
+                            {det.method.map((st: any,si: any)=>(<li key={si} style={{fontSize:13,color:C.white,lineHeight:1.7,marginBottom:8}}>{st}</li>))}
                           </ol>
                         </>
                       )
@@ -1611,7 +1612,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
               {draftSecs.map((sec,secIdx)=>{
                 const secMods = modules.filter(m=>m.section_id===sec.id)
                 const secModsSorted = [...secMods].sort((a,b)=>a.sort_order-b.sort_order)
-                const arrowBtn = (disabled,onClick,label,title) => (
+                const arrowBtn = (disabled: any,onClick: any,label: any,title: any) => (
                   <button onClick={onClick} disabled={disabled} title={title} aria-label={title}
                     style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 7px',color:disabled?C.dim:C.muted,fontSize:10,cursor:disabled?'default':'pointer',flexShrink:0}}>
                     {label}
@@ -1839,7 +1840,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}) {
 }
 
 // ── RecipePicker for DietBuilder ──────────────────────────────
-export function RecipePicker({onSelect, onClose}) {
+export function RecipePicker({onSelect, onClose}: any) {
   const [search,  setSearch]  = useState('')
   const [recipes, setRecipes] = useState(STATIC_RECIPES)
   const [loading, setLoading] = useState(false)
@@ -1850,12 +1851,12 @@ export function RecipePicker({onSelect, onClose}) {
         const json=JSON.parse(t.replace(/^.*?\(/,'').replace(/\);?\s*$/,''))
         const rows=json?.table?.rows||[]
         if(rows.length>1){
-          const parsed=rows.slice(1).map(row=>{
+          const parsed=rows.slice(1).map((row: any)=>{
             const c=row.c||[]
             // c[1] (Recipe/Method column) only has a value for actual recipes — grocery/food rows in the same sheet range are skipped
             return{name:c[0]?.v||'',hasMethod:!!c[1]?.v,serving:'1 serving',cal:parseFloat(c[3]?.v)||0,pro:parseFloat(c[4]?.v)||0,fat:parseFloat(c[5]?.v)||0,carb:parseFloat(c[6]?.v)||0,fib:parseFloat(c[7]?.v)||0,cat:'Recipes',isRecipe:true}
-          }).filter(r=>r.name&&r.cal>0&&r.hasMethod)
-          if(parsed.length>0){const names=new Set(parsed.map(r=>r.name));setRecipes([...parsed,...STATIC_RECIPES.filter(r=>!names.has(r.name)).map(r=>({...r,serving:'1 serving',cat:'Recipes',isRecipe:true}))])}
+          }).filter((r: any)=>r.name&&r.cal>0&&r.hasMethod)
+          if(parsed.length>0){const names=new Set(parsed.map((r: any)=>r.name));setRecipes([...parsed,...STATIC_RECIPES.filter(r=>!names.has(r.name)).map(r=>({...r,serving:'1 serving',cat:'Recipes',isRecipe:true}))])}
         }
       }).catch(()=>{}).finally(()=>setLoading(false))
   },[])

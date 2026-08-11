@@ -24,7 +24,7 @@ const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack']
 
 
 // ── Shared sub-components ─────────────────────────────────────
-function Card({ children, sx = {} }) {
+function Card({ children, sx = {} }: any) {
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:16, ...sx }}>
       {children}
@@ -32,7 +32,7 @@ function Card({ children, sx = {} }) {
   )
 }
 
-function SectionLabel({ text }) {
+function SectionLabel({ text }: any) {
   return (
     <div style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:12 }}>
       {text}
@@ -40,7 +40,7 @@ function SectionLabel({ text }) {
   )
 }
 
-function StatTile({ label, value, unit, color }) {
+function StatTile({ label, value, unit, color }: any) {
   return (
     <div style={{ background:C.surface, borderRadius:8, padding:'10px 12px', textAlign:'center' }}>
       <div style={{ fontSize:16, fontWeight:800, color }}>{value ?? '—'}{value != null ? unit : ''}</div>
@@ -49,8 +49,8 @@ function StatTile({ label, value, unit, color }) {
   )
 }
 
-function TrendBar({ label, values, color, max }) {
-  const peak = max || Math.max(...values.map(v => v ?? 0), 1)
+function TrendBar({ label, values, color, max }: any) {
+  const peak = max || Math.max(...values.map((v: any) => v ?? 0), 1)
   return (
     <div style={{ marginBottom:14 }}>
       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
@@ -58,7 +58,7 @@ function TrendBar({ label, values, color, max }) {
         <span style={{ fontSize:11, fontWeight:700, color }}>{values[0] ?? '—'}</span>
       </div>
       <div style={{ display:'flex', gap:3, alignItems:'flex-end', height:36 }}>
-        {[...values].reverse().map((v, i) => (
+        {[...values].reverse().map((v: any, i: any) => (
           <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
             <div style={{
               width:'100%', borderRadius:3,
@@ -77,7 +77,7 @@ function TrendBar({ label, values, color, max }) {
   )
 }
 
-function NotConnected({ device, icon, clientName, isCoach, onConnect, connecting, error }) {
+function NotConnected({ device, icon, clientName, isCoach, onConnect, connecting, error }: any) {
   return (
     <Card>
       <div style={{ textAlign:'center', padding:'30px 20px' }}>
@@ -114,7 +114,7 @@ function NotConnected({ device, icon, clientName, isCoach, onConnect, connecting
 }
 
 // ── MEAL COLOR MAP ────────────────────────────────────────────
-const MEAL_COLOR = {
+const MEAL_COLOR: any = {
   Breakfast: '#f0a060',
   Lunch:     '#4FD89A',
   Dinner:    '#6FB8E8',
@@ -122,7 +122,7 @@ const MEAL_COLOR = {
 }
 
 // ── FOOD LOG PANEL ────────────────────────────────────────────
-function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote, setCoachNote }) {
+function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote, setCoachNote }: any) {
   const [showForm,   setShowForm]   = useState(false)
   const [meal,       setMeal]       = useState('Breakfast')
   const [desc,       setDesc]       = useState('')
@@ -142,8 +142,8 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
   }
 
   // Group entries by date, then by meal order
-  const byDate = {}
-  entries.forEach(e => {
+  const byDate: any = {}
+  entries.forEach((e: any) => {
     if (!byDate[e.date]) byDate[e.date] = []
     byDate[e.date].push(e)
   })
@@ -152,7 +152,7 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
   // Today's total calories
   const today = new Date().toISOString().slice(0, 10)
   const todayEntries = byDate[today] || []
-  const todayCals = todayEntries.reduce((s, e) => s + (e.calories || 0), 0)
+  const todayCals = todayEntries.reduce((s: any, e: any) => s + (e.calories || 0), 0)
 
   return (
     <div>
@@ -176,7 +176,7 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
           <SectionLabel text="Nutrition Overview" />
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
             <StatTile label="Entries (7d)"  value={entries.length}                              unit=""      color={C.gold}/>
-            <StatTile label="Avg Daily Cal" value={Math.round(entries.reduce((s,e)=>s+(e.calories||0),0)/Math.max(sortedDates.length,1))} unit=" kcal" color="#4FD89A"/>
+            <StatTile label="Avg Daily Cal" value={Math.round(entries.reduce((s: any, e: any)=>s+(e.calories||0),0)/Math.max(sortedDates.length,1))} unit=" kcal" color="#4FD89A"/>
             <StatTile label="Days Logged"   value={sortedDates.length}                          unit=" days" color="#6FB8E8"/>
           </div>
         </Card>
@@ -273,8 +273,8 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
         </Card>
       ) : (
         sortedDates.map(date => {
-          const dayEntries = byDate[date].sort((a,b) => MEAL_TYPES.indexOf(a.meal) - MEAL_TYPES.indexOf(b.meal))
-          const dayTotal = dayEntries.reduce((s, e) => s + (e.calories || 0), 0)
+          const dayEntries = byDate[date].sort((a: any, b: any) => MEAL_TYPES.indexOf(a.meal) - MEAL_TYPES.indexOf(b.meal))
+          const dayTotal = dayEntries.reduce((s: any, e: any) => s + (e.calories || 0), 0)
           const label = date === today ? 'Today' : date === new Date(Date.now()-86400000).toISOString().slice(0,10) ? 'Yesterday' : date
           return (
             <Card key={date} sx={{ marginBottom:10 }}>
@@ -285,7 +285,7 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
               </div>
               {/* Meal entries */}
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {dayEntries.map(entry => (
+                {dayEntries.map((entry: any) => (
                   <div key={entry.id} style={{
                     display:'flex', alignItems:'flex-start', gap:10,
                     background:C.surface, borderRadius:8, padding:'8px 10px',
@@ -322,10 +322,10 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
 }
 
 // ── MAIN COMPONENT ────────────────────────────────────────────
-export default function Wearables({ currentUser }) {
+export default function Wearables({ currentUser }: any) {
   const email      = currentUser?.email || ''
   // Resolve real profile UUID from the database (no demo identity fallbacks)
-  const [profileRow, setProfileRow] = useState(null)
+  const [profileRow, setProfileRow] = useState<any>(null)
   useEffect(() => {
     if (!email) return
     fetch(`${SB_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name`, { headers: SB_HEADERS })
@@ -346,10 +346,10 @@ export default function Wearables({ currentUser }) {
   // Primary store: Supabase `food_log_entries` table (syncs across all devices —
   // client logs on phone, coach sees on computer). Falls back to localStorage
   // if the table doesn't exist yet or the network is down.
-  const seedLog    = []
+  const seedLog: any[] = []
   const storageKey = `eden_foodlog_${(clientUUID || email).replace(/[^a-z0-9]/gi, '_')}`
 
-  const [foodEntries, setFoodEntries] = useState(() => {
+  const [foodEntries, setFoodEntries] = useState<any>(() => {
     try {
       const raw = localStorage.getItem(storageKey)
       if (raw) {
@@ -370,7 +370,7 @@ export default function Wearables({ currentUser }) {
         if (!Array.isArray(rows)) return
         setDbMode(true)
         if (rows.length > 0) {
-          setFoodEntries(rows.map(r => ({ id: r.id, date: r.date, meal: r.meal, description: r.description, calories: r.calories })))
+          setFoodEntries(rows.map((r: any) => ({ id: r.id, date: r.date, meal: r.meal, description: r.description, calories: r.calories })))
         }
       })
       .catch(() => {}) // table missing or offline → stay in localStorage mode
@@ -384,10 +384,10 @@ export default function Wearables({ currentUser }) {
   }, [foodEntries])
 
   // Derive next id from current max so it never collides after deletions
-  const nextIdRef = useRef(Math.max(0, ...foodEntries.map(e => e.id ?? 0)) + 1)
+  const nextIdRef = useRef(Math.max(0, ...foodEntries.map((e: any) => e.id ?? 0)) + 1)
 
   // ── Oura Ring connection + synced data ──────────────────────
-  const [oura, setOura] = useState({ connected: false, readings: [], loading: true })
+  const [oura, setOura] = useState<any>({ connected: false, readings: [], loading: true })
   const [ouraConnecting, setOuraConnecting] = useState(false)
   const [ouraError, setOuraError] = useState('')
   const [ouraBanner, setOuraBanner] = useState('')
@@ -414,7 +414,7 @@ export default function Wearables({ currentUser }) {
     fetch(`/api/oura/data?clientId=${clientUUID}`, { headers: { Authorization: sbBearer() } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => { if (!cancelled) setOura({ connected: !!d.connected, readings: Array.isArray(d.readings) ? d.readings : [], loading: false }) })
-      .catch(() => { if (!cancelled) setOura(prev => ({ ...prev, loading: false })) })
+      .catch(() => { if (!cancelled) setOura((prev: any) => ({ ...prev, loading: false })) })
     return () => { cancelled = true }
   }, [clientUUID, ouraRefresh])
 
@@ -454,7 +454,7 @@ export default function Wearables({ currentUser }) {
     setTimeout(() => setNoteSaved(false), 2500)
   }
 
-  function handleAddFood(entry) {
+  function handleAddFood(entry: any) {
     if (dbMode && clientUUID) {
       // Insert into database and use its returned id
       fetch(`${SB_URL}/rest/v1/food_log_entries`, {
@@ -465,19 +465,19 @@ export default function Wearables({ currentUser }) {
         .then(r => r.ok ? r.json() : Promise.reject())
         .then(rows => {
           const row = Array.isArray(rows) ? rows[0] : rows
-          setFoodEntries(prev => [{ id: row.id, date: row.date, meal: row.meal, description: row.description, calories: row.calories }, ...prev])
+          setFoodEntries((prev: any) => [{ id: row.id, date: row.date, meal: row.meal, description: row.description, calories: row.calories }, ...prev])
         })
         .catch(() => {
           // DB write failed → keep the entry locally so nothing is lost
-          setFoodEntries(prev => [{ ...entry, id: nextIdRef.current++ }, ...prev])
+          setFoodEntries((prev: any) => [{ ...entry, id: nextIdRef.current++ }, ...prev])
         })
       return
     }
-    setFoodEntries(prev => [{ ...entry, id: nextIdRef.current++ }, ...prev])
+    setFoodEntries((prev: any) => [{ ...entry, id: nextIdRef.current++ }, ...prev])
   }
 
-  function handleDeleteFood(id) {
-    setFoodEntries(prev => prev.filter(e => e.id !== id))
+  function handleDeleteFood(id: any) {
+    setFoodEntries((prev: any) => prev.filter((e: any) => e.id !== id))
     if (dbMode && clientUUID) {
       fetch(`${SB_URL}/rest/v1/food_log_entries?id=eq.${id}&client_id=eq.${clientUUID}`, { method: 'DELETE', headers: SB_HEADERS }).catch(() => {})
     }
@@ -573,10 +573,10 @@ export default function Wearables({ currentUser }) {
 
               <Card sx={{ marginBottom:12 }}>
                 <SectionLabel text="7-Day Trends"/>
-                <TrendBar label="HRV (ms)"        values={oura.readings.map(r=>r.hrv)}        color="#4FD89A" max={80}/>
-                <TrendBar label="Sleep Score /100" values={oura.readings.map(r=>r.sleepScore)} color="#6FB8E8" max={100}/>
-                <TrendBar label="Resting HR (bpm)" values={oura.readings.map(r=>r.restingHr)}  color="#f06060" max={90}/>
-                <TrendBar label="Steps"            values={oura.readings.map(r=>r.steps)}      color={C.gold}  max={15000}/>
+                <TrendBar label="HRV (ms)"        values={oura.readings.map((r: any)=>r.hrv)}        color="#4FD89A" max={80}/>
+                <TrendBar label="Sleep Score /100" values={oura.readings.map((r: any)=>r.sleepScore)} color="#6FB8E8" max={100}/>
+                <TrendBar label="Resting HR (bpm)" values={oura.readings.map((r: any)=>r.restingHr)}  color="#f06060" max={90}/>
+                <TrendBar label="Steps"            values={oura.readings.map((r: any)=>r.steps)}      color={C.gold}  max={15000}/>
               </Card>
 
               {isCoach && (
@@ -602,7 +602,7 @@ export default function Wearables({ currentUser }) {
               <div style={{ background:`${C.gold}0a`, border:`1px solid ${C.gold}22`, borderRadius:10, padding:'10px 14px', marginBottom:12 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:C.gold, marginBottom:4 }}>💡 {isCoach ? 'Coach Insight' : 'Your Trends'}</div>
                 <div style={{ fontSize:11, color:C.muted, lineHeight:1.6 }}>
-                  HRV averaging <strong style={{ color:C.white }}>{Math.round(oura.readings.reduce((s,r)=>s+(r.hrv||0),0)/Math.max(oura.readings.filter(r=>r.hrv!=null).length,1))} ms</strong> over 7 days.{' '}
+                  HRV averaging <strong style={{ color:C.white }}>{Math.round(oura.readings.reduce((s: any, r: any)=>s+(r.hrv||0),0)/Math.max(oura.readings.filter((r: any)=>r.hrv!=null).length,1))} ms</strong> over 7 days.{' '}
                   Sleep score trending <strong style={{ color:C.white }}>{(oura.readings[0].sleepScore||0) >= (oura.readings[oura.readings.length-1].sleepScore||0) ? '▲ up' : '▼ down'}</strong> vs. last week.
                   {isCoach ? ' Compare with check-in energy scores for protocol adjustments.' : ' Keep it up — consistent sleep is key to recovery.'}
                 </div>

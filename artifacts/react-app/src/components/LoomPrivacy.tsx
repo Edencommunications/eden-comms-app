@@ -4,22 +4,23 @@
 // ever revealed by accident on camera.
 import React, { useState, useEffect } from 'react'
 
-const keys  = () => window.__edenLoomKeys  || (window.__edenLoomKeys  = new Set())
-const shown = () => window.__edenLoomShown || (window.__edenLoomShown = new Set())
+const w = window as any
+const keys  = () => w.__edenLoomKeys  || (w.__edenLoomKeys  = new Set())
+const shown = () => w.__edenLoomShown || (w.__edenLoomShown = new Set())
 
-export function loomSet(on) {
-  window.__edenLoom = on
+export function loomSet(on: any) {
+  w.__edenLoom = on
   if (on) shown().clear()           // every Loom session starts fully blurred
   window.dispatchEvent(new Event('eden-loom'))
 }
 // Mark a name visible app-wide (e.g. when a coach/admin clicks into a client)
-export function loomShow(k) {
+export function loomShow(k: any) {
   if (!k) return
   shown().add(k)
   window.dispatchEvent(new Event('eden-loom'))
 }
-export function loomIsShown(k) { return !!k && shown().has(k) }
-export function loomToggleShown(k) {
+export function loomIsShown(k: any) { return !!k && shown().has(k) }
+export function loomToggleShown(k: any) {
   const s = shown()
   s.has(k) ? s.delete(k) : s.add(k)
   window.dispatchEvent(new Event('eden-loom'))
@@ -32,10 +33,10 @@ export function useLoomOn() {
     window.addEventListener('eden-loom', h)
     return () => window.removeEventListener('eden-loom', h)
   }, [])
-  return !!window.__edenLoom
+  return !!w.__edenLoom
 }
 
-export const LN = ({ children, k, style }) => {
+export const LN = ({ children, k, style }: any) => {
   const loom = useLoomOn()
   const key = k || (typeof children === 'string' ? children : '')
   useEffect(() => {
@@ -58,7 +59,7 @@ export const LN = ({ children, k, style }) => {
 
 // Checklist button — sits next to the Loom toggle. Open it BEFORE recording,
 // tick the names that should stay readable, close it, then record.
-export function LoomPicker({ isMobile }) {
+export function LoomPicker({ isMobile }: any) {
   const loom = useLoomOn()
   const [open, setOpen] = useState(false)
   const [, tick] = useState(0)
@@ -68,7 +69,7 @@ export function LoomPicker({ isMobile }) {
     return () => window.removeEventListener('eden-loom-keys', h)
   }, [])
   if (!loom) return null
-  const list = [...keys()].sort((a, b) => a.localeCompare(b))
+  const list = [...keys()].sort((a: any, b: any) => a.localeCompare(b))
   return (
     <div style={{ position:'relative' }}>
       <button onClick={() => setOpen(v => !v)}

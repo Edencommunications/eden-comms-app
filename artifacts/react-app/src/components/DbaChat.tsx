@@ -23,19 +23,19 @@ import { ReactionBar, fetchReactions } from './Reactions'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
-const H = {
+const H: any = {
   'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() },
   'Content-Type': 'application/json',
 }
 
-async function dbGet(table, params = '') {
+async function dbGet(table: any, params: any = '') {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: H })
     if (!r.ok) return null
     return await r.json()
   } catch { return null }
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
       method: 'POST', headers: { ...H, 'Prefer': 'return=representation' }, body: JSON.stringify(body),
@@ -44,7 +44,7 @@ async function dbInsert(table, body) {
     return await r.json()
   } catch { return null }
 }
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
       method: 'PATCH', headers: H, body: JSON.stringify(body),
@@ -52,13 +52,13 @@ async function dbUpdate(table, params, body) {
     return r.ok
   } catch { return false }
 }
-async function dbDelete(table, params) {
+async function dbDelete(table: any, params: any) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method: 'DELETE', headers: H })
     return r.ok
   } catch { return false }
 }
-async function apiPost(path, body) {
+async function apiPost(path: any, body: any) {
   try {
     const r = await fetch(`/api/dba/${path}`, {
       method: 'POST',
@@ -69,7 +69,7 @@ async function apiPost(path, body) {
     return { ok: r.ok, ...(j || {}) }
   } catch { return { ok: false, error: 'Network error' } }
 }
-function timeAgo(iso) {
+function timeAgo(iso: any) {
   if (!iso) return ''
   const s = (Date.now() - new Date(iso).getTime()) / 1000
   if (s < 60) return 'just now'
@@ -77,12 +77,12 @@ function timeAgo(iso) {
   if (s < 86400) return `${Math.floor(s/3600)}h ago`
   return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric' })
 }
-const escRe = s => String(s||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escRe = (s: any) => String(s||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // Attachment markers: [[file|name|url|type]] with optional URI-encoded transcript
 const ATT_RE = /\[\[file\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)(?:\|([^\]]*))?\]\]/g
-function splitAtts(text) {
-  const atts = []
+function splitAtts(text: any) {
+  const atts: any[] = []
   const rest = String(text||'').replace(ATT_RE, (_, name, url, type, tx) => {
     let transcript = ''
     try { transcript = tx ? decodeURIComponent(tx) : '' } catch {}
@@ -93,7 +93,7 @@ function splitAtts(text) {
 }
 // Only ever render http(s) URLs — markers ride user content, so a crafted
 // message could otherwise smuggle javascript:/data: URLs into the DOM.
-function safeUrl(u) { try { const p = new URL(u).protocol; return p === 'https:' || p === 'http:' } catch { return false } }
+function safeUrl(u: any) { try { const p = new URL(u).protocol; return p === 'https:' || p === 'http:' } catch { return false } }
 
 // ════════════════════════════════════════════════════════════════
 // Props:
@@ -101,10 +101,10 @@ function safeUrl(u) { try { const p = new URL(u).protocol; return p === 'https:'
 //   primary = brand accent color for this DBA
 //   isMobile
 // ════════════════════════════════════════════════════════════════
-export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMobile = false }) {
+export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMobile = false }: any) {
   // Channel rows cycle through the DBA's saved palette so extra colors show up
   // Channels always use the brand's primary color — no palette cycling
-  const channelColor = (_i) => primary
+  const channelColor = (_i: any) => primary
   const C = {
     gold: primary, black: '#000000', white: '#ffffff',
     surface: '#111111', card: '#1a1a1a', border: '#2a2a2a',
@@ -113,7 +113,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   const dbaId = dba?.id || null
 
   // ── Server config: identity, roster, flags, gates ───────────
-  const [cfg, setCfg] = useState(null)     // null = loading, false = error
+  const [cfg, setCfg] = useState<any>(null)     // null = loading, false = error
   useEffect(() => {
     let dead = false
     setCfg(null)
@@ -138,45 +138,45 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   const tierDefs  = cfg?.tier_defs || []
   const myDm      = !!cfg?.my_dm                // server-computed: can I open 1v1s at all?
   const dmTargets = new Set(cfg?.dm_targets || [])
-  const capsFor   = (channelId, userId) => (leaders[channelId] || {})[userId] || {}
+  const capsFor   = (channelId: any, userId: any) => (leaders[channelId] || {})[userId] || {}
 
   // Everyone who can appear in this DBA's chat (for DMs & pickers)
   const people = cfg ? [
     ...(cfg.coach ? [{ ...cfg.coach, kind: 'coach' }] : []),
-    ...(cfg.admins || []).filter(a => a.id !== cfg?.coach?.id),
+    ...(cfg.admins || []).filter((a: any) => a.id !== cfg?.coach?.id),
     ...(cfg.members || []),
-  ].filter(p => p.id !== myId) : []
-  const isPriv = (id) => id === cfg?.coach?.id || (cfg?.admins || []).some(a => a.id === id)
+  ].filter((p: any) => p.id !== myId) : []
+  const isPriv = (id: any) => id === cfg?.coach?.id || (cfg?.admins || []).some((a: any) => a.id === id)
   // The server decides who can DM whom (tier, explicit grant, leadership,
   // or privilege — BOTH sides must qualify); we just render its answer.
-  const dmUnlocked = (p) => myDm && dmTargets.has(p.id)
+  const dmUnlocked = (p: any) => myDm && dmTargets.has(p.id)
   // Admins & the coach see every channel automatically, so they are never
   // pickable when creating a group or adding people — only regular members are.
-  const pickable = people.filter(p => !p.kind)
+  const pickable = people.filter((p: any) => !p.kind)
 
   // ── Channels & open conversation ────────────────────────────
-  const [channels,   setChannels]   = useState([])
-  const [dms,        setDms]        = useState([])   // my open 1v1 rows
-  const [myChanIds,  setMyChanIds]  = useState(new Set())
+  const [channels,   setChannels]   = useState<any[]>([])
+  const [dms,        setDms]        = useState<any[]>([])   // my open 1v1 rows
+  const [myChanIds,  setMyChanIds]  = useState<any>(new Set())
   const [loaded,     setLoaded]     = useState(false)
-  const [activeId,   setActiveId]   = useState(null)
-  const [members,    setMembers]    = useState([])
-  const [messages,   setMessages]   = useState([])
-  const [pins,       setPins]       = useState([])
-  const [reactions,  setReactions]  = useState({})   // { msgId: { '👍': [{id,n}] } }
+  const [activeId,   setActiveId]   = useState<any>(null)
+  const [members,    setMembers]    = useState<any[]>([])
+  const [messages,   setMessages]   = useState<any[]>([])
+  const [pins,       setPins]       = useState<any[]>([])
+  const [reactions,  setReactions]  = useState<any>({})   // { msgId: { '👍': [{id,n}] } }
   const [canvasOpen, setCanvasOpen] = useState(false)
   const [newMsg,     setNewMsg]     = useState('')
-  const [replyTo,    setReplyTo]    = useState(null)
+  const [replyTo,    setReplyTo]    = useState<any>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [newName,    setNewName]    = useState('')
   const [newAll,     setNewAll]     = useState(true)
-  const [newMembers, setNewMembers] = useState([])
+  const [newMembers, setNewMembers] = useState<any[]>([])
   const [showMembers,setShowMembers]= useState(false)
-  const [authPrompt, setAuthPrompt] = useState(null) // {userId,key,grant,userName} — pending scope choice
-  const [authPick,   setAuthPick]   = useState(null) // Set of communityIds when "choose groups" is open
-  const [dmBusy,     setDmBusy]     = useState(null)
-  const bottomRef = useRef(null)
-  const listRef = useRef(null)
+  const [authPrompt, setAuthPrompt] = useState<any>(null) // {userId,key,grant,userName} — pending scope choice
+  const [authPick,   setAuthPick]   = useState<any>(null) // Set of communityIds when "choose groups" is open
+  const [dmBusy,     setDmBusy]     = useState<any>(null)
+  const bottomRef = useRef<any>(null)
+  const listRef = useRef<any>(null)
   const msgCountRef = useRef(-1)
 
   const allConvos = [...channels, ...dms]
@@ -185,12 +185,12 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   //    same pattern + badge styling as Communities.jsx) ──
   const seenKey = `dba_seen_${dbaId}_${myId || 'anon'}`
   const getSeen = () => { try { return JSON.parse(localStorage.getItem(seenKey) || '{}') } catch { return {} } }
-  const markSeen = (cid) => {
+  const markSeen = (cid: any) => {
     if (!cid) return
     const iso = new Date().toISOString()
     try { const m = getSeen(); m[cid] = iso; localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
     try { window.dispatchEvent(new CustomEvent('hub-seen-updated')) } catch {}   // same-window listeners; cross-tab relies on the storage event
-    setUnread(u => ({ ...u, [cid]: 0 }))
+    setUnread((u: any) => ({ ...u, [cid]: 0 }))
     pushSeenRemote(cid, iso)
     // Tell my other open devices right away (Team Hub 'seen' pattern) — the
     // DB write above is the durable copy; this just clears their dots instantly.
@@ -198,11 +198,11 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   }
   // Same user read a conversation on ANOTHER device — merge (per-key max) into
   // the local cache and clear its badge here without waiting for a poll cycle.
-  function onRemoteSeen(payload) {
+  function onRemoteSeen(payload: any) {
     if (payload?.userId !== myId || !payload?.seen) return
     const m = getSeen()
     let changed = false
-    const cleared = []
+    const cleared: any[] = []
     for (const [cid, t] of Object.entries(payload.seen)) {
       const n = Number(t)
       if (!Number.isFinite(n) || n <= 0) continue
@@ -212,7 +212,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     if (!changed) return
     try { localStorage.setItem(seenKey, JSON.stringify(m)) } catch {}
     try { window.dispatchEvent(new CustomEvent('hub-seen-updated')) } catch {}
-    setUnread(u => { const next = { ...u }; for (const cid of cleared) next[cid] = 0; return next })
+    setUnread((u: any) => { const next: any = { ...u }; for (const cid of cleared) next[cid] = 0; return next })
   }
 
   // ── Cross-device read-state sync (same /team/seen store Team Hub uses).
@@ -220,8 +220,8 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   //    stamps; the server merges per-key with max(), so a stale device can
   //    never roll a newer device's read state backwards. localStorage above
   //    stays as the fast local cache (ISO strings, as before). ──
-  const pushQ = useRef({ timer: null, queue: null, token: null })
-  function pushSeenRemote(cid, iso) {
+  const pushQ = useRef<any>({ timer: null, queue: null, token: null })
+  function pushSeenRemote(cid: any, iso: any) {
     const t = Date.parse(iso)
     if (!dbaId || !cid || !Number.isFinite(t)) return
     const st = pushQ.current
@@ -245,12 +245,12 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   }
   // One-time upload of the existing local cache so read state from before
   // cross-device sync (or reads that happened offline) reaches the server.
-  const seededRef = useRef(null)
+  const seededRef = useRef<any>(null)
   function seedSeenRemote() {
     if (!dbaId || !myId || seededRef.current === seenKey) return
     seededRef.current = seenKey
     const m = getSeen()
-    for (const [cid, iso] of Object.entries(m)) {
+    for (const [cid, iso] of Object.entries(m) as any[]) {
       if (Number.isFinite(Date.parse(iso))) pushSeenRemote(cid, iso)
     }
   }
@@ -276,37 +276,37 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
       if (changed) { try { localStorage.setItem(seenKey, JSON.stringify(m)) } catch {} }
     } catch { /* offline — local cache still works */ }
   }
-  const [unread, setUnread] = useState({})   // { communityId: count }
-  const convosRef = useRef([])
+  const [unread, setUnread] = useState<any>({})   // { communityId: count }
+  const convosRef = useRef<any[]>([])
   convosRef.current = allConvos
-  async function refreshUnread(list) {
-    const cs = (list || convosRef.current).filter(c => c.id !== activeIdRef.current)
+  async function refreshUnread(list?: any) {
+    const cs = (list || convosRef.current).filter((c: any) => c.id !== activeIdRef.current)
     if (!cs.length) return
     const seen = getSeen()
-    const results = await Promise.all(cs.map(async c => {
+    const results = await Promise.all(cs.map(async (c: any) => {
       try {
         const since = seen[c.id] || '1970-01-01'
         const rows = await dbGet('community_messages',
           `community_id=eq.${c.id}&created_at=gt.${encodeURIComponent(since)}&select=id,sender_id&limit=30`)
-        const n = Array.isArray(rows) ? rows.filter(m => m.sender_id !== myId).length : 0
+        const n = Array.isArray(rows) ? rows.filter((m: any) => m.sender_id !== myId).length : 0
         return [c.id, n]
       } catch { return [c.id, 0] }
     }))
-    setUnread(u => { const next = { ...u }; for (const [id, n] of results) next[id] = n; return next })
+    setUnread((u: any) => { const next: any = { ...u }; for (const [id, n] of results) next[id] = n; return next })
   }
-  const UnreadBadge = ({ n }) => n > 0 ? (
+  const UnreadBadge = ({ n }: any) => n > 0 ? (
     <span style={{ background:C.gold, color:C.black, borderRadius:9, minWidth:18, height:18, fontSize:10, fontWeight:800,
       display:'flex', alignItems:'center', justifyContent:'center', padding:'0 5px', flexShrink:0 }}>
       {n >= 30 ? '30+' : n}
     </span>
   ) : null
 
-  const active = allConvos.find(c => c.id === activeId) || null
+  const active = allConvos.find((c: any) => c.id === activeId) || null
   const activeIsDm = !!active && active.context === `dbadm:${dbaId}`
-  const dmPartnerName = (c) => {
+  const dmPartnerName = (c: any) => {
     const ids = String(c.name || '').split('_')
-    const otherId = ids.find(id => id !== myId)
-    const p = people.find(x => x.id === otherId)
+    const otherId = ids.find((id: any) => id !== myId)
+    const p = people.find((x: any) => x.id === otherId)
     return c._otherName || p?.name || 'Direct message'
   }
 
@@ -318,10 +318,10 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
         dbGet('community_members', `user_id=eq.${myId}&select=community_id`),
         dbGet('communities', `context=eq.${encodeURIComponent(`dbadm:${dbaId}`)}&is_active=eq.true&name=like.*${myId}*&order=created_at.asc`),
       ])
-      const mine = new Set((mem || []).map(m => m.community_id))
+      const mine = new Set((mem || []).map((m: any) => m.community_id))
       setMyChanIds(mine)
-      setChannels((chans || []).filter(c => canManage || allFlags[c.id] || mine.has(c.id)))
-      setDms((myDms || []).filter(c => String(c.name||'').split('_').includes(myId)))
+      setChannels((chans || []).filter((c: any) => canManage || allFlags[c.id] || mine.has(c.id)))
+      setDms((myDms || []).filter((c: any) => String(c.name||'').split('_').includes(myId)))
     } finally { setLoaded(true) }
   }
   useEffect(() => { setLoaded(false); if (cfg) loadChannels() }, [cfg]) // eslint-disable-line
@@ -344,12 +344,12 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   }, [channels, dms, activeId]) // eslint-disable-line
   useEffect(() => { if (activeId) markSeen(activeId) }, [activeId]) // eslint-disable-line
 
-  async function loadMembers(cid = activeId) {
+  async function loadMembers(cid: any = activeId) {
     if (!cid) return
     const rows = await dbGet('community_members', `community_id=eq.${cid}&order=created_at.asc`)
     if (Array.isArray(rows)) setMembers(rows)
   }
-  async function loadMessages(cid = activeId) {
+  async function loadMessages(cid: any = activeId) {
     if (!cid) return
     const rows = await dbGet('community_messages', `community_id=eq.${cid}&order=created_at.asc&limit=500`)
     if (Array.isArray(rows)) {
@@ -362,13 +362,13 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
       // Keep this conversation "read" while it's open so leaving it doesn't
       // show a stale badge for messages the person already saw.
       if (grew && cid === activeIdRef.current) markSeen(cid)
-      fetchReactions('community_messages', rows.map(m => m.id)).then(setReactions).catch(() => {})
+      fetchReactions('community_messages', rows.map((m: any) => m.id)).then(setReactions).catch(() => {})
       if (firstLoad || (grew && nearBottom)) {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:'smooth' }), 80)
       }
     }
   }
-  async function loadPins(cid = activeId) {
+  async function loadPins(cid: any = activeId) {
     if (!cid || !myId) return
     const rows = await dbGet('message_pins', `conversation_id=eq.${cid}&user_id=eq.${myId}&context=eq.community`)
     if (Array.isArray(rows)) setPins(rows)
@@ -383,13 +383,13 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   }, [activeId]) // eslint-disable-line
 
   // ── Realtime (broadcast, DBA-scoped channel; 6s poll only as fallback) ──
-  const rtChanRef = useRef(null)
+  const rtChanRef = useRef<any>(null)
   const rtLiveRef = useRef(false)
-  const activeIdRef = useRef(null)
+  const activeIdRef = useRef<any>(null)
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
   useEffect(() => {
     if (!myId || !dbaId) return
-    const onLive = ({ payload }) => {
+    const onLive = ({ payload }: any) => {
       if (!payload?.communityId) return
       if (payload.userId === myId) return
       if (payload.communityId === activeIdRef.current) { loadMessages(payload.communityId); markSeen(payload.communityId) }
@@ -398,16 +398,16 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     const ch = supabase.channel(`dba-chat-live-${dbaId}`)
       .on('broadcast', { event: 'new-message' },     onLive)
       .on('broadcast', { event: 'message-deleted' }, onLive)
-      .on('broadcast', { event: 'seen' }, ({ payload }) => onRemoteSeen(payload))
-      .subscribe(status => { rtLiveRef.current = status === 'SUBSCRIBED' })
+      .on('broadcast', { event: 'seen' }, ({ payload }: any) => onRemoteSeen(payload))
+      .subscribe((status: any) => { rtLiveRef.current = status === 'SUBSCRIBED' })
     rtChanRef.current = ch
     return () => { rtLiveRef.current = false; rtChanRef.current = null; supabase.removeChannel(ch) }
   }, [myId, dbaId]) // eslint-disable-line
-  function broadcastLive(event, communityId) {
+  function broadcastLive(event: any, communityId: any) {
     try { rtChanRef.current?.send({ type:'broadcast', event, payload:{ communityId, userId: myId } }) } catch {}
   }
 
-  const amMember = members.some(m => m.user_id === myId)
+  const amMember = members.some((m: any) => m.user_id === myId)
   const canPost  = amMember || canManage || (active && active.created_by === myId)
   // My delegated authority on the OPEN channel only (never carries over)
   const activeCaps  = activeId ? capsFor(activeId, myId) : {}
@@ -418,7 +418,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     const name = newName.trim()
     if (!name || !dbaId) return
     const r = await apiPost('channel-create', {
-      dbaId, name, allDba: newAll, memberIds: newMembers.map(p => p.id),
+      dbaId, name, allDba: newAll, memberIds: newMembers.map((p: any) => p.id),
     })
     if (!r.ok || !r.id) { alert(r.error || "Couldn't create the channel — try again."); return }
     for (const p of newAll ? people : newMembers) {
@@ -432,30 +432,30 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     await loadChannels()
     setActiveId(r.id)
   }
-  async function renameChannel(c) {
+  async function renameChannel(c: any) {
     const next = window.prompt('New name for this group:', c.name)
     if (!next || !next.trim() || next.trim() === c.name) return
     const r = await apiPost('channel-rename', { dbaId, communityId: c.id, name: next.trim().slice(0, 80) })
     if (!r.ok) { alert(r.error || "Couldn't rename the group — try again."); return }
     loadChannels()
   }
-  async function archiveChannel(c) {
+  async function archiveChannel(c: any) {
     if (!window.confirm(`Archive "${c.name}"? Members will no longer see it.`)) return
     const r = await apiPost('channel-archive', { dbaId, communityId: c.id })
     if (!r.ok) { alert(r.error || "Couldn't archive — try again."); return }
     if (activeId === c.id) setActiveId(null)
     loadChannels()
   }
-  async function toggleAllDba(c) {
+  async function toggleAllDba(c: any) {
     const making = !allFlags[c.id]
     const r = await apiPost('chat-flags', { dbaId, communityId: c.id, allDba: making })
     if (!r.ok) { alert(r.error || "Couldn't update — try again."); return }
-    setCfg(prev => prev ? { ...prev, all_flags: { ...prev.all_flags, [c.id]: making || undefined } } : prev)
+    setCfg((prev: any) => prev ? { ...prev, all_flags: { ...prev.all_flags, [c.id]: making || undefined } } : prev)
     loadMembers(c.id)
   }
 
   // ── Channel membership (managers, subset channels) ──────────
-  async function addMember(p) {
+  async function addMember(p: any) {
     const r = await apiPost('channel-member-add', { dbaId, communityId: activeId, userId: p.id })
     if (!r.ok) { alert(r.error || "Couldn't add them — try again."); return }
     sendNotification({
@@ -464,7 +464,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     })
     loadMembers()
   }
-  async function removeMember(m) {
+  async function removeMember(m: any) {
     if (!window.confirm(`Remove ${m.user_name} from "${active?.name}"?`)) return
     const r = await apiPost('channel-member-remove', { dbaId, communityId: activeId, userId: m.user_id })
     if (!r.ok) { alert(r.error || "Couldn't remove them — try again."); return }
@@ -472,21 +472,21 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   }
 
   // ── 1v1s ─────────────────────────────────────────────────────
-  async function openDm(p) {
+  async function openDm(p: any) {
     if (dmBusy) return
     setDmBusy(p.id)
     try {
       const r = await apiPost('dm-open', { dbaId, otherId: p.id })
       if (!r.ok || !r.id) { alert(r.error || "Couldn't open the conversation."); return }
       await loadChannels()
-      setDms(prev => prev.map(c => c.id === r.id ? { ...c, _otherName: r.other?.name } : c))
+      setDms((prev: any) => prev.map((c: any) => c.id === r.id ? { ...c, _otherName: r.other?.name } : c))
       setActiveId(r.id)
     } finally { setDmBusy(null) }
   }
 
   // ── Mentions & rendering (Communities.jsx patterns) ─────────
-  function findMentions(text) {
-    const hits = []
+  function findMentions(text: any) {
+    const hits: any[] = []
     for (const m of members) {
       if (m.user_id === myId || !m.user_name) continue
       const first = m.user_name.split(' ')[0]
@@ -495,13 +495,13 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     }
     return hits
   }
-  function renderMentions(text, baseColor) {
+  function renderMentions(text: any, baseColor: any) {
     const parts = String(text||'').split(/(@[A-Za-z][A-Za-z'-]*(?:\s[A-Z][A-Za-z'-]*)?)/g)
     return parts.map((p,i) => p.startsWith('@')
       ? <span key={i} style={{ color:C.gold, fontWeight:700 }}>{p}</span>
       : <span key={i} style={{ color:baseColor }}>{linkifyText(p, i)}</span>)
   }
-  function linkifyText(text) {
+  function linkifyText(text: any, _i?: any) {
     return String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g).map((p, i) => {
       if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{p}</span>
       const href = /^www\./.test(p) ? `https://${p}` : p
@@ -510,7 +510,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
         style={{ color:C.gold, fontWeight:700, textDecoration:'underline', wordBreak:'break-all' }}>{p}</a>
     })
   }
-  function AudioAtt({ att }) {
+  function AudioAtt({ att }: any) {
     const [showTx, setShowTx] = useState(false)
     const [copied, setCopied] = useState(false)
     const copy = async () => {
@@ -543,9 +543,9 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
       </div>
     )
   }
-  function renderBody(content, baseColor) {
+  function renderBody(content: any, baseColor: any) {
     const { text, atts: rawAtts } = splitAtts(content)
-    const atts = rawAtts.filter(a => safeUrl(a.url))
+    const atts = rawAtts.filter((a: any) => safeUrl(a.url))
     return (<>
       {text ? renderMentions(text, baseColor) : null}
       {atts.length > 0 && (
@@ -570,12 +570,12 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   }
 
   // ── File uploads & voice memos (via /api/dba/*) ──────────────
-  const [pendingFiles, setPendingFiles] = useState([])
+  const [pendingFiles, setPendingFiles] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef(null)
+  const fileInputRef = useRef<any>(null)
   function pickFile() { fileInputRef.current?.click() }
-  async function onFilePicked(e) {
-    const files = Array.from(e.target.files||[]); e.target.value = ''
+  async function onFilePicked(e: any) {
+    const files: any[] = Array.from(e.target.files||[]); e.target.value = ''
     if (!files.length) return
     setUploading(true)
     try {
@@ -589,19 +589,19 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
         })
         const out = await apiPost('upload', { dbaId, filename:f.name, contentType:f.type, dataBase64:b64 })
         if (!out.ok || !out.url) { alert(`Could not upload ${f.name} — please try again.`); continue }
-        setPendingFiles(prev => [...prev, { name:f.name, url:out.url, type:f.type||'' }])
+        setPendingFiles((prev: any) => [...prev, { name:f.name, url:out.url, type:f.type||'' }])
       }
     } finally { setUploading(false) }
   }
   function takePending() {
     const mine = pendingFiles
     if (mine.length) setPendingFiles([])
-    return mine.map(a => `[[file|${a.name.replace(/[|[\]]/g,'_')}|${a.url}|${a.type}${a.transcript?`|${encodeURIComponent(a.transcript).replace(/[|[\]]/g,'')}`:''}]]`).join('\n')
+    return mine.map((a: any) => `[[file|${a.name.replace(/[|[\]]/g,'_')}|${a.url}|${a.type}${a.transcript?`|${encodeURIComponent(a.transcript).replace(/[|[\]]/g,'')}`:''}]]`).join('\n')
   }
 
   const [recording, setRecording] = useState(false)
   const [recordSecs, setRecordSecs] = useState(0)
-  const recRef = useRef(null)
+  const recRef = useRef<any>(null)
   useEffect(() => {
     if (!recording) { setRecordSecs(0); return }
     const t = setInterval(() => setRecordSecs(s => s + 1), 1000)
@@ -615,8 +615,8 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
       const mime = window.MediaRecorder?.isTypeSupported?.('audio/webm') ? 'audio/webm'
                  : window.MediaRecorder?.isTypeSupported?.('audio/mp4') ? 'audio/mp4' : ''
       const recorder = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined)
-      const chunks = []
-      recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data) }
+      const chunks: any[] = []
+      recorder.ondataavailable = (e: any) => { if (e.data?.size) chunks.push(e.data) }
       recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
         setRecording(false)
@@ -640,7 +640,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
             const tj = await apiPost('transcribe', { dbaId, dataBase64:b64, contentType:blob.type })
             if (tj.ok && tj.text) transcript = tj.text
           } catch {}
-          setPendingFiles(prev => [...prev, { name:out.name, url:out.url, type:blob.type, transcript }])
+          setPendingFiles((prev: any) => [...prev, { name:out.name, url:out.url, type:blob.type, transcript }])
         } finally { setUploading(false) }
       }
       recorder.start()
@@ -670,7 +670,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     // are ALSO created server-side there, so per-community mutes apply to
     // them too. DMs keep the direct client-side mention path (no community
     // to mute). Fire-and-forget.
-    const newId = Array.isArray(r) ? r[0]?.id : null
+    const newId = Array.isArray(r) ? (r[0] as any)?.id : null
     if (newId && !activeIsDm) {
       fetch(`/api/communities/${activeId}/notify-post`, {
         method: 'POST',
@@ -688,8 +688,8 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     }
     loadMessages()
   }
-  function mayDelete(m) { return canManage || m.sender_id === myId || !!activeCaps.del }
-  async function deleteMsg(m) {
+  function mayDelete(m: any) { return canManage || m.sender_id === myId || !!activeCaps.del }
+  async function deleteMsg(m: any) {
     if (!window.confirm('Delete this message for everyone?\nIt stays permanently visible in the admin audit log.')) return
     // Server-enforced: manager, the sender, or a leader with delete authority
     // on THIS channel (audit row written server-side).
@@ -698,8 +698,8 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     broadcastLive('message-deleted', activeId)
     loadMessages()
   }
-  const pinnedIds = new Set(pins.map(p => p.message_id))
-  function jumpToMsg(id) {
+  const pinnedIds = new Set(pins.map((p: any) => p.message_id))
+  function jumpToMsg(id: any) {
     const el = document.getElementById(`dmsg-${id}`)
     if (!el) return
     el.scrollIntoView({ behavior:'smooth', block:'center' })
@@ -708,7 +708,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     el.style.borderRadius = '10px'
     setTimeout(() => { el.style.background = 'transparent' }, 1600)
   }
-  async function togglePin(m) {
+  async function togglePin(m: any) {
     if (!myId) return
     if (pinnedIds.has(m.id)) {
       await dbDelete('message_pins', `message_id=eq.${m.id}&user_id=eq.${myId}`)
@@ -721,7 +721,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     }
     loadPins()
   }
-  async function pinForAll(m) {
+  async function pinForAll(m: any) {
     // Server-enforced: manager or a leader with pin authority on THIS channel
     const r = await apiPost('pin-all', { dbaId, communityId: activeId, messageId: m.id })
     if (!r.ok) { alert(r.error || 'Could not pin — please try again.'); return }
@@ -729,51 +729,51 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     alert('Pinned for everyone in this conversation.')
   }
   // Manager clicks a leader capability → pick the scope (this group, all, or chosen groups)
-  function toggleAuthority(userId, key, userName) {
+  function toggleAuthority(userId: any, key: any, userName: any) {
     const grant = !capsFor(activeId, userId)[key]
     setAuthPick(null)
     setAuthPrompt({ userId, key, grant, userName })
   }
-  async function applyAuthority(scope) {
+  async function applyAuthority(scope: any) {
     if (!authPrompt) return
     const { userId, key, grant } = authPrompt
-    const body = { dbaId, userId, patch: { [key]: grant } }
+    const body: any = { dbaId, userId, patch: { [key]: grant } }
     if (scope === 'all') body.all = true
     else if (scope === 'pick') body.communityIds = [...(authPick || [])]
     else body.communityIds = [activeId]
     if (scope === 'pick' && !body.communityIds.length) { alert('Tick at least one group first.'); return }
     const r = await apiPost('authority-set', body)
     if (!r.ok) { alert(r.error || "Couldn't update authority — try again."); return }
-    setCfg(prev => prev ? { ...prev, leaders: r.leaders || prev.leaders } : prev)
+    setCfg((prev: any) => prev ? { ...prev, leaders: r.leaders || prev.leaders } : prev)
     setAuthPrompt(null); setAuthPick(null)
   }
   // Manager toggles someone's DBA-wide direct-message access
-  async function toggleDm(userId) {
+  async function toggleDm(userId: any) {
     const enabled = !dmEnabled[userId]
     const r = await apiPost('dm-enable', { dbaId, userId, enabled })
     if (!r.ok) { alert(r.error || "Couldn't update DM access — try again."); return }
-    setCfg(prev => {
+    setCfg((prev: any) => {
       if (!prev) return prev
-      const d = { ...(prev.dm_enabled || {}) }
+      const d: any = { ...(prev.dm_enabled || {}) }
       if (enabled) d[userId] = true; else delete d[userId]
       return { ...prev, dm_enabled: d }
     })
   }
-  async function setMemberTier(userId, tierId) {
+  async function setMemberTier(userId: any, tierId: any) {
     const r = await apiPost('tier-set', { dbaId, userId, tierId })
     if (!r.ok) { alert(r.error || "Couldn't change their tier — try again."); return }
-    setCfg(prev => {
+    setCfg((prev: any) => {
       if (!prev) return prev
-      const t = { ...(prev.tiers || {}) }
+      const t: any = { ...(prev.tiers || {}) }
       if (tierId) t[userId] = tierId; else delete t[userId]
       return { ...prev, tiers: t }
     })
   }
 
   // ── Grouping ────────────────────────────────────────────────
-  const repliesByParent = {}
+  const repliesByParent: any = {}
   for (const m of messages) if (m.parent_id) (repliesByParent[m.parent_id] ||= []).push(m)
-  const roots = messages.filter(m => !m.parent_id)
+  const roots = messages.filter((m: any) => !m.parent_id)
 
   // ════════════════════════════════════════════════════════════
   // RENDER
@@ -784,7 +784,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   const showList = !isMobile || !activeId
   const showChat = !isMobile || !!activeId
 
-  function bubble(m, isReply = false) {
+  function bubble(m: any, isReply = false) {
     const mine = m.sender_id === myId
     return (
       <div key={m.id} id={`dmsg-${m.id}`} style={{ marginBottom: isReply ? 8 : 4, marginLeft: isReply ? 34 : 0, display:'flex', gap:8, alignItems:'flex-start' }}>
@@ -813,7 +813,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
           {!m.deleted_at && (
             <ReactionBar table="community_messages" messageId={m.id} myId={myId}
               reactions={reactions[m.id]} accent={C.gold}
-              onChange={map => setReactions(p => ({ ...p, [m.id]: map }))} />
+              onChange={(map: any) => setReactions((p: any) => ({ ...p, [m.id]: map }))} />
           )}
           {!m.deleted_at && (
             <div style={{ display:'flex', gap:10, marginTop:3, alignItems:'center' }}>
@@ -880,9 +880,9 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
             {/* Direct messages */}
             <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', padding:'14px 6px 4px' }}>Direct messages</div>
             {people.length === 0 && <div style={{ fontSize:11, color:C.muted, padding:'4px 6px' }}>Nobody else here yet.</div>}
-            {people.map(p => {
+            {people.map((p: any) => {
               const unlocked = dmUnlocked(p)
-              const openConvo = dms.find(c => String(c.name||'').split('_').includes(p.id))
+              const openConvo = dms.find((c: any) => String(c.name||'').split('_').includes(p.id))
               return (
                 <div key={p.id}
                   onClick={() => { if (!unlocked) return; openConvo ? setActiveId(openConvo.id) : openDm(p) }}
@@ -955,8 +955,8 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
             {pins.length > 0 && (
               <div style={{ background:`${C.gold}11`, borderBottom:`1px solid ${C.gold}33`, padding:'8px 14px', maxHeight:110, overflowY:'auto', flexShrink:0 }}>
                 <div style={{ fontSize:9, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>📌 Pinned</div>
-                {pins.map(p => {
-                  const m = messages.find(x => x.id === p.message_id)
+                {pins.map((p: any) => {
+                  const m = messages.find((x: any) => x.id === p.message_id)
                   if (!m || m.deleted_at) return null
                   return (
                     <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 0' }}>
@@ -978,7 +978,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
               {roots.map(m => (
                 <div key={m.id} style={{ marginBottom:12 }}>
                   {bubble(m)}
-                  {(repliesByParent[m.id]||[]).map(r => bubble(r, true))}
+                  {(repliesByParent[m.id]||[]).map((r: any) => bubble(r, true))}
                 </div>
               ))}
               <div ref={bottomRef}/>
@@ -995,10 +995,10 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                 )}
                 {(pendingFiles.length > 0 || uploading) && (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
-                    {pendingFiles.map((p,i) => (
+                    {pendingFiles.map((p: any, i: number) => (
                       <span key={i} style={{ display:'flex', alignItems:'center', gap:6, background:C.card, border:`1px solid ${C.gold}55`, borderRadius:14, padding:'3px 9px', fontSize:11, color:C.white }}>
                         {/^audio\//.test(p.type||'') ? '🎙️' : '📎'} <span style={{ maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
-                        <button onClick={() => setPendingFiles(prev => prev.filter(x => x!==p))}
+                        <button onClick={() => setPendingFiles((prev: any) => prev.filter((x: any) => x!==p))}
                           style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', padding:0, fontSize:12 }}>✕</button>
                       </span>
                     ))}
@@ -1018,7 +1018,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                     </button>
                   )}
                   <MentionInput value={newMsg} onChange={setNewMsg} onSubmit={send}
-                    candidates={members.filter(m => m.user_id !== myId).map(m => m.user_name)}
+                    candidates={members.filter((m: any) => m.user_id !== myId).map((m: any) => m.user_name)}
                     colors={C}
                     placeholder={activeIsDm ? `Message ${dmPartnerName(active)}…` : `Message # ${active.name}… tag people with @Name`}
                     inputStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:18,
@@ -1062,11 +1062,11 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                 Pick members {newMembers.length > 0 && `(${newMembers.length} selected)`}
               </div>
               <div style={{ maxHeight:180, overflowY:'auto', marginBottom:14, border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 8px' }}>
-                {pickable.map(p => {
-                  const picked = newMembers.some(x => x.id === p.id)
+                {pickable.map((p: any) => {
+                  const picked = newMembers.some((x: any) => x.id === p.id)
                   return (
                     <div key={p.id}
-                      onClick={() => setNewMembers(prev => picked ? prev.filter(x => x.id !== p.id) : [...prev, p])}
+                      onClick={() => setNewMembers((prev: any) => picked ? prev.filter((x: any) => x.id !== p.id) : [...prev, p])}
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 2px', borderBottom:`1px solid ${C.border}`, cursor:'pointer' }}>
                       <span style={{ width:16, height:16, borderRadius:4, border:`1px solid ${picked ? C.gold : C.border}`,
                         background: picked ? C.gold : 'transparent', color:C.black, fontSize:11, fontWeight:800,
@@ -1109,10 +1109,10 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
               Leader authority applies to <b style={{ color:C.white }}>this group only</b>: 🗑 delete messages · 📌 pin for everyone · 🎨 edit the canvas.
             </div>
             <div style={{ maxHeight:200, overflowY:'auto', marginBottom:14 }}>
-              {members.map(m => {
+              {members.map((m: any) => {
                 const mc = capsFor(activeId, m.user_id)
                 const privMember = isPriv(m.user_id)
-                const authBtn = (key, icon, label, on) => (
+                const authBtn = (key: any, icon: any, label: any, on: any) => (
                   <button key={key} onClick={() => toggleAuthority(m.user_id, key, m.user_name)} title={`${on ? 'Revoke' : 'Grant'}: ${label}`}
                     style={{ background: on ? `${C.gold}22` : 'none', border:`1px solid ${on ? C.gold : C.border}`,
                       borderRadius:6, padding:'3px 6px', color: on ? C.gold : C.muted, fontSize:10, cursor:'pointer' }}>{icon}</button>
@@ -1160,10 +1160,10 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                 ) : (
                   <div>
                     <div style={{ maxHeight:120, overflowY:'auto', marginBottom:8 }}>
-                      {channels.map(c => {
+                      {channels.map((c: any) => {
                         const on = authPick.has(c.id)
                         return (
-                          <div key={c.id} onClick={() => setAuthPick(prev => { const n = new Set(prev); on ? n.delete(c.id) : n.add(c.id); return n })}
+                          <div key={c.id} onClick={() => setAuthPick((prev: any) => { const n = new Set(prev); on ? n.delete(c.id) : n.add(c.id); return n })}
                             style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0', cursor:'pointer' }}>
                             <span style={{ width:14, height:14, borderRadius:4, border:`1px solid ${on ? C.gold : C.border}`, background: on ? C.gold : 'transparent',
                               color:C.black, fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{on ? '✓' : ''}</span>
@@ -1185,7 +1185,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
 
             <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:6 }}>Add people</div>
             <div style={{ flex:1, overflowY:'auto', minHeight:80 }}>
-              {pickable.filter(p => !members.some(m => m.user_id === p.id)).map(p => (
+              {pickable.filter((p: any) => !members.some((m: any) => m.user_id === p.id)).map((p: any) => (
                 <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', borderBottom:`1px solid ${C.border}` }}>
                   <div style={{ flex:1, fontSize:12, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                     {p.name} <span style={{ fontSize:9, color:C.muted }}>({p.kind === 'coach' ? 'coach' : p.kind === 'admin' ? 'admin' : 'member'})</span>
@@ -1194,7 +1194,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                     style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.black, fontSize:10, fontWeight:800, cursor:'pointer' }}>Add</button>
                 </div>
               ))}
-              {pickable.filter(p => !members.some(m => m.user_id === p.id)).length === 0 &&
+              {pickable.filter((p: any) => !members.some((m: any) => m.user_id === p.id)).length === 0 &&
                 <div style={{ fontSize:11, color:C.muted, padding:'8px 0' }}>Nobody left to add.</div>}
             </div>
             <div style={{ display:'flex', justifyContent:'flex-end', marginTop:12 }}>

@@ -12,17 +12,19 @@ import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
 import { supabase } from '../supabaseClient'
 import { loadSeen, saveSeen, seenAt, syncSeen, mergeSeenLocal } from '../lib/teamUnread'
+// @ts-ignore -- legacy untyped .js module
 import { mergeRemoteSeen } from '../lib/seenMerge'
 import Communities from './Communities'
 import CanvasPanel from './CanvasPanel'
 import MentionInput from './MentionInput'
+// @ts-ignore -- legacy untyped .js module
 import DeletedBubble from './DeletedBubble'
 import { useHuddle } from './HuddleHub'
 import { ReactionBar, fetchReactions } from './Reactions'
 import { LN } from './LoomPrivacy'
 
 function useIsMobile(bp = 768) {
-  const [m, setM] = useState(() => window.innerWidth < bp)
+  const [m, setM] = useState<any>(() => window.innerWidth < bp)
   useEffect(() => {
     const h = () => setM(window.innerWidth < bp)
     window.addEventListener('resize', h)
@@ -36,10 +38,11 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const DAILY_DOMAIN = 'edencommunications'
 
+
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
 // Demo roster removed — the team list loads live from the database.
-const DEMO_COACHES = []
+const DEMO_COACHES: any[] = []
 
 const C = {
   gold:'#ffa600', black:'#000', white:'#fff',
@@ -54,41 +57,41 @@ const H = {
   'Prefer': 'return=representation',
 }
 
-async function dbGet(table, params='') {
+async function dbGet(table: any, params='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
   if (!r.ok) return []
   return r.json()
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST', headers:H, body:JSON.stringify(body)
   })
   if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
     method:'PATCH', headers:H, body:JSON.stringify(body)
   })
   if (!r.ok) console.error('UPDATE', table, await r.text())
   return r.ok
 }
-async function dbDelete(table, params) {
+async function dbDelete(table: any, params: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method:'DELETE', headers:H })
   if (!r.ok) console.error('DELETE', table, await r.text())
   return r.ok
 }
 
-function timeAgo(ts) {
+function timeAgo(ts: any) {
   if (!ts) return ''
-  const diff = Math.floor((Date.now() - new Date(ts)) / 1000)
+  const diff = Math.floor((Date.now() - (new Date(ts) as any)) / 1000)
   if (diff < 60)    return 'just now'
   if (diff < 3600)  return Math.floor(diff/60) + 'm ago'
   if (diff < 86400) return Math.floor(diff/3600) + 'h ago'
   return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric'})
 }
 
-function Card({children, sx={}}) {
+function Card({children, sx={}}: any) {
   return (
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,...sx}}>
       {children}
@@ -99,7 +102,7 @@ function Card({children, sx={}}) {
 // ════════════════════════════════════════════════════════════════
 // LEFT NAV SIDEBAR ITEM
 // ════════════════════════════════════════════════════════════════
-function NavItem({ icon, label, active, onClick, badge }) {
+function NavItem({ icon, label, active, onClick, badge }: any) {
   const isMobile = window.innerWidth < 768;
   return (
     <button onClick={onClick} style={{
@@ -129,18 +132,18 @@ function NavItem({ icon, label, active, onClick, badge }) {
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
-export default function Week7({ currentUser, initialDm }) {
+export default function Week7({ currentUser, initialDm }: any) {
   const isMobile = useIsMobile()
   const email  = currentUser?.email || ''
   const info   = { role:currentUser?.role||'coach', name:currentUser?.name||'User', uuid:null, orgId:EDEN_ORG_ID }
-  const [self, setSelf] = useState(info)
+  const [self, setSelf] = useState<any>(info)
   const myUUID = self.uuid
   const myName = self.name
   const myRole = self.role
   const orgId  = self.orgId || EDEN_ORG_ID
 
   // Team roster from DB (coaches, head coaches, VAs, admins) — falls back to demo list
-  const [team, setTeam] = useState(DEMO_COACHES)
+  const [team, setTeam] = useState<any>(DEMO_COACHES)
   useEffect(()=>{
     // Resolve own profile from the DB
     if (email) {
@@ -153,7 +156,7 @@ export default function Week7({ currentUser, initialDm }) {
     // Custom staff titles ("Closer", "Sales Mentor"…) live in admin_settings as staff_meta:<id>
     const metaP = dbGet('admin_settings', `key=like.staff_meta:*&select=key,value`)
       .then(rows => {
-        const map = {}
+        const map: Record<string, any> = {}
         for (const r of (rows||[])) {
           try {
             const v = typeof r.value === 'string' ? JSON.parse(r.value) : r.value
@@ -166,13 +169,13 @@ export default function Week7({ currentUser, initialDm }) {
     dbGet('user_profiles', `role=neq.client&is_active=not.is.false&select=id,name,full_name,role,email&order=name.asc.nullslast`)
       .then(async rows=>{
         if (!Array.isArray(rows)||!rows.length) return
-        const labels = await metaP
+        const labels: any = await metaP
         const seen = new Set()
         setTeam(rows.filter(r=>{ if(seen.has(r.id)) return false; seen.add(r.id); return true })
           .map(r=>({ uuid:r.id, name:r.name||r.full_name||'Team member', role:r.role, email:(r.email||'').toLowerCase(), label:labels[r.id]||null, isHeadCoach:r.role==='head_coach' })))
       }).catch(()=>{})
   }, []) // eslint-disable-line
-  const [staffLabels, setStaffLabels] = useState({})
+  const [staffLabels, setStaffLabels] = useState<any>({})
 
   // Safety block — clients must never reach this
   if (myRole === 'client') {
@@ -189,9 +192,9 @@ export default function Week7({ currentUser, initialDm }) {
   // ── My DBAs (sub-brands I coach or was delegated into) ──────
   // The server scopes the list: admins get every org DBA, other staff only
   // the ones they run or were granted access to. Empty → tab stays hidden.
-  const [myDbas, setMyDbas] = useState([])
+  const [myDbas, setMyDbas] = useState<any[]>([])
   const [dbaScope, setDbaScope] = useState('mine')
-  const [openDba, setOpenDba] = useState(null)
+  const [openDba, setOpenDba] = useState<any>(null)
   useEffect(() => {
     if (!myUUID || myRole === 'client') return
     fetch('/api/dba/list', { headers: { Authorization: sbBearer() } })
@@ -204,10 +207,10 @@ export default function Week7({ currentUser, initialDm }) {
   // Reads the same localStorage seen-maps Communities.jsx (`community_seen_<uid>`)
   // and DbaChat.jsx (`dba_seen_<dbaId>_<uid>`) maintain, so opening a
   // conversation there clears the dot here on the next refresh.
-  const [commUnread, setCommUnread] = useState(false)
-  const [dbaUnread,  setDbaUnread]  = useState(false)
-  const readSeenMap = (k) => { try { return JSON.parse(localStorage.getItem(k) || '{}') } catch { return {} } }
-  const hasNewerMsg = async (communityId, since) => {
+  const [commUnread, setCommUnread] = useState<any>(false)
+  const [dbaUnread,  setDbaUnread]  = useState<any>(false)
+  const readSeenMap = (k: any) => { try { return JSON.parse(localStorage.getItem(k) || '{}') } catch { return {} } }
+  const hasNewerMsg = async (communityId: any, since: any) => {
     try {
       const rows = await dbGet('community_messages',
         `community_id=eq.${communityId}&created_at=gt.${encodeURIComponent(since || '1970-01-01')}&select=id,sender_id&limit=30`)
@@ -219,7 +222,7 @@ export default function Week7({ currentUser, initialDm }) {
     const isAdminNav = myRole === 'super_admin' || myRole === 'company_admin'
     // Everything I'm a member of (team communities + DBA channels share community_members)
     let memberIds = []
-    try { memberIds = ((await dbGet('community_members', `user_id=eq.${myUUID}&select=community_id`)) || []).map(m => m.community_id) } catch {}
+    try { memberIds = ((await dbGet('community_members', `user_id=eq.${myUUID}&select=community_id`)) || []).map((m: any) => m.community_id) } catch {}
     // Pull the DB read-state copy once up front (server merges per-key max) so
     // a community or DBA chat read on ANOTHER device clears this device's
     // nav dots within a refresh cycle. Keys: `comm:<communityId>` (Communities)
@@ -246,7 +249,7 @@ export default function Week7({ currentUser, initialDm }) {
       const lsKey = `community_seen_${myUUID}`
       const { map: seenMap, changed } = mergeRemoteSeen(readSeenMap(lsKey), remoteSeen, 'comm:')
       if (changed) { try { localStorage.setItem(lsKey, JSON.stringify(seenMap)) } catch {} }
-      const hits = await Promise.all(list.map(c => hasNewerMsg(c.id, seenMap[c.id])))
+      const hits = await Promise.all(list.map((c: any) => hasNewerMsg(c.id, seenMap[c.id])))
       setCommUnread(hits.some(Boolean))
     } catch {}
     // 2) DBA chats — group channels I'm a member of + my DMs, per-DBA seen map
@@ -259,7 +262,7 @@ export default function Week7({ currentUser, initialDm }) {
         // Managers (DBA coach, delegated staff, super admins — anyone the server
         // returned under scope 'mine') see every group channel, like DbaChat does.
         const manages = dbaScope === 'mine' || myRole === 'super_admin' ||
-          d.coach_id === myUUID || (d.delegates || []).some(g => g.id === myUUID)
+          d.coach_id === myUUID || (d.delegates || []).some((g: any) => g.id === myUUID)
         const [groups, dms] = await Promise.all([
           manages
             ? dbGet('communities', `context=eq.${encodeURIComponent(`dba:${d.id}`)}&is_active=eq.true&select=id`)
@@ -270,7 +273,7 @@ export default function Week7({ currentUser, initialDm }) {
         ])
         const convos = [
           ...(groups || []),
-          ...((dms || []).filter(c => String(c.name || '').split('_').includes(myUUID))),
+          ...((dms || []).filter((c: any) => String(c.name || '').split('_').includes(myUUID))),
         ]
         if (!convos.length) continue
         const lsKey = `dba_seen_${d.id}_${myUUID}`
@@ -287,7 +290,7 @@ export default function Week7({ currentUser, initialDm }) {
     refreshNavUnread()
     const iv = setInterval(refreshNavUnread, 30000)
     // DBA spaces open in another tab — their markSeen writes fire a storage event here
-    const onStorage = (e) => {
+    const onStorage = (e: any) => {
       if (e.key && (e.key.startsWith('dba_seen_') || e.key.startsWith('community_seen_'))) refreshNavUnread()
     }
     window.addEventListener('storage', onStorage)
@@ -299,14 +302,14 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Team Chat state ────────────────────────────────────────
   // Demo seed messages removed — team chat loads live from the database.
-  const [messages, setMessages] = useState([])
-  const [threadReplies, setThreadReplies] = useState({})
-  const [newMessage,   setNewMessage]   = useState('')
+  const [messages, setMessages] = useState<any[]>([])
+  const [threadReplies, setThreadReplies] = useState<any>({})
+  const [newMessage,   setNewMessage]   = useState<any>('')
 
   // ── Live team chat: load real messages from the DB (demo rows stay as fallback) ──
-  const liveLoadedRef = useRef(false)
-  const [reactions, setReactions] = useState({})   // { msgId: { '👍': [{id,n}] } }
-  const setRx = (id) => (map) => setReactions(p => ({ ...p, [id]: map }))
+  const liveLoadedRef = useRef<boolean>(false)
+  const [reactions, setReactions] = useState<any>({})   // { msgId: { '👍': [{id,n}] } }
+  const setRx = (id: any) => (map: any) => setReactions((p: any) => ({ ...p, [id]: map }))
   async function loadTeamChat() {
     try {
       // Fetch the NEWEST 500 rows (desc), then flip ascending for display —
@@ -319,7 +322,7 @@ export default function Week7({ currentUser, initialDm }) {
       rows.reverse()
       liveLoadedRef.current = true
       fetchReactions('team_messages', rows.map(r => r.id)).then(setReactions).catch(() => {})
-      const roots = [], reps = {}, dms = {}, dmReps = {}
+      const roots: any[] = [], reps: Record<string, any> = {}, dms: Record<string, any> = {}, dmReps: Record<string, any> = {}
       for (const r of rows) {
         const m = { id:r.id, senderId:r.sender_id, senderName:r.sender_name, senderRole:r.sender_role,
           content:r.content, createdAt:r.created_at, isDm:!!r.is_dm, threadId:r.thread_id,
@@ -357,11 +360,11 @@ export default function Week7({ currentUser, initialDm }) {
               if (r.sender_id===myUUID || r.dm_to_id===myUUID) {
                 const key = [r.sender_id, r.dm_to_id].sort().join('_')
                 ;(dms[key] ||= []).push(m)
-                dms[key].sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt))
+                dms[key].sort((a: any,b: any) => (new Date(a.createdAt) as any) - (new Date(b.createdAt) as any))
               }
             } else {
               roots.push(m)
-              roots.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt))
+              roots.sort((a: any,b: any) => (new Date(a.createdAt) as any) - (new Date(b.createdAt) as any))
             }
           }
         } catch {}
@@ -370,8 +373,8 @@ export default function Week7({ currentUser, initialDm }) {
       for (const key of Object.keys(dms)) for (const m of dms[key]) m.replyCount = (dmReps[key]?.[m.id]||[]).length
       setMessages(roots)
       setThreadReplies(reps)
-      setDmMessages(prev => ({ ...prev, ...dms }))
-      setDmReplies(prev => ({ ...prev, ...dmReps }))
+      setDmMessages((prev: any) => ({ ...prev, ...dms }))
+      setDmReplies((prev: any) => ({ ...prev, ...dmReps }))
     } catch {}
   }
   useEffect(() => {
@@ -384,15 +387,15 @@ export default function Week7({ currentUser, initialDm }) {
   // ── Realtime: typing hints + instant message delivery ────────
   // Uses a Supabase broadcast channel (no table publication needed).
   // The 8s poll above stays as the fallback per the realtime lesson.
-  const [typers, setTypers] = useState({})   // userId -> {name, ctx, until}
-  const rtChanRef = useRef(null)
-  const lastTypingSentRef = useRef(0)
+  const [typers, setTypers] = useState<any>({})   // userId -> {name, ctx, until}
+  const rtChanRef = useRef<any>(null)
+  const lastTypingSentRef = useRef<number>(0)
   useEffect(() => {
     if (!orgId || !myUUID) return
     const ch = supabase.channel(`teamhub-live-${orgId}`)
       .on('broadcast', { event:'typing' }, ({ payload }) => {
         if (!payload?.userId || payload.userId === myUUID) return
-        setTypers(prev => {
+        setTypers((prev: any) => {
           if (payload.stop) { if (!prev[payload.userId]) return prev; const n = {...prev}; delete n[payload.userId]; return n }
           return { ...prev, [payload.userId]: { name: payload.name || 'Someone', ctx: payload.ctx, until: Date.now() + 4500 } }
         })
@@ -406,10 +409,10 @@ export default function Week7({ currentUser, initialDm }) {
       .on('broadcast', { event:'seen' }, ({ payload }) => {
         if (payload?.userId !== myUUID || !payload?.seen) return
         const merged = mergeSeenLocal(myUUID, payload.seen)
-        setSeen(prev => {
+        setSeen((prev: any) => {
           let changed = false
           const next = { ...prev }
-          for (const [k, t] of Object.entries(merged)) {
+          for (const [k, t] of Object.entries<any>(merged)) {
             if (Number.isFinite(t) && t > (next[k] || 0)) { next[k] = t; changed = true }
           }
           return changed ? next : prev
@@ -418,16 +421,16 @@ export default function Week7({ currentUser, initialDm }) {
       .subscribe()
     rtChanRef.current = ch
     const prune = setInterval(() => {
-      setTypers(prev => {
+      setTypers((prev: any) => {
         const now = Date.now()
-        const keep = Object.entries(prev).filter(([,v]) => v.until > now)
+        const keep = Object.entries<any>(prev).filter(([,v]) => v.until > now)
         return keep.length === Object.keys(prev).length ? prev : Object.fromEntries(keep)
       })
     }, 1200)
     return () => { clearInterval(prune); rtChanRef.current = null; supabase.removeChannel(ch) }
   }, [orgId, myUUID]) // eslint-disable-line
 
-  function sendTyping(ctx) {
+  function sendTyping(ctx: any) {
     const now = Date.now()
     if (now - lastTypingSentRef.current < 1800) return
     lastTypingSentRef.current = now
@@ -440,8 +443,8 @@ export default function Week7({ currentUser, initialDm }) {
   function broadcastNewMessage() {
     rtChanRef.current?.send({ type:'broadcast', event:'new-message', payload:{ userId:myUUID } })
   }
-  const typingNames = (ctx) => Object.values(typers).filter(t => t.ctx === ctx).map(t => (t.name || '').split(' ')[0] || 'Someone')
-  const TypingHint = ({ ctx }) => {
+  const typingNames = (ctx: any) => Object.values<any>(typers).filter(t => t.ctx === ctx).map(t => (t.name || '').split(' ')[0] || 'Someone')
+  const TypingHint = ({ ctx }: any) => {
     const names = typingNames(ctx)
     if (!names.length) return null
     return (
@@ -452,7 +455,7 @@ export default function Week7({ currentUser, initialDm }) {
   }
 
   // ── Unread tracking: last-viewed timestamps per conversation ──
-  const [seen, setSeen] = useState({})
+  const [seen, setSeen] = useState<any>({})
   // Local cache first for instant paint, then merge the DB copy (source of
   // truth) so read state follows the person across devices.
   useEffect(() => {
@@ -462,9 +465,9 @@ export default function Week7({ currentUser, initialDm }) {
     syncSeen(myUUID).then(m => { if (!stop) setSeen(m) }).catch(() => {})
     return () => { stop = true }
   }, [myUUID])
-  function markSeen(key) {
+  function markSeen(key: any) {
     if (!myUUID) return
-    setSeen(prev => {
+    setSeen((prev: any) => {
       const ts = Date.now()
       const next = { ...prev, [key]: ts }
       saveSeen(myUUID, next, { [key]: ts })
@@ -475,8 +478,8 @@ export default function Week7({ currentUser, initialDm }) {
   }
 
   // ── @Mentions: parse against the team roster and notify tagged people ──
-  function findMentions(text) {
-    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  function findMentions(text: any) {
+    const esc = (s: any) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const hits = []
     for (const t of team) {
       if (t.uuid===myUUID || !t.name) continue
@@ -486,7 +489,7 @@ export default function Week7({ currentUser, initialDm }) {
     }
     return hits
   }
-  function notifyMentions(text, where) {
+  function notifyMentions(text: any, where: any) {
     const mentioned = findMentions(text)
     for (const t of mentioned) {
       sendNotification({
@@ -500,8 +503,8 @@ export default function Week7({ currentUser, initialDm }) {
   // Bell notification for every Team Hub message — recipients get an instant
   // alert (the bell listens via realtime). `skip` = people already notified
   // through an @mention, so nobody gets two alerts for one message.
-  function notifyTeamMessage(recipients, body, skip = []) {
-    const skipIds = new Set(skip.map(t => t.uuid))
+  function notifyTeamMessage(recipients: any, body: any, skip: any[] = []) {
+    const skipIds = new Set(skip.map((t: any) => t.uuid))
     const preview = String(body || '').replace(/\[\[file\|[^\]]*\]\]/g, '📎 attachment').trim().slice(0, 80)
     for (const r of recipients) {
       if (!r?.uuid || r.uuid === myUUID || skipIds.has(r.uuid)) continue
@@ -513,7 +516,7 @@ export default function Week7({ currentUser, initialDm }) {
     }
   }
   // Render message text with highlighted @mentions
-  function renderMentions(text, baseColor) {
+  function renderMentions(text: any, baseColor: any) {
     const parts = String(text||'').split(/(@[A-Za-z][A-Za-z'-]*(?:\s[A-Z][A-Za-z'-]*)?)/g)
     return parts.map((p,i) => p.startsWith('@')
       ? <span key={i} style={{color:C.gold,fontWeight:700}}>{p}</span>
@@ -524,8 +527,8 @@ export default function Week7({ currentUser, initialDm }) {
   // Uploaded files travel inside message content as markers: [[file|name|url|type]]
   // Optional 4th field: URI-encoded transcript (voice memos)
   const ATT_RE = /\[\[file\|([^|\]]*)\|([^|\]]*)\|([^|\]]*)(?:\|([^\]]*))?\]\]/g
-  function splitAtts(text) {
-    const atts = []
+  function splitAtts(text: any) {
+    const atts: any[] = []
     const rest = String(text||'').replace(ATT_RE, (_, name, url, type, tx) => {
       let transcript = ''
       try { transcript = tx ? decodeURIComponent(tx) : '' } catch {}
@@ -534,7 +537,7 @@ export default function Week7({ currentUser, initialDm }) {
     })
     return { text: rest.trim(), atts }
   }
-  function linkLabel(url) {
+  function linkLabel(url: any) {
     try {
       const h = new URL(url).hostname.replace(/^www\./,'')
       if (h.includes('loom.com'))         return '▶️ Loom video'
@@ -545,7 +548,7 @@ export default function Week7({ currentUser, initialDm }) {
       return '🔗 ' + h
     } catch { return '🔗 Link' }
   }
-  function renderRich(text, baseColor, mine = false) {
+  function renderRich(text: any, baseColor: any, mine = false) {
     const parts = String(text||'').split(/((?:https?:\/\/|www\.)[^\s]+)/g)
     return parts.map((p, i) => {
       if (!/^(?:https?:\/\/|www\.)/.test(p)) return <span key={i}>{renderMentions(p, baseColor)}</span>
@@ -557,10 +560,10 @@ export default function Week7({ currentUser, initialDm }) {
   }
   // Only ever render http(s) URLs as clickable/embedded — markers are stored in
   // chat content, so a crafted message could otherwise smuggle javascript:/data: URLs
-  function safeUrl(u) { try { const p = new URL(u).protocol; return p === 'https:' || p === 'http:' } catch { return false } }
+  function safeUrl(u: any) { try { const p = new URL(u).protocol; return p === 'https:' || p === 'http:' } catch { return false } }
   // Voice memo attachment — player plus optional transcript (collapsed by
   // default), download, and copy controls
-  function AudioAtt({ att }) {
+  function AudioAtt({ att }: any) {
     const [showTx, setShowTx] = useState(false)
     const [copied, setCopied] = useState(false)
     const copy = async () => {
@@ -594,7 +597,7 @@ export default function Week7({ currentUser, initialDm }) {
     )
   }
 
-  function renderBody(content, baseColor, mine = false) {
+  function renderBody(content: any, baseColor: any, mine = false) {
     const { text, atts: rawAtts } = splitAtts(content)
     const atts = rawAtts.filter(a => safeUrl(a.url))
     return (<>
@@ -621,18 +624,18 @@ export default function Week7({ currentUser, initialDm }) {
   }
 
   // ── File uploads (api-server → Supabase Storage) ─────────────────────
-  const [pendingFiles, setPendingFiles] = useState([])   // {name,url,type,target}
-  const [uploadingFor, setUploadingFor] = useState(null) // 'main' | 'thread' | 'dm' | null
-  const fileInputRef = useRef(null)
-  const uploadTargetRef = useRef('main')
-  function pickFile(target) { uploadTargetRef.current = target; fileInputRef.current?.click() }
-  async function onFilePicked(e) {
+  const [pendingFiles, setPendingFiles] = useState<any[]>([])   // {name,url,type,target}
+  const [uploadingFor, setUploadingFor] = useState<any>(null) // 'main' | 'thread' | 'dm' | null
+  const fileInputRef = useRef<any>(null)
+  const uploadTargetRef = useRef<any>('main')
+  function pickFile(target: any) { uploadTargetRef.current = target; fileInputRef.current?.click() }
+  async function onFilePicked(e: any) {
     const files = Array.from(e.target.files||[]); e.target.value = ''
     if (!files.length) return
     const target = uploadTargetRef.current
     setUploadingFor(target)
     try {
-      for (const f of files) {
+      for (const f of files as any[]) {
         if (f.size > 15*1024*1024) { alert(`${f.name} is over the 15 MB limit.`); continue }
         const b64 = await new Promise((resolve, reject) => {
           const r = new FileReader()
@@ -652,13 +655,13 @@ export default function Week7({ currentUser, initialDm }) {
     } finally { setUploadingFor(null) }
   }
   // Pull this composer's staged files out and turn them into content markers
-  function takePending(target) {
+  function takePending(target: any) {
     const mine = pendingFiles.filter(p => p.target===target)
     if (mine.length) setPendingFiles(prev => prev.filter(p => p.target!==target))
     return mine.map(a => `[[file|${a.name.replace(/[|[\]]/g,'_')}|${a.url}|${a.type}${a.transcript?`|${encodeURIComponent(a.transcript).replace(/[|[\]]/g,'')}`:''}]]`).join('\n')
   }
-  const hasPending = (target) => pendingFiles.some(p => p.target===target)
-  const PendingChips = ({ target }) => {
+  const hasPending = (target: any) => pendingFiles.some(p => p.target===target)
+  const PendingChips = ({ target }: any) => {
     const mine = pendingFiles.filter(p => p.target===target)
     if (!mine.length && uploadingFor!==target) return null
     return (
@@ -674,7 +677,7 @@ export default function Week7({ currentUser, initialDm }) {
       </div>
     )
   }
-  const ClipBtn = ({ target }) => (
+  const ClipBtn = ({ target }: any) => (
     <button onClick={() => pickFile(target)} title="Attach a file (15 MB max)"
       style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',color:C.muted,fontSize:15,cursor:'pointer',flexShrink:0}}>
       📎
@@ -682,10 +685,10 @@ export default function Week7({ currentUser, initialDm }) {
   )
 
   // ── Voice memos (Slack-style) — record with the mic, upload like any file ──
-  const [recordingFor, setRecordingFor] = useState(null) // composer currently recording
+  const [recordingFor, setRecordingFor] = useState<any>(null) // composer currently recording
   const [recordSecs, setRecordSecs] = useState(0)
-  const recRef = useRef(null)   // { recorder, chunks, stream }
-  const [showChannelMembers, setShowChannelMembers] = useState(false)
+  const recRef = useRef<any>(null)   // { recorder, chunks, stream }
+  const [showChannelMembers, setShowChannelMembers] = useState<boolean>(false)
   // Tier gate: does this org's plan include voice memos? (Eden always yes)
   const [voiceMemosOn, setVoiceMemosOn] = useState(true)
   useEffect(()=>{
@@ -699,7 +702,7 @@ export default function Week7({ currentUser, initialDm }) {
     return () => clearInterval(t)
   }, [recordingFor])
   const recClock = `${Math.floor(recordSecs/60)}:${String(recordSecs%60).padStart(2,'0')}`
-  async function toggleRecord(target) {
+  async function toggleRecord(target: any) {
     // Stop → the onstop handler uploads
     if (recordingFor === target) { try { recRef.current?.recorder?.stop() } catch {} ; return }
     if (recordingFor) return // one recording at a time
@@ -708,7 +711,7 @@ export default function Week7({ currentUser, initialDm }) {
       const mime = window.MediaRecorder?.isTypeSupported?.('audio/webm') ? 'audio/webm'
                  : window.MediaRecorder?.isTypeSupported?.('audio/mp4') ? 'audio/mp4' : ''
       const recorder = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined)
-      const chunks = []
+      const chunks: any[] = []
       recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data) }
       recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
@@ -754,7 +757,7 @@ export default function Week7({ currentUser, initialDm }) {
       alert('Microphone access was blocked — allow the mic in your browser to record voice memos.')
     }
   }
-  const MicBtn = ({ target }) => voiceMemosOn && (
+  const MicBtn = ({ target }: any) => voiceMemosOn && (
     <button onClick={() => toggleRecord(target)}
       title={recordingFor===target ? 'Stop recording' : 'Record a voice memo'}
       style={{background:recordingFor===target?C.danger:'none',border:`1px solid ${recordingFor===target?C.danger:C.border}`,borderRadius:8,padding:'0 10px',color:recordingFor===target?C.white:C.muted,fontSize:recordingFor===target?12:15,fontWeight:800,cursor:'pointer',flexShrink:0,animation:recordingFor===target?'pulse 1.2s infinite':'none',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
@@ -764,8 +767,8 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Delete rules: admin deletes anything; everyone else only their own ──
   const isAdminRole = myRole==='super_admin' || myRole==='company_admin'
-  function canDeleteTeamMsg(m) { return typeof m.id==='string' && m.id.length===36 && (isAdminRole || m.senderId===myUUID) }
-  async function deleteTeamMsg(m) {
+  function canDeleteTeamMsg(m: any) { return typeof m.id==='string' && m.id.length===36 && (isAdminRole || m.senderId===myUUID) }
+  async function deleteTeamMsg(m: any) {
     if (!window.confirm('Delete this message for everyone?\nIt stays permanently visible in the admin audit log.')) return
     // Server-side: RLS hides deleted rows from direct reads/writes, so the
     // soft-delete (and its audit log entry) must go through the api-server.
@@ -773,40 +776,40 @@ export default function Week7({ currentUser, initialDm }) {
     if (!resp.ok) { alert('Could not delete this message.'); return }
     loadTeamChat()
   }
-  const [activeThread, setActiveThread] = useState(null)
+  const [activeThread, setActiveThread] = useState<any>(null)
   // Per-user read state for threads — a thread stays under Threads until its
   // latest reply has been seen; "Mark unread" puts it back.
   const [threadReads, setThreadReads] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`eden_team_thread_reads_${email}`) || '{}') } catch { return {} }
   })
-  function setThreadRead(rootId, ts) {
-    setThreadReads(prev => {
+  function setThreadRead(rootId: any, ts: any) {
+    setThreadReads((prev: any) => {
       const next = { ...prev, [rootId]: ts }
       try { localStorage.setItem(`eden_team_thread_reads_${email}`, JSON.stringify(next)) } catch {}
       return next
     })
   }
-  const lastReplyAt = (m) => {
+  const lastReplyAt = (m: any) => {
     const rs = threadReplies[m.id] || []
     return rs.length ? rs[rs.length - 1].createdAt : m.createdAt
   }
-  const isThreadUnread = (m) => (m.replyCount||0) > 0 && new Date(lastReplyAt(m)).getTime() > (threadReads[m.id] || 0)
-  const openThreadRead = (m) => { setThreadRead(m.id, Date.now()); setActiveThread(m); setChatView('thread') }
+  const isThreadUnread = (m: any) => (m.replyCount||0) > 0 && new Date(lastReplyAt(m)).getTime() > (threadReads[m.id] || 0)
+  const openThreadRead = (m: any) => { setThreadRead(m.id, Date.now()); setActiveThread(m); setChatView('thread') }
 
   // Deep link from admin: "💬 Message" on a coach/staff card opens their DM here
   useEffect(() => {
     if (!initialDm?.email || !team.length) return
     dbGet('user_profiles', `email=eq.${encodeURIComponent(initialDm.email)}&select=id`).then(rows => {
       const id = rows?.[0]?.id
-      const t = team.find(x => x.uuid === id)
+      const t = team.find((x: any) => x.uuid === id)
       if (t) { setSection('chat'); setDmTarget(t); setChatView('dm') }
     }).catch(()=>{})
   }, [initialDm, team]) // eslint-disable-line
   const [newReply,     setNewReply]     = useState('')
-  const [dmTarget,     setDmTarget]     = useState(null)
-  const [dmMessages,   setDmMessages]   = useState({})
-  const [dmReplies,    setDmReplies]    = useState({})   // { dmKey: { rootMsgId: [replies] } }
-  const [dmThreadRoot, setDmThreadRoot] = useState(null) // root DM message whose thread panel is open
+  const [dmTarget,     setDmTarget]     = useState<any>(null)
+  const [dmMessages,   setDmMessages]   = useState<any>({})
+  const [dmReplies,    setDmReplies]    = useState<any>({})   // { dmKey: { rootMsgId: [replies] } }
+  const [dmThreadRoot, setDmThreadRoot] = useState<any>(null) // root DM message whose thread panel is open
   const [newDmReply,   setNewDmReply]   = useState('')
   const [newDm,        setNewDm]        = useState('')
   const [chatView,     setChatView]     = useState('main') // main | thread | dm
@@ -845,8 +848,8 @@ export default function Week7({ currentUser, initialDm }) {
   }
 
   // ── Pins for Team Hub (#general + DMs) — per-user rows in message_pins ──
-  const [teamPins, setTeamPins] = useState([])
-  const isRealMsgId = id => typeof id === 'string' && id.length === 36
+  const [teamPins, setTeamPins] = useState<any[]>([])
+  const isRealMsgId = (id: any) => typeof id === 'string' && id.length === 36
   function loadTeamPins() {
     if (!myUUID) return
     dbGet('message_pins', `user_id=eq.${myUUID}&context=in.(team_general,team_dm)&select=*`)
@@ -854,7 +857,7 @@ export default function Week7({ currentUser, initialDm }) {
   }
   useEffect(() => { loadTeamPins() }, [myUUID])
   const teamPinnedIds = new Set(teamPins.map(p => p.message_id))
-  async function togglePinTeam(m, ctx) {
+  async function togglePinTeam(m: any, ctx: any) {
     if (!isRealMsgId(m.id)) { alert('Give this message a second to finish sending, then pin it.'); return }
     if (teamPinnedIds.has(m.id)) {
       await dbDelete('message_pins', `message_id=eq.${m.id}&user_id=eq.${myUUID}`)
@@ -864,16 +867,16 @@ export default function Week7({ currentUser, initialDm }) {
     }
     loadTeamPins()
   }
-  async function pinForAllTeam(m, ctx) {
+  async function pinForAllTeam(m: any, ctx: any) {
     if (!isRealMsgId(m.id)) { alert('Give this message a second to finish sending, then pin it.'); return }
-    const targets = ctx === 'team_dm' && dmTarget ? [myUUID, dmTarget.uuid] : team.map(t => t.uuid)
-    await Promise.all(targets.map(uid => dbInsert('message_pins', {
+    const targets = ctx === 'team_dm' && dmTarget ? [myUUID, dmTarget.uuid] : team.map((t: any) => t.uuid)
+    await Promise.all(targets.map((uid: any) => dbInsert('message_pins', {
       message_id:m.id, conversation_id:orgId, user_id:uid,
       pinned_by:myUUID, pinned_by_name:myName, context:ctx })))
     loadTeamPins()
   }
-  const PinBar = ({ ctx, source }) => {
-    const list = teamPins.filter(p => p.context === ctx).map(p => ({ p, m: source.find(x => x.id === p.message_id) })).filter(x => x.m && !x.m.deletedAt)
+  const PinBar = ({ ctx, source }: any) => {
+    const list = teamPins.filter(p => p.context === ctx).map(p => ({ p, m: source.find((x: any) => x.id === p.message_id) })).filter(x => x.m && !x.m.deletedAt)
     if (!list.length) return null
     return (
       <div style={{background:`${C.gold}11`,borderBottom:`1px solid ${C.gold}33`,padding:'8px 16px',maxHeight:110,overflowY:'auto',flexShrink:0}}>
@@ -891,7 +894,7 @@ export default function Week7({ currentUser, initialDm }) {
       </div>
     )
   }
-  const PinBtns = ({ m, ctx }) => !m.deletedAt && (
+  const PinBtns = ({ m, ctx }: any) => !m.deletedAt && (
     <>
       <button onClick={() => togglePinTeam(m, ctx)} title={teamPinnedIds.has(m.id) ? 'Unpin' : 'Pin (only for you)'}
         style={{background:'none',border:'none',color:teamPinnedIds.has(m.id)?C.gold:C.muted,fontSize:11,cursor:'pointer',padding:0}}>📌</button>
@@ -901,11 +904,11 @@ export default function Week7({ currentUser, initialDm }) {
   )
 
   // ── Shared canvas for the open Team Hub DM ──
-  const [dmCanvasOpen, setDmCanvasOpen] = useState(false)
-  const [generalCanvasOpen, setGeneralCanvasOpen] = useState(false)
+  const [dmCanvasOpen, setDmCanvasOpen] = useState<boolean>(false)
+  const [generalCanvasOpen, setGeneralCanvasOpen] = useState<boolean>(false)
   useEffect(() => { setDmCanvasOpen(false) }, [dmTarget])
-  const bottomRef   = useRef(null)
-  const dmBottomRef = useRef(null)
+  const bottomRef   = useRef<any>(null)
+  const dmBottomRef = useRef<any>(null)
 
   // ── My Calendar (Google Calendar embed) ───────────────────
   const [calendarUrl, setCalendarUrl] = useState('https://calendar.google.com/calendar/embed?src=lifestyleofeden%40gmail.com&ctz=America%2FChicago')
@@ -924,19 +927,19 @@ export default function Week7({ currentUser, initialDm }) {
   } = huddle
 
   // Ping button feedback — huddlePinging = { name, status: 'sending'|'sent'|'failed' }
-  const pingStatus = (coach) => (huddlePinging && huddlePinging.name === coach.name) ? huddlePinging.status : null
-  const pingLabel = (coach, idle) => {
+  const pingStatus = (coach: any) => (huddlePinging && huddlePinging.name === coach.name) ? huddlePinging.status : null
+  const pingLabel = (coach: any, idle: any) => {
     const s = pingStatus(coach)
     return s === 'sending' ? 'Sending…' : s === 'sent' ? 'Invited ✓' : s === 'failed' ? 'Failed ✕' : idle
   }
-  const pingBtnStyle = (coach, base) => {
+  const pingBtnStyle = (coach: any, base: any) => {
     const s = pingStatus(coach)
     if (s === 'sent')   return { ...base, background:`${C.success}22`, border:`1px solid ${C.success}44`, color:C.success }
     if (s === 'failed') return { ...base, background:`${C.danger}22`, border:`1px solid ${C.danger}44`, color:C.danger }
     if (s === 'sending') return { ...base, opacity:.65, cursor:'default' }
     return base
   }
-  const PingError = ({ coach }) => pingStatus(coach) === 'failed'
+  const PingError = ({ coach }: any) => pingStatus(coach) === 'failed'
     ? <div style={{fontSize:10,color:C.danger,marginTop:3}}>Could not send invite — try again</div>
     : null
 
@@ -993,7 +996,7 @@ export default function Week7({ currentUser, initialDm }) {
       id:'r'+Date.now(), senderId:myUUID, senderName:myName, senderRole:myRole,
       content:[newReply.trim(), markers].filter(Boolean).join('\n'), threadId:activeThread.id, createdAt:new Date().toISOString(),
     }
-    setThreadReplies(prev => ({ ...prev, [activeThread.id]:[...(prev[activeThread.id]||[]), reply] }))
+    setThreadReplies((prev: any) => ({ ...prev, [activeThread.id]:[...(prev[activeThread.id]||[]), reply] }))
     setMessages(prev => prev.map(m => m.id===activeThread.id ? {...m, replyCount:(m.replyCount||0)+1} : m))
     setNewReply('')
     stopTyping()
@@ -1012,7 +1015,7 @@ export default function Week7({ currentUser, initialDm }) {
     const markers = takePending('dm')
     const key = [myUUID, dmTarget.uuid].sort().join('_')
     const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDm.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString(), threadId:null }
-    setDmMessages(prev => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
+    setDmMessages((prev: any) => ({ ...prev, [key]:[...(prev[key]||[]), msg] }))
     setNewDm('')
     stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name, thread_id:null })
@@ -1026,15 +1029,15 @@ export default function Week7({ currentUser, initialDm }) {
     const key = [myUUID, dmTarget.uuid].sort().join('_')
     const root = dmThreadRoot
     const msg = { id:'dm'+Date.now(), senderId:myUUID, senderName:myName, content:[newDmReply.trim(), markers].filter(Boolean).join('\n'), createdAt:new Date().toISOString(), threadId:root.id }
-    setDmReplies(prev => ({ ...prev, [key]: { ...(prev[key]||{}), [root.id]: [ ...((prev[key]||{})[root.id]||[]), msg ] } }))
-    setDmMessages(prev => ({ ...prev, [key]:(prev[key]||[]).map(m => m.id===root.id ? {...m, replyCount:(m.replyCount||0)+1} : m) }))
+    setDmReplies((prev: any) => ({ ...prev, [key]: { ...(prev[key]||{}), [root.id]: [ ...((prev[key]||{})[root.id]||[]), msg ] } }))
+    setDmMessages((prev: any) => ({ ...prev, [key]:(prev[key]||[]).map((m: any) => m.id===root.id ? {...m, replyCount:(m.replyCount||0)+1} : m) }))
     setNewDmReply('')
     stopTyping()
     dbInsert('team_messages', { org_id:orgId, sender_id:myUUID, sender_name:myName, content:msg.content, is_dm:true, dm_to_id:dmTarget.uuid, dm_to_name:dmTarget.name, thread_id:root.id })
       .then(() => { loadTeamChat(); broadcastNewMessage() })
     // Reply-specific notification: names the thread (parent preview) so the
     // recipient knows which conversation to open — clicking lands in this DM.
-    const strip = t => String(t || '').replace(/\[\[file\|[^\]]*\]\]/g, '📎 attachment').trim()
+    const strip = (t: any) => String(t || '').replace(/\[\[file\|[^\]]*\]\]/g, '📎 attachment').trim()
     const parentPreview = strip(root.content).slice(0, 60)
     const replyPreview  = strip(msg.content).slice(0, 80)
     if (dmTarget.uuid && dmTarget.uuid !== myUUID) {
@@ -1049,7 +1052,7 @@ export default function Week7({ currentUser, initialDm }) {
 
   // ── Huddle helpers — thin wrappers over the global HuddleHub ─
   async function startHuddle() { return hubStartHuddle ? await hubStartHuddle() : false }
-  function joinLiveHuddle(row) {
+  function joinLiveHuddle(row?: any) {
     if (!hubJoinLiveHuddle) return
     hubJoinLiveHuddle(row && row.room_url ? row : undefined)
     setSection('huddle')
@@ -1062,9 +1065,9 @@ export default function Week7({ currentUser, initialDm }) {
   // Eden admins who aren't the owner never see OTHER non-owner Eden admins as a DM option —
   // only the owner account appears for them among admins.
   const OWNER_EMAIL = 'info@edencommunications.io'
-  const isAdminRole2 = r => r === 'super_admin' || r === 'company_admin'
+  const isAdminRole2 = (r: any) => r === 'super_admin' || r === 'company_admin'
   const iAmNonOwnerEdenAdmin = isAdminRole2(myRole) && orgId === EDEN_ORG_ID && email.toLowerCase() !== OWNER_EMAIL
-  const otherCoaches = team.filter(c =>
+  const otherCoaches = team.filter((c: any) =>
     c.uuid !== myUUID &&
     !(iAmNonOwnerEdenAdmin && isAdminRole2(c.role) && (c.email || '') !== OWNER_EMAIL))
 
@@ -1077,16 +1080,16 @@ export default function Week7({ currentUser, initialDm }) {
   }, [section, chatView, dmKey, dmMessages, dmReplies]) // eslint-disable-line
 
   // ── Unread counts (messages from others newer than last viewed) ──
-  const isUnread = (m, key) => !m.deletedAt && m.senderId !== myUUID && new Date(m.createdAt).getTime() > seenAt(seen, key)
+  const isUnread = (m: any, key: any) => !m.deletedAt && m.senderId !== myUUID && new Date(m.createdAt).getTime() > seenAt(seen, key)
   const generalUnread =
     messages.filter(m => !m.isDm && isUnread(m, 'general')).length +
     Object.values(threadReplies).flat().filter(r => isUnread(r, 'general')).length
-  const dmUnreadCount = (key) =>
-    (dmMessages[key] || []).filter(m => isUnread(m, key)).length +
+  const dmUnreadCount = (key: any) =>
+    (dmMessages[key] || []).filter((m: any) => isUnread(m, key)).length +
     Object.values(dmReplies[key] || {}).flat().filter(m => isUnread(m, key)).length
-  const totalDmUnread = otherCoaches.reduce((n, c) => n + dmUnreadCount([myUUID, c.uuid].sort().join('_')), 0)
+  const totalDmUnread = otherCoaches.reduce((n: any, c: any) => n + dmUnreadCount([myUUID, c.uuid].sort().join('_')), 0)
   const chatUnread = generalUnread + totalDmUnread
-  const UnreadPill = ({ n }) => n > 0 ? (
+  const UnreadPill = ({ n }: any) => n > 0 ? (
     <span style={{marginLeft:'auto',background:C.gold,color:C.black,borderRadius:9,fontSize:9,fontWeight:800,padding:'1px 6px',flexShrink:0,lineHeight:1.5}}>
       {n > 9 ? '9+' : n}
     </span>
@@ -1143,7 +1146,7 @@ export default function Week7({ currentUser, initialDm }) {
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow: isMobile ? 'auto' : 'hidden'}}>
 
         {/* Live huddle banner — visible to teammates who haven't joined yet */}
-        {liveHuddles.length > 0 && !huddleActive && liveHuddles.map(h => (
+        {liveHuddles.length > 0 && !huddleActive && liveHuddles.map((h: any) => (
           <div key={h.id} style={{background:`${C.success}18`,borderBottom:`1px solid ${C.success}44`,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
             <div style={{width:10,height:10,borderRadius:5,background:C.success,animation:'pulse 1.5s infinite'}}/>
             <div style={{flex:1,fontSize:12,color:C.white,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
@@ -1192,7 +1195,7 @@ export default function Week7({ currentUser, initialDm }) {
                   Direct Messages
                   <button onClick={() => setShowDmPicker(true)} style={{background:'none',border:'none',color:C.gold,fontSize:14,cursor:'pointer',padding:0,lineHeight:1}}>+</button>
                 </div>
-                {otherCoaches.map(coach => {
+                {otherCoaches.map((coach: any) => {
                   const key = [myUUID, coach.uuid].sort().join('_')
                   const isDmActive = chatView==='dm' && dmTarget?.uuid===coach.uuid
                   const unread = dmUnreadCount(key)
@@ -1239,7 +1242,7 @@ export default function Week7({ currentUser, initialDm }) {
                     </div>
                   )}
                   {messages.filter(m=>!m.isDm&&isThreadUnread(m))
-                    .slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
+                    .slice().sort((a: any,b: any)=>(new Date(b.createdAt) as any)-(new Date(a.createdAt) as any))
                     .map(m=>{
                       const replies = threadReplies[m.id]||[]
                       const last = replies[replies.length-1]
@@ -1328,7 +1331,7 @@ export default function Week7({ currentUser, initialDm }) {
                                 {msg.replyCount > 0 ? (
                                   <>
                                     <div style={{display:'flex'}}>
-                                      {(threadReplies[msg.id]||[]).slice(0,3).map((r,i) => (
+                                      {(threadReplies[msg.id]||[]).slice(0,3).map((r: any,i: any) => (
                                         <div key={i} style={{width:18,height:18,borderRadius:9,background:`${C.gold}33`,border:`1px solid ${C.black}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:C.gold,marginLeft:i>0?-6:0}}>
                                           {r.senderName[0]}
                                         </div>
@@ -1353,8 +1356,8 @@ export default function Week7({ currentUser, initialDm }) {
                     <PendingChips target="main"/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
                       <ClipBtn target="main"/><MicBtn target="main"/>
-                      <MentionInput value={newMessage} onChange={v => { setNewMessage(v); if (v) sendTyping('general') }} onSubmit={sendMessage}
-                        candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
+                      <MentionInput value={newMessage} onChange={(v: any) => { setNewMessage(v); if (v) sendTyping('general') }} onSubmit={sendMessage}
+                        candidates={team.filter((t: any) => t.uuid !== myUUID).map((t: any) => t.name)}
                         colors={C}
                         placeholder={`Message #${generalName}… tag with @Name (Enter to send)`}
                         inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
@@ -1398,7 +1401,7 @@ export default function Week7({ currentUser, initialDm }) {
                     </div>
 
                     <div style={{flex:1,overflowY:'auto',padding:'8px 14px'}}>
-                      {(threadReplies[activeThread.id]||[]).map(r => {
+                      {(threadReplies[activeThread.id]||[]).map((r: any) => {
                         const isMine = r.senderId===myUUID
                         return (
                           <div key={r.id} style={{marginBottom:12,display:'flex',gap:8,alignItems:'flex-start'}}>
@@ -1434,8 +1437,8 @@ export default function Week7({ currentUser, initialDm }) {
                       <PendingChips target="thread"/>
                       <div style={{display:'flex',gap:8}}>
                         <ClipBtn target="thread"/><MicBtn target="thread"/>
-                        <MentionInput value={newReply} onChange={v => { setNewReply(v); if (v) sendTyping(`thread:${activeThread.id}`) }} onSubmit={sendReply}
-                          candidates={team.filter(t => t.uuid !== myUUID).map(t => t.name)}
+                        <MentionInput value={newReply} onChange={(v: any) => { setNewReply(v); if (v) sendTyping(`thread:${activeThread.id}`) }} onSubmit={sendReply}
+                          candidates={team.filter((t: any) => t.uuid !== myUUID).map((t: any) => t.name)}
                           colors={C}
                           placeholder="Reply in thread…"
                           inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
@@ -1485,7 +1488,7 @@ export default function Week7({ currentUser, initialDm }) {
                       Start your conversation with <LN>{dmTarget.name}</LN>
                     </div>
                   )}
-                  {dmConvo.map(msg => {
+                  {dmConvo.map((msg: any) => {
                     const isMine = msg.senderId===myUUID
                     const reps = dmConvoReplies[msg.id] || []
                     const lastRep = reps[reps.length-1]
@@ -1530,7 +1533,7 @@ export default function Week7({ currentUser, initialDm }) {
                   <PendingChips target="dm"/>
                   <div style={{display:'flex',gap:8}}>
                   <ClipBtn target="dm"/><MicBtn target="dm"/>
-                  <MentionInput value={newDm} onChange={v => { setNewDm(v); if (v) sendTyping(`dm:${dmKey}`) }} onSubmit={sendDm}
+                  <MentionInput value={newDm} onChange={(v: any) => { setNewDm(v); if (v) sendTyping(`dm:${dmKey}`) }} onSubmit={sendDm}
                     candidates={[dmTarget.name]}
                     colors={C}
                     placeholder={`Message ${dmTarget.name.split(' ')[0]}…`}
@@ -1545,7 +1548,7 @@ export default function Week7({ currentUser, initialDm }) {
 
               {/* DM thread panel — same side-panel experience as #general and client Messages */}
               {dmThreadRoot && (() => {
-                const root = dmConvo.find(m => m.id === dmThreadRoot.id) || dmThreadRoot
+                const root = dmConvo.find((m: any) => m.id === dmThreadRoot.id) || dmThreadRoot
                 const reps = dmConvoReplies[root.id] || []
                 const rootMine = root.senderId === myUUID
                 return (
@@ -1581,7 +1584,7 @@ export default function Week7({ currentUser, initialDm }) {
 
                     <div style={{flex:1,overflowY:'auto',padding:'8px 14px',minHeight: isMobile ? 120 : 'auto'}}>
                       {reps.length===0 && <div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'16px 0'}}>No replies yet — start the thread below.</div>}
-                      {reps.map(r => {
+                      {reps.map((r: any) => {
                         const rMine = r.senderId===myUUID
                         return (
                           <div key={r.id} style={{marginBottom:12,display:'flex',gap:8,alignItems:'flex-start'}}>
@@ -1613,7 +1616,7 @@ export default function Week7({ currentUser, initialDm }) {
                       <PendingChips target="dm-thread"/>
                       <div style={{display:'flex',gap:8}}>
                         <ClipBtn target="dm-thread"/><MicBtn target="dm-thread"/>
-                        <MentionInput value={newDmReply} onChange={v => { setNewDmReply(v); if (v) sendTyping(`dm:${dmKey}`) }} onSubmit={sendDmReply}
+                        <MentionInput value={newDmReply} onChange={(v: any) => { setNewDmReply(v); if (v) sendTyping(`dm:${dmKey}`) }} onSubmit={sendDmReply}
                           candidates={[dmTarget.name]}
                           colors={C}
                           placeholder="Reply in thread…"
@@ -1641,7 +1644,7 @@ export default function Week7({ currentUser, initialDm }) {
                   <div style={{fontSize:15,fontWeight:800,color:C.white,marginBottom:2}}>Members — # {generalName}</div>
                   <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Everyone on your team is in the main channel automatically.</div>
                   <div style={{overflowY:'auto'}}>
-                    {team.map(t=>(
+                    {team.map((t: any)=>(
                       <div key={t.uuid} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
                         <div style={{width:30,height:30,borderRadius:15,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:C.gold,flexShrink:0}}>
                           {(t.name||'?')[0]}
@@ -1785,7 +1788,7 @@ export default function Week7({ currentUser, initialDm }) {
                   {open && (
                     <div style={{marginTop:10,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
                       {(d.members||[]).length === 0 && <div style={{fontSize:11,color:C.muted}}>No members yet.</div>}
-                      {(d.members||[]).map(m => (
+                      {(d.members||[]).map((m: any) => (
                         <div key={m.email} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:`1px solid ${C.border}`}}>
                           <span style={{flex:1,fontSize:12,color:C.white,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                             <LN>{m.name}</LN> <span style={{color:C.muted,fontWeight:400}}>· {m.email}</span>
@@ -1795,7 +1798,7 @@ export default function Week7({ currentUser, initialDm }) {
                       ))}
                       {(d.delegates||[]).length > 0 && (
                         <div style={{fontSize:10,color:C.muted,marginTop:8}}>
-                          Staff with access: {(d.delegates||[]).map(g => g.name).join(', ')}
+                          Staff with access: {(d.delegates||[]).map((g: any) => g.name).join(', ')}
                         </div>
                       )}
                       <div style={{fontSize:10,color:C.muted,marginTop:8}}>
@@ -1817,7 +1820,7 @@ export default function Week7({ currentUser, initialDm }) {
             {!huddleActive ? (
               <>
                 {/* A teammate's huddle is live — join it */}
-                {liveHuddles.map(h => (
+                {liveHuddles.map((h: any) => (
                   <div key={h.id} style={{background:`${C.success}15`,border:`1px solid ${C.success}44`,borderRadius:12,padding:'14px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
                     <div style={{width:12,height:12,borderRadius:6,background:C.success,animation:'pulse 1.5s infinite',flexShrink:0}}/>
                     <div style={{flex:1,minWidth:160}}>
@@ -1859,7 +1862,7 @@ export default function Week7({ currentUser, initialDm }) {
 
                 <Card sx={{marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>Your Team</div>
-                  {otherCoaches.map(coach => (
+                  {otherCoaches.map((coach: any) => (
                     <div key={coach.uuid} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderTop:`1px solid ${C.border}`}}>
                       <div style={{width:36,height:36,borderRadius:18,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:C.gold,flexShrink:0}}>
                         <LN>{coach.name[0]}</LN>
@@ -1898,7 +1901,7 @@ export default function Week7({ currentUser, initialDm }) {
 
                 <Card sx={{marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:12}}>Invite to Huddle</div>
-                  {otherCoaches.map(coach => (
+                  {otherCoaches.map((coach: any) => (
                     <div key={coach.uuid} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderTop:`1px solid ${C.border}`}}>
                       <div style={{width:32,height:32,borderRadius:16,background:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.gold,flexShrink:0}}>
                         <LN>{coach.name[0]}</LN>
@@ -1940,7 +1943,7 @@ export default function Week7({ currentUser, initialDm }) {
           onClick={e => { if(e.target===e.currentTarget) setShowDmPicker(false) }}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,width:'100%',maxWidth:360,padding:20}}>
             <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:14}}>Start a Direct Message</div>
-            {otherCoaches.map(coach => (
+            {otherCoaches.map((coach: any) => (
               <button key={coach.uuid}
                 onClick={() => { setDmTarget(coach); setChatView('dm'); setShowDmPicker(false) }}
                 style={{width:'100%',textAlign:'left',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,cursor:'pointer',marginBottom:8}}>

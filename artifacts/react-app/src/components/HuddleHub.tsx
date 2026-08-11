@@ -31,17 +31,17 @@ const H = {
   'Content-Type': 'application/json',
   'Prefer': 'return=representation',
 }
-async function dbGet(table, params='') {
+async function dbGet(table: any, params='') {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers:H })
   if (!r.ok) return []
   return r.json()
 }
-async function dbInsert(table, body) {
+async function dbInsert(table: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method:'POST', headers:H, body:JSON.stringify(body) })
   if (!r.ok) { console.error('INSERT', table, await r.text()); return null }
   const t = await r.text(); return t ? JSON.parse(t) : null
 }
-async function dbUpdate(table, params, body) {
+async function dbUpdate(table: any, params: any, body: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { method:'PATCH', headers:H, body:JSON.stringify(body) })
   if (!r.ok) console.error('UPDATE', table, await r.text())
   return r.ok
@@ -50,8 +50,8 @@ async function dbUpdate(table, params, body) {
 // ── Ring sound (Web Audio — no asset files needed) ──────────────
 // Classic two-burst phone ring, repeated every 2.4s while ringing.
 function createRinger() {
-  let ctx = null, timer = null
-  function burst(at) {
+  let ctx: any = null, timer: any = null
+  function burst(at: any) {
     for (const [freq, off] of [[880, 0], [660, 0], [880, 0.45], [660, 0.45]]) {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
@@ -69,7 +69,7 @@ function createRinger() {
     start() {
       if (timer) return // already ringing — never stack intervals
       try {
-        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)()
+        if (!ctx) ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)()
         if (ctx.state === 'suspended') ctx.resume().catch(()=>{})
         const ring = () => { try { burst(ctx.currentTime + 0.05) } catch {} }
         ring()
@@ -80,13 +80,13 @@ function createRinger() {
   }
 }
 
-const HuddleContext = createContext(null)
+const HuddleContext = createContext<any>(null)
 export function useHuddle() { return useContext(HuddleContext) }
 
 // ════════════════════════════════════════════════════════════════
 // PROVIDER
 // ════════════════════════════════════════════════════════════════
-export function HuddleProvider({ currentUser, children }) {
+export function HuddleProvider({ currentUser, children }: any) {
   const email = currentUser?.email || ''
   const info  = { role:currentUser?.role||'client', name:currentUser?.name||'User', uuid:null, orgId:EDEN_ORG_ID }
   const [self, setSelf] = useState(info)
@@ -110,11 +110,11 @@ export function HuddleProvider({ currentUser, children }) {
   // ── Call state ───────────────────────────────────────────────
   const [huddleActive,  setHuddleActive]  = useState(false)
   const [huddleRoomUrl, setHuddleRoomUrl] = useState('')
-  const [liveHuddle,    setLiveHuddle]    = useState(null)
-  const [liveHuddles,   setLiveHuddles]   = useState([]) // ALL active huddles in the org (newest first)
-  const [huddleRowId,   setHuddleRowId]   = useState(null)
+  const [liveHuddle,    setLiveHuddle]    = useState<any>(null)
+  const [liveHuddles,   setLiveHuddles]   = useState<any[]>([]) // ALL active huddles in the org (newest first)
+  const [huddleRowId,   setHuddleRowId]   = useState<any>(null)
   const [isStarter,     setIsStarter]     = useState(false)
-  const [huddlePinging, setHuddlePinging] = useState(null)
+  const [huddlePinging, setHuddlePinging] = useState<any>(null)
   const [expanded,      setExpanded]      = useState(true) // floating window size
   const [fullscreen,    setFullscreen]    = useState(false) // call fills the whole screen
   const startedByMeRef = useRef(false)
@@ -125,9 +125,9 @@ export function HuddleProvider({ currentUser, children }) {
   // Server keeps the truth (admin_settings via api-server); localStorage
   // is only a boot cache so the button doesn't flicker on load.
   const [dndUntil, setDndUntil] = useState(() => { try { return localStorage.getItem('eden_dnd_until') || null } catch { return null } })
-  const dndIsOn = u => u === 'forever' || (u && Date.parse(u) > Date.now())
+  const dndIsOn = (u: any) => u === 'forever' || (u && Date.parse(u) > Date.now())
   const dnd = dndIsOn(dndUntil)
-  const cacheDnd = u => { try { u ? localStorage.setItem('eden_dnd_until', u) : localStorage.removeItem('eden_dnd_until') } catch {} }
+  const cacheDnd = (u: any) => { try { u ? localStorage.setItem('eden_dnd_until', u) : localStorage.removeItem('eden_dnd_until') } catch {} }
 
   // Load + keep in sync (60s poll so DND set on another device applies here)
   useEffect(() => {
@@ -155,7 +155,7 @@ export function HuddleProvider({ currentUser, children }) {
   }, [dndUntil])
 
   // until: null = off, 'forever', or an ISO timestamp
-  const setDndFor = useCallback(async (until) => {
+  const setDndFor = useCallback(async (until: any) => {
     setDndUntil(until); cacheDnd(until) // instant feedback
     try {
       const r = await fetch('/api/dnd', {
@@ -167,15 +167,15 @@ export function HuddleProvider({ currentUser, children }) {
       if (r.ok && data) { setDndUntil(data.on ? data.until : null); cacheDnd(data.on ? data.until : null) }
     } catch {} // offline → device-local DND still applies until sync
   }, [])
-  const setDnd = useCallback(v => setDndFor(v ? 'forever' : null), [setDndFor])
+  const setDnd = useCallback((v: any) => setDndFor(v ? 'forever' : null), [setDndFor])
   const dndRef = useRef(dnd); dndRef.current = dnd
   const activeRef = useRef(false); activeRef.current = huddleActive
 
   // ── Incoming call (ring) state ───────────────────────────────
-  const [incoming, setIncoming] = useState(null) // { name, notifIds }
-  const ringerRef  = useRef(null)
+  const [incoming, setIncoming] = useState<any>(null) // { name, notifIds }
+  const ringerRef  = useRef<any>(null)
   const seenIdsRef = useRef(new Set())
-  const ringTimeoutRef = useRef(null)
+  const ringTimeoutRef = useRef<any>(null)
 
   const stopRinging = useCallback(() => {
     ringerRef.current?.stop()
@@ -183,10 +183,10 @@ export function HuddleProvider({ currentUser, children }) {
     setIncoming(null)
   }, [])
 
-  const startRinging = useCallback((name, notifIds) => {
+  const startRinging = useCallback((name: any, notifIds: any) => {
     if (dndRef.current || activeRef.current) return
     // Merge invite ids while ringing so Answer/Decline marks ALL of them read
-    setIncoming(prev => prev
+    setIncoming((prev: any) => prev
       ? { ...prev, notifIds: [...new Set([...(prev.notifIds||[]), ...notifIds])] }
       : { name, notifIds })
     if (!ringerRef.current) ringerRef.current = createRinger()
@@ -223,7 +223,7 @@ export function HuddleProvider({ currentUser, children }) {
     checkLiveHuddle()
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON, { realtime: { params: { eventsPerSecond: 5 } } })
     try { const tok = sbAccessToken(); if (tok) sb.realtime.setAuth(tok) } catch {}
-    let realtimeUp = false, lastEventAt = 0, debounce = null
+    let realtimeUp = false, lastEventAt = 0, debounce: any = null
     const scheduleCheck = () => { lastEventAt = Date.now(); clearTimeout(debounce); debounce = setTimeout(checkLiveHuddle, 250) }
     const channel = sb
       .channel('huddle-hub-live')
@@ -244,8 +244,8 @@ export function HuddleProvider({ currentUser, children }) {
   useEffect(() => {
     if (!myUUID || !isStaff) return
     let stop = false
-    const isInvite = n => n && (n.type === 'huddle_invite' || n.type === 'huddle_ping')
-    function handleNotif(n) {
+    const isInvite = (n: any) => n && (n.type === 'huddle_invite' || n.type === 'huddle_ping')
+    function handleNotif(n: any) {
       if (stop || !isInvite(n) || n.is_read) return
       if (seenIdsRef.current.has(n.id)) return
       // Only ring for FRESH invites (ignore old unread ones from hours ago)
@@ -312,7 +312,7 @@ export function HuddleProvider({ currentUser, children }) {
     }
   }, [orgId, myUUID, myName])
 
-  const joinLiveHuddle = useCallback((row) => {
+  const joinLiveHuddle = useCallback((row: any) => {
     const h = row || liveHuddle
     if (!h) return
     startedByMeRef.current = h.created_by === myUUID
@@ -341,7 +341,7 @@ export function HuddleProvider({ currentUser, children }) {
   // resolve, so the sender gets real success/failure feedback instead of a
   // fire-and-forget spinner. huddlePinging = { name, status } where status is
   // 'sending' | 'sent' | 'failed'.
-  const pingCoach = useCallback(async (coach) => {
+  const pingCoach = useCallback(async (coach: any) => {
     setHuddlePinging({ name: coach.name, status: 'sending' })
     let ok = false
     try {
@@ -362,7 +362,7 @@ export function HuddleProvider({ currentUser, children }) {
     setHuddlePinging({ name: coach.name, status: ok ? 'sent' : 'failed' })
     // Success clears quickly; failure lingers so the sender can read it and retry
     setTimeout(() => {
-      setHuddlePinging(p => (p && p.name === coach.name ? null : p))
+      setHuddlePinging((p: any) => (p && p.name === coach.name ? null : p))
     }, ok ? 3000 : 6000)
     return ok
   }, [myUUID, myName])
@@ -404,11 +404,11 @@ export function HuddleProvider({ currentUser, children }) {
   // pos = null → default bottom-right pin. Once dragged, we switch to
   // left/top coordinates and keep them (survives navigation because
   // this provider is mounted once in AppShell).
-  const [winPos, setWinPos] = useState(null) // { x, y } or null
-  const winRef  = useRef(null)
-  const dragRef = useRef(null) // { startX, startY, origX, origY, moved }
+  const [winPos, setWinPos] = useState<any>(null) // { x, y } or null
+  const winRef  = useRef<any>(null)
+  const dragRef = useRef<any>(null) // { startX, startY, origX, origY, moved }
 
-  const clampPos = useCallback((x, y) => {
+  const clampPos = useCallback((x: any, y: any) => {
     const el = winRef.current
     const w = el ? el.offsetWidth  : 320
     const h = el ? el.offsetHeight : 220
@@ -417,7 +417,7 @@ export function HuddleProvider({ currentUser, children }) {
     return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) }
   }, [])
 
-  const onHeaderPointerDown = useCallback((e) => {
+  const onHeaderPointerDown = useCallback((e: any) => {
     // Don't hijack the Shrink/End buttons
     if (e.target.closest('button')) return
     const el = winRef.current
@@ -428,7 +428,7 @@ export function HuddleProvider({ currentUser, children }) {
     e.preventDefault()
   }, [])
 
-  const onHeaderPointerMove = useCallback((e) => {
+  const onHeaderPointerMove = useCallback((e: any) => {
     const d = dragRef.current
     if (!d) return
     const dx = e.clientX - d.startX, dy = e.clientY - d.startY
@@ -442,7 +442,7 @@ export function HuddleProvider({ currentUser, children }) {
   // Keep the window on-screen when the viewport shrinks / rotates
   useEffect(() => {
     if (!winPos) return
-    const onResize = () => setWinPos(p => (p ? clampPos(p.x, p.y) : p))
+    const onResize = () => setWinPos((p: any) => (p ? clampPos(p.x, p.y) : p))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [winPos !== null, clampPos]) // eslint-disable-line
@@ -450,7 +450,7 @@ export function HuddleProvider({ currentUser, children }) {
   // Re-clamp after Shrink/Expand changes the window size
   useEffect(() => {
     if (!winPos) return
-    const id = requestAnimationFrame(() => setWinPos(p => (p ? clampPos(p.x, p.y) : p)))
+    const id = requestAnimationFrame(() => setWinPos((p: any) => (p ? clampPos(p.x, p.y) : p)))
     return () => cancelAnimationFrame(id)
   }, [expanded]) // eslint-disable-line
 
@@ -557,13 +557,13 @@ export function HuddleProvider({ currentUser, children }) {
 // ════════════════════════════════════════════════════════════════
 // DND BUTTON — drop into the top bar next to the notification bell
 // ════════════════════════════════════════════════════════════════
-export function DndButton({ isMobile }) {
+export function DndButton({ isMobile }: any) {
   const huddle = useHuddle()
   const [open, setOpen] = useState(false)
-  const boxRef = useRef(null)
+  const boxRef = useRef<any>(null)
   useEffect(() => {
     if (!open) return
-    const onClick = e => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false) }
+    const onClick = (e: any) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
@@ -578,11 +578,11 @@ export function DndButton({ isMobile }) {
     return 'until ' + (today ? '' : d.toLocaleDateString('en-US',{weekday:'short'}) + ' ') +
       d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
   }
-  const pick = until => { setDndFor(until); setOpen(false); setCustomOpen(false) }
-  const at8 = daysAhead => { const d = new Date(); d.setDate(d.getDate()+daysAhead); d.setHours(8,0,0,0); return d.toISOString() }
+  const pick = (until: any) => { setDndFor(until); setOpen(false); setCustomOpen(false) }
+  const at8 = (daysAhead: any) => { const d = new Date(); d.setDate(d.getDate()+daysAhead); d.setHours(8,0,0,0); return d.toISOString() }
   const tomorrow8 = () => at8(1)
   const nextMonday8 = () => { const d = new Date(); const ahead = ((8 - d.getDay()) % 7) || 7; return at8(ahead) }
-  const inMins = m => new Date(Date.now() + m*60000).toISOString()
+  const inMins = (m: any) => new Date(Date.now() + m*60000).toISOString()
 
   const OPTIONS = [
     { label:'For 30 minutes',          until: inMins(30) },
@@ -596,8 +596,8 @@ export function DndButton({ isMobile }) {
   // Custom picker — pick any date & time up to 7 days out
   const [customOpen, setCustomOpen] = useState(false)
   const [customVal,  setCustomVal]  = useState('')
-  const toLocalInput = d => {
-    const p = n => String(n).padStart(2,'0')
+  const toLocalInput = (d: any) => {
+    const p = (n: any) => String(n).padStart(2,'0')
     return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
   }
   const customLimits = {
