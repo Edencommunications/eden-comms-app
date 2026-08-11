@@ -6,6 +6,7 @@ import { startDietPlanDuplicateWatcher } from "./lib/dietPlanDuplicates";
 import { startMetaAdsScheduler } from "./routes/metaAds";
 import { startPushWatcher } from "./routes/push";
 import { startRealtimeWatch } from "./lib/realtimeWatch";
+import { startSuppLibrarySync } from "./lib/suppLibrarySync";
 import { startHealthAlertWatcher } from "./lib/healthAlerts";
 
 const rawPort = process.env["PORT"];
@@ -36,4 +37,5 @@ app.listen(port, (err) => {
   startMetaAdsScheduler();
   startPushWatcher();
   startRealtimeWatch();
+  startSuppLibrarySync();
 });

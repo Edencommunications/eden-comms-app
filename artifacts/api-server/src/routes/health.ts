@@ -3,6 +3,7 @@ import { HealthCheckResponse } from "@workspace/api-zod";
 import { getStartRemindersHealth } from "../lib/startDateReminders";
 import { getDietPlanDuplicatesHealth } from "../lib/dietPlanDuplicates";
 import { getRealtimeWatchHealth } from "../lib/realtimeWatch";
+import { getSuppSyncHealth } from "../lib/suppLibrarySync";
 
 const router: IRouter = Router();
 
@@ -21,10 +22,13 @@ router.get("/healthz", (_req, res) => {
   // diet_plans row (insert-per-save regression), when the check itself failed,
   // or when the hourly check silently stopped running.
   const dietPlanDuplicates = getDietPlanDuplicatesHealth();
-  const healthy = reminders.healthy && dietPlanDuplicates.healthy && realtimeWatch.healthy;
+  // Add-only Eden→orgs supplement library sync: degraded when its last run
+  // failed or the hourly job silently stopped.
+  const suppSync = getSuppSyncHealth();
+  const healthy = reminders.healthy && dietPlanDuplicates.healthy && realtimeWatch.healthy && suppSync.healthy;
   res
     .status(healthy ? 200 : 503)
-    .json({ ...data, status: healthy ? "ok" : "degraded", startDateReminders: reminders, dietPlanDuplicates, realtimeWatch });
+    .json({ ...data, status: healthy ? "ok" : "degraded", startDateReminders: reminders, dietPlanDuplicates, realtimeWatch, suppSync });
 });
 
 
