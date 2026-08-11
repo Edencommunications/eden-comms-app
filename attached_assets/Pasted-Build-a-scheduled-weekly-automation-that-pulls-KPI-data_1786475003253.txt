@@ -1,0 +1,65 @@
+Build a scheduled weekly automation that pulls KPI data from GoHighLevel (GHL) 
+and sends a summary message into our Eden Communications app.
+
+AUTHENTICATION
+- Use a GHL Private Integration Token (not the legacy API key)
+- Location ID: kuKtKnNy2D1k5hVocBdJ 
+- Required scopes: contacts.readonly, opportunities.readonly, calendars.readonly, 
+  payments.readonly (or transactions, whichever the account uses)
+
+SCHEDULE
+- Run every Monday at 6:00 AM CST
+- Use Replit Scheduled Deployments (cron trigger)
+- Pull data for the trailing 7 days (previous Mon–Sun)
+
+DATA TO PULL FROM GHL
+
+1. Leads
+   - Source: Opportunities API (or Contacts API, whichever we're counting as "lead")
+   - Filter: createdAt within date range
+   - Filter: Pipeline = New Lead, Application Pipeline, Workshop Pipeline, Clients, Workshop Pipeline, University Mentees
+
+2. Setter Calls
+   - Source: Calendar/Appointments API
+   - Filter: Calendar = Complimentary Call, appointment date within range
+   - Count: total booked, and separately total "showed" if status field distinguishes this
+
+3. Closing Calls
+   - Source: Calendar/Appointments API
+   - Filter: Calendar = Lauren Sedlar calendar, Martin Nwakamma Calendar, appointment date within range
+   - Count: total booked, and separately total "showed"
+
+4. Closed Deals
+   - Source: Opportunities API
+   - Filter: Pipeline stage =Deposit paid, Foundation, Scale, Launch, stage-updated date within range
+   - Count of opportunities
+
+5. Amounts
+   - Source: Opportunities API field "monetaryValue" on won deals within range
+   - Sum all won deal values
+
+6. Closer Commissions
+   - Calculated field, NOT pulled from GHL
+   - Formula: 15% × the payment received for that month 
+   - Break out by closer if opportunity owner/assigned user field is available — 
+     sum commission per closer, plus a team total
+
+OUTPUT
+- Aggregate all of the above into a structured JSON payload:
+  { week_start, week_end, leads, setter_calls_booked, setter_calls_showed,
+    closing_calls_booked, closing_calls_showed, closed_deals, total_amount,
+    commissions_by_closer: [{name, amount}], total_commissions }
+
+- Format this into a readable summary message (not raw JSON) and send it to 
+  Eden Communications via [ENDPOINT/WEBHOOK]
+
+ERROR HANDLING
+- Handle GHL API pagination (don't silently truncate results if a week has high volume)
+- If any API call fails, log the error and send a fallback message noting which 
+  section failed, rather than sending a partial/incorrect summary silently
+- Respect GHL rate limits with retry/backoff logic
+
+LOGGING
+- Store each week's raw payload somewhere persistent (Replit DB or a Google Sheet) 
+  so we have a historical record beyond what's shown in the app each week
+
