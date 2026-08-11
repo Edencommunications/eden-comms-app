@@ -4212,18 +4212,43 @@ const AdminDashboard = ({ user }:any) => {
     } catch { setMetaMsg('⚠️ Could not post the recap'); }
     setMetaBusy(false);
   };
-  // GHL KPI reports — Eden HQ only: weekly Monday KPI post + 15th payout post
+  // GHL KPI reports — every org: weekly KPI post + monthly payout post,
+  // each org connects its own GoHighLevel and sets its own time zone.
   const [ghlKpi, setGhlKpi] = useState<any>(null);
   const [ghlKpiBusy, setGhlKpiBusy] = useState(false);
   const [ghlKpiMsg, setGhlKpiMsg] = useState('');
+  const [ghlKpiToken, setGhlKpiToken] = useState('');
+  const [ghlKpiLoc, setGhlKpiLoc] = useState('');
   const loadGhlKpi = async () => {
     try {
       const r = await fetch('/api/ghl-kpi/status', { headers: { Authorization: sbBearer() } });
       const d = await r.json().catch(() => null);
-      setGhlKpi(r.ok && d?.ok ? d : { connected:false });
-    } catch { setGhlKpi({ connected:false }); }
+      setGhlKpi(r.ok && d?.ok ? d : { connected:false, is_eden:false });
+    } catch { setGhlKpi({ connected:false, is_eden:false }); }
   };
-  useEffect(() => { if (isOwnerHQ) loadGhlKpi(); }, []);
+  useEffect(() => { loadGhlKpi(); }, []);
+  const ghlKpiConnect = async () => {
+    setGhlKpiBusy(true); setGhlKpiMsg('');
+    try {
+      const r = await fetch('/api/ghl-kpi/connect', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ token: ghlKpiToken.trim(), locationId: ghlKpiLoc.trim() }),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) { setGhlKpiMsg('✅ Connected to GoHighLevel!'); setGhlKpiToken(''); setGhlKpiLoc(''); setGhlKpiOpts(null); loadGhlKpi(); }
+      else setGhlKpiMsg(`⚠️ ${d?.error || 'Could not connect'}`);
+    } catch { setGhlKpiMsg('⚠️ Could not connect'); }
+    setGhlKpiBusy(false);
+  };
+  const ghlKpiDisconnect = async () => {
+    if (!window.confirm('Disconnect GoHighLevel? Reports will stop until you reconnect.')) return;
+    setGhlKpiBusy(true); setGhlKpiMsg('');
+    try {
+      const r = await fetch('/api/ghl-kpi/disconnect', { method:'POST', headers:{ Authorization: sbBearer() } });
+      if (r.ok) { setGhlKpiOpts(null); loadGhlKpi(); } else setGhlKpiMsg('⚠️ Could not disconnect');
+    } catch { setGhlKpiMsg('⚠️ Could not disconnect'); }
+    setGhlKpiBusy(false);
+  };
   const ghlKpiSave = async (patch:any) => {
     setGhlKpiBusy(true); setGhlKpiMsg('');
     try {
@@ -4238,16 +4263,17 @@ const AdminDashboard = ({ user }:any) => {
     setGhlKpiBusy(false);
     setTimeout(() => setGhlKpiMsg(m => m === '✅ Saved' ? '' : m), 3000);
   };
-  const [ghlKpiCals, setGhlKpiCals] = useState<any[]|null>(null); // GHL calendars, loaded on demand
-  const loadGhlKpiCals = async () => {
-    if (ghlKpiCals !== null) return;
-    setGhlKpiCals([]);
+  // Pipelines + calendars from the org's own GHL, loaded on demand for the pickers.
+  const [ghlKpiOpts, setGhlKpiOpts] = useState<any|null>(null);
+  const loadGhlKpiOpts = async () => {
+    if (ghlKpiOpts !== null) return;
+    setGhlKpiOpts({ pipelines: [], calendars: [], loading: true });
     try {
-      const r = await fetch('/api/ghl-kpi/calendars', { headers: { Authorization: sbBearer() } });
+      const r = await fetch('/api/ghl-kpi/options', { headers: { Authorization: sbBearer() } });
       const d = await r.json().catch(() => null);
-      if (r.ok && Array.isArray(d?.calendars)) setGhlKpiCals(d.calendars);
-      else { setGhlKpiCals(null); setGhlKpiMsg('⚠️ Could not load calendars from GoHighLevel'); }
-    } catch { setGhlKpiCals(null); setGhlKpiMsg('⚠️ Could not load calendars from GoHighLevel'); }
+      if (r.ok && d?.ok) setGhlKpiOpts({ pipelines: d.pipelines || [], calendars: d.calendars || [] });
+      else { setGhlKpiOpts(null); setGhlKpiMsg(`⚠️ ${d?.error || 'Could not load your GoHighLevel setup'}`); }
+    } catch { setGhlKpiOpts(null); setGhlKpiMsg('⚠️ Could not load your GoHighLevel setup'); }
   };
   const ghlKpiRunNow = async (kind:string) => {
     setGhlKpiBusy(true); setGhlKpiMsg('');
@@ -4475,18 +4501,34 @@ const AdminDashboard = ({ user }:any) => {
               )}
               {metaMsg && <p style={{ fontSize:12, color:metaMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{metaMsg}</p>}
             </Card>
-            {/* GHL KPI reports — Eden HQ only (weekly Monday post + 15th payout post) */}
-            {isOwnerHQ && (
+            {/* GHL KPI reports — every org connects its own GoHighLevel */}
+            {(
               <Card style={{ marginBottom:20 }}>
                 <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>📈 GHL KPI Reports</p>
                 {ghlKpi === null ? (
                   <p style={{ fontSize:12, color:B.muted, margin:0 }}>Checking connection…</p>
                 ) : !ghlKpi.connected ? (
-                  <p style={{ fontSize:12, color:"#ffa600", margin:0 }}>The GoHighLevel connection is missing on the server — contact Eden support.</p>
+                  ghlKpi.is_eden ? (
+                    <p style={{ fontSize:12, color:"#ffa600", margin:0 }}>The GoHighLevel connection is missing on the server — contact Eden support.</p>
+                  ) : (
+                    <>
+                      <p style={{ fontSize:11, color:B.muted, margin:"0 0 10px", lineHeight:1.6 }}>
+                        Connect your GoHighLevel account to post automatic weekly KPI reports (leads, calls, closed deals, closer commissions) and a monthly commission payout report into one of your communities.
+                        In GHL go to <strong>Settings → Private Integrations</strong>, create a token with <strong>opportunities, calendars, and users read</strong> access, and copy your <strong>Location ID</strong> from Settings → Business Profile.
+                      </p>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+                        <input type="password" placeholder="Private Integration Token (pit-…)" value={ghlKpiToken} onChange={e => setGhlKpiToken(e.target.value)} disabled={ghlKpiBusy}
+                          style={{ flex:"2 1 220px", background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.text, fontSize:12, outline:"none" }}/>
+                        <input placeholder="Location ID" value={ghlKpiLoc} onChange={e => setGhlKpiLoc(e.target.value)} disabled={ghlKpiBusy}
+                          style={{ flex:"1 1 130px", background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"8px 10px", color:B.text, fontSize:12, outline:"none" }}/>
+                        <Btn onClick={ghlKpiConnect} disabled={ghlKpiBusy || !ghlKpiToken.trim() || !ghlKpiLoc.trim()}>{ghlKpiBusy ? 'Checking…' : 'Connect'}</Btn>
+                      </div>
+                    </>
+                  )
                 ) : (
                   <>
                     <p style={{ fontSize:12, color:"#4FD89A", margin:"0 0 10px", lineHeight:1.5 }}>
-                      ✅ Connected to GoHighLevel. Weekly: leads, setter + closing calls, closed deals, and 15% closer commissions (weekly + month-to-date). Monthly: last month's commission payout report.
+                      ✅ Connected to GoHighLevel. Weekly: leads, setter + closing calls, closed deals, and {ghlKpi.commission_pct ?? 15}% closer commissions (weekly + month-to-date). Monthly: last month's commission payout report.
                     </p>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                       <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post reports into</span>
@@ -4506,7 +4548,18 @@ const AdminDashboard = ({ user }:any) => {
                         </label>
                       ))}
                     </div>
-                    {!ghlKpi.community_id && <p style={{ fontSize:11, color:"#ffa600", margin:"0 0 10px" }}>Pick a community above to turn reports on.</p>}
+                    {ghlKpi.ready_error && <p style={{ fontSize:11, color:"#ffa600", margin:"0 0 10px" }}>{ghlKpi.ready_error}</p>}
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Time zone</span>
+                      <select disabled={ghlKpiBusy} value={ghlKpi.tz || 'America/Chicago'}
+                        onChange={e => ghlKpiSave({ tz: e.target.value })}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer", maxWidth:"100%" }}>
+                        {[['America/New_York','Eastern (New York)'],['America/Chicago','Central (Chicago / Texas)'],['America/Denver','Mountain (Denver)'],['America/Phoenix','Arizona (Phoenix)'],['America/Los_Angeles','Pacific (Los Angeles)'],['America/Anchorage','Alaska'],['Pacific/Honolulu','Hawaii'],['America/Toronto','Toronto'],['America/Vancouver','Vancouver'],['Europe/London','London'],['Europe/Paris','Central Europe (Paris/Berlin)'],['Australia/Sydney','Sydney'],['Pacific/Auckland','New Zealand']]
+                          .concat((ghlKpi.tz && !['America/New_York','America/Chicago','America/Denver','America/Phoenix','America/Los_Angeles','America/Anchorage','Pacific/Honolulu','America/Toronto','America/Vancouver','Europe/London','Europe/Paris','Australia/Sydney','Pacific/Auckland'].includes(ghlKpi.tz)) ? [[ghlKpi.tz, ghlKpi.tz]] : [])
+                          .map(([v, label]:any) => <option key={v} value={v}>{label}</option>)}
+                      </select>
+                      <span style={{ fontSize:11, color:B.muted }}>all report days & times follow this zone</span>
+                    </div>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                       <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Weekly post day</span>
                       <select disabled={ghlKpiBusy} value={Number.isInteger(Number(ghlKpi.weekly_dow)) ? Number(ghlKpi.weekly_dow) : 1}
@@ -4524,14 +4577,92 @@ const AdminDashboard = ({ user }:any) => {
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                       <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post time</span>
                       <select disabled={ghlKpiBusy}
-                        value={(() => { const utc = Number.isFinite(Number(ghlKpi.hour)) ? Number(ghlKpi.hour) : 11; return ((utc - Math.round(new Date().getTimezoneOffset() / 60) % 24) + 48) % 24; })()}
-                        onChange={e => { const local = Number(e.target.value); const utc = ((local + Math.round(new Date().getTimezoneOffset() / 60)) + 48) % 24; ghlKpiSave({ hour: utc }); }}
+                        value={Number.isInteger(Number(ghlKpi.hour_local)) ? Number(ghlKpi.hour_local) : 6}
+                        onChange={e => ghlKpiSave({ hourLocal: Number(e.target.value) })}
                         style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
                         {Array.from({ length: 24 }, (_, h) => (
                           <option key={h} value={h}>{h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`}</option>
                         ))}
                       </select>
-                      <span style={{ fontSize:11, color:B.muted }}>your local time · weekly covers the previous Mon–Sun</span>
+                      <span style={{ fontSize:11, color:B.muted }}>in the time zone above · weekly covers the previous Mon–Sun</span>
+                    </div>
+                    <div style={{ marginBottom:10 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Lead pipelines</span>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6, alignItems:"center" }}>
+                        {(ghlKpi.lead_pipelines || []).map((name:string) => (
+                          <span key={name} style={{ display:"inline-flex", alignItems:"center", gap:6, background:B.surface, border:`1px solid ${B.border}`, borderRadius:20, padding:"4px 6px 4px 12px", fontSize:12, color:B.text }}>
+                            {name}
+                            <button disabled={ghlKpiBusy || (ghlKpi.lead_pipelines || []).length <= 1}
+                              onClick={() => ghlKpiSave({ leadPipelines: (ghlKpi.lead_pipelines || []).filter((x:string) => x !== name) })}
+                              title={(ghlKpi.lead_pipelines || []).length <= 1 ? 'Keep at least one pipeline' : 'Remove'}
+                              style={{ background:"none", border:"none", color:B.muted, cursor:(ghlKpi.lead_pipelines || []).length <= 1 ? 'not-allowed' : 'pointer', fontSize:14, lineHeight:1, padding:"0 4px" }}>✕</button>
+                          </span>
+                        ))}
+                        <select disabled={ghlKpiBusy} value="" onFocus={loadGhlKpiOpts} onMouseDown={loadGhlKpiOpts}
+                          onChange={e => { if (e.target.value && !(ghlKpi.lead_pipelines || []).includes(e.target.value)) ghlKpiSave({ leadPipelines: [...(ghlKpi.lead_pipelines || []), e.target.value] }); }}
+                          style={{ background:B.surface, border:`1px dashed ${B.border}`, borderRadius:20, padding:"5px 10px", color:B.muted, fontSize:12, outline:"none", cursor:"pointer", maxWidth:220 }}>
+                          <option value="">＋ Add a pipeline…</option>
+                          {((ghlKpiOpts?.pipelines) || []).filter((p:any) => !(ghlKpi.lead_pipelines || []).includes(p.name)).map((p:any) => (
+                            <option key={p.name} value={p.name}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <p style={{ fontSize:11, color:B.muted, margin:"6px 0 0" }}>New opportunities in these pipelines count as leads.</p>
+                    </div>
+                    <div style={{ marginBottom:10 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Closed-deal stages</span>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6, alignItems:"center" }}>
+                        {(ghlKpi.closed_stages || []).map((s:any) => (
+                          <span key={`${s.pipeline}::${s.stage}`} style={{ display:"inline-flex", alignItems:"center", gap:6, background:B.surface, border:`1px solid ${B.border}`, borderRadius:20, padding:"4px 6px 4px 12px", fontSize:12, color:B.text }}>
+                            {s.stage} <span style={{ color:B.muted }}>({s.pipeline})</span>
+                            <button disabled={ghlKpiBusy}
+                              onClick={() => ghlKpiSave({ closedStages: (ghlKpi.closed_stages || []).filter((x:any) => !(x.pipeline === s.pipeline && x.stage === s.stage)) })}
+                              title="Remove"
+                              style={{ background:"none", border:"none", color:B.muted, cursor:"pointer", fontSize:14, lineHeight:1, padding:"0 4px" }}>✕</button>
+                          </span>
+                        ))}
+                        <select disabled={ghlKpiBusy} value="" onFocus={loadGhlKpiOpts} onMouseDown={loadGhlKpiOpts}
+                          onChange={e => {
+                            const [pipeline, stage] = e.target.value.split('::');
+                            if (pipeline && stage && !(ghlKpi.closed_stages || []).some((x:any) => x.pipeline === pipeline && x.stage === stage))
+                              ghlKpiSave({ closedStages: [...(ghlKpi.closed_stages || []), { pipeline, stage }] });
+                          }}
+                          style={{ background:B.surface, border:`1px dashed ${B.border}`, borderRadius:20, padding:"5px 10px", color:B.muted, fontSize:12, outline:"none", cursor:"pointer", maxWidth:220 }}>
+                          <option value="">＋ Add a stage…</option>
+                          {((ghlKpiOpts?.pipelines) || []).map((p:any) => (
+                            <optgroup key={p.name} label={p.name}>
+                              {(p.stages || []).filter((st:string) => !(ghlKpi.closed_stages || []).some((x:any) => x.pipeline === p.name && x.stage === st)).map((st:string) => (
+                                <option key={`${p.name}::${st}`} value={`${p.name}::${st}`}>{st}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+                      <p style={{ fontSize:11, color:B.muted, margin:"6px 0 0" }}>A deal moved into any of these stages counts as closed (its dollar value drives commissions).</p>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Setter calendar</span>
+                      <select disabled={ghlKpiBusy} value={ghlKpi.setter_calendar?.id || ''} onFocus={loadGhlKpiOpts} onMouseDown={loadGhlKpiOpts}
+                        onChange={e => {
+                          if (!e.target.value) { ghlKpiSave({ setterCalendar: null }); return; }
+                          const cal = ((ghlKpiOpts?.calendars) || []).find((c:any) => c.id === e.target.value);
+                          if (cal) ghlKpiSave({ setterCalendar: { id: cal.id, name: cal.name } });
+                        }}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:ghlKpi.setter_calendar ? B.gold : B.muted, fontSize:12, outline:"none", cursor:"pointer", maxWidth:"100%" }}>
+                        <option value="">No setter section</option>
+                        {ghlKpi.setter_calendar && !((ghlKpiOpts?.calendars) || []).some((c:any) => c.id === ghlKpi.setter_calendar.id) && (
+                          <option value={ghlKpi.setter_calendar.id}>{ghlKpi.setter_calendar.name}</option>
+                        )}
+                        {((ghlKpiOpts?.calendars) || []).map((c:any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Commission</span>
+                      <select disabled={ghlKpiBusy} value={Number(ghlKpi.commission_pct) || 15}
+                        onChange={e => ghlKpiSave({ commissionPct: Number(e.target.value) })}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
+                        {[...Array.from({ length: 40 }, (_, i) => i + 1), Number(ghlKpi.commission_pct) || 15].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b).map(p => (
+                          <option key={p} value={p}>{p}%</option>
+                        ))}
+                      </select>
                     </div>
                     <div style={{ marginBottom:10 }}>
                       <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Closers</span>
@@ -4546,14 +4677,14 @@ const AdminDashboard = ({ user }:any) => {
                           </span>
                         ))}
                         <select disabled={ghlKpiBusy} value=""
-                          onFocus={loadGhlKpiCals} onMouseDown={loadGhlKpiCals}
+                          onFocus={loadGhlKpiOpts} onMouseDown={loadGhlKpiOpts}
                           onChange={e => {
-                            const cal = (ghlKpiCals || []).find((c:any) => c.id === e.target.value);
+                            const cal = ((ghlKpiOpts?.calendars) || []).find((c:any) => c.id === e.target.value);
                             if (cal && !(ghlKpi.closers || []).some((x:any) => x.id === cal.id)) ghlKpiSave({ closers: [...(ghlKpi.closers || []), { id: cal.id, name: cal.name }] });
                           }}
                           style={{ background:B.surface, border:`1px dashed ${B.border}`, borderRadius:20, padding:"5px 10px", color:B.muted, fontSize:12, outline:"none", cursor:"pointer", maxWidth:220 }}>
                           <option value="">＋ Add a closer…</option>
-                          {(ghlKpiCals || []).filter((c:any) => !(ghlKpi.closers || []).some((x:any) => x.id === c.id)).map((c:any) => (
+                          {((ghlKpiOpts?.calendars) || []).filter((c:any) => !(ghlKpi.closers || []).some((x:any) => x.id === c.id)).map((c:any) => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
                         </select>
@@ -4561,8 +4692,9 @@ const AdminDashboard = ({ user }:any) => {
                       <p style={{ fontSize:11, color:B.muted, margin:"6px 0 0" }}>Each closer is tracked by their GHL calendar — pick the person's calendar from the list.</p>
                     </div>
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                      <Btn variant="secondary" onClick={() => ghlKpiRunNow('weekly')} disabled={ghlKpiBusy || !ghlKpi.community_id}>{ghlKpiBusy ? 'Working…' : 'Post a test report now'}</Btn>
-                      <Btn variant="secondary" onClick={() => ghlKpiRunNow('payout')} disabled={ghlKpiBusy || !ghlKpi.community_id}>Post last month's payout report</Btn>
+                      <Btn variant="secondary" onClick={() => ghlKpiRunNow('weekly')} disabled={ghlKpiBusy || !!ghlKpi.ready_error}>{ghlKpiBusy ? 'Working…' : 'Post a test report now'}</Btn>
+                      <Btn variant="secondary" onClick={() => ghlKpiRunNow('payout')} disabled={ghlKpiBusy || !!ghlKpi.ready_error}>Post last month's payout report</Btn>
+                      {!ghlKpi.is_eden && <Btn variant="secondary" onClick={ghlKpiDisconnect} disabled={ghlKpiBusy}>Disconnect</Btn>}
                     </div>
                   </>
                 )}

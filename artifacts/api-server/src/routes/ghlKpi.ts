@@ -1,20 +1,31 @@
-// ghlKpi.ts — Weekly GoHighLevel KPI report posted into a Team Hub community.
+// ghlKpi.ts — Weekly GoHighLevel KPI reports posted into a community.
 //
-// Eden HQ connects its GHL location via a Private Integration Token that
-// lives in the server-only GHL_PIT_TOKEN secret (never in the database).
-// Every Monday morning the scheduler pulls the previous Mon–Sun week from
-// GHL — new leads, setter calls (Complimentary Call), closing calls
-// (Lauren + Martin), closed deals (Deposit Paid / Foundation / Launch /
-// Scale) and their dollar values — computes 15% closer commissions
-// (weekly + month-to-date), and posts a plain-English report into the
-// admin-chosen community. On the 15th of each month it posts a commission
-// payout report covering the previous calendar month.
+// Works per organization:
+//   • Eden HQ connects via the server-only GHL_PIT_TOKEN secret (never in
+//     the database) with built-in defaults for pipelines/stages/calendars.
+//   • White-label orgs connect their OWN GoHighLevel location by pasting a
+//     Private Integration Token + Location ID; the token is stored
+//     AES-256-GCM encrypted in admin_settings (rows are org-readable under
+//     RLS, so plaintext is never stored) — same pattern as metaAds.ts.
 //
-// Same reliability pattern as metaAds.ts: config + markers in
-// admin_settings (key 'ghl_kpi', Eden org only), CAS-claimed markers so
-// two server instances can't double-post, marker rollback with a 3-try cap
-// on failure, admin bell alerts instead of silent failures, raw payloads
-// archived in admin_settings for history, and an evaluated /healthz entry.
+// Each org picks its own lead pipelines, closed-deal stages, setter
+// calendar, closer calendars, commission rate, community, time zone, post
+// day and hour. On the configured weekday the scheduler pulls the previous
+// full Mon–Sun week (in the org's time zone) — new leads, setter calls,
+// closing calls, closed deals and their dollar values — computes closer
+// commissions (weekly + month-to-date), and posts a plain-English report.
+// On the configured day of month it posts a commission payout report
+// covering the previous calendar month.
+//
+// Reliability pattern shared with metaAds.ts: config + markers in
+// admin_settings (key 'ghl_kpi', one row per org), CAS-claimed markers so
+// two server instances can't double-post (dev and prod share the DB),
+// marker rollback with a 3-try cap on failure, admin bell alerts instead
+// of silent failures, raw payloads archived for history, and an evaluated
+// /healthz entry. The weekly dedupe marker is the reported week's start
+// date in the org's time zone — never "today" — so UTC midnight or a post
+// day change can't repost a week that already went out.
+import crypto from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import { notifyCommunityMembers } from "./communityPost";
@@ -24,30 +35,30 @@ const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const EDEN_COMPANY_ID = "b0000000-0000-0000-0000-000000000001";
 const GHL_BASE = "https://services.leadconnectorhq.com";
-const LOCATION_ID = "kuKtKnNy2D1k5hVocBdJ";
+const EDEN_LOCATION_ID = "kuKtKnNy2D1k5hVocBdJ";
+const isEden = (cid: string) => cid === EDEN_COMPANY_ID;
 
-// Pipelines that count as "leads" (createdAt within the week).
-const LEAD_PIPELINE_NAMES = [
+// ── Eden's built-in defaults (used until Eden admins customize) ──
+const EDEN_LEAD_PIPELINES = [
   "New Lead",
   "Application Pipeline",
   "Workshop Pipeline",
   "Clients",
   "University Mentees",
 ];
-// Closed-deal stages: entering any of these within the week counts as a close.
-const CLOSED_STAGES: Array<{ pipeline: string; stage: string }> = [
+const EDEN_CLOSED_STAGES: Array<{ pipeline: string; stage: string }> = [
   { pipeline: "Application Pipeline", stage: "Deposit Paid" },
   { pipeline: "Clients", stage: "Foundation" },
   { pipeline: "Clients", stage: "Launch" },
   { pipeline: "Clients", stage: "Scale" },
 ];
-const SETTER_CALENDAR = { id: "1z14MTqpliMfJXqIWwd5", name: "Complimentary Call" };
-// Default closer calendars — used only until admins customize the list.
-const DEFAULT_CLOSER_CALENDARS = [
+const EDEN_SETTER_CALENDAR = { id: "1z14MTqpliMfJXqIWwd5", name: "Complimentary Call" };
+const EDEN_CLOSER_CALENDARS = [
   { id: "XRg1BpwuMU53M1moK62C", name: "Lauren Sedlar Calendar" },
   { id: "NeVnLNtJd5L98Mc2fhtl", name: "Martin Nwakamma Calendar" },
 ];
-const COMMISSION_RATE = 0.15;
+const DEFAULT_RATE = 0.15;
+const DEFAULT_TZ = "America/Chicago";
 
 const SH = {
   apikey: SERVICE_KEY,
@@ -68,12 +79,12 @@ async function dbInsert(table: string, body: any): Promise<boolean> {
   });
   return r.ok;
 }
-async function dbUpsertSetting(key: string, value: string): Promise<boolean> {
+async function dbUpsertSetting(companyId: string, key: string, value: string): Promise<boolean> {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
     method: "POST",
     headers: { ...SH, Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify({
-      company_id: EDEN_COMPANY_ID,
+      company_id: companyId,
       key,
       value,
       updated_at: new Date().toISOString(),
@@ -82,75 +93,132 @@ async function dbUpsertSetting(key: string, value: string): Promise<boolean> {
   return r.ok;
 }
 
-// ── Config (admin_settings key 'ghl_kpi', Eden org only) ────────
+// ── Token encryption (metaAds pattern) ──────────────────────────
+// admin_settings rows are readable by every logged-in member of an org, so
+// PIT tokens are stored AES-256-GCM encrypted with a server-only key.
+const ENC_KEY = crypto.createHash("sha256").update(`ghl-kpi-token:${process.env.SESSION_SECRET || ""}`).digest();
+function encToken(plain: string): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", ENC_KEY, iv);
+  const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  return `enc1:${iv.toString("base64")}:${cipher.getAuthTag().toString("base64")}:${ct.toString("base64")}`;
+}
+function decToken(stored: string): string {
+  try {
+    if (!stored?.startsWith("enc1:")) return "";
+    const [, ivB64, tagB64, ctB64] = stored.split(":");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", ENC_KEY, Buffer.from(ivB64, "base64"));
+    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+    return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+  } catch { return ""; }
+}
+
+// ── Config (admin_settings key 'ghl_kpi', one row per org) ──────
 
 type GhlCfg = {
+  // Connection (white-label orgs only — Eden uses the env secret).
+  token_enc?: string;
+  location_id?: string;
+  // Reporting setup.
   community_id?: string | null;
   community_name?: string | null;
-  weekly?: boolean;          // weekly KPI report on/off
-  payout?: boolean;          // monthly commission payout report on/off
-  hour?: number;             // UTC hour reports post at (default 11 ≈ 6am CT)
-  weekly_dow?: number;       // Central weekday for the weekly post (0=Sun … 6=Sat, default 1=Mon)
-  payout_day?: number;       // Central day-of-month for the payout post (1–28, default 15)
-  closers?: Array<{ id: string; name: string }>; // closer calendars (default Lauren + Martin)
-  last_weekly?: string;      // YYYY-MM-DD marker
-  last_payout?: string;      // YYYY-MM marker
+  weekly?: boolean;
+  payout?: boolean;
+  tz?: string;               // IANA time zone (default America/Chicago)
+  hour?: number;             // LEGACY: UTC hour (pre-timezone configs)
+  hour_local?: number;       // post hour in the org's own time zone
+  weekly_dow?: number;       // weekday for the weekly post (0=Sun … 6=Sat, default 1=Mon)
+  payout_day?: number;       // day-of-month for the payout post (1–28, default 15)
+  lead_pipelines?: string[]; // pipeline NAMES counted as leads
+  closed_stages?: Array<{ pipeline: string; stage: string }>;
+  setter_calendar?: { id: string; name: string } | null; // null = no setter section
+  closers?: Array<{ id: string; name: string }>;          // closer calendars
+  commission_rate?: number;  // fraction, e.g. 0.15
+  last_weekly?: string;      // reported week's start date (org-tz) — dedupe marker
+  last_payout?: string;      // YYYY-MM marker (org-tz month)
   closer_names?: Record<string, string>; // GHL userId → display name cache
   connected_by?: string | null;
 };
 
-// Closer calendar list — customizable, falls back to the built-in default.
-export function closersOf(cfg: GhlCfg): Array<{ id: string; name: string }> {
+function validTz(tz: any): string | null {
+  if (typeof tz !== "string" || !tz.trim()) return null;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz; } catch { return null; }
+}
+export function tzOf(cfg: GhlCfg): string { return validTz(cfg.tz) || DEFAULT_TZ; }
+function rateOf(cfg: GhlCfg): number {
+  const r = Number(cfg.commission_rate);
+  return Number.isFinite(r) && r > 0 && r <= 1 ? r : DEFAULT_RATE;
+}
+// The org's GHL connection, or null when not connected.
+function connOf(cfg: GhlCfg, companyId: string): { token: string; locationId: string } | null {
+  if (isEden(companyId)) {
+    const t = process.env.GHL_PIT_TOKEN || "";
+    return t ? { token: t, locationId: EDEN_LOCATION_ID } : null;
+  }
+  const t = decToken(cfg.token_enc || "");
+  const l = String(cfg.location_id || "").trim();
+  return t && l ? { token: t, locationId: l } : null;
+}
+function leadPipelinesOf(cfg: GhlCfg, companyId: string): string[] {
+  const list = Array.isArray(cfg.lead_pipelines) ? cfg.lead_pipelines.filter((p) => typeof p === "string" && p.trim()) : [];
+  return list.length ? list : (isEden(companyId) ? EDEN_LEAD_PIPELINES : []);
+}
+function closedStagesOf(cfg: GhlCfg, companyId: string): Array<{ pipeline: string; stage: string }> {
+  const list = Array.isArray(cfg.closed_stages)
+    ? cfg.closed_stages.filter((s) => s && typeof s.pipeline === "string" && typeof s.stage === "string")
+    : [];
+  return list.length ? list : (isEden(companyId) ? EDEN_CLOSED_STAGES : []);
+}
+function setterOf(cfg: GhlCfg, companyId: string): { id: string; name: string } | null {
+  if (cfg.setter_calendar === null) return null; // explicitly disabled
+  if (cfg.setter_calendar && cfg.setter_calendar.id) return cfg.setter_calendar;
+  return isEden(companyId) ? EDEN_SETTER_CALENDAR : null;
+}
+// Closer calendar list — customizable, Eden falls back to the built-in default.
+export function closersOf(cfg: GhlCfg, companyId: string = EDEN_COMPANY_ID): Array<{ id: string; name: string }> {
   const list = Array.isArray(cfg.closers)
     ? cfg.closers.filter((c) => c && typeof c.id === "string" && c.id.trim())
     : [];
-  return list.length ? list : DEFAULT_CLOSER_CALENDARS;
+  return list.length ? list : (isEden(companyId) ? EDEN_CLOSER_CALENDARS : []);
 }
 // Human display name for a closer calendar ("Lauren Sedlar Calendar" → "Lauren Sedlar").
 const closerDisplay = (name: string) =>
   String(name || "").replace(/\s*calendar\s*$/i, "").trim() || name;
 
-async function getCfg(): Promise<GhlCfg> {
-  const rows = await dbGet<any>(
-    `admin_settings?company_id=eq.${EDEN_COMPANY_ID}&key=eq.ghl_kpi&select=value`,
-  );
-  try {
-    const v = rows[0]?.value;
-    return (typeof v === "string" ? JSON.parse(v) : v) || {};
-  } catch { return {}; }
-}
-async function saveCfg(cfg: GhlCfg): Promise<boolean> {
-  return dbUpsertSetting("ghl_kpi", JSON.stringify(cfg));
-}
-// Safe read-modify-write: re-fetches fresh bytes and applies `fn` under CAS,
-// retrying on conflict. Every writer (settings saves, name-cache persistence,
-// failure rollback) must go through this — dev and prod share the DB, so a
-// plain whole-config save can clobber another instance's markers and cause
-// duplicate posts.
-async function mutateCfg(fn: (cfg: GhlCfg) => void, tries = 3): Promise<boolean> {
-  for (let i = 0; i < tries; i++) {
-    const rows = await dbGet<any>(
-      `admin_settings?company_id=eq.${EDEN_COMPANY_ID}&key=eq.ghl_kpi&select=value`,
-    );
-    if (!rows[0]) {
-      const cfg: GhlCfg = {};
-      fn(cfg);
-      if (await saveCfg(cfg)) return true;
-      continue;
-    }
-    const raw = typeof rows[0].value === "string" ? rows[0].value : JSON.stringify(rows[0].value);
-    let cfg: GhlCfg = {};
-    try { cfg = JSON.parse(raw) || {}; } catch { /* start clean */ }
-    fn(cfg);
-    if (await casCfg(raw, cfg)) return true;
+// What's still missing before reports can run for this org (null = ready).
+function readyError(cfg: GhlCfg, companyId: string): string | null {
+  if (!connOf(cfg, companyId)) {
+    return isEden(companyId)
+      ? "The GHL connection is missing on the server (GHL_PIT_TOKEN)."
+      : "Connect your GoHighLevel account first (token + location ID).";
   }
-  return false;
+  if (!cfg.community_id) return "No community chosen for KPI reports yet.";
+  if (!closersOf(cfg, companyId).length) return "Add at least one closer calendar.";
+  if (!leadPipelinesOf(cfg, companyId).length) return "Choose at least one lead pipeline.";
+  return null;
+}
+
+async function getCfgRow(companyId: string): Promise<{ raw: string; cfg: GhlCfg } | null> {
+  const rows = await dbGet<any>(
+    `admin_settings?company_id=eq.${encodeURIComponent(companyId)}&key=eq.ghl_kpi&select=value`,
+  );
+  if (!rows[0]) return null;
+  const raw = typeof rows[0].value === "string" ? rows[0].value : JSON.stringify(rows[0].value);
+  let cfg: GhlCfg = {};
+  try { cfg = JSON.parse(raw) || {}; } catch { /* keep empty */ }
+  return { raw, cfg };
+}
+async function getCfg(companyId: string): Promise<GhlCfg> {
+  return (await getCfgRow(companyId))?.cfg || {};
+}
+async function saveCfg(companyId: string, cfg: GhlCfg): Promise<boolean> {
+  return dbUpsertSetting(companyId, "ghl_kpi", JSON.stringify(cfg));
 }
 // Compare-and-swap: only writes if the stored bytes are unchanged, so two
 // server instances (dev + prod share this DB) can never double-post.
-async function casCfg(expectedRaw: string, cfg: GhlCfg): Promise<boolean> {
+async function casCfg(companyId: string, expectedRaw: string, cfg: GhlCfg): Promise<boolean> {
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${EDEN_COMPANY_ID}&key=eq.ghl_kpi&value=eq.${encodeURIComponent(expectedRaw)}`,
+    `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${encodeURIComponent(companyId)}&key=eq.ghl_kpi&value=eq.${encodeURIComponent(expectedRaw)}`,
     {
       method: "PATCH",
       headers: { ...SH, Prefer: "return=representation" },
@@ -161,14 +229,32 @@ async function casCfg(expectedRaw: string, cfg: GhlCfg): Promise<boolean> {
   const rows = (await r.json().catch(() => [])) as any[];
   return Array.isArray(rows) && rows.length > 0;
 }
+// Safe read-modify-write: re-fetches fresh bytes and applies `fn` under CAS,
+// retrying on conflict. Every writer (settings saves, name-cache persistence,
+// failure rollback) must go through this — a plain whole-config save can
+// clobber another instance's markers and cause duplicate posts.
+async function mutateCfg(companyId: string, fn: (cfg: GhlCfg) => void, tries = 3): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
+    const row = await getCfgRow(companyId);
+    if (!row) {
+      const cfg: GhlCfg = {};
+      fn(cfg);
+      if (await saveCfg(companyId, cfg)) return true;
+      continue;
+    }
+    fn(row.cfg);
+    if (await casCfg(companyId, row.raw, row.cfg)) return true;
+  }
+  return false;
+}
 
 // ── GHL API (retry/backoff, pagination) ─────────────────────────
 
-function ghlToken(): string { return process.env.GHL_PIT_TOKEN || ""; }
+type Conn = { token: string; locationId: string };
 
-async function ghlGet(path: string): Promise<any> {
+async function ghlGet(conn: Conn, path: string): Promise<any> {
   const headers = {
-    Authorization: `Bearer ${ghlToken()}`,
+    Authorization: `Bearer ${conn.token}`,
     Version: "2021-07-28",
     Accept: "application/json",
   };
@@ -196,12 +282,12 @@ async function ghlGet(path: string): Promise<any> {
 // All opportunities in one pipeline (paginated — never silently truncates).
 // The final count is checked against GHL's own meta.total so an API paging
 // quirk can't quietly drop records from a KPI report.
-async function fetchPipelineOpps(pipelineId: string): Promise<any[]> {
+async function fetchPipelineOpps(conn: Conn, pipelineId: string): Promise<any[]> {
   const out: any[] = [];
   let expectedTotal: number | null = null;
   for (let page = 1; page <= 50; page++) {
-    const b = await ghlGet(
-      `/opportunities/search?location_id=${LOCATION_ID}&pipeline_id=${pipelineId}&limit=100&page=${page}`,
+    const b = await ghlGet(conn,
+      `/opportunities/search?location_id=${conn.locationId}&pipeline_id=${pipelineId}&limit=100&page=${page}`,
     );
     const rows = Array.isArray(b?.opportunities) ? b.opportunities : [];
     out.push(...rows);
@@ -217,19 +303,19 @@ async function fetchPipelineOpps(pipelineId: string): Promise<any[]> {
   throw new Error(`Pipeline ${pipelineId} has more than 5,000 opportunities — refusing to truncate.`);
 }
 
-async function fetchCalendarEvents(calendarId: string, startMs: number, endMs: number): Promise<any[]> {
-  const b = await ghlGet(
-    `/calendars/events?locationId=${LOCATION_ID}&calendarId=${calendarId}&startTime=${startMs}&endTime=${endMs}`,
+async function fetchCalendarEvents(conn: Conn, calendarId: string, startMs: number, endMs: number): Promise<any[]> {
+  const b = await ghlGet(conn,
+    `/calendars/events?locationId=${conn.locationId}&calendarId=${calendarId}&startTime=${startMs}&endTime=${endMs}`,
   );
   return Array.isArray(b?.events) ? b.events : [];
 }
 
 // GHL userId → human name (cached in config; falls back to short id).
-async function resolveCloserName(userId: string, cache: Record<string, string>): Promise<string> {
+async function resolveCloserName(conn: Conn, userId: string, cache: Record<string, string>): Promise<string> {
   if (!userId) return "Unassigned";
   if (cache[userId]) return cache[userId];
   try {
-    const b = await ghlGet(`/users/${userId}`);
+    const b = await ghlGet(conn, `/users/${userId}`);
     const name = String(b?.name || `${b?.firstName || ""} ${b?.lastName || ""}`.trim() || "").trim();
     if (name) { cache[userId] = name; return name; }
   } catch { /* fall through */ }
@@ -239,42 +325,42 @@ async function resolveCloserName(userId: string, cache: Record<string, string>):
 // ── Pure calculation helpers (exported for tests) ───────────────
 
 export type Windows = {
-  weekStart: string; weekEnd: string;       // previous Mon–Sun (Central dates)
-  weekStartMs: number; weekEndMs: number;   // [start, end) — Central midnights as real instants
-  mtdStart: string; mtdStartMs: number;     // 1st of current Central month → now
+  weekStart: string; weekEnd: string;       // previous Mon–Sun (org-tz dates)
+  weekStartMs: number; weekEndMs: number;   // [start, end) — org-tz midnights as real instants
+  mtdStart: string; mtdStartMs: number;     // 1st of current org-tz month → now
 };
 
-// The business runs on US Central time, so week/month boundaries must be
-// Central midnights (a deal closed 11pm Sunday in Texas belongs to that
-// week, even though it's already Monday in UTC).
-const CENTRAL_TZ = "America/Chicago";
+// Week/month boundaries must be midnights in the ORG'S time zone (a deal
+// closed 11pm Sunday locally belongs to that week, even though it's
+// already Monday in UTC). Default: US Central (Eden's zone).
+const CENTRAL_TZ = DEFAULT_TZ;
 
-// Calendar date (y, m0, d) + weekday in the Central timezone.
-export function centralDateParts(now: Date): { y: number; m0: number; d: number; dow: number } {
+// Calendar date (y, m0, d) + weekday + hour in the given time zone.
+export function centralDateParts(now: Date, tz: string = CENTRAL_TZ): { y: number; m0: number; d: number; dow: number; hour: number } {
   const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: CENTRAL_TZ, year: "numeric", month: "numeric", day: "numeric", weekday: "short",
+    timeZone: tz, year: "numeric", month: "numeric", day: "numeric", weekday: "short", hour: "numeric", hour12: false,
   });
   const parts: Record<string, string> = {};
   for (const p of fmt.formatToParts(now)) parts[p.type] = p.value;
   const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(parts.weekday || "");
-  return { y: Number(parts.year), m0: Number(parts.month) - 1, d: Number(parts.day), dow };
+  return { y: Number(parts.year), m0: Number(parts.month) - 1, d: Number(parts.day), dow, hour: Number(parts.hour) % 24 };
 }
 
-// The real UTC instant of midnight on a given Central calendar date.
-// Two-pass offset lookup so DST transition days resolve correctly.
-export function centralMidnightMs(y: number, m0: number, d: number): number {
+// The real UTC instant of midnight on a given calendar date in the given
+// time zone. Two-pass offset lookup so DST transition days resolve correctly.
+export function centralMidnightMs(y: number, m0: number, d: number, tz: string = CENTRAL_TZ): number {
   const offsetAt = (ms: number) => {
     const fmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: CENTRAL_TZ, year: "numeric", month: "numeric", day: "numeric",
+      timeZone: tz, year: "numeric", month: "numeric", day: "numeric",
       hour: "numeric", minute: "numeric", second: "numeric", hour12: false,
     });
     const p: Record<string, string> = {};
     for (const part of fmt.formatToParts(new Date(ms))) p[part.type] = part.value;
     const wall = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day),
       Number(p.hour) % 24, Number(p.minute), Number(p.second));
-    return wall - ms; // negative for Central (UTC-5/-6)
+    return wall - ms; // negative west of Greenwich
   };
-  let guess = Date.UTC(y, m0, d, 6); // ≈ Central midnight in UTC
+  let guess = Date.UTC(y, m0, d, 6); // rough guess
   guess = Date.UTC(y, m0, d) - offsetAt(guess);
   return Date.UTC(y, m0, d) - offsetAt(guess);
 }
@@ -283,11 +369,11 @@ const isoOf = (y: number, m0: number, d: number) =>
   new Date(Date.UTC(y, m0, d)).toISOString().slice(0, 10);
 const dayIso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-// Given "now", the reporting week is the last FULL Central Mon–Sun before today.
-export function computeWindows(now: Date): Windows {
-  const c = centralDateParts(now);
+// Given "now", the reporting week is the last FULL Mon–Sun (org-tz) before today.
+export function computeWindows(now: Date, tz: string = CENTRAL_TZ): Windows {
+  const c = centralDateParts(now, tz);
   const daysSinceMonday = (c.dow + 6) % 7; // Monday → 0
-  // Walk back on the Central calendar via a UTC-noon anchor (DST-safe).
+  // Walk back on the calendar via a UTC-noon anchor (DST-safe).
   const anchor = Date.UTC(c.y, c.m0, c.d, 12);
   const dateNDaysBack = (n: number) => {
     const t = new Date(anchor - n * 86400_000);
@@ -299,23 +385,23 @@ export function computeWindows(now: Date): Windows {
   return {
     weekStart: isoOf(mon.y, mon.m0, mon.d),
     weekEnd: isoOf(sun.y, sun.m0, sun.d),
-    weekStartMs: centralMidnightMs(mon.y, mon.m0, mon.d),
-    weekEndMs: centralMidnightMs(nextMon.y, nextMon.m0, nextMon.d),
+    weekStartMs: centralMidnightMs(mon.y, mon.m0, mon.d, tz),
+    weekEndMs: centralMidnightMs(nextMon.y, nextMon.m0, nextMon.d, tz),
     mtdStart: isoOf(c.y, c.m0, 1),
-    mtdStartMs: centralMidnightMs(c.y, c.m0, 1),
+    mtdStartMs: centralMidnightMs(c.y, c.m0, 1, tz),
   };
 }
 
-// Previous Central calendar month [start, end) for the payout report.
-export function payoutWindow(now: Date): { label: string; startMs: number; endMs: number } {
-  const c = centralDateParts(now);
+// Previous calendar month [start, end) in the org's time zone.
+export function payoutWindow(now: Date, tz: string = CENTRAL_TZ): { label: string; startMs: number; endMs: number } {
+  const c = centralDateParts(now, tz);
   const prev = new Date(Date.UTC(c.y, c.m0 - 1, 1));
   const py = prev.getUTCFullYear(), pm0 = prev.getUTCMonth();
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   return {
     label: `${months[pm0]} ${py}`,
-    startMs: centralMidnightMs(py, pm0, 1),
-    endMs: centralMidnightMs(c.y, c.m0, 1),
+    startMs: centralMidnightMs(py, pm0, 1, tz),
+    endMs: centralMidnightMs(c.y, c.m0, 1, tz),
   };
 }
 
@@ -325,7 +411,7 @@ export type Deal = { id: string; name: string; value: number; closer: string; wh
 export function dealsInRange(deals: Deal[], startMs: number, endMs: number): Deal[] {
   return deals.filter((d) => d.whenMs >= startMs && d.whenMs < endMs);
 }
-export function commissionByCloser(deals: Deal[]): Array<{ name: string; sales: number; commission: number; deals: number }> {
+export function commissionByCloser(deals: Deal[], rate: number = DEFAULT_RATE): Array<{ name: string; sales: number; commission: number; deals: number }> {
   const map = new Map<string, { sales: number; deals: number }>();
   for (const d of deals) {
     const cur = map.get(d.closer) || { sales: 0, deals: 0 };
@@ -333,11 +419,15 @@ export function commissionByCloser(deals: Deal[]): Array<{ name: string; sales: 
     map.set(d.closer, cur);
   }
   return [...map.entries()]
-    .map(([name, v]) => ({ name, sales: v.sales, commission: v.sales * COMMISSION_RATE, deals: v.deals }))
+    .map(([name, v]) => ({ name, sales: v.sales, commission: v.sales * rate, deals: v.deals }))
     .sort((a, b) => b.sales - a.sales);
 }
 
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pctLabel = (rate: number) => {
+  const p = rate * 100;
+  return Number.isInteger(p) ? String(p) : p.toFixed(1);
+};
 const fmtDate = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -348,8 +438,11 @@ export type WeeklyPayload = {
   week_start: string; week_end: string;
   leads: number;
   setter_calls_booked: number; setter_calls_showed: number;
+  setter_label?: string;   // calendar name; section hidden when include_setter is false
+  include_setter?: boolean;
   closing_calls_booked: number; closing_calls_showed: number;
   closer_label?: string;   // e.g. "Lauren + Martin" — from the configured closer calendars
+  commission_pct?: string; // e.g. "15" — org's configured rate
   closed_deals: number; total_amount: number;
   commissions_by_closer: Array<{ name: string; sales: number; commission: number; deals: number }>;
   total_commissions: number;
@@ -364,10 +457,16 @@ export function buildWeeklyMessage(p: WeeklyPayload): string {
     "",
     "🧲 LEADS",
     `• New leads: ${p.leads}`,
-    "",
-    "📞 SETTER CALLS (Complimentary Call)",
-    `• Booked: ${p.setter_calls_booked}`,
-    `• Showed: ${p.setter_calls_showed}`,
+  ];
+  if (p.include_setter !== false) {
+    lines.push(
+      "",
+      `📞 SETTER CALLS (${p.setter_label || "Complimentary Call"})`,
+      `• Booked: ${p.setter_calls_booked}`,
+      `• Showed: ${p.setter_calls_showed}`,
+    );
+  }
+  lines.push(
     "",
     `🤝 CLOSING CALLS${p.closer_label ? ` (${p.closer_label})` : ""}`,
     `• Booked: ${p.closing_calls_booked}`,
@@ -376,8 +475,8 @@ export function buildWeeklyMessage(p: WeeklyPayload): string {
     "💰 CLOSED DEALS",
     `• Deals closed: ${p.closed_deals}`,
     `• Total value: ${usd(p.total_amount)}`,
-  ];
-  lines.push("", "💵 CLOSER COMMISSIONS (15%) — THIS WEEK");
+  );
+  lines.push("", `💵 CLOSER COMMISSIONS (${p.commission_pct || "15"}%) — THIS WEEK`);
   if (p.commissions_by_closer.length) {
     for (const c of p.commissions_by_closer) {
       lines.push(`• ${c.name}: ${usd(c.commission)} (${c.deals} deal${c.deals === 1 ? "" : "s"}, ${usd(c.sales)} in sales)`);
@@ -395,8 +494,8 @@ export function buildWeeklyMessage(p: WeeklyPayload): string {
   return lines.join("\n");
 }
 
-export function buildPayoutMessage(label: string, deals: Deal[], payoutDay = 15): string {
-  const byCloser = commissionByCloser(deals);
+export function buildPayoutMessage(label: string, deals: Deal[], payoutDay = 15, rate: number = DEFAULT_RATE): string {
+  const byCloser = commissionByCloser(deals, rate);
   const total = byCloser.reduce((s, c) => s + c.commission, 0);
   const sales = byCloser.reduce((s, c) => s + c.sales, 0);
   const suffix = payoutDay === 1 ? "st" : payoutDay === 2 ? "nd" : payoutDay === 3 ? "rd" : payoutDay === 21 ? "st" : payoutDay === 22 ? "nd" : payoutDay === 23 ? "rd" : "th";
@@ -411,7 +510,7 @@ export function buildPayoutMessage(label: string, deals: Deal[], payoutDay = 15)
     return lines.join("\n");
   }
   for (const c of byCloser) {
-    lines.push(`• ${c.name}: ${usd(c.commission)} (15% of ${usd(c.sales)} · ${c.deals} deal${c.deals === 1 ? "" : "s"})`);
+    lines.push(`• ${c.name}: ${usd(c.commission)} (${pctLabel(rate)}% of ${usd(c.sales)} · ${c.deals} deal${c.deals === 1 ? "" : "s"})`);
   }
   lines.push("", `Team total: ${usd(total)} on ${usd(sales)} in ${label} sales.`);
   return lines.join("\n");
@@ -421,22 +520,22 @@ export function buildPayoutMessage(label: string, deals: Deal[], payoutDay = 15)
 
 // Pipeline/stage ids are resolved by NAME at run time so renames/rebuilds
 // in GHL can't silently break the report against stale hardcoded ids.
-async function resolvePipelines(): Promise<{
+async function resolvePipelines(conn: Conn, leadNames: string[], closedStageNames: Array<{ pipeline: string; stage: string }>): Promise<{
   leadPipelineIds: string[];
   closedStages: Array<{ pipelineId: string; stageId: string }>;
   missing: string[];
 }> {
-  const b = await ghlGet(`/opportunities/pipelines?locationId=${LOCATION_ID}`);
+  const b = await ghlGet(conn, `/opportunities/pipelines?locationId=${conn.locationId}`);
   const pipelines: any[] = Array.isArray(b?.pipelines) ? b.pipelines : [];
   const byName = new Map(pipelines.map((p) => [String(p.name).trim().toLowerCase(), p]));
   const missing: string[] = [];
   const leadPipelineIds: string[] = [];
-  for (const name of LEAD_PIPELINE_NAMES) {
+  for (const name of leadNames) {
     const p = byName.get(name.toLowerCase());
     if (p) leadPipelineIds.push(p.id); else missing.push(`pipeline "${name}"`);
   }
   const closedStages: Array<{ pipelineId: string; stageId: string }> = [];
-  for (const cs of CLOSED_STAGES) {
+  for (const cs of closedStageNames) {
     const p = byName.get(cs.pipeline.toLowerCase());
     const stage = (p?.stages || []).find((s: any) => String(s.name).trim().toLowerCase() === cs.stage.toLowerCase());
     if (p && stage) closedStages.push({ pipelineId: p.id, stageId: stage.id });
@@ -450,14 +549,16 @@ const isShowed = (ev: any) => String(ev.appointmentStatus || "").toLowerCase() =
 
 // Full pull for a weekly report. Throws with a section-specific message on
 // failure so the alert can say exactly which part broke.
-async function pullWeekData(cfg: GhlCfg, w: Windows) {
-  const { leadPipelineIds, closedStages, missing } = await resolvePipelines();
+async function pullWeekData(companyId: string, cfg: GhlCfg, conn: Conn, w: Windows) {
+  const { leadPipelineIds, closedStages, missing } = await resolvePipelines(
+    conn, leadPipelinesOf(cfg, companyId), closedStagesOf(cfg, companyId),
+  );
   if (missing.length) throw new Error(`GHL setup changed — could not find: ${missing.join(", ")}.`);
 
   // Opportunities for every relevant pipeline, fetched once each.
   const pipelineIds = [...new Set([...leadPipelineIds, ...closedStages.map((c) => c.pipelineId)])];
   const oppsByPipeline = new Map<string, any[]>();
-  for (const pid of pipelineIds) oppsByPipeline.set(pid, await fetchPipelineOpps(pid));
+  for (const pid of pipelineIds) oppsByPipeline.set(pid, await fetchPipelineOpps(conn, pid));
 
   // 1. Leads — created inside the week, across the lead pipelines.
   let leads = 0;
@@ -469,10 +570,11 @@ async function pullWeekData(cfg: GhlCfg, w: Windows) {
   }
 
   // 2–3. Appointments.
-  const setterEvents = await fetchCalendarEvents(SETTER_CALENDAR.id, w.weekStartMs, w.weekEndMs);
+  const setter = setterOf(cfg, companyId);
+  const setterEvents = setter ? await fetchCalendarEvents(conn, setter.id, w.weekStartMs, w.weekEndMs) : [];
   let closingBooked = 0, closingShowed = 0;
-  for (const cal of closersOf(cfg)) {
-    const evs = await fetchCalendarEvents(cal.id, w.weekStartMs, w.weekEndMs);
+  for (const cal of closersOf(cfg, companyId)) {
+    const evs = await fetchCalendarEvents(conn, cal.id, w.weekStartMs, w.weekEndMs);
     closingBooked += evs.filter(isBooked).length;
     closingShowed += evs.filter(isShowed).length;
   }
@@ -492,7 +594,7 @@ async function pullWeekData(cfg: GhlCfg, w: Windows) {
         id: o.id,
         name: String(o.name || "Unnamed"),
         value: Number(o.monetaryValue) || 0,
-        closer: await resolveCloserName(String(o.assignedTo || ""), closerCache),
+        closer: await resolveCloserName(conn, String(o.assignedTo || ""), closerCache),
         whenMs: t,
       });
     }
@@ -501,6 +603,8 @@ async function pullWeekData(cfg: GhlCfg, w: Windows) {
 
   return {
     leads,
+    setter_label: setter?.name,
+    include_setter: !!setter,
     setter_calls_booked: setterEvents.filter(isBooked).length,
     setter_calls_showed: setterEvents.filter(isShowed).length,
     closing_calls_booked: closingBooked,
@@ -511,18 +615,18 @@ async function pullWeekData(cfg: GhlCfg, w: Windows) {
 
 // ── Posting ─────────────────────────────────────────────────────
 
-async function notifyAdmins(body: string): Promise<void> {
-  const admins = await dbGet<any>(`user_profiles?company_id=eq.${EDEN_COMPANY_ID}&role=eq.super_admin&is_active=not.is.false&select=id`);
+async function notifyAdmins(companyId: string, body: string): Promise<void> {
+  const admins = await dbGet<any>(`user_profiles?company_id=eq.${encodeURIComponent(companyId)}&role=eq.super_admin&is_active=not.is.false&select=id`);
   for (const a of admins) {
     await dbInsert("notifications", { recipient_id: a.id, type: "ghl_kpi", body, is_read: false });
   }
 }
 
-async function postToCommunity(cfg: GhlCfg, text: string): Promise<{ ok: boolean; error?: string }> {
+async function postToCommunity(companyId: string, cfg: GhlCfg, text: string): Promise<{ ok: boolean; error?: string }> {
   if (!cfg.community_id) return { ok: false, error: "No community chosen for KPI reports yet." };
-  const comm = await dbGet<any>(`communities?id=eq.${encodeURIComponent(cfg.community_id)}&company_id=eq.${EDEN_COMPANY_ID}&is_active=eq.true&select=id,name`);
+  const comm = await dbGet<any>(`communities?id=eq.${encodeURIComponent(cfg.community_id)}&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&select=id,name`);
   if (!comm[0]) {
-    await notifyAdmins("⚠️ Weekly KPI reports are paused — the community they post into no longer exists. Pick a new one in the admin panel (Overview → GHL KPI Reports).");
+    await notifyAdmins(companyId, "⚠️ Weekly KPI reports are paused — the community they post into no longer exists. Pick a new one in the admin panel (Overview → GHL KPI Reports).");
     return { ok: false, error: "The chosen community no longer exists — pick a new one." };
   }
   const posted = await dbInsert("community_messages", {
@@ -534,37 +638,47 @@ async function postToCommunity(cfg: GhlCfg, text: string): Promise<{ ok: boolean
     parent_id: null,
   });
   if (!posted) {
-    await notifyAdmins("⚠️ The weekly KPI report was generated but could not be posted to the chosen community. Check Overview → GHL KPI Reports.");
+    await notifyAdmins(companyId, "⚠️ The weekly KPI report was generated but could not be posted to the chosen community. Check Overview → GHL KPI Reports.");
     return { ok: false, error: "Could not post into the community." };
   }
   await notifyCommunityMembers(cfg.community_id, comm[0]?.name || "KPIs", cfg.connected_by || null);
   return { ok: true };
 }
 
-async function runWeekly(cfg: GhlCfg): Promise<{ ok: boolean; error?: string }> {
-  if (!ghlToken()) return { ok: false, error: "The GHL connection is missing on the server (GHL_PIT_TOKEN)." };
-  const now = new Date();
-  const w = computeWindows(now);
+// `asOf` pins the reported window to the moment the scheduler CLAIMED the
+// report — a long GHL pull crossing local midnight must not shift the
+// window away from the dedupe marker that was claimed for it.
+async function runWeekly(companyId: string, cfg: GhlCfg, asOf: Date = new Date()): Promise<{ ok: boolean; error?: string }> {
+  const notReady = readyError(cfg, companyId);
+  if (notReady) return { ok: false, error: notReady };
+  const conn = connOf(cfg, companyId)!;
+  const tz = tzOf(cfg);
+  const rate = rateOf(cfg);
+  const now = asOf;
+  const w = computeWindows(now, tz);
   let data;
   try {
-    data = await pullWeekData(cfg, w);
+    data = await pullWeekData(companyId, cfg, conn, w);
   } catch (e: any) {
     const msg = String(e?.message || e).slice(0, 300);
-    await notifyAdmins(`⚠️ The weekly KPI report could not pull data from GoHighLevel: ${msg}`);
+    await notifyAdmins(companyId, `⚠️ The weekly KPI report could not pull data from GoHighLevel: ${msg}`);
     return { ok: false, error: msg };
   }
   const weekDeals = dealsInRange(data.allDeals, w.weekStartMs, w.weekEndMs);
   const mtdDeals = dealsInRange(data.allDeals, w.mtdStartMs, now.getTime());
-  const weekComm = commissionByCloser(weekDeals);
-  const mtdComm = commissionByCloser(mtdDeals);
+  const weekComm = commissionByCloser(weekDeals, rate);
+  const mtdComm = commissionByCloser(mtdDeals, rate);
   const payload: WeeklyPayload = {
     week_start: w.weekStart, week_end: w.weekEnd,
     leads: data.leads,
+    setter_label: data.setter_label,
+    include_setter: data.include_setter,
     setter_calls_booked: data.setter_calls_booked,
     setter_calls_showed: data.setter_calls_showed,
     closing_calls_booked: data.closing_calls_booked,
     closing_calls_showed: data.closing_calls_showed,
-    closer_label: closersOf(cfg).map((c) => closerDisplay(c.name).split(" ")[0]).join(" + "),
+    closer_label: closersOf(cfg, companyId).map((c) => closerDisplay(c.name).split(" ")[0]).join(" + "),
+    commission_pct: pctLabel(rate),
     closed_deals: weekDeals.length,
     total_amount: weekDeals.reduce((s, d) => s + d.value, 0),
     commissions_by_closer: weekComm,
@@ -577,37 +691,41 @@ async function runWeekly(cfg: GhlCfg): Promise<{ ok: boolean; error?: string }> 
       total_commissions: mtdComm.reduce((s, c) => s + c.commission, 0),
     },
   };
-  const r = await postToCommunity(cfg, buildWeeklyMessage(payload));
+  const r = await postToCommunity(companyId, cfg, buildWeeklyMessage(payload));
   if (r.ok) {
     // Persist the raw payload for history (best-effort; the post already went).
-    await dbUpsertSetting(`ghl_kpi_hist:${w.weekStart}`, JSON.stringify(payload));
-    await persistCloserNames(cfg.closer_names || {});
+    await dbUpsertSetting(companyId, `ghl_kpi_hist:${w.weekStart}`, JSON.stringify(payload));
+    await persistCloserNames(companyId, cfg.closer_names || {});
   }
   return r;
 }
 
-async function runPayout(cfg: GhlCfg): Promise<{ ok: boolean; error?: string }> {
-  if (!ghlToken()) return { ok: false, error: "The GHL connection is missing on the server (GHL_PIT_TOKEN)." };
-  const now = new Date();
-  const pw = payoutWindow(now);
+async function runPayout(companyId: string, cfg: GhlCfg, asOf: Date = new Date()): Promise<{ ok: boolean; error?: string }> {
+  const notReady = readyError(cfg, companyId);
+  if (notReady) return { ok: false, error: notReady };
+  const conn = connOf(cfg, companyId)!;
+  const tz = tzOf(cfg);
+  const rate = rateOf(cfg);
+  const now = asOf;
+  const pw = payoutWindow(now, tz);
   let data;
   try {
-    data = await pullWeekData(cfg, computeWindows(now)); // reuse: allDeals is all-time
+    data = await pullWeekData(companyId, cfg, conn, computeWindows(now, tz)); // reuse: allDeals is all-time
   } catch (e: any) {
     const msg = String(e?.message || e).slice(0, 300);
-    await notifyAdmins(`⚠️ The monthly commission payout report could not pull data from GoHighLevel: ${msg}`);
+    await notifyAdmins(companyId, `⚠️ The monthly commission payout report could not pull data from GoHighLevel: ${msg}`);
     return { ok: false, error: msg };
   }
   const deals = dealsInRange(data.allDeals, pw.startMs, pw.endMs);
   const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
-  const r = await postToCommunity(cfg, buildPayoutMessage(pw.label, deals, payoutDay));
+  const r = await postToCommunity(companyId, cfg, buildPayoutMessage(pw.label, deals, payoutDay, rate));
   if (r.ok) {
-    await dbUpsertSetting(`ghl_kpi_payout:${dayIso(pw.startMs).slice(0, 7)}`, JSON.stringify({
+    await dbUpsertSetting(companyId, `ghl_kpi_payout:${dayIso(pw.startMs).slice(0, 7)}`, JSON.stringify({
       month: pw.label,
-      commissions_by_closer: commissionByCloser(deals),
+      commissions_by_closer: commissionByCloser(deals, rate),
       deals: deals.map((d) => ({ name: d.name, value: d.value, closer: d.closer, when: dayIso(d.whenMs) })),
     }));
-    await persistCloserNames(cfg.closer_names || {});
+    await persistCloserNames(companyId, cfg.closer_names || {});
   }
   return r;
 }
@@ -615,9 +733,9 @@ async function runPayout(cfg: GhlCfg): Promise<{ ok: boolean; error?: string }> 
 // Merge newly-resolved closer names into a FRESH copy of the config — the
 // long GHL pull means our in-memory cfg may be stale, and writing it back
 // whole would clobber markers or settings an admin changed mid-run.
-async function persistCloserNames(names: Record<string, string>): Promise<void> {
+async function persistCloserNames(companyId: string, names: Record<string, string>): Promise<void> {
   if (!Object.keys(names).length) return;
-  await mutateCfg((cfg) => {
+  await mutateCfg(companyId, (cfg) => {
     cfg.closer_names = { ...(cfg.closer_names || {}), ...names };
   });
 }
@@ -644,79 +762,106 @@ export function getGhlKpiHealth() {
   };
 }
 
+// Post-hour gate in the org's own time zone. Legacy configs stored a UTC
+// hour; honor it until the org saves a local hour.
+function hourGatePassed(cfg: GhlCfg, now: Date, tzHourNow: number): boolean {
+  if (Number.isInteger(cfg.hour_local) && cfg.hour_local! >= 0 && cfg.hour_local! <= 23) {
+    return tzHourNow >= cfg.hour_local!;
+  }
+  const legacy = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11;
+  return now.getUTCHours() >= legacy;
+}
+
+async function processOrg(companyId: string, cfg: GhlCfg): Promise<void> {
+  if (!cfg.weekly && !cfg.payout) return;
+  if (readyError(cfg, companyId)) return; // not fully set up yet — nothing to do
+  const now = new Date();
+  const tz = tzOf(cfg);
+  const parts = centralDateParts(now, tz);
+  if (!hourGatePassed(cfg, now, parts.hour)) return;
+
+  // Post day and payout day are judged on the ORG's calendar. Markers are
+  // org-tz based too: the weekly marker is the REPORTED WEEK's start date
+  // (not "today"), so crossing UTC midnight during one local day — or
+  // changing the post day mid-week — can never repost a week that already
+  // went out. The payout marker is the org-tz month.
+  const localToday = isoOf(parts.y, parts.m0, parts.d);
+  const localMonth = localToday.slice(0, 7);
+  const weekKey = computeWindows(now, tz).weekStart;
+  const weeklyDow = Number.isInteger(cfg.weekly_dow) && cfg.weekly_dow! >= 0 && cfg.weekly_dow! <= 6 ? cfg.weekly_dow! : 1;
+  const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
+  const due: Array<"weekly" | "payout"> = [];
+  if (cfg.weekly && parts.dow === weeklyDow && cfg.last_weekly !== weekKey) due.push("weekly");
+  if (cfg.payout && parts.d === payoutDay && cfg.last_payout !== localMonth) due.push("payout");
+  if (!due.length) return;
+
+  for (const kind of due) {
+    // Claim EACH report separately with its own CAS on fresh bytes — a
+    // shared claim would let one report's rollback resurrect (or erase)
+    // the other's marker when both land on the same day.
+    const row = await getCfgRow(companyId);
+    if (!row) return;
+    const freshCfg = row.cfg;
+    // Re-check the marker on fresh bytes (another instance may have run it).
+    if (kind === "weekly") {
+      if (!freshCfg.weekly || freshCfg.last_weekly === weekKey) continue;
+      freshCfg.last_weekly = weekKey;
+    } else {
+      if (!freshCfg.payout || freshCfg.last_payout === localMonth) continue;
+      freshCfg.last_payout = localMonth;
+    }
+    if (!(await casCfg(companyId, row.raw, freshCfg))) continue; // lost the claim — skip
+
+    // Pass the claim-time `now` so the reported window always matches the
+    // marker we just claimed, even if the GHL pull crosses local midnight.
+    const r = kind === "weekly" ? await runWeekly(companyId, freshCfg, now) : await runPayout(companyId, freshCfg, now);
+    logger.info({ companyId, kind, ok: r.ok, error: r.error }, "[GhlKpi] scheduled report");
+    if (!r.ok) {
+      health.lastPassOk = false;
+      health.lastError = `${companyId.slice(0, 8)}…: ${r.error || "report failed"}`;
+      // Roll only THIS report's marker back (up to 3 tries per day) so the
+      // next 15-min pass retries; admins were already alerted by the run.
+      await mutateCfg(companyId, (rollback) => {
+        const failKey = `fails_${kind}_${localToday}`;
+        const attempts = Number((rollback as any)[failKey] || 0) + 1;
+        (rollback as any)[failKey] = attempts;
+        if (attempts < 3) {
+          // Only roll back OUR OWN claim — if the marker has since moved to
+          // a different week/month (another instance or a later period),
+          // deleting it would let that other report post twice.
+          if (kind === "weekly" && rollback.last_weekly === weekKey) delete rollback.last_weekly;
+          if (kind === "payout" && rollback.last_payout === localMonth) delete rollback.last_payout;
+        }
+        for (const k of Object.keys(rollback)) {
+          if (k.startsWith("fails_") && !k.endsWith(localToday)) delete (rollback as any)[k];
+        }
+      });
+    }
+  }
+}
+
 async function processDue() {
   try {
-    const rows = await dbGet<any>(`admin_settings?company_id=eq.${EDEN_COMPANY_ID}&key=eq.ghl_kpi&select=value`);
+    const rows = await dbGet<any>(`admin_settings?key=eq.ghl_kpi&select=company_id,value`);
     health.lastPassAt = Date.now();
-    if (!rows[0]) { health.configured = false; health.lastPassOk = true; return; }
-    const rawStored = typeof rows[0].value === "string" ? rows[0].value : JSON.stringify(rows[0].value);
-    let cfg: GhlCfg = {};
-    try { cfg = JSON.parse(rawStored) || {}; } catch { /* keep empty */ }
-    health.configured = !!(cfg.community_id && (cfg.weekly || cfg.payout) && ghlToken());
     health.lastPassOk = true;
-    if (!health.configured) return;
-
-    const now = new Date();
-    const hour = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11;
-    if (now.getUTCHours() < hour) return;
-
-    // Post day and payout day are judged on the CENTRAL calendar — the team
-    // is in US Central time, and a UTC Monday starts Sunday evening for them.
-    // Markers are Central-based too: the weekly marker is the REPORTED WEEK's
-    // start date (not "today"), so crossing UTC midnight during one Central
-    // day — or changing the post day mid-week — can never repost a week that
-    // already went out. The payout marker is the Central month.
-    const central = centralDateParts(now);
-    const centralToday = isoOf(central.y, central.m0, central.d);
-    const centralMonth = centralToday.slice(0, 7);
-    const weekKey = computeWindows(now).weekStart;
-    const weeklyDow = Number.isInteger(cfg.weekly_dow) && cfg.weekly_dow! >= 0 && cfg.weekly_dow! <= 6 ? cfg.weekly_dow! : 1;
-    const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
-    const due: Array<"weekly" | "payout"> = [];
-    if (cfg.weekly && central.dow === weeklyDow && cfg.last_weekly !== weekKey) due.push("weekly");
-    if (cfg.payout && central.d === payoutDay && cfg.last_payout !== centralMonth) due.push("payout");
-    if (!due.length) return;
-
-    for (const kind of due) {
-      // Claim EACH report separately with its own CAS on fresh bytes — a
-      // shared claim would let one report's rollback resurrect (or erase)
-      // the other's marker when both land on the same day (Monday the 15th).
-      const freshRows = await dbGet<any>(`admin_settings?company_id=eq.${EDEN_COMPANY_ID}&key=eq.ghl_kpi&select=value`);
-      if (!freshRows[0]) return;
-      const freshRaw = typeof freshRows[0].value === "string" ? freshRows[0].value : JSON.stringify(freshRows[0].value);
-      let freshCfg: GhlCfg = {};
-      try { freshCfg = JSON.parse(freshRaw) || {}; } catch { continue; }
-      // Re-check the marker on fresh bytes (another instance may have run it).
-      if (kind === "weekly") {
-        if (!freshCfg.weekly || freshCfg.last_weekly === weekKey) continue;
-        freshCfg.last_weekly = weekKey;
-      } else {
-        if (!freshCfg.payout || freshCfg.last_payout === centralMonth) continue;
-        freshCfg.last_payout = centralMonth;
-      }
-      if (!(await casCfg(freshRaw, freshCfg))) continue; // lost the claim — skip
-
-      const r = kind === "weekly" ? await runWeekly(freshCfg) : await runPayout(freshCfg);
-      logger.info({ kind, ok: r.ok, error: r.error }, "[GhlKpi] scheduled report");
-      if (!r.ok) {
+    health.lastError = "";
+    let anyConfigured = false;
+    for (const row of rows) {
+      const companyId = String(row.company_id || "");
+      if (!companyId) continue;
+      let cfg: GhlCfg = {};
+      try { cfg = (typeof row.value === "string" ? JSON.parse(row.value) : row.value) || {}; } catch { continue; }
+      if ((cfg.weekly || cfg.payout) && !readyError(cfg, companyId)) anyConfigured = true;
+      try {
+        await processOrg(companyId, cfg);
+      } catch (e) {
         health.lastPassOk = false;
-        health.lastError = r.error || "report failed";
-        // Roll only THIS report's marker back (up to 3 tries per day) so the
-        // next 15-min pass retries; admins were already alerted by the run.
-        await mutateCfg((rollback) => {
-          const failKey = `fails_${kind}_${centralToday}`;
-          const attempts = Number((rollback as any)[failKey] || 0) + 1;
-          (rollback as any)[failKey] = attempts;
-          if (attempts < 3) {
-            if (kind === "weekly") delete rollback.last_weekly;
-            if (kind === "payout") delete rollback.last_payout;
-          }
-          for (const k of Object.keys(rollback)) {
-            if (k.startsWith("fails_") && !k.endsWith(centralToday)) delete (rollback as any)[k];
-          }
-        });
+        health.lastError = `${companyId.slice(0, 8)}…: ${String(e).slice(0, 150)}`;
+        logger.warn({ companyId, err: String(e) }, "[GhlKpi] org pass failed");
       }
     }
+    health.configured = anyConfigured;
   } catch (e) {
     health.lastPassOk = false;
     health.lastError = String(e).slice(0, 200);
@@ -729,39 +874,19 @@ export function startGhlKpiScheduler() {
   setInterval(processDue, 15 * 60 * 1000); // then every 15 minutes
 }
 
-// ── Routes (Eden super admins only) ─────────────────────────────
+// ── Routes (each org's super admins manage their own setup) ─────
 
 const router: IRouter = Router();
 
-async function requireEdenAdmin(req: Request, res: Response) {
+async function requireOrgAdmin(req: Request, res: Response) {
   const caller = await requireStaff(req);
   if (!caller) { res.status(401).json({ error: "Not authorized" }); return null; }
-  if (caller.role !== "super_admin" || caller.company_id !== EDEN_COMPANY_ID) {
-    res.status(403).json({ error: "Only Eden admins can manage KPI reports" });
+  if (caller.role !== "super_admin" || !caller.company_id) {
+    res.status(403).json({ error: "Only organization admins can manage KPI reports" });
     return null;
   }
   return caller;
 }
-
-router.get("/ghl-kpi/status", async (req: Request, res: Response) => {
-  try {
-    const caller = await requireEdenAdmin(req, res);
-    if (!caller) return;
-    const cfg = await getCfg();
-    res.json({
-      ok: true,
-      connected: !!ghlToken(),
-      community_id: cfg.community_id || null,
-      community_name: cfg.community_name || null,
-      weekly: !!cfg.weekly,
-      payout: !!cfg.payout,
-      hour: Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11,
-      weekly_dow: Number.isInteger(cfg.weekly_dow) && cfg.weekly_dow! >= 0 && cfg.weekly_dow! <= 6 ? cfg.weekly_dow : 1,
-      payout_day: Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day : 15,
-      closers: closersOf(cfg),
-    });
-  } catch { res.status(500).json({ error: "Status check failed" }); }
-});
 
 // Strict integer parsing — Number("") is 0, which would silently turn a
 // malformed empty input into "Sunday" or "midnight".
@@ -771,25 +896,139 @@ const intParam = (v: any): number | null => {
   return null;
 };
 
+router.get("/ghl-kpi/status", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireOrgAdmin(req, res);
+    if (!caller) return;
+    const cid = caller.company_id;
+    const cfg = await getCfg(cid);
+    const tz = tzOf(cfg);
+    // Present a local hour even for legacy UTC-hour configs.
+    let hourLocal = Number.isInteger(cfg.hour_local) ? Number(cfg.hour_local) : null;
+    if (hourLocal === null) {
+      const legacyUtc = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11;
+      const probe = new Date();
+      probe.setUTCHours(legacyUtc, 30, 0, 0);
+      hourLocal = centralDateParts(probe, tz).hour;
+    }
+    res.json({
+      ok: true,
+      is_eden: isEden(cid),
+      connected: !!connOf(cfg, cid),
+      location_id: isEden(cid) ? null : (cfg.location_id || null),
+      community_id: cfg.community_id || null,
+      community_name: cfg.community_name || null,
+      weekly: !!cfg.weekly,
+      payout: !!cfg.payout,
+      tz,
+      hour_local: hourLocal,
+      weekly_dow: Number.isInteger(cfg.weekly_dow) && cfg.weekly_dow! >= 0 && cfg.weekly_dow! <= 6 ? cfg.weekly_dow : 1,
+      payout_day: Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day : 15,
+      lead_pipelines: leadPipelinesOf(cfg, cid),
+      closed_stages: closedStagesOf(cfg, cid),
+      setter_calendar: setterOf(cfg, cid),
+      closers: closersOf(cfg, cid),
+      commission_pct: Math.round(rateOf(cfg) * 1000) / 10,
+      ready_error: readyError(cfg, cid),
+    });
+  } catch { res.status(500).json({ error: "Status check failed" }); }
+});
+
+// White-label orgs connect their own GHL location. Validated live before
+// saving; the token is stored encrypted.
+router.post("/ghl-kpi/connect", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireOrgAdmin(req, res);
+    if (!caller) return;
+    if (isEden(caller.company_id)) { res.status(400).json({ error: "Eden's GHL connection is built in" }); return; }
+    const token = String(req.body?.token || "").trim();
+    const locationId = String(req.body?.locationId || "").trim();
+    if (!token || token.length < 20) { res.status(400).json({ error: "Paste the Private Integration Token from GoHighLevel" }); return; }
+    if (!locationId || !/^[A-Za-z0-9]{10,40}$/.test(locationId)) { res.status(400).json({ error: "Paste your GHL Location ID (Settings → Business Profile)" }); return; }
+    // Prove the pair works before saving anything.
+    try {
+      await ghlGet({ token, locationId }, `/opportunities/pipelines?locationId=${locationId}`);
+    } catch (e: any) {
+      res.status(400).json({ error: `GoHighLevel rejected that token/location: ${String(e?.message || e).slice(0, 160)}` });
+      return;
+    }
+    const enc = encToken(token);
+    const saved = await mutateCfg(caller.company_id, (cfg) => {
+      cfg.token_enc = enc;
+      cfg.location_id = locationId;
+      if (!cfg.connected_by) cfg.connected_by = caller.id;
+    });
+    if (!saved) { res.status(502).json({ error: "Could not save the connection" }); return; }
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Could not connect" }); }
+});
+
+router.post("/ghl-kpi/disconnect", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireOrgAdmin(req, res);
+    if (!caller) return;
+    if (isEden(caller.company_id)) { res.status(400).json({ error: "Eden's GHL connection is built in" }); return; }
+    const saved = await mutateCfg(caller.company_id, (cfg) => {
+      delete cfg.token_enc;
+      delete cfg.location_id;
+      cfg.weekly = false;
+      cfg.payout = false;
+    });
+    if (!saved) { res.status(502).json({ error: "Could not disconnect" }); return; }
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Could not disconnect" }); }
+});
+
+// Everything the setup pickers need: the org's pipelines (with stages) and
+// active calendars, straight from their GHL account.
+router.get("/ghl-kpi/options", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireOrgAdmin(req, res);
+    if (!caller) return;
+    const cfg = await getCfg(caller.company_id);
+    const conn = connOf(cfg, caller.company_id);
+    if (!conn) { res.status(400).json({ error: "Connect GoHighLevel first" }); return; }
+    const [pb, cb] = await Promise.all([
+      ghlGet(conn, `/opportunities/pipelines?locationId=${conn.locationId}`),
+      ghlGet(conn, `/calendars/?locationId=${conn.locationId}`),
+    ]);
+    const pipelines = (Array.isArray(pb?.pipelines) ? pb.pipelines : []).map((p: any) => ({
+      name: String(p.name || ""),
+      stages: (Array.isArray(p.stages) ? p.stages : []).map((s: any) => String(s.name || "")).filter(Boolean),
+    })).filter((p: any) => p.name);
+    const calendars = (Array.isArray(cb?.calendars) ? cb.calendars : [])
+      .filter((c: any) => c?.isActive !== false)
+      .map((c: any) => ({ id: String(c.id), name: String(c.name || c.id) }))
+      .sort((a: any, b2: any) => a.name.localeCompare(b2.name));
+    res.json({ ok: true, pipelines, calendars });
+  } catch { res.status(502).json({ error: "Could not load your GoHighLevel setup" }); }
+});
+
 router.post("/ghl-kpi/settings", async (req: Request, res: Response) => {
   try {
-    const caller = await requireEdenAdmin(req, res);
+    const caller = await requireOrgAdmin(req, res);
     if (!caller) return;
+    const cid = caller.company_id;
     // Validate everything up front, then apply as a field-merge under CAS so
     // an admin save can never clobber a scheduler's just-claimed marker.
     const setters: Array<(cfg: GhlCfg) => void> = [];
     const communityId = String(req.body?.communityId || "").trim();
     if (communityId) {
-      const rows = await dbGet<any>(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${EDEN_COMPANY_ID}&is_active=eq.true&select=id,name`);
+      const rows = await dbGet<any>(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${encodeURIComponent(cid)}&is_active=eq.true&select=id,name`);
       if (!rows[0]) { res.status(400).json({ error: "That community wasn't found" }); return; }
       setters.push((cfg) => { cfg.community_id = rows[0].id; cfg.community_name = rows[0].name; });
     }
     if (req.body?.weekly !== undefined) { const v = !!req.body.weekly; setters.push((cfg) => { cfg.weekly = v; }); }
     if (req.body?.payout !== undefined) { const v = !!req.body.payout; setters.push((cfg) => { cfg.payout = v; }); }
-    if (req.body?.hour !== undefined) {
-      const h = intParam(req.body.hour);
+    if (req.body?.tz !== undefined) {
+      const tz = validTz(req.body.tz);
+      if (!tz) { res.status(400).json({ error: "That time zone isn't recognized" }); return; }
+      setters.push((cfg) => { cfg.tz = tz; });
+    }
+    if (req.body?.hourLocal !== undefined) {
+      const h = intParam(req.body.hourLocal);
       if (h === null || h < 0 || h > 23) { res.status(400).json({ error: "Post hour must be 0–23" }); return; }
-      setters.push((cfg) => { cfg.hour = h; });
+      setters.push((cfg) => { cfg.hour_local = h; delete cfg.hour; });
     }
     if (req.body?.weeklyDow !== undefined) {
       const d = intParam(req.body.weeklyDow);
@@ -800,6 +1039,42 @@ router.post("/ghl-kpi/settings", async (req: Request, res: Response) => {
       const d = intParam(req.body.payoutDay);
       if (d === null || d < 1 || d > 28) { res.status(400).json({ error: "Payout day must be 1–28" }); return; }
       setters.push((cfg) => { cfg.payout_day = d; });
+    }
+    if (req.body?.commissionPct !== undefined) {
+      const p = Number(req.body.commissionPct);
+      if (!Number.isFinite(p) || p <= 0 || p > 100) { res.status(400).json({ error: "Commission must be between 0 and 100 percent" }); return; }
+      const rate = Math.round(p * 10) / 1000; // one decimal of a percent
+      setters.push((cfg) => { cfg.commission_rate = rate; });
+    }
+    if (req.body?.leadPipelines !== undefined) {
+      if (!Array.isArray(req.body.leadPipelines) || req.body.leadPipelines.length > 25) { res.status(400).json({ error: "Bad pipeline list" }); return; }
+      const names = [...new Set(req.body.leadPipelines.map((n: any) => String(n || "").trim().slice(0, 120)).filter(Boolean))] as string[];
+      if (!names.length) { res.status(400).json({ error: "Keep at least one lead pipeline" }); return; }
+      setters.push((cfg) => { cfg.lead_pipelines = names; });
+    }
+    if (req.body?.closedStages !== undefined) {
+      if (!Array.isArray(req.body.closedStages) || req.body.closedStages.length > 40) { res.status(400).json({ error: "Bad stage list" }); return; }
+      const seen = new Set<string>();
+      const stages: Array<{ pipeline: string; stage: string }> = [];
+      for (const s of req.body.closedStages) {
+        const pipeline = String(s?.pipeline || "").trim().slice(0, 120);
+        const stage = String(s?.stage || "").trim().slice(0, 120);
+        const key = `${pipeline}::${stage}`.toLowerCase();
+        if (!pipeline || !stage || seen.has(key)) continue;
+        seen.add(key);
+        stages.push({ pipeline, stage });
+      }
+      setters.push((cfg) => { cfg.closed_stages = stages; });
+    }
+    if (req.body?.setterCalendar !== undefined) {
+      const v = req.body.setterCalendar;
+      if (v === null || v === "") {
+        setters.push((cfg) => { cfg.setter_calendar = null; });
+      } else {
+        const id = String(v?.id || "").trim(), name = String(v?.name || "").trim().slice(0, 100);
+        if (!id || !name) { res.status(400).json({ error: "Bad setter calendar" }); return; }
+        setters.push((cfg) => { cfg.setter_calendar = { id, name }; });
+      }
     }
     if (req.body?.closers !== undefined) {
       if (!Array.isArray(req.body.closers) || req.body.closers.length > 15) { res.status(400).json({ error: "Bad closer list" }); return; }
@@ -812,17 +1087,20 @@ router.post("/ghl-kpi/settings", async (req: Request, res: Response) => {
         cleaned.push({ id, name });
       }
       if (!cleaned.length) { res.status(400).json({ error: "Keep at least one closer calendar on the list" }); return; }
-      cfg_closers: {
-        // Only accept ids that are real calendars on this GHL location.
-        const b = await ghlGet(`/calendars/?locationId=${LOCATION_ID}`).catch(() => null);
+      // Only accept ids that are real calendars on this org's GHL location.
+      const cfgNow = await getCfg(cid);
+      const conn = connOf(cfgNow, cid);
+      if (conn) {
+        const b = await ghlGet(conn, `/calendars/?locationId=${conn.locationId}`).catch(() => null);
         const valid = new Set(((b?.calendars || []) as any[]).map((c) => String(c.id)));
-        if (valid.size === 0) break cfg_closers; // GHL unreachable — don't block the save
-        const unknown = cleaned.filter((c) => !valid.has(c.id));
-        if (unknown.length) { res.status(400).json({ error: "One of those calendars no longer exists in GoHighLevel" }); return; }
+        if (valid.size > 0) {
+          const unknown = cleaned.filter((c) => !valid.has(c.id));
+          if (unknown.length) { res.status(400).json({ error: "One of those calendars no longer exists in GoHighLevel" }); return; }
+        }
       }
       setters.push((cfg) => { cfg.closers = cleaned; });
     }
-    const saved = await mutateCfg((cfg) => {
+    const saved = await mutateCfg(cid, (cfg) => {
       for (const s of setters) s(cfg);
       if (!cfg.connected_by) cfg.connected_by = caller.id;
     });
@@ -831,34 +1109,16 @@ router.post("/ghl-kpi/settings", async (req: Request, res: Response) => {
   } catch { res.status(500).json({ error: "Could not save settings" }); }
 });
 
-// List the location's active GHL calendars so admins can add/remove closer
-// calendars by name instead of typing IDs.
-router.get("/ghl-kpi/calendars", async (req: Request, res: Response) => {
-  try {
-    const caller = await requireEdenAdmin(req, res);
-    if (!caller) return;
-    const b = await ghlGet(`/calendars/?locationId=${LOCATION_ID}`);
-    const cals: any[] = Array.isArray(b?.calendars) ? b.calendars : [];
-    res.json({
-      ok: true,
-      calendars: cals
-        .filter((c) => c?.isActive !== false)
-        .map((c) => ({ id: String(c.id), name: String(c.name || c.id) }))
-        .sort((a, b2) => a.name.localeCompare(b2.name)),
-    });
-  } catch { res.status(502).json({ error: "Could not load calendars from GoHighLevel" }); }
-});
-
 // Post a report right now — lets the user test without waiting for the scheduled day.
 router.post("/ghl-kpi/run-now", async (req: Request, res: Response) => {
   try {
-    const caller = await requireEdenAdmin(req, res);
+    const caller = await requireOrgAdmin(req, res);
     if (!caller) return;
     const kind = String(req.body?.kind || "weekly");
     if (!["weekly", "payout"].includes(kind)) { res.status(400).json({ error: "Bad report kind" }); return; }
-    const cfg = await getCfg();
+    const cfg = await getCfg(caller.company_id);
     if (!cfg.connected_by) cfg.connected_by = caller.id;
-    const r = kind === "weekly" ? await runWeekly(cfg) : await runPayout(cfg);
+    const r = kind === "weekly" ? await runWeekly(caller.company_id, cfg) : await runPayout(caller.company_id, cfg);
     if (!r.ok) { res.status(400).json({ error: r.error || "Report failed" }); return; }
     res.json({ ok: true });
   } catch { res.status(500).json({ error: "Could not run the report" }); }
