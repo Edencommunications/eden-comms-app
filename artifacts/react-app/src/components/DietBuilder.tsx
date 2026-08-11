@@ -304,6 +304,7 @@ const SUPP_DB = {
     {name:'L-Carnitine', dose:'3g / day', directions:'', code:'TOGNIETTI10', link:'https://nuethix.com/collections/supplements/products/liposomal-l-carnitine?variant=40741984305314'},
   ],
   'Extra Supplements':[
+    {name:'PHGG (Partially Hydrolyzed Guar Gum)', dose:'1 scoop (6g) daily in water or any beverage', directions:'Prebiotic fiber — start with 1/2 scoop for the first week if new to fiber supplements.', code:'', link:'https://www.amazon.com/Perfect-Prebiotic-Partially-Hydrolyzed-Powder/dp/B00WHJRREY'},
     {name:'Potassium Iodide', dose:'', directions:'', code:'', link:'https://www.amazon.com/Nutricost-Potassium-Capsules-Serving-Vegetarian/dp/B0B2XB4V43?th=1'},
     {name:'Iodoral', dose:'', directions:'', code:'', link:'https://www.amazon.com/Optimox-Iodoral-Potency-Potassium-Supplement/dp/B005MKP9OK?th=1'},
     {name:'Horny Goat Weed', dose:'', directions:'', code:'', link:'https://www.amazon.com/Capsules-Minimum-Icariin-Epimedium-brevicornum/dp/B09XG7GQGZ?th=1'},
