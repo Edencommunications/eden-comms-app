@@ -42,7 +42,8 @@ const CLOSED_STAGES: Array<{ pipeline: string; stage: string }> = [
   { pipeline: "Clients", stage: "Scale" },
 ];
 const SETTER_CALENDAR = { id: "1z14MTqpliMfJXqIWwd5", name: "Complimentary Call" };
-const CLOSER_CALENDARS = [
+// Default closer calendars — used only until admins customize the list.
+const DEFAULT_CLOSER_CALENDARS = [
   { id: "XRg1BpwuMU53M1moK62C", name: "Lauren Sedlar Calendar" },
   { id: "NeVnLNtJd5L98Mc2fhtl", name: "Martin Nwakamma Calendar" },
 ];
@@ -86,14 +87,28 @@ async function dbUpsertSetting(key: string, value: string): Promise<boolean> {
 type GhlCfg = {
   community_id?: string | null;
   community_name?: string | null;
-  weekly?: boolean;          // Monday weekly KPI report on/off
-  payout?: boolean;          // 15th-of-month commission payout report on/off
+  weekly?: boolean;          // weekly KPI report on/off
+  payout?: boolean;          // monthly commission payout report on/off
   hour?: number;             // UTC hour reports post at (default 11 ≈ 6am CT)
+  weekly_dow?: number;       // Central weekday for the weekly post (0=Sun … 6=Sat, default 1=Mon)
+  payout_day?: number;       // Central day-of-month for the payout post (1–28, default 15)
+  closers?: Array<{ id: string; name: string }>; // closer calendars (default Lauren + Martin)
   last_weekly?: string;      // YYYY-MM-DD marker
   last_payout?: string;      // YYYY-MM marker
   closer_names?: Record<string, string>; // GHL userId → display name cache
   connected_by?: string | null;
 };
+
+// Closer calendar list — customizable, falls back to the built-in default.
+export function closersOf(cfg: GhlCfg): Array<{ id: string; name: string }> {
+  const list = Array.isArray(cfg.closers)
+    ? cfg.closers.filter((c) => c && typeof c.id === "string" && c.id.trim())
+    : [];
+  return list.length ? list : DEFAULT_CLOSER_CALENDARS;
+}
+// Human display name for a closer calendar ("Lauren Sedlar Calendar" → "Lauren Sedlar").
+const closerDisplay = (name: string) =>
+  String(name || "").replace(/\s*calendar\s*$/i, "").trim() || name;
 
 async function getCfg(): Promise<GhlCfg> {
   const rows = await dbGet<any>(
@@ -310,6 +325,7 @@ export type WeeklyPayload = {
   leads: number;
   setter_calls_booked: number; setter_calls_showed: number;
   closing_calls_booked: number; closing_calls_showed: number;
+  closer_label?: string;   // e.g. "Lauren + Martin" — from the configured closer calendars
   closed_deals: number; total_amount: number;
   commissions_by_closer: Array<{ name: string; sales: number; commission: number; deals: number }>;
   total_commissions: number;
@@ -329,7 +345,7 @@ export function buildWeeklyMessage(p: WeeklyPayload): string {
     `• Booked: ${p.setter_calls_booked}`,
     `• Showed: ${p.setter_calls_showed}`,
     "",
-    "🤝 CLOSING CALLS (Lauren + Martin)",
+    `🤝 CLOSING CALLS${p.closer_label ? ` (${p.closer_label})` : ""}`,
     `• Booked: ${p.closing_calls_booked}`,
     `• Showed: ${p.closing_calls_showed}`,
     "",
@@ -355,13 +371,14 @@ export function buildWeeklyMessage(p: WeeklyPayload): string {
   return lines.join("\n");
 }
 
-export function buildPayoutMessage(label: string, deals: Deal[]): string {
+export function buildPayoutMessage(label: string, deals: Deal[], payoutDay = 15): string {
   const byCloser = commissionByCloser(deals);
   const total = byCloser.reduce((s, c) => s + c.commission, 0);
   const sales = byCloser.reduce((s, c) => s + c.sales, 0);
+  const suffix = payoutDay === 1 ? "st" : payoutDay === 2 ? "nd" : payoutDay === 3 ? "rd" : payoutDay === 21 ? "st" : payoutDay === 22 ? "nd" : payoutDay === 23 ? "rd" : "th";
   const lines = [
     "💵 COMMISSION PAYOUT REPORT",
-    `For ${label} closes — payable on the 15th`,
+    `For ${label} closes — payable on the ${payoutDay}${suffix}`,
     "━━━━━━━━━━━━━━━",
     "",
   ];
@@ -430,7 +447,7 @@ async function pullWeekData(cfg: GhlCfg, w: Windows) {
   // 2–3. Appointments.
   const setterEvents = await fetchCalendarEvents(SETTER_CALENDAR.id, w.weekStartMs, w.weekEndMs);
   let closingBooked = 0, closingShowed = 0;
-  for (const cal of CLOSER_CALENDARS) {
+  for (const cal of closersOf(cfg)) {
     const evs = await fetchCalendarEvents(cal.id, w.weekStartMs, w.weekEndMs);
     closingBooked += evs.filter(isBooked).length;
     closingShowed += evs.filter(isShowed).length;
@@ -523,6 +540,7 @@ async function runWeekly(cfg: GhlCfg): Promise<{ ok: boolean; error?: string }> 
     setter_calls_showed: data.setter_calls_showed,
     closing_calls_booked: data.closing_calls_booked,
     closing_calls_showed: data.closing_calls_showed,
+    closer_label: closersOf(cfg).map((c) => closerDisplay(c.name).split(" ")[0]).join(" + "),
     closed_deals: weekDeals.length,
     total_amount: weekDeals.reduce((s, d) => s + d.value, 0),
     commissions_by_closer: weekComm,
@@ -557,7 +575,8 @@ async function runPayout(cfg: GhlCfg): Promise<{ ok: boolean; error?: string }> 
     return { ok: false, error: msg };
   }
   const deals = dealsInRange(data.allDeals, pw.startMs, pw.endMs);
-  const r = await postToCommunity(cfg, buildPayoutMessage(pw.label, deals));
+  const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
+  const r = await postToCommunity(cfg, buildPayoutMessage(pw.label, deals, payoutDay));
   if (r.ok) {
     await dbUpsertSetting(`ghl_kpi_payout:${dayIso(pw.startMs).slice(0, 7)}`, JSON.stringify({
       month: pw.label,
@@ -619,12 +638,14 @@ async function processDue() {
     const hour = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11;
     if (now.getUTCHours() < hour) return;
 
-    // "Monday" and "the 15th" are judged on the CENTRAL calendar — the team
+    // Post day and "the 15th" are judged on the CENTRAL calendar — the team
     // is in US Central time, and a UTC Monday starts Sunday evening for them.
     const central = centralDateParts(now);
+    const weeklyDow = Number.isInteger(cfg.weekly_dow) && cfg.weekly_dow! >= 0 && cfg.weekly_dow! <= 6 ? cfg.weekly_dow! : 1;
+    const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
     const due: Array<"weekly" | "payout"> = [];
-    if (cfg.weekly && central.dow === 1 && cfg.last_weekly !== todayStr) due.push("weekly");
-    if (cfg.payout && central.d === 15 && cfg.last_payout !== monthStr) due.push("payout");
+    if (cfg.weekly && central.dow === weeklyDow && cfg.last_weekly !== todayStr) due.push("weekly");
+    if (cfg.payout && central.d === payoutDay && cfg.last_payout !== monthStr) due.push("payout");
     if (!due.length) return;
 
     for (const kind of due) {
@@ -706,6 +727,9 @@ router.get("/ghl-kpi/status", async (req: Request, res: Response) => {
       weekly: !!cfg.weekly,
       payout: !!cfg.payout,
       hour: Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11,
+      weekly_dow: Number.isInteger(cfg.weekly_dow) && cfg.weekly_dow! >= 0 && cfg.weekly_dow! <= 6 ? cfg.weekly_dow : 1,
+      payout_day: Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day : 15,
+      closers: closersOf(cfg),
     });
   } catch { res.status(500).json({ error: "Status check failed" }); }
 });
@@ -729,13 +753,54 @@ router.post("/ghl-kpi/settings", async (req: Request, res: Response) => {
       if (!Number.isInteger(h) || h < 0 || h > 23) { res.status(400).json({ error: "Post hour must be 0–23" }); return; }
       cfg.hour = h;
     }
+    if (req.body?.weeklyDow !== undefined) {
+      const d = Number(req.body.weeklyDow);
+      if (!Number.isInteger(d) || d < 0 || d > 6) { res.status(400).json({ error: "Weekly post day must be 0 (Sunday) to 6 (Saturday)" }); return; }
+      cfg.weekly_dow = d;
+    }
+    if (req.body?.payoutDay !== undefined) {
+      const d = Number(req.body.payoutDay);
+      if (!Number.isInteger(d) || d < 1 || d > 28) { res.status(400).json({ error: "Payout day must be 1–28" }); return; }
+      cfg.payout_day = d;
+    }
+    if (req.body?.closers !== undefined) {
+      if (!Array.isArray(req.body.closers) || req.body.closers.length > 15) { res.status(400).json({ error: "Bad closer list" }); return; }
+      const cleaned: Array<{ id: string; name: string }> = [];
+      const seen = new Set<string>();
+      for (const c of req.body.closers) {
+        const id = String(c?.id || "").trim(), name = String(c?.name || "").trim().slice(0, 100);
+        if (!id || !name || seen.has(id)) continue;
+        seen.add(id);
+        cleaned.push({ id, name });
+      }
+      if (!cleaned.length) { res.status(400).json({ error: "Keep at least one closer calendar on the list" }); return; }
+      cfg.closers = cleaned;
+    }
     if (!cfg.connected_by) cfg.connected_by = caller.id;
     if (!(await saveCfg(cfg))) { res.status(502).json({ error: "Could not save settings" }); return; }
     res.json({ ok: true });
   } catch { res.status(500).json({ error: "Could not save settings" }); }
 });
 
-// Post a report right now — lets the user test without waiting for Monday.
+// List the location's active GHL calendars so admins can add/remove closer
+// calendars by name instead of typing IDs.
+router.get("/ghl-kpi/calendars", async (req: Request, res: Response) => {
+  try {
+    const caller = await requireEdenAdmin(req, res);
+    if (!caller) return;
+    const b = await ghlGet(`/calendars/?locationId=${LOCATION_ID}`);
+    const cals: any[] = Array.isArray(b?.calendars) ? b.calendars : [];
+    res.json({
+      ok: true,
+      calendars: cals
+        .filter((c) => c?.isActive !== false)
+        .map((c) => ({ id: String(c.id), name: String(c.name || c.id) }))
+        .sort((a, b2) => a.name.localeCompare(b2.name)),
+    });
+  } catch { res.status(502).json({ error: "Could not load calendars from GoHighLevel" }); }
+});
+
+// Post a report right now — lets the user test without waiting for the scheduled day.
 router.post("/ghl-kpi/run-now", async (req: Request, res: Response) => {
   try {
     const caller = await requireEdenAdmin(req, res);

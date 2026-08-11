@@ -4238,6 +4238,17 @@ const AdminDashboard = ({ user }:any) => {
     setGhlKpiBusy(false);
     setTimeout(() => setGhlKpiMsg(m => m === '✅ Saved' ? '' : m), 3000);
   };
+  const [ghlKpiCals, setGhlKpiCals] = useState<any[]|null>(null); // GHL calendars, loaded on demand
+  const loadGhlKpiCals = async () => {
+    if (ghlKpiCals !== null) return;
+    setGhlKpiCals([]);
+    try {
+      const r = await fetch('/api/ghl-kpi/calendars', { headers: { Authorization: sbBearer() } });
+      const d = await r.json().catch(() => null);
+      if (r.ok && Array.isArray(d?.calendars)) setGhlKpiCals(d.calendars);
+      else { setGhlKpiCals(null); setGhlKpiMsg('⚠️ Could not load calendars from GoHighLevel'); }
+    } catch { setGhlKpiCals(null); setGhlKpiMsg('⚠️ Could not load calendars from GoHighLevel'); }
+  };
   const ghlKpiRunNow = async (kind:string) => {
     setGhlKpiBusy(true); setGhlKpiMsg('');
     try {
@@ -4475,7 +4486,7 @@ const AdminDashboard = ({ user }:any) => {
                 ) : (
                   <>
                     <p style={{ fontSize:12, color:"#4FD89A", margin:"0 0 10px", lineHeight:1.5 }}>
-                      ✅ Connected to GoHighLevel. Every Monday: leads, setter + closing calls, closed deals, and 15% closer commissions (weekly + month-to-date). On the 15th: last month's commission payout report.
+                      ✅ Connected to GoHighLevel. Weekly: leads, setter + closing calls, closed deals, and 15% closer commissions (weekly + month-to-date). Monthly: last month's commission payout report.
                     </p>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                       <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post reports into</span>
@@ -4487,7 +4498,7 @@ const AdminDashboard = ({ user }:any) => {
                       </select>
                     </div>
                     <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:10 }}>
-                      {[['weekly','Weekly KPIs (Mondays)'],['payout','Payout report (the 15th)']].map(([k, label]) => (
+                      {[['weekly','Weekly KPI report'],['payout','Monthly payout report']].map(([k, label]) => (
                         <label key={k} style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
                           <input type="checkbox" checked={!!ghlKpi[k]} disabled={ghlKpiBusy || !ghlKpi.community_id}
                             onChange={e => ghlKpiSave({ [k]: e.target.checked })}/>
@@ -4496,6 +4507,20 @@ const AdminDashboard = ({ user }:any) => {
                       ))}
                     </div>
                     {!ghlKpi.community_id && <p style={{ fontSize:11, color:"#ffa600", margin:"0 0 10px" }}>Pick a community above to turn reports on.</p>}
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Weekly post day</span>
+                      <select disabled={ghlKpiBusy} value={Number.isInteger(Number(ghlKpi.weekly_dow)) ? Number(ghlKpi.weekly_dow) : 1}
+                        onChange={e => ghlKpiSave({ weeklyDow: Number(e.target.value) })}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
+                        {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d, i) => <option key={i} value={i}>{d}</option>)}
+                      </select>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Payout day</span>
+                      <select disabled={ghlKpiBusy} value={Number.isInteger(Number(ghlKpi.payout_day)) ? Number(ghlKpi.payout_day) : 15}
+                        onChange={e => ghlKpiSave({ payoutDay: Number(e.target.value) })}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
+                        {Array.from({ length: 28 }, (_, i) => <option key={i+1} value={i+1}>the {i+1}{[1,21].includes(i+1) ? 'st' : [2,22].includes(i+1) ? 'nd' : [3,23].includes(i+1) ? 'rd' : 'th'} of the month</option>)}
+                      </select>
+                    </div>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                       <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post time</span>
                       <select disabled={ghlKpiBusy}
@@ -4507,6 +4532,33 @@ const AdminDashboard = ({ user }:any) => {
                         ))}
                       </select>
                       <span style={{ fontSize:11, color:B.muted }}>your local time · weekly covers the previous Mon–Sun</span>
+                    </div>
+                    <div style={{ marginBottom:10 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Closers</span>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6, alignItems:"center" }}>
+                        {(ghlKpi.closers || []).map((c:any) => (
+                          <span key={c.id} style={{ display:"inline-flex", alignItems:"center", gap:6, background:B.surface, border:`1px solid ${B.border}`, borderRadius:20, padding:"4px 6px 4px 12px", fontSize:12, color:B.text }}>
+                            {String(c.name).replace(/\s*calendar\s*$/i, '')}
+                            <button disabled={ghlKpiBusy || (ghlKpi.closers || []).length <= 1}
+                              onClick={() => ghlKpiSave({ closers: (ghlKpi.closers || []).filter((x:any) => x.id !== c.id) })}
+                              title={(ghlKpi.closers || []).length <= 1 ? 'Keep at least one closer' : 'Remove this closer'}
+                              style={{ background:"none", border:"none", color:B.muted, cursor:(ghlKpi.closers || []).length <= 1 ? 'not-allowed' : 'pointer', fontSize:14, lineHeight:1, padding:"0 4px" }}>✕</button>
+                          </span>
+                        ))}
+                        <select disabled={ghlKpiBusy} value=""
+                          onFocus={loadGhlKpiCals} onMouseDown={loadGhlKpiCals}
+                          onChange={e => {
+                            const cal = (ghlKpiCals || []).find((c:any) => c.id === e.target.value);
+                            if (cal && !(ghlKpi.closers || []).some((x:any) => x.id === cal.id)) ghlKpiSave({ closers: [...(ghlKpi.closers || []), { id: cal.id, name: cal.name }] });
+                          }}
+                          style={{ background:B.surface, border:`1px dashed ${B.border}`, borderRadius:20, padding:"5px 10px", color:B.muted, fontSize:12, outline:"none", cursor:"pointer", maxWidth:220 }}>
+                          <option value="">＋ Add a closer…</option>
+                          {(ghlKpiCals || []).filter((c:any) => !(ghlKpi.closers || []).some((x:any) => x.id === c.id)).map((c:any) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <p style={{ fontSize:11, color:B.muted, margin:"6px 0 0" }}>Each closer is tracked by their GHL calendar — pick the person's calendar from the list.</p>
                     </div>
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                       <Btn variant="secondary" onClick={() => ghlKpiRunNow('weekly')} disabled={ghlKpiBusy || !ghlKpi.community_id}>{ghlKpiBusy ? 'Working…' : 'Post a test report now'}</Btn>
