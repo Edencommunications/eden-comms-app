@@ -35,6 +35,7 @@ const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const EDEN_COMPANY_ID = "b0000000-0000-0000-0000-000000000001";
 const GHL_BASE = "https://services.leadconnectorhq.com";
+
 const EDEN_LOCATION_ID = "kuKtKnNy2D1k5hVocBdJ";
 const isEden = (cid: string) => cid === EDEN_COMPANY_ID;
 
@@ -405,9 +406,17 @@ export function payoutWindow(now: Date, tz: string = CENTRAL_TZ): { label: strin
   };
 }
 
-export type Deal = { id: string; name: string; value: number; closer: string; whenMs: number };
+export type Deal = { id: string; name: string; value: number; closer: string; whenMs: number; contactId: string };
 
-// Deals whose closed-stage entry falls inside [startMs, endMs).
+export type GhlTransaction = {
+  id: string;
+  contactId: string;
+  amount: number;          // in whole dollars (GHL returns dollars, not cents)
+  amountRefunded: number;  // partial-refund amount on a succeeded tx
+  status: "succeeded" | "refunded" | "failed" | string;
+  createdAt: string;       // ISO — when the payment was made
+  updatedAt: string;       // ISO — when last updated (i.e. when refund was issued)
+};
 export function dealsInRange(deals: Deal[], startMs: number, endMs: number): Deal[] {
   return deals.filter((d) => d.whenMs >= startMs && d.whenMs < endMs);
 }
@@ -423,6 +432,12 @@ export function commissionByCloser(deals: Deal[], rate: number = DEFAULT_RATE): 
     .sort((a, b) => b.sales - a.sales);
 }
 
+export type CashCloserRow = {
+  name: string;
+  collected: number;        // net cash in period (can be negative on heavy refunds)
+  commission: number;       // collected × COMMISSION_RATE
+  txCount: number;          // number of payments attributed
+};
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pctLabel = (rate: number) => {
   const p = rate * 100;
@@ -443,10 +458,24 @@ export type WeeklyPayload = {
   closing_calls_booked: number; closing_calls_showed: number;
   closer_label?: string;   // e.g. "Lauren + Martin" — from the configured closer calendars
   commission_pct?: string; // e.g. "15" — org's configured rate
+  // Contracted (deal-value) commissions
   closed_deals: number; total_amount: number;
   commissions_by_closer: Array<{ name: string; sales: number; commission: number; deals: number }>;
   total_commissions: number;
-  mtd: { start: string; closed_deals: number; total_amount: number; commissions_by_closer: Array<{ name: string; sales: number; commission: number; deals: number }>; total_commissions: number };
+  // Collected-cash commissions
+  cash_by_closer: CashCloserRow[];
+  total_cash_commissions: number;
+  total_cash_collected: number;
+  mtd: {
+    start: string;
+    closed_deals: number; total_amount: number;
+    commissions_by_closer: Array<{ name: string; sales: number; commission: number; deals: number }>;
+    total_commissions: number;
+    // MTD collected-cash
+    cash_by_closer: CashCloserRow[];
+    total_cash_commissions: number;
+    total_cash_collected: number;
+  };
 };
 
 export function buildWeeklyMessage(p: WeeklyPayload): string {
@@ -472,54 +501,129 @@ export function buildWeeklyMessage(p: WeeklyPayload): string {
     `• Booked: ${p.closing_calls_booked}`,
     `• Showed: ${p.closing_calls_showed}`,
     "",
-    "💰 CLOSED DEALS",
+    "💰 CLOSED DEALS (CONTRACTED)",
     `• Deals closed: ${p.closed_deals}`,
-    `• Total value: ${usd(p.total_amount)}`,
+    `• Contracted revenue: ${usd(p.total_amount)}`,
   );
-  lines.push("", `💵 CLOSER COMMISSIONS (${p.commission_pct || "15"}%) — THIS WEEK`);
+
+  // ── Contracted (deal-value) commissions ──
+  lines.push("", `📋 CONTRACTED COMMISSIONS (${p.commission_pct || "15"}% of deal values) — THIS WEEK`);
   if (p.commissions_by_closer.length) {
     for (const c of p.commissions_by_closer) {
-      lines.push(`• ${c.name}: ${usd(c.commission)} (${c.deals} deal${c.deals === 1 ? "" : "s"}, ${usd(c.sales)} in sales)`);
+      lines.push(`• ${c.name}: ${usd(c.commission)} (${c.deals} deal${c.deals === 1 ? "" : "s"}, ${usd(c.sales)} contracted)`);
     }
     lines.push(`• Team total: ${usd(p.total_commissions)}`);
   } else {
     lines.push("• No closed deals this week.");
   }
-  lines.push("", `📆 MONTH TO DATE (since ${fmtDate(p.mtd.start)})`);
-  lines.push(`• Deals closed: ${p.mtd.closed_deals} · Total value: ${usd(p.mtd.total_amount)}`);
-  if (p.mtd.commissions_by_closer.length) {
-    for (const c of p.mtd.commissions_by_closer) lines.push(`• ${c.name}: ${usd(c.commission)} commission so far`);
-    lines.push(`• Team total so far: ${usd(p.mtd.total_commissions)}`);
+
+  // ── Collected-cash commissions ──
+  lines.push("", `💵 COLLECTED COMMISSIONS (${p.commission_pct || "15"}% of cash received) — THIS WEEK`);
+  if (p.cash_by_closer.length) {
+    for (const c of p.cash_by_closer) {
+      lines.push(`• ${c.name}: ${usd(c.commission)} (${c.txCount} payment${c.txCount === 1 ? "" : "s"}, ${usd(c.collected)} collected)`);
+    }
+    lines.push(`• Team total: ${usd(p.total_cash_commissions)} on ${usd(p.total_cash_collected)} collected`);
+  } else {
+    lines.push("• No attributed payments received this week.");
   }
+
+  // ── MTD ──
+  lines.push("", `📆 MONTH TO DATE (since ${fmtDate(p.mtd.start)})`);
+  lines.push(`• Contracted: ${p.mtd.closed_deals} deal${p.mtd.closed_deals === 1 ? "" : "s"} · ${usd(p.mtd.total_amount)}`);
+  if (p.mtd.commissions_by_closer.length) {
+    for (const c of p.mtd.commissions_by_closer) lines.push(`• ${c.name}: ${usd(c.commission)} contracted commission`);
+    lines.push(`• Team contracted total: ${usd(p.mtd.total_commissions)}`);
+  }
+  lines.push("");
+  if (p.mtd.cash_by_closer.length) {
+    lines.push(`• Collected: ${usd(p.mtd.total_cash_collected)} · Cash commissions owed: ${usd(p.mtd.total_cash_commissions)}`);
+    for (const c of p.mtd.cash_by_closer) lines.push(`• ${c.name}: ${usd(c.commission)} cash commission so far`);
+  } else {
+    lines.push("• No attributed payments received MTD.");
+  }
+
   return lines.join("\n");
 }
 
-export function buildPayoutMessage(label: string, deals: Deal[], payoutDay = 15, rate: number = DEFAULT_RATE): string {
+export function buildPayoutMessage(
+  label: string,
+  deals: Deal[],
+  cashRows: CashCloserRow[],
+  totalCashCollected: number,
+  payoutDay = 15,
+  rate: number = DEFAULT_RATE,
+): string {
   const byCloser = commissionByCloser(deals, rate);
-  const total = byCloser.reduce((s, c) => s + c.commission, 0);
-  const sales = byCloser.reduce((s, c) => s + c.sales, 0);
+  const contractedTotal = byCloser.reduce((s, c) => s + c.commission, 0);
+  const contractedSales = byCloser.reduce((s, c) => s + c.sales, 0);
+  const cashTotal = cashRows.reduce((s, c) => s + c.commission, 0);
   const suffix = payoutDay === 1 ? "st" : payoutDay === 2 ? "nd" : payoutDay === 3 ? "rd" : payoutDay === 21 ? "st" : payoutDay === 22 ? "nd" : payoutDay === 23 ? "rd" : "th";
+
   const lines = [
     "💵 COMMISSION PAYOUT REPORT",
-    `For ${label} closes — payable on the ${payoutDay}${suffix}`,
+    `${label} — payable on the ${payoutDay}${suffix}`,
     "━━━━━━━━━━━━━━━",
     "",
+    "💰 COLLECTED CASH (basis for payout)",
   ];
-  if (!byCloser.length) {
-    lines.push(`No deals were closed in ${label}, so there are no commissions to pay out.`);
-    return lines.join("\n");
+
+  if (cashRows.length) {
+    for (const c of cashRows) {
+      lines.push(`• ${c.name}: ${usd(c.commission)} (${pctLabel(rate)}% of ${usd(c.collected)} · ${c.txCount} payment${c.txCount === 1 ? "" : "s"})`);
+    }
+    lines.push(`• Team total to pay: ${usd(cashTotal)} on ${usd(totalCashCollected)} collected`);
+  } else {
+    lines.push(`• No attributed payments received in ${label}.`);
   }
-  for (const c of byCloser) {
-    lines.push(`• ${c.name}: ${usd(c.commission)} (${pctLabel(rate)}% of ${usd(c.sales)} · ${c.deals} deal${c.deals === 1 ? "" : "s"})`);
+
+  lines.push("", "📋 CONTRACTED REVENUE (deal values — for reference)");
+  if (byCloser.length) {
+    for (const c of byCloser) {
+      lines.push(`• ${c.name}: ${usd(c.sales)} contracted (${c.deals} deal${c.deals === 1 ? "" : "s"}, ${usd(c.commission)} at ${pctLabel(rate)}%)`);
+    }
+    lines.push(`• Team contracted: ${usd(contractedSales)} · ${usd(contractedTotal)} at ${pctLabel(rate)}%`);
+  } else {
+    lines.push(`• No deals were closed in ${label}.`);
   }
-  lines.push("", `Team total: ${usd(total)} on ${usd(sales)} in ${label} sales.`);
+
   return lines.join("\n");
 }
 
-// ── Data pull ───────────────────────────────────────────────────
-
-// Pipeline/stage ids are resolved by NAME at run time so renames/rebuilds
-// in GHL can't silently break the report against stale hardcoded ids.
+async function fetchAllTransactions(conn: Conn): Promise<GhlTransaction[]> {
+  const out: GhlTransaction[] = [];
+  let expectedTotal: number | null = null;
+  for (let page = 1; page <= 50; page++) {
+    const b = await ghlGet(conn,
+      `/payments/transactions?altId=${conn.locationId}&altType=location&limit=100&pageNo=${page}`,
+    );
+    const total = Number(b?.totalCount);
+    if (Number.isFinite(total) && total >= 0) expectedTotal = total;
+    const rows: any[] = Array.isArray(b?.data) ? b.data : [];
+    for (const r of rows) {
+      if (!r?.contactId) continue; // can't attribute without a contact
+      out.push({
+        id: String(r._id || r.id || ""),
+        contactId: String(r.contactId),
+        amount: Number(r.amount) || 0,
+        amountRefunded: Number(r.amountRefunded) || 0,
+        status: String(r.status || ""),
+        createdAt: String(r.createdAt || ""),
+        updatedAt: String(r.updatedAt || ""),
+      });
+    }
+    // `nextPage` is null when there are no more pages.
+    if (!b?.nextPage || rows.length < 100) {
+      if (expectedTotal != null && out.length < expectedTotal) {
+        throw new Error(
+          `Payment transactions: got ${out.length} of ${expectedTotal} — refusing to report on incomplete data.`,
+        );
+      }
+      return out;
+    }
+  }
+  throw new Error("More than 5,000 payment transactions — refusing to truncate.");
+}
 async function resolvePipelines(conn: Conn, leadNames: string[], closedStageNames: Array<{ pipeline: string; stage: string }>): Promise<{
   leadPipelineIds: string[];
   closedStages: Array<{ pipelineId: string; stageId: string }>;
@@ -581,7 +685,7 @@ async function pullWeekData(companyId: string, cfg: GhlCfg, conn: Conn, w: Windo
 
   // 4–6. Closed deals (all-time list; callers slice by window). Stage-entry
   // time = lastStageChangeAt (falls back to updatedAt/createdAt when GHL
-  // omits it).
+  // omits it). contactId is carried so transaction cash can be attributed.
   const closerCache = cfg.closer_names || {};
   const allDeals: Deal[] = [];
   const stageSet = new Set(closedStages.map((c) => `${c.pipelineId}:${c.stageId}`));
@@ -596,10 +700,17 @@ async function pullWeekData(companyId: string, cfg: GhlCfg, conn: Conn, w: Windo
         value: Number(o.monetaryValue) || 0,
         closer: await resolveCloserName(conn, String(o.assignedTo || ""), closerCache),
         whenMs: t,
+        contactId: String(o.contactId || o.contact?.id || ""),
       });
     }
   }
   cfg.closer_names = closerCache;
+
+  // 7. Payment transactions — full history, filtered in-code by callers.
+  // A fetch failure throws here: the caller's try/catch will notify admins
+  // and trigger the scheduler retry so we never post a silently-empty cash
+  // section on a payout report or misleading zero on a weekly report.
+  const allTransactions = await fetchAllTransactions(conn);
 
   return {
     leads,
@@ -610,6 +721,7 @@ async function pullWeekData(companyId: string, cfg: GhlCfg, conn: Conn, w: Windo
     closing_calls_booked: closingBooked,
     closing_calls_showed: closingShowed,
     allDeals,
+    allTransactions,
   };
 }
 
@@ -668,6 +780,13 @@ async function runWeekly(companyId: string, cfg: GhlCfg, asOf: Date = new Date()
   const mtdDeals = dealsInRange(data.allDeals, w.mtdStartMs, now.getTime());
   const weekComm = commissionByCloser(weekDeals, rate);
   const mtdComm = commissionByCloser(mtdDeals, rate);
+
+  // Cash commissions: build a contact→closer map from ALL closed deals
+  // (no time-filter), then attribute payment transactions to closers.
+  const contactCloserMap = buildContactCloserMap(data.allDeals);
+  const weekCash = cashCommissionByCloser(data.allTransactions, contactCloserMap, w.weekStartMs, w.weekEndMs);
+  const mtdCash = cashCommissionByCloser(data.allTransactions, contactCloserMap, w.mtdStartMs, now.getTime());
+
   const payload: WeeklyPayload = {
     week_start: w.weekStart, week_end: w.weekEnd,
     leads: data.leads,
@@ -683,12 +802,18 @@ async function runWeekly(companyId: string, cfg: GhlCfg, asOf: Date = new Date()
     total_amount: weekDeals.reduce((s, d) => s + d.value, 0),
     commissions_by_closer: weekComm,
     total_commissions: weekComm.reduce((s, c) => s + c.commission, 0),
+    cash_by_closer: weekCash,
+    total_cash_commissions: weekCash.reduce((s, c) => s + c.commission, 0),
+    total_cash_collected: weekCash.reduce((s, c) => s + c.collected, 0),
     mtd: {
       start: w.mtdStart,
       closed_deals: mtdDeals.length,
       total_amount: mtdDeals.reduce((s, d) => s + d.value, 0),
       commissions_by_closer: mtdComm,
       total_commissions: mtdComm.reduce((s, c) => s + c.commission, 0),
+      cash_by_closer: mtdCash,
+      total_cash_commissions: mtdCash.reduce((s, c) => s + c.commission, 0),
+      total_cash_collected: mtdCash.reduce((s, c) => s + c.collected, 0),
     },
   };
   const r = await postToCommunity(companyId, cfg, buildWeeklyMessage(payload));
@@ -710,18 +835,27 @@ async function runPayout(companyId: string, cfg: GhlCfg, asOf: Date = new Date()
   const pw = payoutWindow(now, tz);
   let data;
   try {
-    data = await pullWeekData(companyId, cfg, conn, computeWindows(now, tz)); // reuse: allDeals is all-time
+    data = await pullWeekData(companyId, cfg, conn, computeWindows(now, tz)); // reuse: allDeals + allTransactions are all-time
   } catch (e: any) {
     const msg = String(e?.message || e).slice(0, 300);
     await notifyAdmins(companyId, `⚠️ The monthly commission payout report could not pull data from GoHighLevel: ${msg}`);
     return { ok: false, error: msg };
   }
   const deals = dealsInRange(data.allDeals, pw.startMs, pw.endMs);
+  const contactCloserMap = buildContactCloserMap(data.allDeals);
+  const cashRows = cashCommissionByCloser(data.allTransactions, contactCloserMap, pw.startMs, pw.endMs);
+  const totalCashCollected = cashRows.reduce((s, c) => s + c.collected, 0);
   const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
-  const r = await postToCommunity(companyId, cfg, buildPayoutMessage(pw.label, deals, payoutDay, rate));
+
+  const r = await postToCommunity(companyId, cfg, buildPayoutMessage(pw.label, deals, cashRows, totalCashCollected, payoutDay, rate));
   if (r.ok) {
     await dbUpsertSetting(companyId, `ghl_kpi_payout:${dayIso(pw.startMs).slice(0, 7)}`, JSON.stringify({
       month: pw.label,
+      // Cash-collected commissions (the payout basis)
+      cash_by_closer: cashRows,
+      total_cash_collected: totalCashCollected,
+      total_cash_commissions: cashRows.reduce((s, c) => s + c.commission, 0),
+      // Deal-value commissions (reference)
       commissions_by_closer: commissionByCloser(deals, rate),
       deals: deals.map((d) => ({ name: d.name, value: d.value, closer: d.closer, when: dayIso(d.whenMs) })),
     }));
@@ -896,6 +1030,36 @@ const intParam = (v: any): number | null => {
   return null;
 };
 
+// Exported for unit testing: parse the scalar (non-DB) fields of a settings
+// POST body into (cfg: GhlCfg) => void mutators or an error string.
+// Community-id, closers-list, setter-calendar, pipelines/stages (which
+// require DB or GHL API calls) are NOT included and handled by the route
+// handler separately.
+export function parseGhlKpiSettingsBody(body: Record<string, unknown>): {
+  setters: Array<(cfg: GhlCfg) => void>;
+  error?: string;
+} {
+  const setters: Array<(cfg: GhlCfg) => void> = [];
+  if (body.weekly !== undefined) { const v = !!body.weekly; setters.push((cfg) => { cfg.weekly = v; }); }
+  if (body.payout !== undefined) { const v = !!body.payout; setters.push((cfg) => { cfg.payout = v; }); }
+  if (body.hourLocal !== undefined) {
+    const h = intParam(body.hourLocal);
+    if (h === null || h < 0 || h > 23) return { setters: [], error: "Post hour must be 0–23" };
+    setters.push((cfg) => { cfg.hour_local = h; delete cfg.hour; });
+  }
+  if (body.weeklyDow !== undefined) {
+    const d = intParam(body.weeklyDow);
+    if (d === null || d < 0 || d > 6) return { setters: [], error: "Weekly post day must be 0 (Sunday) to 6 (Saturday)" };
+    setters.push((cfg) => { cfg.weekly_dow = d; });
+  }
+  if (body.payoutDay !== undefined) {
+    const d = intParam(body.payoutDay);
+    if (d === null || d < 1 || d > 28) return { setters: [], error: "Payout day must be 1–28" };
+    setters.push((cfg) => { cfg.payout_day = d; });
+  }
+  return { setters };
+}
+
 router.get("/ghl-kpi/status", async (req: Request, res: Response) => {
   try {
     const caller = await requireOrgAdmin(req, res);
@@ -909,7 +1073,7 @@ router.get("/ghl-kpi/status", async (req: Request, res: Response) => {
       const legacyUtc = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11;
       const probe = new Date();
       probe.setUTCHours(legacyUtc, 30, 0, 0);
-      hourLocal = centralDateParts(probe, tz).hour;
+      hourLocal = centralDateParts(probe, tz ?? undefined).hour;
     }
     res.json({
       ok: true,
@@ -1125,3 +1289,73 @@ router.post("/ghl-kpi/run-now", async (req: Request, res: Response) => {
 });
 
 export default router;
+
+export function buildContactCloserMap(allDeals: Deal[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const d of allDeals) {
+    if (d.contactId && d.closer && !m.has(d.contactId)) m.set(d.contactId, d.closer);
+  }
+  return m;
+}
+
+// Net cash collected in [startMs, endMs) per closer, given:
+//   • succeeded txs whose createdAt is in [startMs, endMs):
+//       net = amount − amountRefunded  (GHL shows current state; captures in-period
+//       partial refunds and refunds issued before the payout report runs)
+//   • refunded txs (status="refunded") whose updatedAt is in [startMs, endMs)
+//     AND createdAt < startMs:
+//       net = −amount  (full refund issued this period on a prior payment)
+//   • refunded txs where BOTH createdAt and updatedAt are in period → zero; skip
+// ⚠ Known limitation: a succeeded tx from a prior period that received a
+//   PARTIAL refund after that period's payout was already calculated cannot be
+//   detected here — the tx stays "succeeded" and won't appear in the current
+//   period.  Task #293 tracks this gap.
+// Transactions whose contactId has no entry in contactCloserMap are excluded.
+export function cashCommissionByCloser(
+  txs: GhlTransaction[],
+  contactCloserMap: Map<string, string>,
+  startMs: number,
+  endMs: number,
+  rate: number = DEFAULT_RATE,
+): CashCloserRow[] {
+  const map = new Map<string, { collected: number; txCount: number }>();
+
+  for (const tx of txs) {
+    if (tx.status === "failed") continue;
+    const closer = contactCloserMap.get(tx.contactId);
+    if (!closer) continue; // unattributed — no closed deal for this contact
+
+    const createdMs = Date.parse(tx.createdAt || "");
+    const updatedMs = Date.parse(tx.updatedAt || "");
+    let net = 0;
+
+    if (tx.status === "succeeded") {
+      // Only payments received in this period; use current API net amount.
+      if (!Number.isFinite(createdMs) || createdMs < startMs || createdMs >= endMs) continue;
+      net = tx.amount - (tx.amountRefunded || 0);
+    } else if (tx.status === "refunded") {
+      if (Number.isFinite(createdMs) && createdMs >= startMs && createdMs < endMs) {
+        // Payment AND full refund both in this period → nets to zero; skip.
+        continue;
+      }
+      // Full refund issued in this period for a prior payment.
+      if (!Number.isFinite(updatedMs) || updatedMs < startMs || updatedMs >= endMs) continue;
+      net = -(tx.amount);
+    }
+
+    if (net === 0) continue;
+    const cur = map.get(closer) || { collected: 0, txCount: 0 };
+    cur.collected += net;
+    cur.txCount += net > 0 ? 1 : 0; // count payments, not refund lines
+    map.set(closer, cur);
+  }
+
+  return [...map.entries()]
+    .map(([name, v]) => ({
+      name,
+      collected: v.collected,
+      commission: v.collected * rate,
+      txCount: v.txCount,
+    }))
+    .sort((a, b) => b.collected - a.collected);
+}
