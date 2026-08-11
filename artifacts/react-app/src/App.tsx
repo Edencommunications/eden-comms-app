@@ -4212,6 +4212,45 @@ const AdminDashboard = ({ user }:any) => {
     } catch { setMetaMsg('⚠️ Could not post the recap'); }
     setMetaBusy(false);
   };
+  // GHL KPI reports — Eden HQ only: weekly Monday KPI post + 15th payout post
+  const [ghlKpi, setGhlKpi] = useState<any>(null);
+  const [ghlKpiBusy, setGhlKpiBusy] = useState(false);
+  const [ghlKpiMsg, setGhlKpiMsg] = useState('');
+  const loadGhlKpi = async () => {
+    try {
+      const r = await fetch('/api/ghl-kpi/status', { headers: { Authorization: sbBearer() } });
+      const d = await r.json().catch(() => null);
+      setGhlKpi(r.ok && d?.ok ? d : { connected:false });
+    } catch { setGhlKpi({ connected:false }); }
+  };
+  useEffect(() => { if (isOwnerHQ) loadGhlKpi(); }, []);
+  const ghlKpiSave = async (patch:any) => {
+    setGhlKpiBusy(true); setGhlKpiMsg('');
+    try {
+      const r = await fetch('/api/ghl-kpi/settings', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify(patch),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) { setGhlKpiMsg('✅ Saved'); loadGhlKpi(); }
+      else setGhlKpiMsg(`⚠️ ${d?.error || 'Could not save'}`);
+    } catch { setGhlKpiMsg('⚠️ Could not save'); }
+    setGhlKpiBusy(false);
+    setTimeout(() => setGhlKpiMsg(m => m === '✅ Saved' ? '' : m), 3000);
+  };
+  const ghlKpiRunNow = async (kind:string) => {
+    setGhlKpiBusy(true); setGhlKpiMsg('');
+    try {
+      const r = await fetch('/api/ghl-kpi/run-now', {
+        method:'POST', headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ kind }),
+      });
+      const d = await r.json().catch(() => null);
+      if (r.ok) setGhlKpiMsg('✅ Report posted! Check the community.');
+      else setGhlKpiMsg(`⚠️ ${d?.error || 'Could not post the report'}`);
+    } catch { setGhlKpiMsg('⚠️ Could not post the report'); }
+    setGhlKpiBusy(false);
+  };
   useEffect(() => {
     sbGet('user_profiles', `role=in.(coach,head_coach)&is_active=not.is.false&select=id,name,timezone,deadline_time&order=name`)
       .then((rows:any[]) => {
@@ -4425,6 +4464,59 @@ const AdminDashboard = ({ user }:any) => {
               )}
               {metaMsg && <p style={{ fontSize:12, color:metaMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{metaMsg}</p>}
             </Card>
+            {/* GHL KPI reports — Eden HQ only (weekly Monday post + 15th payout post) */}
+            {isOwnerHQ && (
+              <Card style={{ marginBottom:20 }}>
+                <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 4px" }}>📈 GHL KPI Reports</p>
+                {ghlKpi === null ? (
+                  <p style={{ fontSize:12, color:B.muted, margin:0 }}>Checking connection…</p>
+                ) : !ghlKpi.connected ? (
+                  <p style={{ fontSize:12, color:"#ffa600", margin:0 }}>The GoHighLevel connection is missing on the server — contact Eden support.</p>
+                ) : (
+                  <>
+                    <p style={{ fontSize:12, color:"#4FD89A", margin:"0 0 10px", lineHeight:1.5 }}>
+                      ✅ Connected to GoHighLevel. Every Monday: leads, setter + closing calls, closed deals, and 15% closer commissions (weekly + month-to-date). On the 15th: last month's commission payout report.
+                    </p>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post reports into</span>
+                      <select value={ghlKpi.community_id || ''} disabled={ghlKpiBusy}
+                        onChange={e => e.target.value && ghlKpiSave({ communityId: e.target.value })}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:ghlKpi.community_id ? B.gold : B.text, fontSize:12, outline:"none", cursor:"pointer", maxWidth:"100%" }}>
+                        <option value="">Choose a community…</option>
+                        {metaCommunities.map((c:any) => <option key={c.id} value={c.id}>{c.context === 'team' ? '👥' : '💬'} {c.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:10 }}>
+                      {[['weekly','Weekly KPIs (Mondays)'],['payout','Payout report (the 15th)']].map(([k, label]) => (
+                        <label key={k} style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
+                          <input type="checkbox" checked={!!ghlKpi[k]} disabled={ghlKpiBusy || !ghlKpi.community_id}
+                            onChange={e => ghlKpiSave({ [k]: e.target.checked })}/>
+                          <span style={{ fontSize:12, color: ghlKpi[k] ? "#4FD89A" : B.muted, fontWeight:700 }}>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {!ghlKpi.community_id && <p style={{ fontSize:11, color:"#ffa600", margin:"0 0 10px" }}>Pick a community above to turn reports on.</p>}
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post time</span>
+                      <select disabled={ghlKpiBusy}
+                        value={(() => { const utc = Number.isFinite(Number(ghlKpi.hour)) ? Number(ghlKpi.hour) : 11; return ((utc - Math.round(new Date().getTimezoneOffset() / 60) % 24) + 48) % 24; })()}
+                        onChange={e => { const local = Number(e.target.value); const utc = ((local + Math.round(new Date().getTimezoneOffset() / 60)) + 48) % 24; ghlKpiSave({ hour: utc }); }}
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
+                        {Array.from({ length: 24 }, (_, h) => (
+                          <option key={h} value={h}>{h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`}</option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize:11, color:B.muted }}>your local time · weekly covers the previous Mon–Sun</span>
+                    </div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <Btn variant="secondary" onClick={() => ghlKpiRunNow('weekly')} disabled={ghlKpiBusy || !ghlKpi.community_id}>{ghlKpiBusy ? 'Working…' : 'Post a test report now'}</Btn>
+                      <Btn variant="secondary" onClick={() => ghlKpiRunNow('payout')} disabled={ghlKpiBusy || !ghlKpi.community_id}>Post last month's payout report</Btn>
+                    </div>
+                  </>
+                )}
+                {ghlKpiMsg && <p style={{ fontSize:12, color:ghlKpiMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{ghlKpiMsg}</p>}
+              </Card>
+            )}
             {/* GHL intake webhook — white-label self-serve */}
             {myOrg && (
               <Card style={{ marginBottom:20 }}>
