@@ -565,13 +565,30 @@ function ReadOnlyFoodRow({item}: any) {
   const ps = parseServing(item.food.serving)
   const actualAmt = Math.round(item.servings * ps.amount * 10) / 10
   return (
-    <div style={{padding:'7px 0',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
-        <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-          {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g Fib:{Math.round(item.food.fib*item.servings)}g
+    <div style={{padding:'7px 0',borderTop:`1px solid ${C.border}`}}>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
+          <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+            {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g Fib:{Math.round(item.food.fib*item.servings)}g
+          </div>
         </div>
       </div>
+      {(item.alts||[]).map((alt: any,ai: any)=>{
+        const aps = parseServing(alt.food.serving)
+        const aAmt = Math.round(alt.servings * aps.amount * 10) / 10
+        return (
+          <div key={ai} style={{display:'flex',alignItems:'center',gap:8,marginTop:5,marginLeft:10,paddingLeft:8,borderLeft:`2px solid ${C.gold}44`}}>
+            <span style={{fontSize:8,fontWeight:800,color:C.gold,background:`${C.gold}18`,padding:'2px 6px',borderRadius:8,letterSpacing:.5,flexShrink:0}}>OR</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,color:C.white,fontWeight:500}}>{alt.food.name}</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                {aAmt}{aps.unit} · {Math.round(alt.food.cal*alt.servings)}cal · P:{Math.round(alt.food.pro*alt.servings)}g C:{Math.round(alt.food.carb*alt.servings)}g F:{Math.round(alt.food.fat*alt.servings)}g Fib:{Math.round(alt.food.fib*alt.servings)}g
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -855,6 +872,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [dayType,    setDayType]    = useState<any>('high')
   const [protocol,   setProtocol]   = useState<any>('Base Diet Protocol Male')
   const [showPicker, setShowPicker] = useState<any>(false)
+  // When set to {mi, fi}, the food picker adds an "or" alternative to that food instead of a new food
+  const [altTarget, setAltTarget] = useState<any>(null)
   const [activeMeal, setActiveMeal] = useState<any>(null)
   const [foodSearch, setFoodSearch] = useState<any>('')
   const [viewRecipe, setViewRecipe] = useState<any>(null)   // full recipe detail modal (client + coach)
@@ -1329,15 +1348,34 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   },{cal:0,pro:0,fat:0,carb:0,fib:0})
 
   function addFood(food: any) {
+    if(altTarget){
+      const {mi,fi,name} = altTarget
+      // Guard: the target row must still be the same food (rows can shift/vanish while the picker is open)
+      if(meals[mi]?.foods?.[fi]?.food?.name!==name){
+        setShowPicker(false); setFoodSearch(''); setAltTarget(null)
+        alert('That food changed while the picker was open — please tap "or +" again.')
+        return
+      }
+      setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,foods:m.foods.map((f: any,j: any)=>j===fi?{...f,alts:[...(f.alts||[]),{food,servings:1}]}:f)}:m))
+      setShowPicker(false); setFoodSearch(''); setAltTarget(null)
+      return
+    }
     if(activeMeal===null) return
     setMeals((p: any)=>p.map((m: any,i: any)=>i===activeMeal?{...m,foods:[...m.foods,{food,servings:1}]}:m))
     setShowPicker(false); setFoodSearch('')
   }
   function removeFood(mi: any,fi: any) {
+    setAltTarget(null) // indexes shift — never leave a stale alt target behind
     setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,foods:m.foods.filter((_: any,j: any)=>j!==fi)}:m))
   }
   function updateServings(mi: any,fi: any,v: any) {
     setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,foods:m.foods.map((f: any,j: any)=>j===fi?{...f,servings:parseFloat(v)||1}:f)}:m))
+  }
+  function removeAlt(mi: any,fi: any,ai: any) {
+    setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,foods:m.foods.map((f: any,j: any)=>j===fi?{...f,alts:(f.alts||[]).filter((_: any,k: any)=>k!==ai)}:f)}:m))
+  }
+  function updateAltServings(mi: any,fi: any,ai: any,v: any) {
+    setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,foods:m.foods.map((f: any,j: any)=>j===fi?{...f,alts:(f.alts||[]).map((a: any,k: any)=>k===ai?{...a,servings:parseFloat(v)||1}:a)}:f)}:m))
   }
 
   function runCalc() {
@@ -1817,7 +1855,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <span style={{fontSize:10,color:C.muted}}>P:{totalMt.pro}g C:{totalMt.carb}g F:{totalMt.fat}g</span>
                     {/* + Food button — coach only */}
                     {isCoach&&(
-                      <button onClick={()=>{setActiveMeal(mi);setShowPicker(true)}}
+                      <button onClick={()=>{setAltTarget(null);setActiveMeal(mi);setShowPicker(true)}}
                         style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'4px 10px',color:C.gold,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                         + Food
                       </button>
@@ -1837,21 +1875,49 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       const actualAmt = Math.round(item.servings * ps.amount * 10) / 10
                       const step = ps.unit==='g'||ps.unit==='ml'?5:ps.unit==='oz'?0.5:0.25
                       return (
-                        <div key={fi} style={{padding:'7px 0',borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
-                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                              {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g
+                        <div key={fi} style={{padding:'7px 0',borderTop:`1px solid ${C.border}`}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
+                              <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                                {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g
+                              </div>
+                            </div>
+                            <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                              <input type="number" min={step} step={step} value={actualAmt}
+                                onChange={e=>{const v=parseFloat(e.target.value);if(v>0)updateServings(mi,fi,v/ps.amount)}}
+                                style={{width:54,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.white,fontSize:12,outline:'none',textAlign:'center'}}/>
+                              <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{ps.unit}</span>
+                              <button onClick={()=>{setAltTarget({mi,fi,name:item.food.name});setActiveMeal(mi);setShowPicker(true)}} title="Add an either/or alternative food"
+                                style={{background:'none',border:`1px solid ${C.gold}44`,borderRadius:6,padding:'2px 7px',color:C.gold,fontSize:10,fontWeight:700,cursor:'pointer',marginLeft:2}}>or +</button>
+                              <button onClick={()=>removeFood(mi,fi)}
+                                style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 2px',marginLeft:2}}>×</button>
                             </div>
                           </div>
-                          <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                            <input type="number" min={step} step={step} value={actualAmt}
-                              onChange={e=>{const v=parseFloat(e.target.value);if(v>0)updateServings(mi,fi,v/ps.amount)}}
-                              style={{width:54,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.white,fontSize:12,outline:'none',textAlign:'center'}}/>
-                            <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{ps.unit}</span>
-                            <button onClick={()=>removeFood(mi,fi)}
-                              style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 2px',marginLeft:2}}>×</button>
-                          </div>
+                          {(item.alts||[]).map((alt: any,ai: any)=>{
+                            const aps = parseServing(alt.food.serving)
+                            const aAmt = Math.round(alt.servings * aps.amount * 10) / 10
+                            const aStep = aps.unit==='g'||aps.unit==='ml'?5:aps.unit==='oz'?0.5:0.25
+                            return (
+                              <div key={ai} style={{display:'flex',alignItems:'center',gap:8,marginTop:5,marginLeft:10,paddingLeft:8,borderLeft:`2px solid ${C.gold}44`}}>
+                                <span style={{fontSize:8,fontWeight:800,color:C.gold,background:`${C.gold}18`,padding:'2px 6px',borderRadius:8,letterSpacing:.5,flexShrink:0}}>OR</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:12,color:C.white,fontWeight:500}}>{alt.food.name}</div>
+                                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>
+                                    {aAmt}{aps.unit} · {Math.round(alt.food.cal*alt.servings)}cal · P:{Math.round(alt.food.pro*alt.servings)}g C:{Math.round(alt.food.carb*alt.servings)}g F:{Math.round(alt.food.fat*alt.servings)}g
+                                  </div>
+                                </div>
+                                <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                                  <input type="number" min={aStep} step={aStep} value={aAmt}
+                                    onChange={e=>{const v=parseFloat(e.target.value);if(v>0)updateAltServings(mi,fi,ai,v/aps.amount)}}
+                                    style={{width:54,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.white,fontSize:12,outline:'none',textAlign:'center'}}/>
+                                  <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{aps.unit}</span>
+                                  <button onClick={()=>removeAlt(mi,fi,ai)}
+                                    style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'0 2px',marginLeft:2}}>×</button>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       )
                     })()
@@ -3870,10 +3936,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       {/* ── Food picker modal (coach only) ─────────────────── */}
       {showPicker&&isCoach&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
-          onClick={e=>{if(e.target===e.currentTarget)setShowPicker(false)}}>
+          onClick={e=>{if(e.target===e.currentTarget){setShowPicker(false);setAltTarget(null)}}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:500,maxHeight:'82vh',display:'flex',flexDirection:'column'}}>
             <div style={{padding:'14px 16px 10px',borderBottom:`1px solid ${C.border}`}}>
-              <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:8}}>Add Food to {meals[activeMeal]?.name}</div>
+              <div style={{fontSize:14,fontWeight:700,color:C.white,marginBottom:8}}>
+                {altTarget?`Add "or" option for ${meals[altTarget.mi]?.foods?.[altTarget.fi]?.food?.name||'food'}`:`Add Food to ${meals[activeMeal]?.name}`}
+              </div>
+              {altTarget&&<div style={{fontSize:10,color:C.muted,marginBottom:8}}>This is an either/or swap — it won't add to the meal's calories or macros.</div>}
               <input value={foodSearch} onChange={e=>setFoodSearch(e.target.value)}
                 placeholder="Search foods or category…"
                 style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box'}}
@@ -3952,7 +4021,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               </div>
             )}
             <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
-              <button onClick={()=>setShowPicker(false)}
+              <button onClick={()=>{setShowPicker(false);setAltTarget(null)}}
                 style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>
                 Cancel
               </button>
