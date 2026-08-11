@@ -189,7 +189,16 @@ export function useMessagesUnread(user: any) {
         const ids = convos.map((c: any) => c.id).join(',')
         const rm = await fetch(`${SUPABASE_URL}/rest/v1/messages?conversation_id=in.(${ids})&is_read=eq.false&sender_id=neq.${me.id}&select=id&limit=1`, { headers: H })
         const rows = rm.ok ? await rm.json() : []
-        if (!stopped) setUnread(rows.length > 0)
+        let any = rows.length > 0
+        // Manually "kept unread" threads count too (persisted via /api/msgs/unread)
+        if (!any) {
+          try {
+            const rman = await fetch(`${(import.meta as any).env?.BASE_URL || '/'}api/msgs/unread`, { headers: { Authorization: sbBearer() } })
+            const b = rman.ok ? await rman.json() : null
+            any = Array.isArray(b?.unread) && b.unread.length > 0
+          } catch {}
+        }
+        if (!stopped) setUnread(any)
       } catch {}
     }
     check()

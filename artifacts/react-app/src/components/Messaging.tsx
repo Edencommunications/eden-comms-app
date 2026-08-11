@@ -735,17 +735,43 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const [openedConvos, setOpenedConvos] = useState<any>(() => new Set())
   const [markedUnread, setMarkedUnread] = useState<any>(() => new Set())
 
+  // Manual unread marks persist server-side (admin_settings via /api/msgs/unread)
+  // so "keep this thread unread" survives reloads, logouts, and other devices.
+  const API_BASE = `${(import.meta as any).env?.BASE_URL || '/'}api/`
+  function syncUnreadMarks(next: Set<any>) {
+    try {
+      const list = conversationsRef.current || []
+      const ids = [...next]
+        .map((cid: any) => list.find((c: any) => c.id === cid)?.supabaseConvoId)
+        .filter(Boolean)
+      fetch(`${API_BASE}msgs/unread`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ unread: ids }),
+      }).catch(() => {})
+    } catch {}
+  }
+
   function openConvo(id: any) {
     setActiveId(id)
     setOpenedConvos((prev: any) => new Set([...prev, id]))
-    setMarkedUnread((prev: any) => { const n = new Set(prev); n.delete(id); return n })
+    setMarkedUnread((prev: any) => {
+      if (!prev.has(id)) return prev
+      const n = new Set(prev); n.delete(id)
+      syncUnreadMarks(n)
+      return n
+    })
   }
 
   function closeConvo() { setActiveId(null) }
 
   function markCurrentUnread() {
     if (!activeId) return
-    setMarkedUnread((prev: any) => new Set([...prev, activeId]))
+    setMarkedUnread((prev: any) => {
+      const n = new Set([...prev, activeId])
+      syncUnreadMarks(n)
+      return n
+    })
     // On mobile go back to list so user sees the badge immediately
     if (isMobile) setActiveId(null)
   }
@@ -1077,6 +1103,67 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       .subscribe()
     return () => { clearTimeout(debounce); supabase.removeChannel(ch) }
   }, [myProfileId])
+
+  // ── Keep sidebar unread counts fresh ─────────────────────────
+  // The initial load computes counts once; without this, messages that arrive
+  // while the tab is open (or that raced the login token) never show a badge.
+  useEffect(() => {
+    if (!myProfileId) return
+    let stopped = false
+    async function refreshCounts() {
+      try {
+        const list = conversationsRef.current || []
+        const ids = list.map((c: any) => c.supabaseConvoId).filter(Boolean)
+        if (!ids.length) return
+        const rows = await dbGet('messages',
+          `conversation_id=in.(${ids.join(',')})&is_read=eq.false&sender_id=neq.${myProfileId}&select=id,conversation_id`)
+        if (stopped || !Array.isArray(rows)) return
+        const counts: Record<string, number> = {}
+        for (const r of rows) counts[r.conversation_id] = (counts[r.conversation_id] || 0) + 1
+        setDynConversations((prev: any) => Array.isArray(prev)
+          ? prev.map((c: any) => ({ ...c, unread: counts[c.supabaseConvoId] || 0 }))
+          : prev)
+        // Fresh unread on a previously-opened (non-active) convo → show badge again
+        setOpenedConvos((prev: any) => {
+          const keep = [...prev].filter((cid: any) => {
+            if (cid === activeIdRef.current) return true
+            const c = (conversationsRef.current || []).find((x: any) => x.id === cid)
+            return !c?.supabaseConvoId || !counts[c.supabaseConvoId]
+          })
+          return keep.length === prev.size ? prev : new Set(keep)
+        })
+      } catch {}
+    }
+    refreshCounts()
+    const iv = setInterval(refreshCounts, 20000)
+    const onFocus = () => refreshCounts()
+    window.addEventListener('focus', onFocus)
+    return () => { stopped = true; clearInterval(iv); window.removeEventListener('focus', onFocus) }
+  }, [myProfileId])
+
+  // ── Load persisted manual-unread marks once conversations exist ──
+  const unreadMarksLoadedRef = useRef(false)
+  useEffect(() => {
+    if (unreadMarksLoadedRef.current || !myProfileId) return
+    if (!Array.isArray(dynConversations) || !dynConversations.length) return
+    unreadMarksLoadedRef.current = true
+    ;(async () => {
+      try {
+        const r = await fetch(`${API_BASE}msgs/unread`, { headers: { Authorization: sbBearer() } })
+        const b = r.ok ? await r.json() : null
+        const ids = Array.isArray(b?.unread) ? b.unread : []
+        if (!ids.length) return
+        setMarkedUnread((prev: any) => {
+          const n = new Set(prev)
+          for (const sc of ids) {
+            const c = dynConversations.find((x: any) => x.supabaseConvoId === sc)
+            if (c) n.add(c.id)
+          }
+          return n
+        })
+      } catch {}
+    })()
+  }, [myProfileId, dynConversations]) // eslint-disable-line
 
   // Cached, never-subscribed channels used purely for HTTP broadcast sends
   const sendChansRef = useRef<any>({})
@@ -1538,6 +1625,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             const label     = isHidden ? `Client ${String.fromCharCode(65 + i)}` : convo.name
             const snippet   = isHidden ? '···' : convo.lastMessage
             const avatarTxt = isHidden ? String.fromCharCode(65 + i) : convo.initials
+            const hasUnread = !isHidden && effectiveUnread(convo) > 0
 
             return (
               <button key={convo.id}
@@ -1567,9 +1655,13 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                 {/* Text */}
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
-                    <span style={{ fontSize:13, fontWeight:700,
-                      color: isActive ? C.gold : isHidden ? C.border : C.white,
-                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:120 }}>
+                    <span style={{ fontSize:13, fontWeight: hasUnread ? 800 : 700,
+                      color: isActive ? C.gold : isHidden ? C.border : hasUnread ? C.gold : C.white,
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:120,
+                      display:'inline-flex', alignItems:'center', gap:5 }}>
+                      {hasUnread && !isActive && (
+                        <span style={{ width:7, height:7, borderRadius:4, background:C.gold, flexShrink:0 }}/>
+                      )}
                       {label}
                     </span>
                     {/* Hide timestamp for masked entries */}
