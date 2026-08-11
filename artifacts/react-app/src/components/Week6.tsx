@@ -14,7 +14,7 @@ import { useDeadline, TZ_OPTIONS, DEFAULT_TZ, DEFAULT_TIME, clearTzCache } from 
 import { createClient } from '@supabase/supabase-js'
 import { MASTER_HABITS, FOODS, CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
 import { supabase as authClient } from '../supabaseClient'
-import { LN, loomShow, loomIsShown, useLoomOn } from './LoomPrivacy'
+import { LN, loomShow, loomIsShown, loomToggleShown, useLoomOn } from './LoomPrivacy'
 import { AUD_PAGE, auditPageQuery, fetchAuditFacet } from '../lib/auditKeyset'
 
 // Create a full account (login + profile + access records) atomically on the
@@ -2037,12 +2037,21 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 const dispInitial = hidden ? '?' : client.name[0]
                 function toggleFeatured(e: any) {
                   e.stopPropagation()
-                  setLoomFeatured((prev: any) => {
-                    const next = new Set(prev)
-                    if (next.has(client.name)) next.delete(client.name)
-                    else next.add(client.name)
-                    return next
-                  })
+                  // "Featured" lives in TWO places: the loomFeatured set here and
+                  // the app-wide shown() list (added when the coach clicks into a
+                  // client). Unchecking must clear BOTH, or the checkmark can
+                  // never turn off for the last-clicked client.
+                  const isOn = loomFeatured.has(client.name) || loomIsShown(client.name)
+                  if (isOn) {
+                    if (loomIsShown(client.name)) loomToggleShown(client.name)
+                    setLoomFeatured((prev: any) => {
+                      const next = new Set(prev)
+                      next.delete(client.name)
+                      return next
+                    })
+                  } else {
+                    setLoomFeatured((prev: any) => new Set(prev).add(client.name))
+                  }
                 }
                 return (
                   <div key={client.uuid} style={{position:'relative',borderBottom:`1px solid ${C.border}`}}>
