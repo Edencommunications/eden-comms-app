@@ -4482,16 +4482,24 @@ const AdminDashboard = ({ user }:any) => {
                   </div>
                   {!metaAds.community_id && <p style={{ fontSize:11, color:"#ffa600", margin:"0 0 10px" }}>Pick a community above to turn recaps on.</p>}
                   <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Time zone</span>
+                    <select disabled={metaBusy} value={metaAds.tz || 'America/Chicago'}
+                      onChange={e => metaSaveSettings({ tz: e.target.value })}
+                      style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer", maxWidth:"100%" }}>
+                      {[['America/New_York','Eastern (New York)'],['America/Chicago','Central (Chicago / Texas)'],['America/Denver','Mountain (Denver)'],['America/Phoenix','Arizona (Phoenix)'],['America/Los_Angeles','Pacific (Los Angeles)'],['America/Anchorage','Alaska'],['Pacific/Honolulu','Hawaii'],['America/Toronto','Toronto'],['America/Vancouver','Vancouver'],['Europe/London','London'],['Europe/Paris','Central Europe (Paris/Berlin)'],['Australia/Sydney','Sydney'],['Pacific/Auckland','New Zealand']]
+                        .concat((metaAds.tz && !['America/New_York','America/Chicago','America/Denver','America/Phoenix','America/Los_Angeles','America/Anchorage','Pacific/Honolulu','America/Toronto','America/Vancouver','Europe/London','Europe/Paris','Australia/Sydney','Pacific/Auckland'].includes(metaAds.tz)) ? [[metaAds.tz, metaAds.tz]] : [])
+                        .map(([v, label]:any) => <option key={v} value={v}>{label}</option>)}
+                    </select>
                     <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post time</span>
                     <select disabled={metaBusy}
-                      value={(() => { const utc = Number.isFinite(Number(metaAds.hour)) ? Number(metaAds.hour) : 12; return ((utc - Math.round(new Date().getTimezoneOffset() / 60) % 24) + 48) % 24; })()}
-                      onChange={e => { const local = Number(e.target.value); const utc = ((local + Math.round(new Date().getTimezoneOffset() / 60)) + 48) % 24; metaSaveSettings({ hour: utc }); }}
+                      value={Number.isInteger(Number(metaAds.hour_local)) ? Number(metaAds.hour_local) : 7}
+                      onChange={e => metaSaveSettings({ hourLocal: Number(e.target.value) })}
                       style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>
                       {Array.from({ length: 24 }, (_, h) => (
                         <option key={h} value={h}>{h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`}</option>
                       ))}
                     </select>
-                    <span style={{ fontSize:11, color:B.muted }}>your local time · daily = yesterday's numbers · weekly = Mondays · monthly = the 1st</span>
+                    <span style={{ fontSize:11, color:B.muted }}>in the time zone above · daily = yesterday's numbers · weekly = Mondays · monthly = the 1st</span>
                   </div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     <Btn variant="secondary" onClick={() => metaRunNow('daily')} disabled={metaBusy || !metaAds.community_id}>Post a test recap now</Btn>

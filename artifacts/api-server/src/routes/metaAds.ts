@@ -16,6 +16,13 @@ import crypto from "node:crypto";
 import { logger } from "../lib/logger";
 import { notifyCommunityMembers } from "./communityPost";
 import { requireStaff } from "./checkinForm";
+import { centralDateParts } from "./ghlKpi";
+
+const DEFAULT_TZ = "America/Chicago";
+function validTz(tz: any): string | null {
+  if (typeof tz !== "string" || !tz.trim()) return null;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz; } catch { return null; }
+}
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -76,7 +83,9 @@ type MetaCfg = {
   daily?: boolean;
   weekly?: boolean;
   monthly?: boolean;
-  hour?: number;              // UTC hour recaps post at (default 12 ≈ morning US)
+  hour?: number;              // LEGACY: UTC hour (honored until hour_local is saved)
+  hour_local?: number;        // post hour in the org's own time zone
+  tz?: string;                // IANA time zone (default America/Chicago)
   weekly_day?: number;        // 1 = Monday (default)
   connected_by?: string | null;
   connected_by_name?: string | null;
@@ -437,20 +446,28 @@ async function processDue() {
   try {
     const rows = await dbGet<any>(`admin_settings?key=eq.meta_ads&select=company_id,value`);
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const monthStr = todayStr.slice(0, 7);
     for (const row of rows) {
       const rawStored = typeof row.value === "string" ? row.value : JSON.stringify(row.value);
       const cfg = parseCfg(row.value);
       if (!cfg?.token || !cfg.ad_account_id || !cfg.community_id) continue;
-      const hour = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 12;
-      if (now.getUTCHours() < hour) continue;
+      // Dueness on the ORG's calendar. Post hour: org-local if saved,
+      // otherwise the legacy UTC hour keeps working unchanged.
+      const tz = validTz(cfg.tz) || DEFAULT_TZ;
+      const parts = centralDateParts(now, tz);
+      if (Number.isInteger(cfg.hour_local) && cfg.hour_local! >= 0 && cfg.hour_local! <= 23) {
+        if (parts.hour < cfg.hour_local!) continue;
+      } else {
+        const hour = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 12;
+        if (now.getUTCHours() < hour) continue;
+      }
+      const todayStr = `${parts.y}-${String(parts.m0 + 1).padStart(2, "0")}-${String(parts.d).padStart(2, "0")}`;
+      const monthStr = todayStr.slice(0, 7);
 
       const due: Array<"daily" | "weekly" | "monthly"> = [];
       if (cfg.daily && cfg.last_daily !== todayStr) due.push("daily");
       const weeklyDay = Number.isFinite(Number(cfg.weekly_day)) ? Number(cfg.weekly_day) : 1;
-      if (cfg.weekly && now.getUTCDay() === weeklyDay && cfg.last_weekly !== todayStr) due.push("weekly");
-      if (cfg.monthly && now.getUTCDate() === 1 && cfg.last_monthly !== monthStr) due.push("monthly");
+      if (cfg.weekly && parts.dow === weeklyDay && cfg.last_weekly !== todayStr) due.push("weekly");
+      if (cfg.monthly && parts.d === 1 && cfg.last_monthly !== monthStr) due.push("monthly");
       if (!due.length) continue;
 
       // Atomically CLAIM the periods before running (compare-and-swap on the
@@ -514,7 +531,15 @@ router.get("/meta-ads/status", async (req: Request, res: Response) => {
       community_id: cfg.community_id || null,
       community_name: cfg.community_name || null,
       daily: !!cfg.daily, weekly: !!cfg.weekly, monthly: !!cfg.monthly,
-      hour: Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 12,
+      tz: validTz(cfg.tz) || DEFAULT_TZ,
+      hour_local: (() => {
+        if (Number.isInteger(cfg.hour_local) && cfg.hour_local! >= 0 && cfg.hour_local! <= 23) return cfg.hour_local;
+        // Present a local hour even for legacy UTC-hour configs.
+        const legacyUtc = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 12;
+        const probe = new Date();
+        probe.setUTCHours(legacyUtc, 30, 0, 0);
+        return centralDateParts(probe, validTz(cfg.tz) || DEFAULT_TZ).hour;
+      })(),
     });
   } catch { res.status(500).json({ error: "Status check failed" }); }
 });
@@ -581,6 +606,17 @@ router.post("/meta-ads/settings", async (req: Request, res: Response) => {
       const h = Number(req.body.hour);
       if (!Number.isInteger(h) || h < 0 || h > 23) { res.status(400).json({ error: "Post hour must be 0–23" }); return; }
       cfg.hour = h;
+    }
+    if (req.body?.hourLocal !== undefined) {
+      const h = Number(req.body.hourLocal);
+      if (!Number.isInteger(h) || h < 0 || h > 23) { res.status(400).json({ error: "Post hour must be 0–23" }); return; }
+      cfg.hour_local = h;
+      delete cfg.hour; // local hour supersedes the legacy UTC one
+    }
+    if (req.body?.tz !== undefined) {
+      const tz = validTz(req.body.tz);
+      if (!tz) { res.status(400).json({ error: "That time zone isn't valid" }); return; }
+      cfg.tz = tz;
     }
     if (!(await saveCfg(caller.company_id, cfg))) { res.status(502).json({ error: "Could not save settings" }); return; }
     res.json({ ok: true });
