@@ -741,59 +741,56 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   const marksDirtyRef = useRef(false) // user changed marks before the server load returned
   // Per-thread manual unread marks (root message ids) — persisted with convo marks
   const [threadMarkedUnread, setThreadMarkedUnread] = useState<any>(() => new Set())
-  const threadMarksRef = useRef<any>(new Set())
-  useEffect(() => { threadMarksRef.current = threadMarkedUnread })
-  function syncUnreadMarks(next: Set<any>, nextThreads?: Set<any>) {
+  // Single source of truth for what gets persisted. Both sets are updated here
+  // SYNCHRONOUSLY on every mutation (never from render closures), and writes
+  // are chained so an earlier POST can never overwrite a later one.
+  const marksRef = useRef<any>({ convos: new Set(), threads: new Set() })
+  const marksPostChainRef = useRef<Promise<any>>(Promise.resolve())
+  function persistMarks() {
     marksDirtyRef.current = true
-    try {
-      const list = conversationsRef.current || []
-      const ids = [...next]
-        .map((cid: any) => list.find((c: any) => c.id === cid)?.supabaseConvoId)
-        .filter(Boolean)
-      const threads = [...(nextThreads ?? threadMarksRef.current)]
-      fetch(`${API_BASE}msgs/unread`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
-        body: JSON.stringify({ unread: ids, threads }),
-      }).catch(() => {})
-    } catch {}
+    marksPostChainRef.current = marksPostChainRef.current.then(() => {
+      try {
+        const list = conversationsRef.current || []
+        const ids = [...marksRef.current.convos]
+          .map((cid: any) => list.find((c: any) => c.id === cid)?.supabaseConvoId)
+          .filter(Boolean)
+        return fetch(`${API_BASE}msgs/unread`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+          body: JSON.stringify({ unread: ids, threads: [...marksRef.current.threads] }),
+        }).catch(() => {})
+      } catch { return }
+    })
   }
   function markThreadUnread(rootId: any) {
-    setThreadMarkedUnread((prev: any) => {
-      const n = new Set([...prev, rootId])
-      syncUnreadMarks(markedUnread, n)
-      return n
-    })
+    marksRef.current.threads.add(rootId)
+    setThreadMarkedUnread(new Set(marksRef.current.threads))
+    persistMarks()
   }
   function clearThreadUnread(rootId: any) {
-    setThreadMarkedUnread((prev: any) => {
-      if (!prev.has(rootId)) return prev
-      const n = new Set(prev); n.delete(rootId)
-      syncUnreadMarks(markedUnread, n)
-      return n
-    })
+    if (!marksRef.current.threads.has(rootId)) return
+    marksRef.current.threads.delete(rootId)
+    setThreadMarkedUnread(new Set(marksRef.current.threads))
+    persistMarks()
   }
 
   function openConvo(id: any) {
     setActiveId(id)
     setOpenedConvos((prev: any) => new Set([...prev, id]))
-    setMarkedUnread((prev: any) => {
-      if (!prev.has(id)) return prev
-      const n = new Set(prev); n.delete(id)
-      syncUnreadMarks(n)
-      return n
-    })
+    if (marksRef.current.convos.has(id)) {
+      marksRef.current.convos.delete(id)
+      setMarkedUnread(new Set(marksRef.current.convos))
+      persistMarks()
+    }
   }
 
   function closeConvo() { setActiveId(null) }
 
   function markCurrentUnread() {
     if (!activeId) return
-    setMarkedUnread((prev: any) => {
-      const n = new Set([...prev, activeId])
-      syncUnreadMarks(n)
-      return n
-    })
+    marksRef.current.convos.add(activeId)
+    setMarkedUnread(new Set(marksRef.current.convos))
+    persistMarks()
     // On mobile go back to list so user sees the badge immediately
     if (isMobile) setActiveId(null)
   }
@@ -1185,15 +1182,13 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         // If the user already marked/opened something, their action wins —
         // applying this stale snapshot would resurrect a mark they just cleared.
         if ((!ids.length && !tids.length) || marksDirtyRef.current) return
-        if (ids.length) setMarkedUnread((prev: any) => {
-          const n = new Set(prev)
-          for (const sc of ids) {
-            const c = dynConversations.find((x: any) => x.supabaseConvoId === sc)
-            if (c) n.add(c.id)
-          }
-          return n
-        })
-        if (tids.length) setThreadMarkedUnread((prev: any) => new Set([...prev, ...tids]))
+        for (const sc of ids) {
+          const c = dynConversations.find((x: any) => x.supabaseConvoId === sc)
+          if (c) marksRef.current.convos.add(c.id)
+        }
+        for (const t of tids) marksRef.current.threads.add(t)
+        setMarkedUnread(new Set(marksRef.current.convos))
+        setThreadMarkedUnread(new Set(marksRef.current.threads))
       } catch {}
     })()
   }, [myProfileId, dynConversations]) // eslint-disable-line
@@ -1600,10 +1595,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             {threadInbox.map(item => {
               const last   = item.replies[item.replies.length - 1]
               const unread = threadUnread(item)
+              const openIt = () => { openConvo(item.convo.id); openThread(item.root.id); setShowThreads(false); setTab('chat') }
               return (
-                <button key={item.root.id}
-                  onClick={() => { openConvo(item.convo.id); openThread(item.root.id); setShowThreads(false); setTab('chat') }}
-                  style={{ width:'100%', textAlign:'left', background: unread ? `${C.gold}0d` : 'transparent',
+                <div key={item.root.id} role="button" tabIndex={0}
+                  onClick={openIt}
+                  onKeyDown={(e: any) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt() } }}
+                  style={{ width:'100%', textAlign:'left', boxSizing:'border-box', background: unread ? `${C.gold}0d` : 'transparent',
                     border:'none', borderBottom:`1px solid ${C.border}`,
                     borderLeft:`3px solid ${unread ? C.gold : 'transparent'}`,
                     padding:'10px 14px', cursor:'pointer' }}>
@@ -1622,19 +1619,20 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:2 }}>
                     <span style={{ fontSize:10, color:C.muted }}>🧵 {item.replies.length} {item.replies.length===1?'reply':'replies'}</span>
-                    <span
+                    <button
                       onClick={(e: any) => {
                         e.stopPropagation()
                         if (threadMarkedUnread.has(item.root.id)) clearThreadUnread(item.root.id)
                         else markThreadUnread(item.root.id)
                       }}
-                      style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:6,
+                      onKeyDown={(e: any) => e.stopPropagation()}
+                      style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:6, background:'transparent',
                         border:`1px solid ${threadMarkedUnread.has(item.root.id) ? C.gold : C.border}`,
                         color: threadMarkedUnread.has(item.root.id) ? C.gold : C.muted, cursor:'pointer' }}>
                       {threadMarkedUnread.has(item.root.id) ? '● Kept unread' : 'Mark unread'}
-                    </span>
+                    </button>
                   </div>
-                </button>
+                </div>
               )
             })}
           </div>

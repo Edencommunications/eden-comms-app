@@ -83,7 +83,8 @@ async function filterToMine(me: Profile, ids: string[]): Promise<string[]> {
 // Keep only thread-root message ids living in conversations the caller is in.
 async function filterThreadsToMine(me: Profile, ids: string[]): Promise<string[]> {
   if (!ids.length) return [];
-  const msgs = await rest<any>(`messages?id=in.(${ids.join(",")})&select=id,conversation_id`);
+  // Root messages only — a reply id would be an invisible, untogglable mark
+  const msgs = await rest<any>(`messages?id=in.(${ids.join(",")})&parent_id=is.null&select=id,conversation_id`);
   const convoIds = [...new Set(msgs.map((m: any) => m.conversation_id).filter(Boolean))];
   if (!convoIds.length) return [];
   const mine = new Set((await rest<any>(
