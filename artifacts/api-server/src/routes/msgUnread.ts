@@ -54,9 +54,19 @@ export function sanitizeMarks(input: any): string[] {
   return out;
 }
 
-async function readMarks(userId: string): Promise<string[]> {
+// Stored value: legacy plain array (convo ids) or {convos:[],threads:[]}
+export type Marks = { convos: string[]; threads: string[] };
+export function parseMarks(raw: any): Marks {
+  try {
+    const v = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (Array.isArray(v)) return { convos: sanitizeMarks(v), threads: [] };
+    return { convos: sanitizeMarks(v?.convos), threads: sanitizeMarks(v?.threads) };
+  } catch { return { convos: [], threads: [] }; }
+}
+
+async function readMarks(userId: string): Promise<Marks> {
   const rows = await rest<any>(`admin_settings?key=eq.${encodeURIComponent(`msgs_unread:${userId}`)}&select=value&limit=1`);
-  try { return sanitizeMarks(JSON.parse(rows[0]?.value ?? "[]")); } catch { return []; }
+  return parseMarks(rows[0]?.value ?? "[]");
 }
 
 // Keep only conversations the caller actually participates in.
@@ -70,9 +80,22 @@ async function filterToMine(me: Profile, ids: string[]): Promise<string[]> {
   return ids.filter((id) => mine.has(id));
 }
 
-async function saveMarks(me: Profile, ids: string[]): Promise<boolean> {
+// Keep only thread-root message ids living in conversations the caller is in.
+async function filterThreadsToMine(me: Profile, ids: string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  const msgs = await rest<any>(`messages?id=in.(${ids.join(",")})&select=id,conversation_id`);
+  const convoIds = [...new Set(msgs.map((m: any) => m.conversation_id).filter(Boolean))];
+  if (!convoIds.length) return [];
+  const mine = new Set((await rest<any>(
+    `conversations?id=in.(${convoIds.join(",")})&or=(participant_a_id.eq.${me.id},participant_b_id.eq.${me.id})&select=id`,
+  )).map((r: any) => r.id));
+  const ok = new Set(msgs.filter((m: any) => mine.has(m.conversation_id)).map((m: any) => m.id));
+  return ids.filter((id) => ok.has(id));
+}
+
+async function saveMarks(me: Profile, marks: Marks): Promise<boolean> {
   const key = `msgs_unread:${me.id}`;
-  const value = JSON.stringify(ids);
+  const value = JSON.stringify(marks);
   const stamp = new Date().toISOString();
   const r = await fetch(
     `${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`,
@@ -92,7 +115,8 @@ router.get("/msgs/unread", async (req: Request, res: Response) => {
   try {
     const me = await requireUser(req);
     if (!me) { res.status(401).json({ error: "Not authorized" }); return; }
-    res.json({ ok: true, unread: await readMarks(me.id) });
+    const marks = await readMarks(me.id);
+    res.json({ ok: true, unread: marks.convos, threads: marks.threads });
   } catch (e) {
     logger.warn({ err: String(e) }, "[MsgUnread] read failed");
     res.status(500).json({ error: "Could not load unread marks" });
@@ -104,10 +128,13 @@ router.post("/msgs/unread", async (req: Request, res: Response) => {
   try {
     const me = await requireUser(req);
     if (!me) { res.status(401).json({ error: "Not authorized" }); return; }
-    const wanted = sanitizeMarks((req.body || {}).unread);
-    const mine = await filterToMine(me, wanted);
-    if (!(await saveMarks(me, mine))) { res.status(500).json({ error: "Could not save unread marks" }); return; }
-    res.json({ ok: true, unread: mine });
+    const body = req.body || {};
+    const [convos, threads] = await Promise.all([
+      filterToMine(me, sanitizeMarks(body.unread)),
+      filterThreadsToMine(me, sanitizeMarks(body.threads)),
+    ]);
+    if (!(await saveMarks(me, { convos, threads }))) { res.status(500).json({ error: "Could not save unread marks" }); return; }
+    res.json({ ok: true, unread: convos, threads });
   } catch (e) {
     logger.warn({ err: String(e) }, "[MsgUnread] save failed");
     res.status(500).json({ error: "Could not save unread marks" });

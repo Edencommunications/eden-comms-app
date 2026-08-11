@@ -190,12 +190,13 @@ export function useMessagesUnread(user: any) {
         const rm = await fetch(`${SUPABASE_URL}/rest/v1/messages?conversation_id=in.(${ids})&is_read=eq.false&sender_id=neq.${me.id}&select=id&limit=1`, { headers: H })
         const rows = rm.ok ? await rm.json() : []
         let any = rows.length > 0
-        // Manually "kept unread" threads count too (persisted via /api/msgs/unread)
+        // Manually "kept unread" chats/threads count too (persisted via /api/msgs/unread)
         if (!any) {
           try {
             const rman = await fetch(`${(import.meta as any).env?.BASE_URL || '/'}api/msgs/unread`, { headers: { Authorization: sbBearer() } })
             const b = rman.ok ? await rman.json() : null
-            any = Array.isArray(b?.unread) && b.unread.length > 0
+            any = (Array.isArray(b?.unread) && b.unread.length > 0) ||
+                  (Array.isArray(b?.threads) && b.threads.length > 0)
           } catch {}
         }
         if (!stopped) setUnread(any)
@@ -203,7 +204,22 @@ export function useMessagesUnread(user: any) {
     }
     check()
     const iv = setInterval(check, 30000)
-    return () => { stopped = true; clearInterval(iv) }
+    // Realtime: a broadcast on my user channel means a message just landed —
+    // light the Messages tab instantly instead of waiting for the next poll.
+    let chan: any = null
+    ;(async () => {
+      try {
+        // me may not be resolved yet — check() resolves it on first run
+        for (let i = 0; i < 20 && !me; i++) await new Promise(r => setTimeout(r, 500))
+        if (stopped || !me?.id) return
+        // Own topic (msgs-tab-*) — Messaging.tsx owns msgs-user-*, and two
+        // subscribers on one topic conflict in the realtime client.
+        chan = supabase.channel(`msgs-tab-${me.id}`)
+          .on('broadcast', { event: 'new-message' }, () => { if (!stopped) setUnread(true) })
+          .subscribe()
+      } catch {}
+    })()
+    return () => { stopped = true; clearInterval(iv); try { if (chan) supabase.removeChannel(chan) } catch {} }
   }, [email]) // eslint-disable-line
   return unread
 }

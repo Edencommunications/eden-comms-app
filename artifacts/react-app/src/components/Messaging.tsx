@@ -739,19 +739,39 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // so "keep this thread unread" survives reloads, logouts, and other devices.
   const API_BASE = `${(import.meta as any).env?.BASE_URL || '/'}api/`
   const marksDirtyRef = useRef(false) // user changed marks before the server load returned
-  function syncUnreadMarks(next: Set<any>) {
+  // Per-thread manual unread marks (root message ids) — persisted with convo marks
+  const [threadMarkedUnread, setThreadMarkedUnread] = useState<any>(() => new Set())
+  const threadMarksRef = useRef<any>(new Set())
+  useEffect(() => { threadMarksRef.current = threadMarkedUnread })
+  function syncUnreadMarks(next: Set<any>, nextThreads?: Set<any>) {
     marksDirtyRef.current = true
     try {
       const list = conversationsRef.current || []
       const ids = [...next]
         .map((cid: any) => list.find((c: any) => c.id === cid)?.supabaseConvoId)
         .filter(Boolean)
+      const threads = [...(nextThreads ?? threadMarksRef.current)]
       fetch(`${API_BASE}msgs/unread`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
-        body: JSON.stringify({ unread: ids }),
+        body: JSON.stringify({ unread: ids, threads }),
       }).catch(() => {})
     } catch {}
+  }
+  function markThreadUnread(rootId: any) {
+    setThreadMarkedUnread((prev: any) => {
+      const n = new Set([...prev, rootId])
+      syncUnreadMarks(markedUnread, n)
+      return n
+    })
+  }
+  function clearThreadUnread(rootId: any) {
+    setThreadMarkedUnread((prev: any) => {
+      if (!prev.has(rootId)) return prev
+      const n = new Set(prev); n.delete(rootId)
+      syncUnreadMarks(markedUnread, n)
+      return n
+    })
   }
 
   function openConvo(id: any) {
@@ -816,8 +836,10 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   function openThread(rootId: any) {
     setThreadRootId(rootId)
     markThreadRead(rootId)
+    clearThreadUnread(rootId)
   }
   function threadUnread(item: any) {
+    if (threadMarkedUnread.has(item.root.id)) return true
     const last = item.replies[item.replies.length - 1]
     if (!last || last.sender_id === myProfileId) return false
     const readAt = threadReads[item.root.id]
@@ -1092,11 +1114,16 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         // Flag the conversation unread in the list the moment the message lands
         const convo = conversationsRef.current.find((c: any) => c.supabaseConvoId === convoId)
         if (convo && convo.id !== activeIdRef.current) {
-          setMarkedUnread((prev: any) => prev.has(convo.id) ? prev : new Set([...prev, convo.id]))
+          // Instant badge: bump the real unread count and lift any "already
+          // opened" suppression so the row lights up the moment it lands.
           setDynConversations((prev: any) => Array.isArray(prev) ? prev.map((c: any) =>
             c.supabaseConvoId === convoId
-              ? { ...c, lastMessage: payload?.preview ?? c.lastMessage, lastTime: 'now' }
+              ? { ...c, unread: (c.unread || 0) + 1, lastMessage: payload?.preview ?? c.lastMessage, lastTime: 'now' }
               : c) : prev)
+          setOpenedConvos((prev: any) => {
+            if (!prev.has(convo.id)) return prev
+            const n = new Set(prev); n.delete(convo.id); return n
+          })
         }
         // Thread replies land in the Threads inbox instantly too
         clearTimeout(debounce)
@@ -1154,10 +1181,11 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         const r = await fetch(`${API_BASE}msgs/unread`, { headers: { Authorization: sbBearer() } })
         const b = r.ok ? await r.json() : null
         const ids = Array.isArray(b?.unread) ? b.unread : []
+        const tids = Array.isArray(b?.threads) ? b.threads : []
         // If the user already marked/opened something, their action wins —
         // applying this stale snapshot would resurrect a mark they just cleared.
-        if (!ids.length || marksDirtyRef.current) return
-        setMarkedUnread((prev: any) => {
+        if ((!ids.length && !tids.length) || marksDirtyRef.current) return
+        if (ids.length) setMarkedUnread((prev: any) => {
           const n = new Set(prev)
           for (const sc of ids) {
             const c = dynConversations.find((x: any) => x.supabaseConvoId === sc)
@@ -1165,6 +1193,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           }
           return n
         })
+        if (tids.length) setThreadMarkedUnread((prev: any) => new Set([...prev, ...tids]))
       } catch {}
     })()
   }, [myProfileId, dynConversations]) // eslint-disable-line
@@ -1184,10 +1213,13 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       convoChanRef.current?.send({ type: 'broadcast', event: 'new-message', payload })
       const other = conversationsRef.current.find((c: any) => c.supabaseConvoId === convoId)
       if (other?.id && other.id !== myProfileId) {
-        const topic = `msgs-user-${other.id}`
-        // send() on an unjoined channel goes over HTTP — no subscribe needed
-        const ch = sendChansRef.current[topic] ||= supabase.channel(topic)
-        ch.send({ type: 'broadcast', event: 'new-message', payload })
+        // send() on an unjoined channel goes over HTTP — no subscribe needed.
+        // msgs-user-* feeds their open Messages view; msgs-tab-* lights the
+        // sidebar Messages tab instantly even when they're on another tab.
+        for (const topic of [`msgs-user-${other.id}`, `msgs-tab-${other.id}`]) {
+          const ch = sendChansRef.current[topic] ||= supabase.channel(topic)
+          ch.send({ type: 'broadcast', event: 'new-message', payload })
+        }
       }
     } catch {}
   }
@@ -1588,7 +1620,20 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                     overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: unread ? 600 : 400 }}>
                     ↪ {last.sender_id === myProfileId ? 'You: ' : ''}{last.content}
                   </div>
-                  <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>🧵 {item.replies.length} {item.replies.length===1?'reply':'replies'}</div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:2 }}>
+                    <span style={{ fontSize:10, color:C.muted }}>🧵 {item.replies.length} {item.replies.length===1?'reply':'replies'}</span>
+                    <span
+                      onClick={(e: any) => {
+                        e.stopPropagation()
+                        if (threadMarkedUnread.has(item.root.id)) clearThreadUnread(item.root.id)
+                        else markThreadUnread(item.root.id)
+                      }}
+                      style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:6,
+                        border:`1px solid ${threadMarkedUnread.has(item.root.id) ? C.gold : C.border}`,
+                        color: threadMarkedUnread.has(item.root.id) ? C.gold : C.muted, cursor:'pointer' }}>
+                      {threadMarkedUnread.has(item.root.id) ? '● Kept unread' : 'Mark unread'}
+                    </span>
+                  </div>
                 </button>
               )
             })}
@@ -1722,6 +1767,18 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                 {(conversations.find((c: any) => c.supabaseConvoId === threadRoot.conversation_id)?.name) || activeConvo?.name || ''}
               </div>
             </div>
+            <button
+              onClick={() => {
+                if (threadMarkedUnread.has(threadRoot.id)) { clearThreadUnread(threadRoot.id); return }
+                markThreadUnread(threadRoot.id)
+                setThreadRootId(null) // close so the kept-unread state is visible
+              }}
+              style={{ background: threadMarkedUnread.has(threadRoot.id) ? '#2a2a2a' : 'transparent',
+                border:`1px solid ${threadMarkedUnread.has(threadRoot.id) ? C.gold : C.border}`, borderRadius:8,
+                color: threadMarkedUnread.has(threadRoot.id) ? C.gold : C.muted, fontSize:10, fontWeight:700,
+                cursor:'pointer', padding:'4px 9px', lineHeight:1.4 }}>
+              {threadMarkedUnread.has(threadRoot.id) ? '● Kept unread' : 'Mark unread'}
+            </button>
             {!isMobile && (
               <button onClick={() => setThreadRootId(null)}
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:8, color:C.muted, fontSize:14, cursor:'pointer', padding:'3px 9px', lineHeight:1 }}>×</button>

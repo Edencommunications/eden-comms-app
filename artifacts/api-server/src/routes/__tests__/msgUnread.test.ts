@@ -25,3 +25,14 @@ test("caps the list at 100 marks", () => {
     `${String(i).padStart(8, "0")}-0000-4000-8000-000000000000`);
   assert.equal(sanitizeMarks(many).length, 100);
 });
+
+import { parseMarks } from "../msgUnread";
+
+test("parseMarks handles legacy plain array", () => {
+  assert.deepEqual(parseMarks(JSON.stringify([A])), { convos: [A], threads: [] });
+});
+
+test("parseMarks handles new object shape and junk", () => {
+  assert.deepEqual(parseMarks(JSON.stringify({ convos: [A, "x"], threads: [B] })), { convos: [A], threads: [B] });
+  assert.deepEqual(parseMarks("not json"), { convos: [], threads: [] });
+});
