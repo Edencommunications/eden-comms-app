@@ -61,8 +61,39 @@ export function getSuppSyncHealth(now: Date = new Date()): SuppSyncHealth & { he
 }
 
 // ---- one pass ----------------------------------------------------------
-export async function runSuppSyncPass(): Promise<{ orgs: number; inserted: number }> {
+// ---- multi-instance lease (dev + prod share the DB) --------------------
+// Claimed by compare-and-swap on an admin_settings row, exactly like the
+// push watcher: only one server instance syncs at a time, so two instances
+// can never both insert the same missing rows.
+const LEASE_KEY = "supp_sync_lease";
+const LEASE_MS = 10 * 60 * 1000; // generous: a pass is seconds, lease 10 min
+async function claimLease(instance: string): Promise<boolean> {
+  const rows = await sbGet("admin_settings", `company_id=eq.${EDEN_ORG_ID}&key=eq.${LEASE_KEY}&select=value`);
+  const raw: string | null = rows[0] ? String(rows[0].value) : null;
+  let cur: { at?: string; holder?: string } = {};
+  try { cur = raw ? JSON.parse(raw) : {}; } catch { cur = {}; }
+  if (cur.at && cur.holder !== instance && Date.now() - Date.parse(cur.at) < LEASE_MS) return false;
+  const next = JSON.stringify({ at: new Date().toISOString(), holder: instance });
+  if (raw === null) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings`, {
+      method: "POST", headers: { ...sbHeaders(), Prefer: "return=representation" },
+      body: JSON.stringify([{ company_id: EDEN_ORG_ID, key: LEASE_KEY, value: next }]),
+    });
+    return r.ok; // a duplicate-key failure means someone else just created it
+  }
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${EDEN_ORG_ID}&key=eq.${LEASE_KEY}&value=eq.${encodeURIComponent(raw)}`,
+    { method: "PATCH", headers: { ...sbHeaders(), Prefer: "return=representation" }, body: JSON.stringify({ value: next }) },
+  );
+  const won = (r.ok ? await r.json().catch(() => []) : []) as any[];
+  return Array.isArray(won) && won.length > 0;
+}
+
+const INSTANCE = Math.random().toString(36).slice(2);
+
+export async function runSuppSyncPass(): Promise<{ orgs: number; inserted: number; skipped?: boolean }> {
   if (!sbKey()) throw new Error("SUPABASE_SERVICE_ROLE_KEY missing");
+  if (!(await claimLease(INSTANCE))) return { orgs: 0, inserted: 0, skipped: true };
 
   // Master list = Eden's current library
   const eden = await sbGet(
@@ -92,12 +123,20 @@ export async function runSuppSyncPass(): Promise<{ orgs: number; inserted: numbe
     // suddenly flooded with the whole Eden catalog they chose not to keep…
     // except they never chose — so on first run we DO copy missing Eden supps
     // (that is the point of add-only sync) but skip name matches.
-    if (firstRun) {
-      const existing = await sbGet("company_supplements", `company_id=eq.${orgId}&select=category,name`);
-      for (const s of existing) seenSet.add(normKey(s.category, s.name));
-    }
+    // Belt-and-braces: ALWAYS check what the org currently has right before
+    // inserting — even outside the first run. If a previous pass inserted a
+    // row but crashed before writing the tombstone, this prevents a duplicate.
+    const existing = await sbGet("company_supplements", `company_id=eq.${orgId}&select=category,name`);
+    const existingKeys = new Set(existing.map((s: any) => normKey(s.category, s.name)));
+    if (firstRun) for (const k of existingKeys) seenSet.add(k);
 
-    const missing = [...edenByKey.entries()].filter(([k]) => !seenSet.has(k));
+    const missing = [...edenByKey.entries()].filter(([k]) => !seenSet.has(k) && !existingKeys.has(k));
+    // Rows the org already has but the tombstone list missed (crash recovery):
+    // record them as seen so they are never candidates again.
+    let seenChanged = false;
+    for (const k of edenByKey.keys()) {
+      if (!seenSet.has(k) && existingKeys.has(k)) { seenSet.add(k); seenChanged = true; }
+    }
     if (missing.length > 0) {
       const rows = missing.map(([, s]) => ({
         company_id: orgId,
@@ -113,7 +152,7 @@ export async function runSuppSyncPass(): Promise<{ orgs: number; inserted: numbe
     }
 
     // Persist the seen list whenever it changed (first-run seeding counts)
-    if (firstRun || missing.length > 0) {
+    if (firstRun || missing.length > 0 || seenChanged) {
       const value = JSON.stringify([...seenSet]);
       const up = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
         method: "POST",
