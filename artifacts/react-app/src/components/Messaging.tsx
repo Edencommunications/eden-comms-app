@@ -738,7 +738,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
   // Manual unread marks persist server-side (admin_settings via /api/msgs/unread)
   // so "keep this thread unread" survives reloads, logouts, and other devices.
   const API_BASE = `${(import.meta as any).env?.BASE_URL || '/'}api/`
+  const marksDirtyRef = useRef(false) // user changed marks before the server load returned
   function syncUnreadMarks(next: Set<any>) {
+    marksDirtyRef.current = true
     try {
       const list = conversationsRef.current || []
       const ids = [...next]
@@ -1152,7 +1154,9 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
         const r = await fetch(`${API_BASE}msgs/unread`, { headers: { Authorization: sbBearer() } })
         const b = r.ok ? await r.json() : null
         const ids = Array.isArray(b?.unread) ? b.unread : []
-        if (!ids.length) return
+        // If the user already marked/opened something, their action wins —
+        // applying this stale snapshot would resurrect a mark they just cleared.
+        if (!ids.length || marksDirtyRef.current) return
         setMarkedUnread((prev: any) => {
           const n = new Set(prev)
           for (const sc of ids) {
