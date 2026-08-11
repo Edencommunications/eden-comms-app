@@ -122,6 +122,30 @@ async function getCfg(): Promise<GhlCfg> {
 async function saveCfg(cfg: GhlCfg): Promise<boolean> {
   return dbUpsertSetting("ghl_kpi", JSON.stringify(cfg));
 }
+// Safe read-modify-write: re-fetches fresh bytes and applies `fn` under CAS,
+// retrying on conflict. Every writer (settings saves, name-cache persistence,
+// failure rollback) must go through this — dev and prod share the DB, so a
+// plain whole-config save can clobber another instance's markers and cause
+// duplicate posts.
+async function mutateCfg(fn: (cfg: GhlCfg) => void, tries = 3): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
+    const rows = await dbGet<any>(
+      `admin_settings?company_id=eq.${EDEN_COMPANY_ID}&key=eq.ghl_kpi&select=value`,
+    );
+    if (!rows[0]) {
+      const cfg: GhlCfg = {};
+      fn(cfg);
+      if (await saveCfg(cfg)) return true;
+      continue;
+    }
+    const raw = typeof rows[0].value === "string" ? rows[0].value : JSON.stringify(rows[0].value);
+    let cfg: GhlCfg = {};
+    try { cfg = JSON.parse(raw) || {}; } catch { /* start clean */ }
+    fn(cfg);
+    if (await casCfg(raw, cfg)) return true;
+  }
+  return false;
+}
 // Compare-and-swap: only writes if the stored bytes are unchanged, so two
 // server instances (dev + prod share this DB) can never double-post.
 async function casCfg(expectedRaw: string, cfg: GhlCfg): Promise<boolean> {
@@ -593,9 +617,9 @@ async function runPayout(cfg: GhlCfg): Promise<{ ok: boolean; error?: string }> 
 // whole would clobber markers or settings an admin changed mid-run.
 async function persistCloserNames(names: Record<string, string>): Promise<void> {
   if (!Object.keys(names).length) return;
-  const fresh = await getCfg();
-  fresh.closer_names = { ...(fresh.closer_names || {}), ...names };
-  await saveCfg(fresh);
+  await mutateCfg((cfg) => {
+    cfg.closer_names = { ...(cfg.closer_names || {}), ...names };
+  });
 }
 
 // ── Scheduler + health ──────────────────────────────────────────
@@ -633,19 +657,24 @@ async function processDue() {
     if (!health.configured) return;
 
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const monthStr = todayStr.slice(0, 7);
     const hour = Number.isFinite(Number(cfg.hour)) ? Number(cfg.hour) : 11;
     if (now.getUTCHours() < hour) return;
 
-    // Post day and "the 15th" are judged on the CENTRAL calendar — the team
+    // Post day and payout day are judged on the CENTRAL calendar — the team
     // is in US Central time, and a UTC Monday starts Sunday evening for them.
+    // Markers are Central-based too: the weekly marker is the REPORTED WEEK's
+    // start date (not "today"), so crossing UTC midnight during one Central
+    // day — or changing the post day mid-week — can never repost a week that
+    // already went out. The payout marker is the Central month.
     const central = centralDateParts(now);
+    const centralToday = isoOf(central.y, central.m0, central.d);
+    const centralMonth = centralToday.slice(0, 7);
+    const weekKey = computeWindows(now).weekStart;
     const weeklyDow = Number.isInteger(cfg.weekly_dow) && cfg.weekly_dow! >= 0 && cfg.weekly_dow! <= 6 ? cfg.weekly_dow! : 1;
     const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
     const due: Array<"weekly" | "payout"> = [];
-    if (cfg.weekly && central.dow === weeklyDow && cfg.last_weekly !== todayStr) due.push("weekly");
-    if (cfg.payout && central.d === payoutDay && cfg.last_payout !== monthStr) due.push("payout");
+    if (cfg.weekly && central.dow === weeklyDow && cfg.last_weekly !== weekKey) due.push("weekly");
+    if (cfg.payout && central.d === payoutDay && cfg.last_payout !== centralMonth) due.push("payout");
     if (!due.length) return;
 
     for (const kind of due) {
@@ -659,11 +688,11 @@ async function processDue() {
       try { freshCfg = JSON.parse(freshRaw) || {}; } catch { continue; }
       // Re-check the marker on fresh bytes (another instance may have run it).
       if (kind === "weekly") {
-        if (!freshCfg.weekly || freshCfg.last_weekly === todayStr) continue;
-        freshCfg.last_weekly = todayStr;
+        if (!freshCfg.weekly || freshCfg.last_weekly === weekKey) continue;
+        freshCfg.last_weekly = weekKey;
       } else {
-        if (!freshCfg.payout || freshCfg.last_payout === monthStr) continue;
-        freshCfg.last_payout = monthStr;
+        if (!freshCfg.payout || freshCfg.last_payout === centralMonth) continue;
+        freshCfg.last_payout = centralMonth;
       }
       if (!(await casCfg(freshRaw, freshCfg))) continue; // lost the claim — skip
 
@@ -674,18 +703,18 @@ async function processDue() {
         health.lastError = r.error || "report failed";
         // Roll only THIS report's marker back (up to 3 tries per day) so the
         // next 15-min pass retries; admins were already alerted by the run.
-        const rollback = await getCfg();
-        const failKey = `fails_${kind}_${todayStr}`;
-        const attempts = Number((rollback as any)[failKey] || 0) + 1;
-        (rollback as any)[failKey] = attempts;
-        if (attempts < 3) {
-          if (kind === "weekly") delete rollback.last_weekly;
-          if (kind === "payout") delete rollback.last_payout;
-        }
-        for (const k of Object.keys(rollback)) {
-          if (k.startsWith("fails_") && !k.endsWith(todayStr)) delete (rollback as any)[k];
-        }
-        await saveCfg(rollback);
+        await mutateCfg((rollback) => {
+          const failKey = `fails_${kind}_${centralToday}`;
+          const attempts = Number((rollback as any)[failKey] || 0) + 1;
+          (rollback as any)[failKey] = attempts;
+          if (attempts < 3) {
+            if (kind === "weekly") delete rollback.last_weekly;
+            if (kind === "payout") delete rollback.last_payout;
+          }
+          for (const k of Object.keys(rollback)) {
+            if (k.startsWith("fails_") && !k.endsWith(centralToday)) delete (rollback as any)[k];
+          }
+        });
       }
     }
   } catch (e) {
@@ -734,34 +763,43 @@ router.get("/ghl-kpi/status", async (req: Request, res: Response) => {
   } catch { res.status(500).json({ error: "Status check failed" }); }
 });
 
+// Strict integer parsing — Number("") is 0, which would silently turn a
+// malformed empty input into "Sunday" or "midnight".
+const intParam = (v: any): number | null => {
+  if (typeof v === "number" && Number.isInteger(v)) return v;
+  if (typeof v === "string" && /^-?\d+$/.test(v.trim())) return Number(v.trim());
+  return null;
+};
+
 router.post("/ghl-kpi/settings", async (req: Request, res: Response) => {
   try {
     const caller = await requireEdenAdmin(req, res);
     if (!caller) return;
-    const cfg = await getCfg();
+    // Validate everything up front, then apply as a field-merge under CAS so
+    // an admin save can never clobber a scheduler's just-claimed marker.
+    const setters: Array<(cfg: GhlCfg) => void> = [];
     const communityId = String(req.body?.communityId || "").trim();
     if (communityId) {
       const rows = await dbGet<any>(`communities?id=eq.${encodeURIComponent(communityId)}&company_id=eq.${EDEN_COMPANY_ID}&is_active=eq.true&select=id,name`);
       if (!rows[0]) { res.status(400).json({ error: "That community wasn't found" }); return; }
-      cfg.community_id = rows[0].id;
-      cfg.community_name = rows[0].name;
+      setters.push((cfg) => { cfg.community_id = rows[0].id; cfg.community_name = rows[0].name; });
     }
-    if (req.body?.weekly !== undefined) cfg.weekly = !!req.body.weekly;
-    if (req.body?.payout !== undefined) cfg.payout = !!req.body.payout;
+    if (req.body?.weekly !== undefined) { const v = !!req.body.weekly; setters.push((cfg) => { cfg.weekly = v; }); }
+    if (req.body?.payout !== undefined) { const v = !!req.body.payout; setters.push((cfg) => { cfg.payout = v; }); }
     if (req.body?.hour !== undefined) {
-      const h = Number(req.body.hour);
-      if (!Number.isInteger(h) || h < 0 || h > 23) { res.status(400).json({ error: "Post hour must be 0–23" }); return; }
-      cfg.hour = h;
+      const h = intParam(req.body.hour);
+      if (h === null || h < 0 || h > 23) { res.status(400).json({ error: "Post hour must be 0–23" }); return; }
+      setters.push((cfg) => { cfg.hour = h; });
     }
     if (req.body?.weeklyDow !== undefined) {
-      const d = Number(req.body.weeklyDow);
-      if (!Number.isInteger(d) || d < 0 || d > 6) { res.status(400).json({ error: "Weekly post day must be 0 (Sunday) to 6 (Saturday)" }); return; }
-      cfg.weekly_dow = d;
+      const d = intParam(req.body.weeklyDow);
+      if (d === null || d < 0 || d > 6) { res.status(400).json({ error: "Weekly post day must be 0 (Sunday) to 6 (Saturday)" }); return; }
+      setters.push((cfg) => { cfg.weekly_dow = d; });
     }
     if (req.body?.payoutDay !== undefined) {
-      const d = Number(req.body.payoutDay);
-      if (!Number.isInteger(d) || d < 1 || d > 28) { res.status(400).json({ error: "Payout day must be 1–28" }); return; }
-      cfg.payout_day = d;
+      const d = intParam(req.body.payoutDay);
+      if (d === null || d < 1 || d > 28) { res.status(400).json({ error: "Payout day must be 1–28" }); return; }
+      setters.push((cfg) => { cfg.payout_day = d; });
     }
     if (req.body?.closers !== undefined) {
       if (!Array.isArray(req.body.closers) || req.body.closers.length > 15) { res.status(400).json({ error: "Bad closer list" }); return; }
@@ -774,10 +812,21 @@ router.post("/ghl-kpi/settings", async (req: Request, res: Response) => {
         cleaned.push({ id, name });
       }
       if (!cleaned.length) { res.status(400).json({ error: "Keep at least one closer calendar on the list" }); return; }
-      cfg.closers = cleaned;
+      cfg_closers: {
+        // Only accept ids that are real calendars on this GHL location.
+        const b = await ghlGet(`/calendars/?locationId=${LOCATION_ID}`).catch(() => null);
+        const valid = new Set(((b?.calendars || []) as any[]).map((c) => String(c.id)));
+        if (valid.size === 0) break cfg_closers; // GHL unreachable — don't block the save
+        const unknown = cleaned.filter((c) => !valid.has(c.id));
+        if (unknown.length) { res.status(400).json({ error: "One of those calendars no longer exists in GoHighLevel" }); return; }
+      }
+      setters.push((cfg) => { cfg.closers = cleaned; });
     }
-    if (!cfg.connected_by) cfg.connected_by = caller.id;
-    if (!(await saveCfg(cfg))) { res.status(502).json({ error: "Could not save settings" }); return; }
+    const saved = await mutateCfg((cfg) => {
+      for (const s of setters) s(cfg);
+      if (!cfg.connected_by) cfg.connected_by = caller.id;
+    });
+    if (!saved) { res.status(502).json({ error: "Could not save settings" }); return; }
     res.json({ ok: true });
   } catch { res.status(500).json({ error: "Could not save settings" }); }
 });

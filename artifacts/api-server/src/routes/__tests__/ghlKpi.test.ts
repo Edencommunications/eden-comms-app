@@ -57,6 +57,14 @@ test("the week containing the fall DST change is an hour longer", () => {
   assert.equal(w.weekEndMs - w.weekStartMs, 7 * 86400_000 + 3600_000);
 });
 
+test("weekly marker key (weekStart) is stable across UTC midnight during one Central day", () => {
+  // Mon Aug 10 2026, 11:00 UTC (6am CT) vs Tue Aug 11, 02:00 UTC (still Mon 9pm CT)
+  const morning = computeWindows(new Date(Date.UTC(2026, 7, 10, 11)));
+  const lateNight = computeWindows(new Date(Date.UTC(2026, 7, 11, 2)));
+  assert.equal(morning.weekStart, "2026-08-03");
+  assert.equal(lateNight.weekStart, "2026-08-03"); // same key → no duplicate post
+});
+
 test("payoutWindow on the 15th covers the previous calendar month", () => {
   const p = payoutWindow(new Date(Date.UTC(2026, 8, 15, 12))); // Sep 15
   assert.equal(p.label, "August 2026");
