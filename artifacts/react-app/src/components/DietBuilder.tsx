@@ -53,7 +53,7 @@ function PhotoCompare({ photos, isMobile }: any) {
           <img src={p.photo_url} alt="" style={{ width:'100%', height:'100%', objectFit:'contain', display:'block' }}/>
           <div style={{ position:'absolute', bottom:0, left:0, right:0, background:'rgba(0,0,0,0.65)', padding:'5px 8px',
             fontSize:11, fontWeight:700, color:C.gold, textAlign:'center' }}>
-            {p.week_label||''}{p.notes?` · ${p.notes}`:''}
+            {p.week_label||''}{p.taken_at?` · ${new Date(p.taken_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`:''}{p.notes?` · ${p.notes}`:''}
           </div>
         </>) : (
           <div style={{ color:C.muted, fontSize:11, textAlign:'center', padding:12 }}>
@@ -2301,6 +2301,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
                         </div>
                         <button onClick={()=>{
+                          if(!window.confirm('Delete this coach update? This permanently removes it for you and the client.')) return
                           setCoachOnlyUpdates((p: any)=>p.filter((u: any)=>u.id!==item.id))
                           if(typeof item.id==='string') dbDelete('coach_updates',`id=eq.${item.id}`)
                         }} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
