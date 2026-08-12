@@ -150,17 +150,6 @@ async function dbUpdate(table: any, query: any, body: any) {
   if (!r.ok) { console.error('UPDATE', await r.text()); return null }
   return true
 }
-async function dbDelete(table: any, query: any) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    method:'DELETE',
-    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() },
-      'Prefer':'return=representation' },
-  })
-  if (!r.ok) { console.error('DELETE', await r.text()); return null }
-  // With return=representation, an RLS-blocked delete returns [] — treat as failure
-  const rows = await r.json().catch(()=>null)
-  return Array.isArray(rows) && rows.length > 0 ? rows : null
-}
 async function dbUpsert(table: any, body: any, onConflict: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
     method:'POST',
@@ -174,9 +163,13 @@ async function dbUpsert(table: any, body: any, onConflict: any) {
 async function dbDelete(table: any, query: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     method:'DELETE',
-    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() } }
+    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() },
+      'Prefer':'return=representation' }
   })
-  if (!r.ok) console.error('DELETE', await r.text())
+  if (!r.ok) { console.error('DELETE', await r.text()); return null }
+  // With return=representation, an RLS-blocked delete returns [] — treat as failure
+  const rows = await r.json().catch(()=>null)
+  return Array.isArray(rows) && rows.length > 0 ? rows : null
 }
 // Save a client's diet plan without piling up rows: update the newest existing
 // diet_plans row for this client (and prune any older duplicates left over from
