@@ -1440,27 +1440,40 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
         clientNotes:     r.other_notes || r.notes || '',
         coachNotes:      '',                loomUrl:       '',
         _dbId:           r.id,
+        _ts:             new Date(r.submitted_at).getTime() || 0,
       }));
-      const resps = await sbGet('coach_responses', `client_id=eq.${client.uuid}&order=updated_at.desc`);
+      const [resps, updates] = await Promise.all([
+        sbGet('coach_responses', `client_id=eq.${client.uuid}&order=updated_at.desc`),
+        sbGet('coach_updates',   `client_id=eq.${client.uuid}&order=created_at.desc&limit=50`),
+      ]);
       const byDate: Record<string,any> = {};
       (Array.isArray(resps) ? resps : []).forEach((r:any) => { if (!byDate[r.checkin_date]) byDate[r.checkin_date] = r; });
-      setLocalHistory(mapped.map((e:any) => {
+      const merged = mapped.map((e:any) => {
         const resp = byDate[e.date];
-        const merged = resp ? { ...e, coachNotes: resp.coach_notes || '', loomUrl: resp.coach_loom || '' } : e;
+        const m = resp ? { ...e, coachNotes: resp.coach_notes || '', loomUrl: resp.coach_loom || '' } : e;
         // Never let a slow load clobber feedback the coach saved while it ran
         const edit = savedEditsRef.current[e.date];
-        return edit ? { ...merged, coachNotes: edit.note, loomUrl: edit.loom } : merged;
+        return edit ? { ...m, coachNotes: edit.note, loomUrl: edit.loom } : m;
+      });
+      // Coach updates (📝) ride the same timeline, matching the Clients tab
+      const updateEntries = (Array.isArray(updates) ? updates : []).map((u:any) => ({
+        _type: 'coachUpdate',
+        date:  u.date || (u.created_at ? new Date(u.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''),
+        note:  u.note || '', loom: u.loom || '',
+        _ts:   new Date(u.created_at || u.date).getTime() || 0,
       }));
+      setLocalHistory([...merged, ...updateEntries].sort((a:any,b:any) => b._ts - a._ts));
     })();
   }, [client?.uuid]);
 
   if (!client) return null;
 
   const history: any[] = localHistory;
-  const lastCompleted = history.length > 0 ? history[0].date : client.lastCheckin;
+  const checkinsOnly = history.filter((e:any) => e._type !== 'coachUpdate');
+  const lastCompleted = checkinsOnly.length > 0 ? checkinsOnly[0].date : client.lastCheckin;
 
-  // Oldest→newest for charts (left = past, right = present)
-  const chartData = [...history].reverse().map((e:any) => ({
+  // Oldest→newest for charts (left = past, right = present) — check-ins only
+  const chartData = [...checkinsOnly].reverse().map((e:any) => ({
     date: e.date.replace(" 2026",""),
     weight:    parseFloat(e.weight),
     compliance:e.compliance,
@@ -1740,6 +1753,18 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
 
               {/* ── TIMELINE VIEW ── */}
               {historyView === "timeline" && history.map((entry:any, idx:number) => {
+                if (entry._type === 'coachUpdate') return (
+                  <div key={`cu-${idx}`} style={{ borderBottom: idx < history.length-1 ? `1px solid ${B.border}` : "none",
+                    padding:"16px", borderLeft:`3px solid ${B.gold}`, marginLeft:2, background:`${B.gold}08` }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                      <span style={{ fontSize:9, fontWeight:700, background:`${B.gold}22`, color:B.gold, padding:"2px 8px",
+                        borderRadius:20, letterSpacing:.5, textTransform:"uppercase" }}>📝 Coach Update</span>
+                      <span style={{ fontSize:12, fontWeight:700, color:B.text }}>{entry.date}</span>
+                    </div>
+                    {entry.note && <p style={{ fontSize:12, color:B.text, lineHeight:1.7, whiteSpace:"pre-wrap", margin:"0 0 8px" }}>{entry.note}</p>}
+                    {entry.loom ? <LoomEmbed url={entry.loom} label="🎥 Watch Loom" title="Loom"/> : null}
+                  </div>
+                );
                 const compColor = entry.compliance >= 90 ? "#4caf50" : entry.compliance >= 75 ? B.gold : "#ff5252";
                 const borderAccent = entry.compliance >= 90 ? "#4caf50" : entry.compliance >= 75 ? B.gold : "#ff5252";
                 return (
