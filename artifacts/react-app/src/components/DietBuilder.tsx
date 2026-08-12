@@ -1172,24 +1172,21 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     setClientPhotos((prev: any) => (prev || []).map((x: any) => x.id === p.id ? { ...x, notes: name } : x))
   }
 
-  // Delete a photo the client uploaded by mistake (removes the DB row; best-effort storage cleanup)
+  // Delete a photo the client uploaded by mistake. Goes through the server so
+  // BOTH the record and the actual image file are removed (browser sessions
+  // can't delete storage objects directly).
   async function deletePhoto(p: any) {
     if (!window.confirm(`Delete "${p.notes || 'this photo'}"? Your coach will no longer see it.`)) return
-    const ok = await dbDelete('progress_photos', `id=eq.${p.id}`)
-    if (!ok) { alert('Could not delete this photo — please try again.'); return }
-    // Best-effort: remove the underlying file from storage (row is already gone either way)
     try {
-      const marker = '/storage/v1/object/public/progress-photos/'
-      const i = String(p.photo_url || '').indexOf(marker)
-      if (i >= 0) {
-        const path = String(p.photo_url).slice(i + marker.length)
-        await fetch(`${SUPABASE_URL}/storage/v1/object/progress-photos/${path}`, {
-          method: 'DELETE',
-          headers: { 'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() } },
-        })
-      }
-    } catch { /* storage cleanup is best-effort */ }
-    setClientPhotos((prev: any) => (prev || []).filter((x: any) => x.id !== p.id))
+      const tok = sbAccessToken()
+      const r = await fetch('/api/photos/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+        body: JSON.stringify({ id: p.id }),
+      })
+      if (!r.ok) { alert('Could not delete this photo — please try again.'); return }
+      setClientPhotos((prev: any) => (prev || []).filter((x: any) => x.id !== p.id))
+    } catch { alert('Could not delete this photo — please try again.') }
   }
 
   // Habits — assigned by coach, frequency filled by client

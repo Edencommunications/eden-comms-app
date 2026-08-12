@@ -24,6 +24,7 @@ import reactionsRouter from "./reactions";
 import teamSeenRouter from "./teamSeen";
 import msgUnreadRouter from "./msgUnread";
 import teamMessagesRouter from "./teamMessages";
+import photoDeleteRouter from "./photoDelete";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(reactionsRouter);
 router.use(teamSeenRouter);
 router.use(msgUnreadRouter);
 router.use(teamMessagesRouter);
+router.use(photoDeleteRouter);
 
 export default router;
