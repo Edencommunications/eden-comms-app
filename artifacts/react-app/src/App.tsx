@@ -2499,7 +2499,14 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
 
         {rosterOpen && (
           <>
-            {[...clients].sort((a:any,b:any)=>(b.needsReview?1:0)-(a.needsReview?1:0)).map((c,i)=>{
+            {[...clients].sort((a:any,b:any)=>{
+              // Clients who submitted this cycle on top (unreviewed first), missing ones below
+              const subA = isMissingCheckin(a, { time: myTime, tz: myTz }) ? 0 : 1;
+              const subB = isMissingCheckin(b, { time: myTime, tz: myTz }) ? 0 : 1;
+              if (subA !== subB) return subB - subA;
+              return (b.needsReview?1:0)-(a.needsReview?1:0);
+            }).map((c,i)=>{
+              const missingCycle = isMissingCheckin(c, { time: myTime, tz: myTz });
               const alertOn = isAlertActive(c);
               // Opening a client with a new check-in clears the highlight (the
               // modal has a "remind me" button to flag it as new again)
@@ -2520,9 +2527,13 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                       onClick={openClient}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                         <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
-                        {!loomMode && c.needsReview && (
+                        {!loomMode && c.needsReview && !missingCycle && (
                           <span style={{ fontSize:9, fontWeight:800, color:B.black, background:B.gold,
                             borderRadius:4, padding:"2px 6px", letterSpacing:.5, whiteSpace:"nowrap" }}>📋 NEW CHECK-IN</span>
+                        )}
+                        {!loomMode && missingCycle && (
+                          <span style={{ fontSize:9, fontWeight:800, color:"#ffa600", background:"#ffa60022", border:"1px solid #ffa60044",
+                            borderRadius:4, padding:"2px 6px", letterSpacing:.5, whiteSpace:"nowrap" }}>⏰ NO CHECK-IN YET</span>
                         )}
                         {!loomMode && c.checkInDay && (
                           <span style={{ fontSize:9, color:B.muted, background:B.surface, border:`1px solid ${B.border}`,

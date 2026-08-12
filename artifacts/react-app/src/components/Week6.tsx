@@ -1838,6 +1838,10 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     const mc = filterCoach==='All Coaches'||effectiveCoachName(c)===filterCoach
     return ms&&mc
   }).sort((a: any,b: any)=>{
+    // Clients who submitted a check-in this week float to the top,
+    // with pending-review ones first among them
+    const sa = weekSubs.has(a.uuid)?1:0, sb = weekSubs.has(b.uuid)?1:0
+    if (sa!==sb) return sb-sa
     if (a.hasUpdate && !b.hasUpdate) return -1
     if (!a.hasUpdate && b.hasUpdate) return 1
     return 0
@@ -2070,7 +2074,9 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         </div>
                         {!hidden && (client.hasUpdate
                           ? <div style={{fontSize:9,color:C.gold,fontWeight:700,marginTop:2}}>● CHECK-IN PENDING REVIEW</div>
-                          : <div style={{fontSize:9,color:C.success,fontWeight:700,marginTop:2}}>● ACTIVE</div>)}
+                          : weekSubs.has(client.uuid)
+                          ? <div style={{fontSize:9,color:C.success,fontWeight:700,marginTop:2}}>✓ CHECKED IN THIS WEEK</div>
+                          : <div style={{fontSize:9,color:C.muted,fontWeight:700,marginTop:2}}>● ACTIVE</div>)}
                       </div>
                     </button>
                     {/* Loom visibility checkbox */}
