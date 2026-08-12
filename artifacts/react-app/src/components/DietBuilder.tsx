@@ -150,6 +150,17 @@ async function dbUpdate(table: any, query: any, body: any) {
   if (!r.ok) { console.error('UPDATE', await r.text()); return null }
   return true
 }
+async function dbDelete(table: any, query: any) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    method:'DELETE',
+    headers:{ 'apikey':SUPABASE_ANON, get Authorization(){ return sbBearer() },
+      'Prefer':'return=representation' },
+  })
+  if (!r.ok) { console.error('DELETE', await r.text()); return null }
+  // With return=representation, an RLS-blocked delete returns [] — treat as failure
+  const rows = await r.json().catch(()=>null)
+  return Array.isArray(rows) && rows.length > 0 ? rows : null
+}
 async function dbUpsert(table: any, body: any, onConflict: any) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
     method:'POST',
@@ -1166,6 +1177,26 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     const ok = await dbUpdate('progress_photos', `id=eq.${p.id}`, { notes: name })
     if (ok === null) { alert('Could not rename — please try again.'); return }
     setClientPhotos((prev: any) => (prev || []).map((x: any) => x.id === p.id ? { ...x, notes: name } : x))
+  }
+
+  // Delete a photo the client uploaded by mistake (removes the DB row; best-effort storage cleanup)
+  async function deletePhoto(p: any) {
+    if (!window.confirm(`Delete "${p.notes || 'this photo'}"? Your coach will no longer see it.`)) return
+    const ok = await dbDelete('progress_photos', `id=eq.${p.id}`)
+    if (!ok) { alert('Could not delete this photo — please try again.'); return }
+    // Best-effort: remove the underlying file from storage (row is already gone either way)
+    try {
+      const marker = '/storage/v1/object/public/progress-photos/'
+      const i = String(p.photo_url || '').indexOf(marker)
+      if (i >= 0) {
+        const path = String(p.photo_url).slice(i + marker.length)
+        await fetch(`${SUPABASE_URL}/storage/v1/object/progress-photos/${path}`, {
+          method: 'DELETE',
+          headers: { 'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() } },
+        })
+      }
+    } catch { /* storage cleanup is best-effort */ }
+    setClientPhotos((prev: any) => (prev || []).filter((x: any) => x.id !== p.id))
   }
 
   // Habits — assigned by coach, frequency filled by client
@@ -2996,9 +3027,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )}
               </>)}
 
+              {/* Hidden file input — shared by the Photos tab and the Submit tab upload block */}
+              <input type="file" ref={photoFileRef} accept="image/*" multiple style={{display:'none'}} onChange={uploadProgressPhoto}/>
+
               {/* ─── Photos tab ─── */}
               {clientViewTab==='photos'&&(<>
-                <input type="file" ref={photoFileRef} accept="image/*" multiple style={{display:'none'}} onChange={uploadProgressPhoto}/>
                 <button onClick={()=>photoFileRef.current?.click()} disabled={photoUploading}
                   style={{width:'100%',background:'none',border:`2px dashed ${C.gold}66`,borderRadius:12,
                     padding:'18px',color:C.gold,fontSize:13,fontWeight:700,
@@ -3062,6 +3095,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                 <span style={{fontSize:11,fontWeight:700,color:C.gold}}>{p.notes||`Photo ${i+1}`}</span>
                                 <button onClick={()=>renamePhoto(p)} title="Rename this photo"
                                   style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:C.muted,padding:0}}>✏️</button>
+                                <button onClick={()=>deletePhoto(p)} title="Delete this photo"
+                                  style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:C.danger,padding:0}}>🗑</button>
                               </div>
                             </div>
                           ):(
@@ -3284,7 +3319,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     rows={4}
                     style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
                   <div style={{marginTop:10,padding:'8px 10px',background:`${C.gold}11`,border:`1px solid ${C.gold}33`,borderRadius:8,fontSize:11,color:C.muted}}>
-                    📸 Upload progress photos (front, side, back) in the Photos tab above
+                    📸 After you submit below, upload your weekly progress photos (front, side, back) at the bottom of this page
                   </div>
                 </Card>
 
@@ -3397,9 +3432,28 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   },...prev])
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                   }finally{setCiSubmitting(false)}
-                }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:ciSubmitting?'wait':'pointer',opacity:ciSubmitting?0.6:1,marginBottom:24}}>
+                }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:ciSubmitting?'wait':'pointer',opacity:ciSubmitting?0.6:1,marginBottom:16}}>
                   {ciSubmitting?'⏳ Submitting…':'Submit Weekly Check-In'}
                 </button>
+
+                {/* Weekly photo upload — placed under Submit so clients submit FIRST, then upload */}
+                <Card sx={{marginBottom:24}}>
+                  <Lbl t="📸 Weekly Progress Photos"/>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.6}}>
+                    <strong style={{color:C.gold}}>Step 1:</strong> Tap Submit above. <strong style={{color:C.gold}}>Step 2:</strong> Upload your weekly photos (front, side, back) here. Photos save and go to your coach automatically — no extra save button needed.
+                  </div>
+                  <button onClick={()=>photoFileRef.current?.click()} disabled={photoUploading}
+                    style={{width:'100%',background:'none',border:`2px dashed ${C.gold}66`,borderRadius:12,
+                      padding:'16px',color:C.gold,fontSize:13,fontWeight:700,
+                      cursor:photoUploading?'not-allowed':'pointer',
+                      display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+                      opacity:photoUploading?0.5:1}}>
+                    {photoUploading?'⏳ Uploading…':'📸 Upload Weekly Photos'}
+                  </button>
+                  <div style={{fontSize:10,color:C.muted,textAlign:'center',marginTop:6}}>
+                    They go into {currentWeekLabel(clientPhotos)} automatically — view, rename or delete them in the Photos tab.
+                  </div>
+                </Card>
               </>)}
             </div>
           </div>
