@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
+import LoomEmbed from './LoomEmbed'
 import { useDeadline } from '../lib/tz'
 import { useCheckinForm } from '../lib/checkinForm'
 import {
@@ -84,7 +85,10 @@ function PhotoCompare({ photos, isMobile }: any) {
       </div>
       {Object.entries(byWeek).map(([week, wPhotos]) => (
         <div key={week} style={{ marginBottom:14 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.white, marginBottom:6 }}>{week}</div>
+          <div style={{ fontSize:11, fontWeight:700, color:C.white, marginBottom:6 }}>
+            {week}
+            {wPhotos[0]?.taken_at && <span style={{ fontWeight:400, color:C.muted }}> · {new Date(wPhotos[0].taken_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+          </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
             {wPhotos.map((p: any, i: any) => {
               const inLeft = panes.left?.id === p.id, inRight = panes.right?.id === p.id
@@ -2302,17 +2306,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         }} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
                       </div>
                       {item.note&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.note}</p>}
-                      {loomId?(
-                        <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
-                          <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Loom"
-                            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                        </div>
-                      ):item.loom?(
-                        <a href={item.loom} target="_blank" rel="noreferrer"
-                          style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
-                          🎥 Watch Loom
-                        </a>
-                      ):null}
+                      {item.loom?<LoomEmbed url={item.loom} label="🎥 Watch Loom" title="Loom"/>:null}
                     </div>
                   )
                 }
@@ -2559,15 +2553,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                               <div>
                                 <p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{saved.coachNotes}</p>
                                 {(()=>{const id=saved?.coachLoom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1];return id?(
-                                  <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
-                                    <iframe src={`https://www.loom.com/embed/${id}`} allowFullScreen title="Loom"
-                                      style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                                  </div>
+                                  <LoomEmbed url={saved.coachLoom} label="🎥 Watch Loom Review" title="Loom"/>
                                 ):saved?.coachLoom?(
-                                  <a href={saved.coachLoom} target="_blank" rel="noreferrer"
-                                    style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
-                                    🎥 Watch Loom Review
-                                  </a>
+                                  <LoomEmbed url={saved.coachLoom} label="🎥 Watch Loom Review" title="Loom"/>
                                 ):null})()}
                               </div>
                             ):(
@@ -2718,17 +2706,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
                         </div>
                         {item.note&&<p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{item.note}</p>}
-                        {loomId?(
-                          <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
-                            <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Coach Loom"
-                              style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                          </div>
-                        ):item.loom?(
-                          <a href={item.loom} target="_blank" rel="noreferrer"
-                            style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
-                            🎥 Watch Loom
-                          </a>
-                        ):null}
+                        {item.loom?<LoomEmbed url={item.loom} label="🎥 Watch Loom" title="Coach Loom"/>:null}
                       </div>
                     )
                   }
@@ -2818,17 +2796,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             <div style={{background:`${C.gold}0d`,border:`1px solid ${C.gold}33`,borderRadius:10,padding:'12px 14px'}}>
                               <div style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>💬 Coach Response</div>
                               <p style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap',margin:'0 0 10px'}}>{ci.coachNotes}</p>
-                              {loomId?(
-                                <div style={{position:'relative',paddingBottom:'56.25%',borderRadius:8,overflow:'hidden'}}>
-                                  <iframe src={`https://www.loom.com/embed/${loomId}`} allowFullScreen title="Coach Loom"
-                                    style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                                </div>
-                              ):ci.coachLoom?(
-                                <a href={ci.coachLoom} target="_blank" rel="noreferrer"
-                                  style={{display:'inline-flex',alignItems:'center',gap:6,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'6px 14px',color:C.gold,fontSize:12,fontWeight:700,textDecoration:'none'}}>
-                                  🎥 Watch Coach Review
-                                </a>
-                              ):null}
+                              {ci.coachLoom?<LoomEmbed url={ci.coachLoom} label="🎥 Watch Coach Review" title="Coach Loom"/>:null}
                             </div>
                           ):(
                             <div style={{background:C.surface,borderRadius:10,padding:'10px 12px',fontSize:12,color:C.muted,fontStyle:'italic'}}>
@@ -2992,10 +2960,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       {embed&&(
                         <div style={{marginTop:10}}>
                           <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🎥 Loom Recording</div>
-                          <div style={{position:'relative',paddingBottom:'56.25%',overflow:'hidden',borderRadius:10,border:`1px solid ${C.border}`}}>
-                            <iframe src={embed} allowFullScreen title="Loom recording"
-                              style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                          </div>
+                          <LoomEmbed url={embed} label="🎥 Watch Recording" title="Loom recording"/>
                         </div>
                       )}
                     </div>

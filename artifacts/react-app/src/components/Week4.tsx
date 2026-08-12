@@ -121,6 +121,7 @@ const EXERCISE_LIBRARY = {
 }
 
 import { CARDIO_TYPES, DEFAULT_RESOURCE_LINKS } from './libraryDefaults'
+import LoomEmbed from './LoomEmbed'
 
 const LAB_TYPES = [
   'Blood Work','DUTCH Test','GI-MAP','Hormone Panel',
@@ -882,10 +883,7 @@ Training Principles:
                 return embed ? (
                   <div style={{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
                     <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,marginBottom:8}}>🎥 COACH LAB REVIEW</div>
-                    <div style={{position:'relative',paddingBottom:'56.25%',overflow:'hidden',borderRadius:10,border:`1px solid ${C.border}`}}>
-                      <iframe src={embed} allowFullScreen title="Coach lab review"
-                        style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                    </div>
+                    <LoomEmbed url={embed} label="🎥 Watch Lab Review" title="Coach lab review"/>
                   </div>
                 ) : null
               })()}

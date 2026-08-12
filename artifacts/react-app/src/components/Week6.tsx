@@ -5,6 +5,7 @@
 //
 // In App.jsx:
 //   import Week6 from './components/Week6'
+import LoomEmbed from './LoomEmbed'
 //   {tab === 'admin' && <Week6 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useMemo } from 'react'
@@ -3037,10 +3038,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 return embed ? (
                   <div style={{marginTop:12}}>
                     <div style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>🎥 Loom Recording</div>
-                    <div style={{position:'relative',paddingBottom:'56.25%',overflow:'hidden',borderRadius:10,border:`1px solid ${C.border}`}}>
-                      <iframe src={embed} allowFullScreen title="Loom recording"
-                        style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-                    </div>
+                    <LoomEmbed url={embed} label="🎥 Watch Recording" title="Loom recording"/>
                   </div>
                 ) : null
               })()}
