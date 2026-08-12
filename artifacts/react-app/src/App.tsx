@@ -19,6 +19,7 @@ function useIsMobile(breakpoint = 768) {
 }
 import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
+import LoomEmbed from "./components/LoomEmbed";
 import Notifications from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
 import { LN, LoomPicker, loomSet, loomShow, loomIsShown, useLoomOn } from "./components/LoomPrivacy";
@@ -1848,16 +1849,7 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved, onFlagUnrevie
                             {entry.coachNotes || "No coach notes yet — click Add feedback to respond."}
                           </p>
                           {entry.loomUrl && (
-                            <a href={entry.loomUrl} target="_blank" rel="noreferrer"
-                              style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, background:B.bg,
-                                borderRadius:7, padding:"7px 10px", textDecoration:"none", border:`1px solid ${B.border}` }}>
-                              <span style={{ fontSize:18 }}>▶️</span>
-                              <div>
-                                <div style={{ fontSize:11, color:B.gold, fontWeight:600 }}>Watch Video Review</div>
-                                <div style={{ fontSize:9, color:B.muted, marginTop:1, overflow:"hidden",
-                                  textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:200 }}>{entry.loomUrl}</div>
-                              </div>
-                            </a>
+                            <LoomEmbed url={entry.loomUrl} label="🎥 Watch Video Review" title="Coach video review" sx={{ marginTop:8 }}/>
                           )}
                         </>
                       )}
