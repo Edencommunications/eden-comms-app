@@ -895,8 +895,26 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   const [lowMeals, setLowMeals] = useState<any>(
     ['Meal 1','Meal 2','Meal 3','Meal 4','Meal 5'].map(n=>({name:n,foods:[]}))
   )
-  const meals    = dayType==='high'?highMeals:lowMeals
-  const setMeals = dayType==='high'?setHighMeals:setLowMeals
+  // Extra diet days (3rd/4th) keep their meals here, keyed by day key —
+  // the diet_plans row only has columns for the first two days.
+  const [extraMeals, setExtraMeals] = useState<any>({})
+  // Day-plan config: coach-editable names, weekly schedule (0=Sun…6=Sat per
+  // JS getDay), and a free-text note. Persists in admin_settings 'diet_days:<uuid>'.
+  const [dayPlans, setDayPlans] = useState<any>({
+    days:[{key:'high',name:'High Calorie Day',sched:[]},{key:'low',name:'Low Calorie Day',sched:[]}], note:'',
+  })
+  // Guards so a save can't overwrite a stored config that hasn't loaded yet,
+  // and a late load response can't clobber the coach's in-progress edits.
+  const [dayCfgLoaded, setDayCfgLoaded] = useState<any>(false)
+  const dayCfgDirty = useRef<any>(false)
+  const editDayPlans = (fn: any)=>{ dayCfgDirty.current=true; setDayPlans(fn) }
+  const dayPlanList = Array.isArray(dayPlans?.days)&&dayPlans.days.length?dayPlans.days:[{key:'high',name:'High Calorie Day',sched:[]}]
+  const activeDay   = dayPlanList.find((d: any)=>d.key===dayType)||dayPlanList[0]
+  const BLANK_MEALS = ()=>['Meal 1','Meal 2','Meal 3','Meal 4','Meal 5'].map(n=>({name:n,foods:[]}))
+  const mealsForDay = (k: any)=>k==='high'?highMeals:k==='low'?lowMeals:(extraMeals[k]||BLANK_MEALS())
+  const meals    = mealsForDay(activeDay.key)
+  const setMeals = activeDay.key==='high'?setHighMeals:activeDay.key==='low'?setLowMeals:
+    ((fn: any)=>{const k=activeDay.key;setExtraMeals((p: any)=>({...p,[k]: typeof fn==='function'?fn(p[k]||BLANK_MEALS()):fn}))})
 
   // Calculator
   const [calc, setCalc] = useState<any>({
@@ -1251,6 +1269,38 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           }
         } catch(e){}
       }).catch(()=>{})
+    return ()=>{stale=true}
+  },[myUUID,myCompanyId])
+  // Day-plan config (names, weekly schedule, note, extra days' meals) persists
+  // per client in admin_settings 'diet_days:<uuid>' — the diet_plans row keeps
+  // holding meals for the first two days so older saved plans load unchanged.
+  useEffect(()=>{
+    if (!myUUID || !myCompanyId) return
+    let stale=false
+    setDayCfgLoaded(false)
+    dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('diet_days:'+myUUID)}&select=value`)
+      .then(rows=>{
+        if (stale) return
+        setDayCfgLoaded(true)
+        // If the coach already started editing day names/schedule before this
+        // response landed, keep their in-progress work — don't clobber it.
+        if (dayCfgDirty.current) return
+        try {
+          const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
+          if (v && Array.isArray(v.days) && v.days.length) {
+            setDayPlans({ days: v.days, note: typeof v.note==='string' ? v.note : '' })
+            if (v.extraMeals && typeof v.extraMeals==='object') setExtraMeals(v.extraMeals)
+            // Land on today's scheduled day; otherwise keep the current pick if
+            // it still exists, else fall back to the first day.
+            const todayDow = new Date().getDay()
+            setDayType((cur: any)=>{
+              const t = v.days.find((d: any)=>Array.isArray(d.sched)&&d.sched.includes(todayDow))
+              if (t) return t.key
+              return v.days.some((d: any)=>d.key===cur) ? cur : v.days[0].key
+            })
+          }
+        } catch(e){}
+      }).catch(()=>{ if(!stale) setDayCfgLoaded(true) })
     return ()=>{stale=true}
   },[myUUID,myCompanyId])
   // Hydrate the meal-plan builder from the latest saved diet plan so both the
@@ -1812,15 +1862,120 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             </Card>
           )}
 
-          {/* Day toggle */}
-          <div style={{display:'flex',gap:8,marginBottom:12}}>
-            {['high','low'].map(d=>(
-              <button key={d} onClick={()=>setDayType(d)}
-                style={{flex:1,padding:10,borderRadius:10,border:`1px solid ${dayType===d?C.gold:C.border}`,background:dayType===d?`${C.gold}20`:C.card,color:dayType===d?C.gold:C.muted,fontWeight:dayType===d?700:400,fontSize:13,cursor:'pointer'}}>
-                {d==='high'?'⬆ High Calorie Day':'⬇ Low Calorie Day'}
+          {/* Day plan tabs — coach can rename, remove, and add diet days */}
+          {(dayPlanList.length>1||isCoach)&&(
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+            {dayPlanList.map((d: any)=>{
+              const sel = activeDay.key===d.key
+              return (
+              <div key={d.key} style={{flex:1,minWidth:130,display:'flex',alignItems:'center',gap:6,padding:'0 8px 0 0',borderRadius:10,border:`1px solid ${sel?C.gold:C.border}`,background:sel?`${C.gold}20`:C.card}}>
+                <button onClick={()=>setDayType(d.key)}
+                  style={{flex:1,minWidth:0,padding:10,background:'none',border:'none',color:sel?C.gold:C.muted,fontWeight:sel?700:400,fontSize:13,cursor:'pointer',textAlign:'center',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  {d.name}
+                </button>
+                {isCoach&&sel&&(
+                  <>
+                    <button title="Rename this diet day" onClick={()=>{
+                        const n=window.prompt('Name this diet day',d.name)
+                        if(n&&n.trim()) editDayPlans((p: any)=>({...p,days:p.days.map((x: any)=>x.key===d.key?{...x,name:n.trim().slice(0,30)}:x)}))
+                      }}
+                      style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:2}}>✏</button>
+                    {dayPlanList.length>1&&(
+                      <button title="Remove this diet day" onClick={()=>{
+                          if(!window.confirm(`Remove "${d.name}" from this plan? Its meals will no longer show for the client.`)) return
+                          editDayPlans((p: any)=>{
+                            const days=p.days.filter((x: any)=>x.key!==d.key)
+                            return {...p,days}
+                          })
+                          setExtraMeals((p: any)=>{const{[d.key]:_gone,...rest}=p;return rest})
+                          setDayType((cur: any)=>cur===d.key?(dayPlanList.find((x: any)=>x.key!==d.key)?.key||'high'):cur)
+                        }}
+                        style={{background:'none',border:'none',color:'#ff6b6b',fontSize:13,cursor:'pointer',padding:2}}>✕</button>
+                    )}
+                  </>
+                )}
+              </div>
+            )})}
+            {isCoach&&dayPlanList.length<4&&(
+              <button onClick={()=>{
+                  const n=window.prompt('Name the new diet day (e.g. "Refeed Day")','')
+                  if(!n||!n.trim()) return
+                  const key='d'+Date.now()
+                  editDayPlans((p: any)=>({...p,days:[...p.days,{key,name:n.trim().slice(0,30),sched:[]}]}))
+                  setDayType(key)
+                }}
+                style={{flexShrink:0,padding:'10px 14px',borderRadius:10,border:`1px dashed ${C.border}`,background:'none',color:C.muted,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                ＋ Add Day
               </button>
-            ))}
+            )}
           </div>
+          )}
+
+          {/* Weekly schedule — which weekdays this client does each diet day */}
+          <Card sx={{marginBottom:12}}>
+            <Lbl t="📅 Weekly Schedule"/>
+            {isCoach&&(
+              <div style={{fontSize:11,color:C.muted,margin:'6px 0 8px'}}>
+                Tap the weekdays for <b style={{color:C.gold}}>{activeDay.name}</b> — each weekday can only belong to one diet day.
+              </div>
+            )}
+            <div style={{display:'flex',gap:6,marginBottom:10}}>
+              {['S','M','T','W','TH','F','S'].map((lbl,wd)=>{
+                const owner = dayPlanList.find((d: any)=>Array.isArray(d.sched)&&d.sched.includes(wd))
+                const mine  = owner?.key===activeDay.key
+                const isToday = new Date().getDay()===wd
+                return (
+                  <button key={wd} disabled={!isCoach}
+                    title={owner?owner.name:'Unassigned'}
+                    onClick={()=>{
+                      if(!isCoach) return
+                      editDayPlans((p: any)=>({...p,days:p.days.map((d: any)=>{
+                        const sched=(Array.isArray(d.sched)?d.sched:[]).filter((x: number)=>x!==wd)
+                        if(d.key===activeDay.key&&!mine) sched.push(wd)
+                        return {...d,sched:sched.sort((a: number,b: number)=>a-b)}
+                      })}))
+                    }}
+                    style={{flex:1,padding:'9px 0',borderRadius:8,
+                      border:`1px solid ${mine?C.gold:owner?`${C.gold}44`:C.border}`,
+                      background:mine?`${C.gold}25`:owner?C.surface:C.card,
+                      color:mine?C.gold:owner?C.white:C.muted,
+                      fontWeight:700,fontSize:11,cursor:isCoach?'pointer':'default',
+                      boxShadow:isToday?`0 0 0 2px ${C.gold}55`:'none'}}>
+                    {lbl}
+                  </button>
+                )
+              })}
+            </div>
+            {/* At-a-glance mapping */}
+            {dayPlanList.some((d: any)=>d.sched&&d.sched.length)?(
+              <div style={{marginBottom:8}}>
+                {dayPlanList.map((d: any)=>d.sched&&d.sched.length?(
+                  <div key={d.key} style={{fontSize:11,color:C.muted,marginBottom:3}}>
+                    <span style={{color:activeDay.key===d.key?C.gold:C.white,fontWeight:600}}>{d.name}</span>
+                    {' — '}{d.sched.map((wd: number)=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][wd]).join(', ')}
+                  </div>
+                ):null)}
+                {(()=>{const t=dayPlanList.find((d: any)=>d.sched&&d.sched.includes(new Date().getDay()));return t?(
+                  <div style={{fontSize:11,color:C.success,fontWeight:700,marginTop:6}}>Today: {t.name}</div>
+                ):null})()}
+              </div>
+            ):(
+              <div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginBottom:8}}>
+                {isCoach?'No weekdays assigned yet.':'Your coach hasn\u2019t set a weekly schedule — follow their guidance on which day to do.'}
+              </div>
+            )}
+            {/* Coach note about the schedule */}
+            {isCoach?(
+              <textarea value={dayPlans.note||''} onChange={e=>editDayPlans((p: any)=>({...p,note:e.target.value}))}
+                placeholder='Optional note — e.g. "High days on lifting days; if you swap a workout, swap the diet day too."'
+                rows={2}
+                style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,resize:'vertical',outline:'none',fontFamily:'inherit'}}/>
+            ):dayPlans.note?(
+              <div style={{fontSize:12,color:C.white,lineHeight:1.6,background:C.surface,borderRadius:8,padding:'8px 10px',borderLeft:`3px solid ${C.gold}`}}>
+                📝 {dayPlans.note}
+              </div>
+            ):null}
+          </Card>
 
           {/* Macro summary */}
           <Card sx={{marginBottom:12}}>
@@ -2012,7 +2167,12 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           })}
 
           {isCoach&&(
-            <button onClick={async()=>{if(!myUUID){alert('Still loading this client\'s profile — try again in a second.');return}const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('Could not save the diet plan — please try again.');return}setPlanUpdatedAt(new Date().toISOString());auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
+            <button onClick={async()=>{if(!myUUID||!myCompanyId||!dayCfgLoaded){alert('Still loading this client\'s plan — try again in a second.');return}
+              // Save the day config FIRST so clients never see new meals with a stale schedule
+              const okCfg=await dbUpsert('admin_settings',{company_id:myCompanyId,key:'diet_days:'+myUUID,value:JSON.stringify({days:dayPlanList,note:dayPlans.note||'',extraMeals}),updated_at:new Date().toISOString()},'company_id,key')
+              if(!okCfg){alert('Could not save the diet plan — please try again.');return}
+              const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('The day schedule saved, but the meals did not — please hit Save again.');return}
+              setPlanUpdatedAt(new Date().toISOString());auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
               style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
