@@ -38,6 +38,16 @@ export const WATCHED_TABLES = [
 export const ALERT_TYPE = "realtime_watch_alert";
 const EVENT_TIMEOUT_MS = Number(process.env.REALTIME_EVENT_TIMEOUT_MS || 5000);
 
+// A single missed event (or a slow overnight socket handshake) is almost
+// always a transient Supabase blip, not a dropped publication. Before waking
+// admins up with "run this SQL", re-run the check a couple of times with a
+// pause in between and only alert when the failure PERSISTS across every
+// attempt. Delay is read at call time so tests can shrink it.
+export const RETRY_ATTEMPTS = 2; // re-checks after the initial failure
+export function retryDelayMs(): number {
+  return Number(process.env.REALTIME_RETRY_DELAY_MS || 90_000); // 1.5 min
+}
+
 export const FIX_HINT =
   `Realtime events are NOT being delivered — the table is likely missing from the ` +
   `supabase_realtime publication (a Supabase restore can drop it). Fix in the Supabase SQL editor:\n` +
@@ -214,6 +224,7 @@ export type RealtimeWatchHealth = {
   lastError: string | null;
   lastFailedTables: string[];  // tables that missed delivery last run
   lastNotified: number;        // admin alerts inserted last run
+  lastAttempts: number;        // check attempts made last run (retries included)
   runs: number;
 };
 
@@ -224,6 +235,7 @@ const health: RealtimeWatchHealth = {
   lastError: null,
   lastFailedTables: [],
   lastNotified: 0,
+  lastAttempts: 0,
   runs: 0,
 };
 
@@ -256,48 +268,91 @@ export async function runRealtimeWatch(
     health.lastError = "SUPABASE_SERVICE_ROLE_KEY missing — realtime watchdog disabled";
     health.lastFailedTables = [];
     health.lastNotified = 0;
+    health.lastAttempts = 0;
     logger.error("[RealtimeWatch] SUPABASE_SERVICE_ROLE_KEY missing — realtime watchdog disabled");
     return;
   }
-  try {
-    const failures = await check();
-    health.lastRunAt = new Date().toISOString();
-    health.lastFailedTables = failures.map((f) => f.split(":")[0] || f);
-    health.lastNotified = 0;
+  // Run the check up to 1 + RETRY_ATTEMPTS times. A transient miss (single
+  // failed attempt followed by a clean one) is LOGGED, never alerted — only a
+  // failure that persists across every attempt wakes admins up.
+  const totalAttempts = 1 + RETRY_ATTEMPTS;
+  let failures: string[] = [];
+  let thrown: unknown = null;
+  let transientMisses = 0;
 
-    if (failures.length === 0) {
-      health.lastRunOk = true;
-      health.lastError = null;
-      health.lastSuccessAt = health.lastRunAt;
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+    failures = [];
+    thrown = null;
+    try {
+      failures = await check();
+    } catch (err) {
+      thrown = err;
+    }
+    health.lastAttempts = attempt;
+    if (!thrown && failures.length === 0) break; // clean pass
+    transientMisses++;
+    if (attempt < totalAttempts) {
+      const what = thrown
+        ? `check threw (${thrown instanceof Error ? thrown.message : String(thrown)})`
+        : `missed delivery for ${failures.map((f) => f.split(":")[0] || f).join(", ")}`;
+      // Log-only: a single miss is very likely a transient Supabase blip.
+      logger.warn(
+        { attempt, of: totalAttempts, failures },
+        `[RealtimeWatch] ${what} — retrying in ${retryDelayMs()}ms before alerting (transient blips are expected overnight)`,
+      );
+      await new Promise((r) => setTimeout(r, retryDelayMs()));
+    }
+  }
+
+  health.lastRunAt = new Date().toISOString();
+  health.lastNotified = 0;
+
+  if (!thrown && failures.length === 0) {
+    health.lastRunOk = true;
+    health.lastError = null;
+    health.lastSuccessAt = health.lastRunAt;
+    health.lastFailedTables = [];
+    if (transientMisses > 0) {
+      // Recovered on retry — heartbeat notes the blip but nobody is alerted.
+      logger.warn(
+        { transientMisses },
+        "[RealtimeWatch] realtime publication OK after retry — earlier miss was transient, no alert sent",
+      );
+    } else {
       // Heartbeat: a passing run still logs, proving the watchdog is alive.
       logger.info({ tables: WATCHED_TABLES }, "[RealtimeWatch] realtime publication OK — instant admin updates verified");
-      return;
     }
+    return;
+  }
 
-    health.lastRunOk = false;
-    health.lastError = failures.join(" | ");
-    logger.error(
-      { failures },
-      `[RealtimeWatch] INSTANT ADMIN UPDATES ARE BROKEN.\n${FIX_HINT}`,
-    );
-    await tryAlertAdmins(
-      `realtime events stopped arriving for ${health.lastFailedTables.join(", ")}.`,
-    );
-  } catch (err) {
+  if (thrown) {
     // A thrown verification error (channel never subscribed, REST read/PATCH
     // failed…) also means instant updates could NOT be verified — that is
     // itself an alertable failure, not just a health/log event. The service
     // key and notifications table may still be reachable, so attempt the
     // same once-per-day deduplicated bell alert.
-    const msg = err instanceof Error ? err.message : String(err);
-    health.lastRunAt = new Date().toISOString();
+    const msg = thrown instanceof Error ? thrown.message : String(thrown);
     health.lastRunOk = false;
     health.lastError = msg;
     health.lastFailedTables = [];
-    health.lastNotified = 0;
-    logger.error({ err }, `[RealtimeWatch] check itself FAILED — could not verify instant admin updates.\n${FIX_HINT}`);
-    await tryAlertAdmins(`the daily realtime verification itself failed (${msg}).`);
+    logger.error({ err: thrown }, `[RealtimeWatch] check itself FAILED on all ${totalAttempts} attempts — could not verify instant admin updates.\n${FIX_HINT}`);
+    await tryAlertAdmins(
+      `the daily realtime verification itself failed on all ${totalAttempts} attempts (${msg}).`,
+    );
+    return;
   }
+
+  health.lastRunOk = false;
+  health.lastError = failures.join(" | ");
+  health.lastFailedTables = failures.map((f) => f.split(":")[0] || f);
+  logger.error(
+    { failures, attempts: totalAttempts },
+    `[RealtimeWatch] INSTANT ADMIN UPDATES ARE BROKEN — failure persisted across ${totalAttempts} checks.\n${FIX_HINT}`,
+  );
+  await tryAlertAdmins(
+    `realtime events stopped arriving for ${health.lastFailedTables.join(", ")} — ` +
+      `this failure PERSISTED across ${totalAttempts} checks spaced ${Math.round(retryDelayMs() / 1000)}s apart, so it is not a transient blip.`,
+  );
 }
 
 // Best-effort admin alerting shared by both failure paths; alerting failures

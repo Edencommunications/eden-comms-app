@@ -4,6 +4,7 @@
 // Run with the api-server test script (esbuild bundle + node --test).
 
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-key";
+process.env.REALTIME_RETRY_DELAY_MS = "0"; // no real waits between retry attempts
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -14,6 +15,7 @@ import {
   ALERT_TYPE,
   STALE_AFTER_MS,
   RUN_EVERY_MS,
+  RETRY_ATTEMPTS,
 } from "../realtimeWatch";
 
 // ---- pickColumn ----------------------------------------------------------
@@ -82,12 +84,19 @@ test("run: all tables delivering → healthy, heartbeat, no alerts", async (t) =
   assert.equal(inserts.length, 0); // no false-alarm notifications
 });
 
-test("run: missed delivery → unhealthy + bell alert for every super_admin", async (t) => {
+test("run: PERSISTENT missed delivery → retried, then unhealthy + bell alert for every super_admin", async (t) => {
   t.after(() => { globalThis.fetch = realFetch; });
   const inserts: Insert[] = [];
+  let calls = 0;
   mockSupabase({ admins: [{ id: "admin-1" }, { id: "admin-2" }], inserts });
-  await runRealtimeWatch(async () => ["organizations: realtime UPDATE did not arrive within 5000ms."]);
+  await runRealtimeWatch(async () => {
+    calls++;
+    return ["organizations: realtime UPDATE did not arrive within 5000ms."];
+  });
   const h = getRealtimeWatchHealth();
+  // The check must be retried before anyone is alerted.
+  assert.equal(calls, 1 + RETRY_ATTEMPTS);
+  assert.equal(h.lastAttempts, 1 + RETRY_ATTEMPTS);
   assert.equal(h.lastRunOk, false);
   assert.equal(h.healthy, false);
   assert.deepEqual(h.lastFailedTables, ["organizations"]);
@@ -96,9 +105,45 @@ test("run: missed delivery → unhealthy + bell alert for every super_admin", as
   for (const ins of inserts) {
     assert.equal(ins.table, "notifications");
     assert.equal(ins.body.type, ALERT_TYPE);
-    // The alert must name the exact fix.
+    // The alert must name the exact fix AND make clear this persisted.
     assert.match(ins.body.body, /ALTER PUBLICATION supabase_realtime ADD TABLE/);
+    assert.match(ins.body.body, /PERSISTED across 3 checks/);
   }
+});
+
+test("run: transient miss that recovers on retry → healthy, NO alert", async (t) => {
+  t.after(() => { globalThis.fetch = realFetch; });
+  const inserts: Insert[] = [];
+  let calls = 0;
+  mockSupabase({ admins: [{ id: "admin-1" }], inserts });
+  await runRealtimeWatch(async () => {
+    calls++;
+    return calls === 1 ? ["organizations: realtime UPDATE did not arrive within 5000ms."] : [];
+  });
+  const h = getRealtimeWatchHealth();
+  assert.equal(calls, 2); // stopped retrying after the clean pass
+  assert.equal(h.lastAttempts, 2);
+  assert.equal(h.lastRunOk, true);
+  assert.equal(h.healthy, true);
+  assert.equal(h.lastError, null);
+  assert.deepEqual(h.lastFailedTables, []);
+  assert.equal(inserts.length, 0); // the whole point: no middle-of-the-night alarm
+});
+
+test("run: transient thrown check (slow socket) that recovers on retry → healthy, NO alert", async (t) => {
+  t.after(() => { globalThis.fetch = realFetch; });
+  const inserts: Insert[] = [];
+  let calls = 0;
+  mockSupabase({ admins: [{ id: "admin-1" }], inserts });
+  await runRealtimeWatch(async () => {
+    calls++;
+    if (calls === 1) throw new Error("Realtime channel did not reach SUBSCRIBED within 10s");
+    return [];
+  });
+  const h = getRealtimeWatchHealth();
+  assert.equal(h.lastRunOk, true);
+  assert.equal(h.healthy, true);
+  assert.equal(inserts.length, 0);
 });
 
 test("run: alerts are deduped — admins already alerted today are skipped", async (t) => {
@@ -134,12 +179,14 @@ test("run: alerting-path GET failure is surfaced, run stays failed", async (t) =
   assert.match(String(h.lastError), /alerting failed/);
 });
 
-test("run: a throwing check (e.g. channel never subscribed) is a FAILED run and still bell-alerts admins", async (t) => {
+test("run: a persistently throwing check (e.g. channel never subscribed) is a FAILED run and still bell-alerts admins", async (t) => {
   t.after(() => { globalThis.fetch = realFetch; });
   const inserts: Insert[] = [];
+  let calls = 0;
   mockSupabase({ admins: [{ id: "admin-1" }, { id: "admin-2" }], inserts });
-  await runRealtimeWatch(async () => { throw new Error("Realtime channel did not reach SUBSCRIBED within 10s"); });
+  await runRealtimeWatch(async () => { calls++; throw new Error("Realtime channel did not reach SUBSCRIBED within 10s"); });
   const h = getRealtimeWatchHealth();
+  assert.equal(calls, 1 + RETRY_ATTEMPTS); // retried before alerting
   assert.equal(h.lastRunOk, false);
   assert.equal(h.healthy, false);
   assert.match(String(h.lastError), /SUBSCRIBED/);
@@ -148,7 +195,7 @@ test("run: a throwing check (e.g. channel never subscribed) is a FAILED run and 
   assert.equal(inserts.length, 2);
   for (const ins of inserts) {
     assert.equal(ins.body.type, ALERT_TYPE);
-    assert.match(ins.body.body, /verification itself failed/);
+    assert.match(ins.body.body, /verification itself failed on all 3 attempts/);
     assert.match(ins.body.body, /ALTER PUBLICATION supabase_realtime ADD TABLE/);
   }
 });
