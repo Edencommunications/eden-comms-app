@@ -394,10 +394,23 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const pendingUpdates = clients.filter((c: any)=>c.hasUpdate).length
 
   // Real submissions this week (from weekly_checkins) — drives "X/Y submitted"
+  // plus which clients have an unreviewed check-in (pending review badge)
   const [weekSubs, setWeekSubs] = useState<any>(new Set())
+  const [pendingReviewMap, setPendingReviewMap] = useState<any>({})  // { clientUuid: latest unreviewed checkin id }
   useEffect(()=>{
-    dbGet('weekly_checkins',`submitted_at=gte.${new Date(Date.now()-7*86400000).toISOString()}&select=client_id`)
-      .then(rows=>{ if(Array.isArray(rows)) setWeekSubs(new Set(rows.map(r=>r.client_id))) })
+    dbGet('weekly_checkins',`submitted_at=gte.${new Date(Date.now()-7*86400000).toISOString()}&select=id,client_id,coach_reviewed_at&order=submitted_at.desc`)
+      .then(rows=>{
+        if(!Array.isArray(rows)) return
+        setWeekSubs(new Set(rows.map(r=>r.client_id)))
+        const pending: any = {}
+        const seen = new Set()
+        for (const r of rows) {           // rows are newest-first: only the LATEST per client counts
+          if (seen.has(r.client_id)) continue
+          seen.add(r.client_id)
+          if (!r.coach_reviewed_at) pending[r.client_id] = r.id
+        }
+        setPendingReviewMap(pending)
+      })
       .catch(()=>{})
   },[])
   const totalClients   = clients.length
@@ -1428,6 +1441,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   function markViewed(clientId: any) {
     setClients((prev: any)=>prev.map((c: any)=>c.uuid===clientId?{...c,hasUpdate:false}:c))
     setSelectedClient((prev: any)=>prev?.uuid===clientId?{...prev,hasUpdate:false}:prev)
+    // Clear the pending-review flag in the DB too (mirrors the Home page behavior)
+    const ckId = pendingReviewMap[clientId]
+    if (ckId) {
+      dbUpdate('weekly_checkins', `id=eq.${ckId}`, { coach_reviewed_at: new Date().toISOString() }).catch(()=>{})
+      setPendingReviewMap((prev: any)=>{ const n={...prev}; delete n[clientId]; return n })
+    }
   }
 
   const [consultBack, setConsultBack] = useState<any>(null) // client to return to when Consultation was opened from Client Tools
@@ -1439,7 +1458,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     if (client?.name) { setLoomFeatured(new Set([client.name])); loomShow(client.name) }
     // Report the click up to the app shell so Split View follows the last-clicked client
     if (client?.email) onClientFocus({ email: client.email, name: client.name, role: client.role || 'client' })
-    if (client.hasUpdate) markViewed(client.uuid)
+    if (client.hasUpdate || pendingReviewMap[client.uuid]) markViewed(client.uuid)
     // Load this client's saved consultation data so admin/coach always see what's in the DB.
     // Track which client is open so late responses from a previous client never overwrite the current one.
     openClientRef.current = client.uuid
@@ -1842,9 +1861,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // with pending-review ones first among them
     const sa = weekSubs.has(a.uuid)?1:0, sb = weekSubs.has(b.uuid)?1:0
     if (sa!==sb) return sb-sa
-    if (a.hasUpdate && !b.hasUpdate) return -1
-    if (!a.hasUpdate && b.hasUpdate) return 1
-    return 0
+    const pa = (a.hasUpdate||pendingReviewMap[a.uuid])?1:0, pb = (b.hasUpdate||pendingReviewMap[b.uuid])?1:0
+    return pb-pa
   })
 
   const archivedClients = clients.filter((c: any)=>{
@@ -2060,19 +2078,19 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 return (
                   <div key={client.uuid} style={{position:'relative',borderBottom:`1px solid ${C.border}`}}>
                     <button onClick={()=>openClient(client)}
-                      style={{width:'100%',textAlign:'left',background:selectedClient?.uuid===client.uuid?`${C.gold}15`:client.hasUpdate?`${C.gold}08`:C.surface,border:'none',borderLeft:`3px solid ${selectedClient?.uuid===client.uuid?C.gold:client.hasUpdate?C.gold+'88':'transparent'}`,padding:'11px 13px 11px 42px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
-                      <div style={{width:36,height:36,borderRadius:18,background:client.hasUpdate?C.gold:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:client.hasUpdate?C.black:C.gold,flexShrink:0,position:'relative'}}>
+                      style={{width:'100%',textAlign:'left',background:selectedClient?.uuid===client.uuid?`${C.gold}15`:(client.hasUpdate||pendingReviewMap[client.uuid])?`${C.gold}08`:C.surface,border:'none',borderLeft:`3px solid ${selectedClient?.uuid===client.uuid?C.gold:(client.hasUpdate||pendingReviewMap[client.uuid])?C.gold+'88':'transparent'}`,padding:'11px 13px 11px 42px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:36,height:36,borderRadius:18,background:(client.hasUpdate||pendingReviewMap[client.uuid])?C.gold:`${C.gold}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:(client.hasUpdate||pendingReviewMap[client.uuid])?C.black:C.gold,flexShrink:0,position:'relative'}}>
                         {dispInitial}
-                        {!hidden && client.hasUpdate&&(
+                        {!hidden && (client.hasUpdate||pendingReviewMap[client.uuid])&&(
                           <div style={{position:'absolute',top:-3,right:-3,width:10,height:10,borderRadius:5,background:C.danger,border:`2px solid ${C.black}`}}/>
                         )}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:client.hasUpdate?700:500,color:selectedClient?.uuid===client.uuid?C.gold:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dispName}</div>
+                        <div style={{fontSize:12,fontWeight:(client.hasUpdate||pendingReviewMap[client.uuid])?700:500,color:selectedClient?.uuid===client.uuid?C.gold:C.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dispName}</div>
                         <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                           {!hidden && isAdmin ? client.coachName+' · ' : ''}{hidden ? '—' : client.checkInDay+'s'}
                         </div>
-                        {!hidden && (client.hasUpdate
+                        {!hidden && ((client.hasUpdate||pendingReviewMap[client.uuid])
                           ? <div style={{fontSize:9,color:C.gold,fontWeight:700,marginTop:2}}>● CHECK-IN PENDING REVIEW</div>
                           : weekSubs.has(client.uuid)
                           ? <div style={{fontSize:9,color:C.success,fontWeight:700,marginTop:2}}>✓ CHECKED IN THIS WEEK</div>
