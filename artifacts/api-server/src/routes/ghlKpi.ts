@@ -416,6 +416,7 @@ export type GhlTransaction = {
   status: "succeeded" | "refunded" | "failed" | string;
   createdAt: string;       // ISO — when the payment was made
   updatedAt: string;       // ISO — when last updated (i.e. when refund was issued)
+  entitySourceType?: string; // where the payment came from (funnel, payment_link, …)
 };
 export function dealsInRange(deals: Deal[], startMs: number, endMs: number): Deal[] {
   return deals.filter((d) => d.whenMs >= startMs && d.whenMs < endMs);
@@ -553,6 +554,7 @@ export function buildPayoutMessage(
   totalCashCollected: number,
   payoutDay = 15,
   rate: number = DEFAULT_RATE,
+  unattributed: UnattributedTx[] = [],
 ): string {
   const byCloser = commissionByCloser(deals, rate);
   const contractedTotal = byCloser.reduce((s, c) => s + c.commission, 0);
@@ -587,6 +589,29 @@ export function buildPayoutMessage(
     lines.push(`• No deals were closed in ${label}.`);
   }
 
+  if (unattributed.length) {
+    // Real cash with no closed deal behind it — shown so leadership sees
+    // every dollar, without inflating any closer's commission.
+    const bySource = new Map<string, { net: number; count: number }>();
+    for (const u of unattributed) {
+      const cur = bySource.get(u.source) || { net: 0, count: 0 };
+      cur.net += u.net;
+      cur.count += u.net > 0 ? 1 : 0; // count payments, not refund lines
+      bySource.set(u.source, cur);
+    }
+    const totalNet = unattributed.reduce((s, u) => s + u.net, 0);
+    const totalCount = unattributed.reduce((s, u) => s + (u.net > 0 ? 1 : 0), 0);
+    const sourceLabel = (s: string) => {
+      const t = s.replace(/[_-]+/g, " ").trim();
+      return t ? t.charAt(0).toUpperCase() + t.slice(1) : "Other";
+    };
+    lines.push("", "🧾 UNATTRIBUTED PAYMENTS (no closed deal — not in commissions)");
+    for (const [source, v] of [...bySource.entries()].sort((a, b) => b[1].net - a[1].net)) {
+      lines.push(`• ${sourceLabel(source)}: ${usd(v.net)} (${v.count} payment${v.count === 1 ? "" : "s"})`);
+    }
+    lines.push(`• Total unattributed: ${usd(totalNet)} (${totalCount} payment${totalCount === 1 ? "" : "s"})`);
+  }
+
   return lines.join("\n");
 }
 
@@ -610,6 +635,7 @@ async function fetchAllTransactions(conn: Conn): Promise<GhlTransaction[]> {
         status: String(r.status || ""),
         createdAt: String(r.createdAt || ""),
         updatedAt: String(r.updatedAt || ""),
+        entitySourceType: String(r.entitySourceType || ""),
       });
     }
     // `nextPage` is null when there are no more pages.
@@ -845,9 +871,10 @@ async function runPayout(companyId: string, cfg: GhlCfg, asOf: Date = new Date()
   const contactCloserMap = buildContactCloserMap(data.allDeals);
   const cashRows = cashCommissionByCloser(data.allTransactions, contactCloserMap, pw.startMs, pw.endMs);
   const totalCashCollected = cashRows.reduce((s, c) => s + c.collected, 0);
+  const unattributed = unattributedTransactions(data.allTransactions, contactCloserMap, pw.startMs, pw.endMs);
   const payoutDay = Number.isInteger(cfg.payout_day) && cfg.payout_day! >= 1 && cfg.payout_day! <= 28 ? cfg.payout_day! : 15;
 
-  const r = await postToCommunity(companyId, cfg, buildPayoutMessage(pw.label, deals, cashRows, totalCashCollected, payoutDay, rate));
+  const r = await postToCommunity(companyId, cfg, buildPayoutMessage(pw.label, deals, cashRows, totalCashCollected, payoutDay, rate, unattributed));
   if (r.ok) {
     await dbUpsertSetting(companyId, `ghl_kpi_payout:${dayIso(pw.startMs).slice(0, 7)}`, JSON.stringify({
       month: pw.label,
@@ -855,6 +882,9 @@ async function runPayout(companyId: string, cfg: GhlCfg, asOf: Date = new Date()
       cash_by_closer: cashRows,
       total_cash_collected: totalCashCollected,
       total_cash_commissions: cashRows.reduce((s, c) => s + c.commission, 0),
+      // Cash with no closed deal (visibility only — not commissioned)
+      unattributed,
+      total_unattributed: unattributed.reduce((s, u) => s + u.net, 0),
       // Deal-value commissions (reference)
       commissions_by_closer: commissionByCloser(deals, rate),
       deals: deals.map((d) => ({ name: d.name, value: d.value, closer: d.closer, when: dayIso(d.whenMs) })),
@@ -1311,6 +1341,55 @@ export function buildContactCloserMap(allDeals: Deal[]): Map<string, string> {
 //   detected here — the tx stays "succeeded" and won't appear in the current
 //   period.  Task #293 tracks this gap.
 // Transactions whose contactId has no entry in contactCloserMap are excluded.
+// Net cash effect of one transaction on the [startMs, endMs) period, using
+// the same rules documented above. 0 = no effect on this period.
+function txNetInPeriod(tx: GhlTransaction, startMs: number, endMs: number): number {
+  if (tx.status === "failed") return 0;
+  const createdMs = Date.parse(tx.createdAt || "");
+  const updatedMs = Date.parse(tx.updatedAt || "");
+  if (tx.status === "succeeded") {
+    // Only payments received in this period; use current API net amount.
+    if (!Number.isFinite(createdMs) || createdMs < startMs || createdMs >= endMs) return 0;
+    return tx.amount - (tx.amountRefunded || 0);
+  }
+  if (tx.status === "refunded") {
+    if (Number.isFinite(createdMs) && createdMs >= startMs && createdMs < endMs) {
+      // Payment AND full refund both in this period → nets to zero; skip.
+      return 0;
+    }
+    // Full refund issued in this period for a prior payment.
+    if (!Number.isFinite(updatedMs) || updatedMs < startMs || updatedMs >= endMs) return 0;
+    return -(tx.amount);
+  }
+  return 0;
+}
+
+// Transactions in [startMs, endMs) whose contact has NO closed deal (no
+// entry in contactCloserMap) — real cash that earns nobody a commission.
+// Returned so the payout report can surface it instead of silently
+// omitting it. `net` uses the same period/refund rules as attribution.
+export type UnattributedTx = { id: string; contactId: string; net: number; source: string };
+export function unattributedTransactions(
+  txs: GhlTransaction[],
+  contactCloserMap: Map<string, string>,
+  startMs: number,
+  endMs: number,
+): UnattributedTx[] {
+  const out: UnattributedTx[] = [];
+  for (const tx of txs) {
+    if (contactCloserMap.has(tx.contactId)) continue;
+    const net = txNetInPeriod(tx, startMs, endMs);
+    if (net === 0) continue;
+    out.push({
+      id: tx.id,
+      contactId: tx.contactId,
+      net,
+      source: String(tx.entitySourceType || "").trim() || "other",
+    });
+  }
+  return out;
+}
+
 export function cashCommissionByCloser(
   txs: GhlTransaction[],
   contactCloserMap: Map<string, string>,
@@ -1321,28 +1400,10 @@ export function cashCommissionByCloser(
   const map = new Map<string, { collected: number; txCount: number }>();
 
   for (const tx of txs) {
-    if (tx.status === "failed") continue;
     const closer = contactCloserMap.get(tx.contactId);
     if (!closer) continue; // unattributed — no closed deal for this contact
 
-    const createdMs = Date.parse(tx.createdAt || "");
-    const updatedMs = Date.parse(tx.updatedAt || "");
-    let net = 0;
-
-    if (tx.status === "succeeded") {
-      // Only payments received in this period; use current API net amount.
-      if (!Number.isFinite(createdMs) || createdMs < startMs || createdMs >= endMs) continue;
-      net = tx.amount - (tx.amountRefunded || 0);
-    } else if (tx.status === "refunded") {
-      if (Number.isFinite(createdMs) && createdMs >= startMs && createdMs < endMs) {
-        // Payment AND full refund both in this period → nets to zero; skip.
-        continue;
-      }
-      // Full refund issued in this period for a prior payment.
-      if (!Number.isFinite(updatedMs) || updatedMs < startMs || updatedMs >= endMs) continue;
-      net = -(tx.amount);
-    }
-
+    const net = txNetInPeriod(tx, startMs, endMs);
     if (net === 0) continue;
     const cur = map.get(closer) || { collected: 0, txCount: 0 };
     cur.collected += net;

@@ -11,6 +11,7 @@ import {
   buildWeeklyMessage,
   buildPayoutMessage,
   cashCommissionByCloser,
+  unattributedTransactions,
   buildContactCloserMap,
   parseGhlKpiSettingsBody,
   type Deal,
@@ -219,6 +220,44 @@ test("buildPayoutMessage respects configurable payout day with ordinal suffix", 
 test("buildPayoutMessage handles an empty month", () => {
   const msg = buildPayoutMessage("July 2026", [], [], 0);
   assert.match(msg, /No attributed payments received in July 2026/);
+  assert.ok(!msg.includes("UNATTRIBUTED"), "no unattributed section when list is empty");
+});
+
+test("buildPayoutMessage shows unattributed payments grouped by source with a total", () => {
+  const msg = buildPayoutMessage("August 2026", [], [], 0, 15, 0.15, [
+    { id: "t1", contactId: "c1", net: 45, source: "funnel" },
+    { id: "t2", contactId: "c2", net: 45, source: "funnel" },
+    { id: "t3", contactId: "c3", net: 200, source: "payment_link" },
+    { id: "t4", contactId: "c4", net: -45, source: "funnel" }, // refund line
+  ]);
+  assert.match(msg, /UNATTRIBUTED PAYMENTS \(no closed deal — not in commissions\)/);
+  assert.match(msg, /Payment link: \$200\.00 \(1 payment\)/);
+  assert.match(msg, /Funnel: \$45\.00 \(2 payments\)/); // 45+45−45, refund not counted as a payment
+  assert.match(msg, /Total unattributed: \$245\.00 \(3 payments\)/);
+});
+
+test("unattributedTransactions returns only in-period cash for contacts with no closer", () => {
+  const startMs = Date.UTC(2026, 7, 1), endMs = Date.UTC(2026, 8, 1);
+  const contactMap = new Map([["known", "Lauren"]]);
+  const t1 = { ...tx("stranger", 45, "succeeded", "2026-08-05T10:00:00Z"), entitySourceType: "funnel" };
+  const txs: GhlTransaction[] = [
+    t1,
+    tx("known", 5000, "succeeded", "2026-08-06T10:00:00Z"),           // attributed — excluded
+    tx("stranger2", 100, "succeeded", "2026-07-05T10:00:00Z"),        // out of period
+    tx("stranger3", 80, "failed", "2026-08-07T10:00:00Z"),            // failed
+    tx("stranger4", 60, "refunded", "2026-08-08T10:00:00Z"),          // same-period full refund → zero
+    tx("stranger5", 70, "refunded", "2026-07-01T10:00:00Z", "2026-08-09T10:00:00Z"), // prior payment refunded now
+    tx("stranger6", 30, "succeeded", "2026-08-10T10:00:00Z"),         // no entitySourceType → "other"
+  ];
+  const rows = unattributedTransactions(txs, contactMap, startMs, endMs);
+  assert.deepEqual(
+    rows.map((r) => ({ contactId: r.contactId, net: r.net, source: r.source })),
+    [
+      { contactId: "stranger", net: 45, source: "funnel" },
+      { contactId: "stranger5", net: -70, source: "other" },
+      { contactId: "stranger6", net: 30, source: "other" },
+    ],
+  );
 });
 
 // ── Settings body parser ─────────────────────────────────────────
