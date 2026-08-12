@@ -1055,6 +1055,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           habitPct:         r.protocol_durations?.__extra?.habit_pct ?? r.habit_pct,
           mealNotes:        r.meal_notes || null,
           custom:           r.protocol_durations?.__custom || null,
+          // Protocol durations: legacy named keys ("Flush Protocol": "3 weeks") + __others list
+          protocolDurations: (()=>{
+            const pd = r.protocol_durations || {}
+            const named = Object.entries(pd).filter(([k,v]: any)=>!k.startsWith('__')&&typeof v==='string'&&v.trim())
+              .map(([k,v]: any)=>({protocol:k,duration:v}))
+            const others = Array.isArray(pd.__others) ? pd.__others : []
+            const all = [...named,...others]
+            return all.length>0 ? all : null
+          })(),
           _dbId:            r.id,
         }))
         setLocalCheckins((prev: any) => {
@@ -2383,6 +2392,19 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
                             <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>Client Notes</div>
                             <div style={{fontSize:12,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{ci.clientNotes}</div>
+                          </div>
+                        )}
+
+                        {/* Protocol durations reported by the client */}
+                        {ci.protocolDurations&&ci.protocolDurations.length>0&&(
+                          <div style={{background:C.surface,borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                            <div style={{fontSize:8,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>💊 Protocols / Supplements</div>
+                            {ci.protocolDurations.map((p: any,i: number)=>(
+                              <div key={i} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0'}}>
+                                <span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,flexShrink:0}}>{p.protocol}</span>
+                                <span style={{fontSize:12,color:C.white}}>{p.duration}</span>
+                              </div>
+                            ))}
                           </div>
                         )}
 
