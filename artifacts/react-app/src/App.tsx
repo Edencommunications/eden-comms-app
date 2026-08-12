@@ -1390,6 +1390,7 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
   const isMobile = useIsMobile();
   const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
   const [localHistory, setLocalHistory] = useState<any[]>(client?.checkinHistory || []);
+  const savedEditsRef = useRef<Record<string,{note:string,loom:string}>>({}); // date → feedback saved this session
   const [editingIdx,   setEditingIdx]   = useState<number|null>(null);
   const [draftNote,    setDraftNote]    = useState('');
   const [draftLoom,    setDraftLoom]    = useState('');
@@ -1445,7 +1446,10 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
       (Array.isArray(resps) ? resps : []).forEach((r:any) => { if (!byDate[r.checkin_date]) byDate[r.checkin_date] = r; });
       setLocalHistory(mapped.map((e:any) => {
         const resp = byDate[e.date];
-        return resp ? { ...e, coachNotes: resp.coach_notes || '', loomUrl: resp.coach_loom || '' } : e;
+        const merged = resp ? { ...e, coachNotes: resp.coach_notes || '', loomUrl: resp.coach_loom || '' } : e;
+        // Never let a slow load clobber feedback the coach saved while it ran
+        const edit = savedEditsRef.current[e.date];
+        return edit ? { ...merged, coachNotes: edit.note, loomUrl: edit.loom } : merged;
       }));
     })();
   }, [client?.uuid]);
@@ -1874,10 +1878,16 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
                                   coach_notes: note, coach_loom: loom, updated_at: new Date().toISOString(),
                                 }, 'client_id,checkin_date');
                                 if (!ok) { alert('Could not save feedback — check your connection and try again.'); return; }
-                                setLocalHistory(prev => prev.map((e:any,i:number) =>
-                                  i===idx ? {...e, coachNotes:note, loomUrl:loom} : e));
+                                savedEditsRef.current[entry.date] = { note, loom };
+                                // Match by stable date key, not list index — the async
+                                // history load may have reordered the list meanwhile
+                                setLocalHistory(prev => prev.map((e:any) =>
+                                  e.date===entry.date ? {...e, coachNotes:note, loomUrl:loom} : e));
                                 // Mark the check-in reviewed + bell-notify the client (never self)
-                                if (entry._dbId) sbPatch('weekly_checkins', `id=eq.${entry._dbId}`, { coach_reviewed_at: new Date().toISOString() });
+                                if (entry._dbId) {
+                                  const reviewed = await sbPatch('weekly_checkins', `id=eq.${entry._dbId}`, { coach_reviewed_at: new Date().toISOString() });
+                                  if (!reviewed) console.error('Feedback saved, but marking the check-in reviewed failed — it may still show as needing review');
+                                }
                                 sendNotification({ recipientId: client.uuid, senderId: coachId, type: 'coach_response',
                                   body: `💬 Your coach reviewed your ${entry.date} check-in — new feedback waiting` });
                               }}
