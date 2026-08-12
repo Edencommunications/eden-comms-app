@@ -938,8 +938,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     })
   }
   const [customAnswers, setCustomAnswers] = useState<any>({})  // { customMetricLabel: value }
-  const [protocolDurations, setProtocolDurations] = useState<any>({})  // { protocolName: duration string }
-  const setProtDur = (name: any,val: any) => setProtocolDurations((p: any)=>({...p,[name]:val}))
   const [otherProtocols, setOtherProtocols] = useState<any>([])        // [{id,protocol,duration}] — user-added list
   const [otherProtoDraft, setOtherProtoDraft] = useState<any>({protocol:'',duration:''})
   const [mealNotes, setMealNotes] = useState<any>({})  // per-meal adjustment notes from client, keyed by meal name
@@ -3159,42 +3157,13 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 <Card sx={{marginBottom:12}}>
                   <Lbl t="Protocol Duration"/>
                   <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.6}}>
-                    For each protocol below, enter how long you have been following it (e.g. "3 weeks", "5 days", "2 months").
+                    List any protocol or supplement you are on and how long you have been on it (e.g. "3 weeks", "5 days", "2 months"). Add as many as you need.
                   </div>
 
-                  {/* Assigned supplement protocol rows (auto-populated from coach assignments) */}
-                  {(()=>{
-                    const assignedProtocols=[...new Set(clientSupps.filter((s: any)=>s.protocolGroup).map((s: any)=>s.protocolGroup))]
-                    return assignedProtocols.map((proto: any)=>(
-                      <div key={proto} style={{marginBottom:10}}>
-                        <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>{proto}</div>
-                        <input
-                          value={protocolDurations[proto]||''}
-                          onChange={e=>setProtDur(proto,e.target.value)}
-                          placeholder="e.g. 3 weeks, Day 14, Started Jan 6…"
-                          style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
-                        />
-                      </div>
-                    ))
-                  })()}
-
-                  {/* Flush Protocol — diet-based, always shown */}
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:4}}>
-                      If on the Specific Diet &ldquo;Flush Protocol&rdquo;
-                    </div>
-                    <input
-                      value={protocolDurations['Flush Protocol']||''}
-                      onChange={e=>setProtDur('Flush Protocol',e.target.value)}
-                      placeholder="e.g. 3 weeks, Day 14, Started Jan 6…"
-                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
-                    />
-                  </div>
-
-                  {/* Other protocols — list builder, one line per protocol */}
+                  {/* Protocols — list builder, one line per protocol */}
                   <div style={{marginTop:4}}>
                     <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>
-                      Any Other Protocol / Supplement Not Listed?
+                      Any Protocol / Supplement Protocol, or Other Supplements
                     </div>
 
                     {/* Submitted entries */}
@@ -3216,7 +3185,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <input
                         value={otherProtoDraft.protocol}
                         onChange={e=>setOtherProtoDraft((p: any)=>({...p,protocol:e.target.value}))}
-                        placeholder="Supplement protocol name…"
+                        placeholder="Protocol or supplement name…"
                         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',boxSizing:'border-box'}}
                       />
                       <div style={{display:'flex',gap:6}}>
@@ -3353,7 +3322,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     other_notes:      ci.notes,
                     submitted_at:     new Date().toISOString(),
                     meal_notes:       Object.keys(mealNotes).some(k=>mealNotes[k]) ? mealNotes : null,
-                    protocol_durations: {...protocolDurations,
+                    protocol_durations: {
                          __others: otherProtocols.length>0 ? otherProtocols : undefined,
                          __custom: hasCustom ? custom : undefined,
                          __extra: { stress:ci.stress, compliance:ci.compliance, mood:ci.mood,
