@@ -1495,7 +1495,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       dbInsert('coach_updates',{coach_id:coachId,client_id:clientId,date:newDate,note:entry.note,loom:entry.loom,created_at:new Date().toISOString()})
         .then(()=> dbGet('coach_updates',`client_id=eq.${clientId}&order=created_at.desc&limit=50`))
         .then(rows=>{ if(Array.isArray(rows)&&rows.length) setCoachOnlyUpdates(rows.map(r=>({id:r.id,date:r.date,note:r.note||'',loom:r.loom||''}))) })
-        .then(()=>insertNotification(clientId, coachId, 'coach_update', '📝 Your coach posted a new update — check your History & Feedback tab'))
+        .then(()=>insertNotification(clientId, coachId, 'coach_update', '📝 Your coach posted a new update — check your History & Feedback tab', 'checkin'))
         .catch(()=>{})
     }
   }
@@ -2539,7 +2539,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                     if(saved._dbId) dbUpdate('weekly_checkins', `id=eq.${saved._dbId}`,
                                       { coach_reviewed_at:new Date().toISOString() }).catch(()=>{})
                                     insertNotification(clientId, coachId, 'coach_response',
-                                      `💬 Your coach reviewed your ${saved.date} check-in — new feedback waiting`)
+                                      `💬 Your coach reviewed your ${saved.date} check-in — new feedback waiting`, 'checkin')
                                   }
                                 }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
                                   Save

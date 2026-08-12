@@ -1427,6 +1427,7 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
     sendNotification({
       recipientId: client.uuid, senderId: coachId, type: 'coach_response',
       body: `💬 Your coach reviewed your ${entry.date} check-in — new feedback waiting`,
+      linkTo: 'checkin',
     });
     return true;
   };

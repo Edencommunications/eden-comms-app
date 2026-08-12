@@ -239,6 +239,7 @@ const TYPE_LABELS: Record<string, string> = {
   community_added: "👥 Added to a community", community_message: "💬 New community message",
   team_message: "💬 New team message", broadcast: "📣 Announcement", reaction: "👍 New reaction",
   course_access: "🎓 Course unlocked", ghl_intake: "🆕 New client signed up",
+  coach_response: "💬 Coach feedback on your check-in", coach_update: "📝 Coach update",
 };
 
 // ── Privacy: phone buzzes never include message/plan content ──
@@ -252,6 +253,8 @@ const SAFE_BODY: Record<string, string> = {
   checkin_received: "A check-in was submitted",
   lab_uploaded: "A lab result was uploaded",
   update_note: "Your coach posted an update",
+  coach_response: "Your coach reviewed your check-in — new feedback waiting",
+  coach_update: "Your coach posted an update",
   loom_posted: "Your coach posted a video update",
   meta_ads: "A new ads recap was posted",
   team_message: "A teammate sent a message in Team Hub",
@@ -279,6 +282,7 @@ const TYPE_GOTO: Record<string, string> = {
   checkin_received: "checkin", lab_uploaded: "labs", community_post: "community",
   community_added: "community", community: "community", meta_ads: "community", mention: "team",
   huddle_invite: "team", huddle_ping: "team", team_message: "team", broadcast: "msgs",
+  coach_response: "checkin", coach_update: "checkin",
 };
 
 // Injectable sender so tests can capture deliveries instead of hitting
