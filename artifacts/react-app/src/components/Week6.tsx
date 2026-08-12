@@ -398,10 +398,14 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [weekSubs, setWeekSubs] = useState<any>(new Set())
   const [pendingReviewMap, setPendingReviewMap] = useState<any>({})  // { clientUuid: latest unreviewed checkin id }
   useEffect(()=>{
-    dbGet('weekly_checkins',`submitted_at=gte.${new Date(Date.now()-7*86400000).toISOString()}&select=id,client_id,coach_reviewed_at&order=submitted_at.desc`)
+    // No date filter: pending review matches the Home page — the LATEST
+    // check-in per client counts regardless of age. weekSubs still only
+    // counts submissions from the trailing 7 days.
+    dbGet('weekly_checkins',`select=id,client_id,submitted_at,coach_reviewed_at&order=submitted_at.desc&limit=1000`)
       .then(rows=>{
         if(!Array.isArray(rows)) return
-        setWeekSubs(new Set(rows.map(r=>r.client_id)))
+        const weekAgo = Date.now()-7*86400000
+        setWeekSubs(new Set(rows.filter(r=>r.submitted_at&&new Date(r.submitted_at).getTime()>=weekAgo).map(r=>r.client_id)))
         const pending: any = {}
         const seen = new Set()
         for (const r of rows) {           // rows are newest-first: only the LATEST per client counts
@@ -1444,8 +1448,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     // Clear the pending-review flag in the DB too (mirrors the Home page behavior)
     const ckId = pendingReviewMap[clientId]
     if (ckId) {
-      dbUpdate('weekly_checkins', `id=eq.${ckId}`, { coach_reviewed_at: new Date().toISOString() }).catch(()=>{})
-      setPendingReviewMap((prev: any)=>{ const n={...prev}; delete n[clientId]; return n })
+      dbUpdate('weekly_checkins', `id=eq.${ckId}`, { coach_reviewed_at: new Date().toISOString() })
+        .then(ok=>{ // only drop the badge once the DB write actually succeeded
+          if (ok) setPendingReviewMap((prev: any)=>{ const n={...prev}; delete n[clientId]; return n })
+        })
+        .catch(()=>{})
     }
   }
 

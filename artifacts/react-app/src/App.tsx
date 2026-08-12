@@ -2141,11 +2141,12 @@ function isMissingCheckin(c: any, dl?: { time: string; tz: string }): boolean {
     if (inst) {
       // Contract started after that deadline passed → not counted yet
       if (c.startDate && new Date(`${c.startDate}T00:00:00`).getTime() > inst.getTime()) return false;
-      // A submission counts for a deadline if it arrived within the 7 days
-      // LEADING UP TO it (e.g. Wednesday 8 AM for a Wednesday 9 AM deadline),
-      // not only after the deadline passed.
-      const windowStart = inst.getTime() - 7 * 86400000;
-      return !last || isNaN(last.getTime()) || last.getTime() <= windowStart;
+      // Each submission belongs to the cycle whose deadline is NEAREST in time
+      // (within ±3.5 days). So Wednesday 8 AM counts for a Wednesday 9 AM
+      // deadline, a late Wednesday-afternoon submission still clears that same
+      // week, but neither can double-count for the following week too.
+      const halfCycle = 3.5 * 86400000;
+      return !last || isNaN(last.getTime()) || last.getTime() <= inst.getTime() - halfCycle;
     }
   }
   // Fallback (no update day assigned): more than 7 days since last check-in
