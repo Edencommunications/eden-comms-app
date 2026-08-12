@@ -1101,8 +1101,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .catch(() => setClientPhotos([]))
   }, [email, myUUID])
 
-  // Week numbers are automatic and can't be edited: photos taken within 7 days
-  // of the current week's first photo join that week; after that a new week starts.
+  // Week numbers are automatic and can't be edited: photos taken within 4 days
+  // of the current week's first photo join that week; after that a new week
+  // starts. (4 days — not 7 — because weekly uploads often land a few minutes
+  // shy of a full 7 days, which used to keep them stuck in the same week.)
   function currentWeekLabel(photos: any) {
     let maxWeek = 0
     for (const p of photos || []) {
@@ -1113,7 +1115,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     const label = `Week ${maxWeek}`
     const group = (photos || []).filter((p: any) => String(p.week_label || '').trim().toLowerCase() === label.toLowerCase())
     const first = group.map((p: any) => new Date(p.taken_at || p.created_at).getTime()).filter((t: any) => !isNaN(t)).sort()[0]
-    if (first && Date.now() - first < 7 * 86400000) return label
+    if (first && Date.now() - first < 4 * 86400000) return label
     return `Week ${maxWeek + 1}`
   }
   const DEFAULT_PHOTO_NAMES = ['Front', 'Side', 'Back']
