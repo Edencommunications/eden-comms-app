@@ -1400,6 +1400,35 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
   const [startError,   setStartError]   = useState(false);
   const [startDate,    setStartDate]    = useState<string>('');
   const [savingStart,  setSavingStart]  = useState(false);
+  const [savingNote,   setSavingNote]   = useState(false);
+  const [noteError,    setNoteError]    = useState(false);
+  // Persist coach feedback exactly like the Clients-tab (DietBuilder) path:
+  // upsert coach_responses, mark the check-in reviewed, notify the client.
+  const saveFeedback = async (entry:any, note:string, loom:string) => {
+    if (!client?.uuid || !coachId || !entry?.date) { setNoteError(true); return false; }
+    setSavingNote(true); setNoteError(false);
+    const ok = await sbUpsert('coach_responses', {
+      client_id: client.uuid, coach_id: coachId,
+      checkin_date: entry.date,
+      coach_notes: note, coach_loom: loom,
+      updated_at: new Date().toISOString(),
+    }, 'client_id,checkin_date');
+    setSavingNote(false);
+    if (!ok) { setNoteError(true); return false; }
+    // Never let a slow history load clobber feedback saved this session
+    savedEditsRef.current[entry.date] = { note, loom };
+    // Mark the check-in reviewed so it drops out of "needs review" highlights
+    if (entry._dbId) {
+      const reviewed = await sbPatch('weekly_checkins', `id=eq.${entry._dbId}`, { coach_reviewed_at: new Date().toISOString() });
+      if (!reviewed) console.error('Feedback saved, but marking the check-in reviewed failed — it may still show as needing review');
+      else if (client.lastCheckinId === entry._dbId) onSaved?.(client.uuid, { needsReview:false });
+    }
+    sendNotification({
+      recipientId: client.uuid, senderId: coachId, type: 'coach_response',
+      body: `💬 Your coach reviewed your ${entry.date} check-in — new feedback waiting`,
+    });
+    return true;
+  };
   useEffect(() => {
     if (!client?.uuid) return;
     sbGet('user_profiles', `id=eq.${client.uuid}&select=update_day,start_date`)
@@ -1891,34 +1920,19 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
                               padding:"7px 10px", color:B.text, fontSize:11, outline:"none",
                               boxSizing:"border-box", marginBottom:8 }}/>
                           <div style={{ display:"flex", gap:8 }}>
-                            <button onClick={async ()=>{
+                            <button disabled={savingNote} onClick={async ()=>{
                                 const note = draftNote.trim(), loom = draftLoom.trim();
-                                setEditingIdx(null);
-                                if (!client?.uuid || !coachId || !entry?.date) {
-                                  alert('Could not save feedback — please try again from the Clients tab.');
-                                  return;
-                                }
-                                const ok = await sbUpsert('coach_responses', {
-                                  client_id: client.uuid, coach_id: coachId, checkin_date: entry.date,
-                                  coach_notes: note, coach_loom: loom, updated_at: new Date().toISOString(),
-                                }, 'client_id,checkin_date');
-                                if (!ok) { alert('Could not save feedback — check your connection and try again.'); return; }
-                                savedEditsRef.current[entry.date] = { note, loom };
+                                const ok = await saveFeedback(entry, note, loom);
+                                if (!ok) return; // keep the editor open — nothing was saved
                                 // Match by stable date key, not list index — the async
                                 // history load may have reordered the list meanwhile
                                 setLocalHistory(prev => prev.map((e:any) =>
                                   e.date===entry.date ? {...e, coachNotes:note, loomUrl:loom} : e));
-                                // Mark the check-in reviewed + bell-notify the client (never self)
-                                if (entry._dbId) {
-                                  const reviewed = await sbPatch('weekly_checkins', `id=eq.${entry._dbId}`, { coach_reviewed_at: new Date().toISOString() });
-                                  if (!reviewed) console.error('Feedback saved, but marking the check-in reviewed failed — it may still show as needing review');
-                                }
-                                sendNotification({ recipientId: client.uuid, senderId: coachId, type: 'coach_response',
-                                  body: `💬 Your coach reviewed your ${entry.date} check-in — new feedback waiting` });
+                                setEditingIdx(null);
                               }}
                               style={{ flex:1, background:B.gold, border:"none", borderRadius:7, padding:"7px",
-                                color:"#000", fontWeight:700, fontSize:12, cursor:"pointer" }}>
-                              Save
+                                color:"#000", fontWeight:700, fontSize:12, cursor:savingNote?"wait":"pointer", opacity:savingNote?0.6:1 }}>
+                              {savingNote ? "Saving…" : "Save"}
                             </button>
                             <button onClick={()=>setEditingIdx(null)}
                               style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:7,
@@ -1926,6 +1940,11 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
                               Cancel
                             </button>
                           </div>
+                          {noteError && (
+                            <p style={{ fontSize:11, color:B.danger, margin:"8px 0 0", lineHeight:1.5 }}>
+                              Couldn't save your feedback — it was NOT sent to the client. Please try again.
+                            </p>
+                          )}
                         </>
                       ) : (
                         <>
@@ -2690,22 +2709,18 @@ async function sbGet(table:string, params='') {
 async function sbInsert(table:string, body:any) {
   try { const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:SB_H,body:JSON.stringify(body)}); if(!r.ok) return null; const t=await r.text(); return t?JSON.parse(t):null; } catch { return null; }
 }
-// Insert-or-update keyed on onConflict columns (PostgREST merge-duplicates upsert)
 async function sbUpsert(table:string, body:any, onConflict:string):Promise<boolean> {
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?on_conflict=${onConflict}`,{
       method:'POST',
-      headers:{ 'apikey':SB_ANON, 'Authorization':sbBearer(), 'Content-Type':'application/json',
-        'Prefer':'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify(body),
+      headers:{ 'apikey':SB_ANON, get Authorization(){ return sbBearer() },
+        'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates,return=minimal' },
+      body:JSON.stringify(body),
     });
     if (!r.ok) { console.error('UPSERT', table, await r.text().catch(()=> '')); return false; }
     return true;
   } catch (e) { console.error('UPSERT', table, e); return false; }
 }
-// Returns true only when the PATCH succeeded AND at least one row was actually
-// updated (SB_H sends Prefer: return=representation, so the response body holds
-// the updated rows — an empty array means RLS silently rejected the write).
 async function sbPatch(table:string, params:string, body:any):Promise<boolean> {
   try {
     const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'PATCH',headers:SB_H,body:JSON.stringify(body)});
@@ -2719,10 +2734,6 @@ async function sbPatch(table:string, params:string, body:any):Promise<boolean> {
 async function sbDelete(table:string, params:string) {
   try { await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:SB_H}); } catch {}
 }
-// Upload an org logo to real file storage (server-side, bucket: org-logos)
-// and return its public https URL, or null if the upload failed. The server
-// creates the bucket on demand with its service key, so this always works —
-// no more data-URL fallback in the database.
 async function sbUploadLogo(orgId:string, file:File):Promise<string|null> {
   try {
     const dataBase64: string = await new Promise((resolve, reject) => {
