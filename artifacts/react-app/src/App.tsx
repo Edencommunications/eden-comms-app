@@ -20,7 +20,7 @@ function useIsMobile(breakpoint = 768) {
 import Messaging from "./components/Messaging";
 import DietBuilder from "./components/DietBuilder";
 import LoomEmbed from "./components/LoomEmbed";
-import Notifications from "./components/Notifications";
+import Notifications, { sendNotification } from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
 import { LN, LoomPicker, loomSet, loomShow, loomIsShown, useLoomOn } from "./components/LoomPrivacy";
 import Week4 from "./components/Week4";
@@ -1385,7 +1385,7 @@ const HabitTrackerScreen = () => {
 
 const UPDATE_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-const ClientDetailModal = ({ client, onClose, onNavigate, onSaved, onFlagUnreviewed }: any) => {
+const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFlagUnreviewed }: any) => {
   const modalDeadline = useDeadline(client?.email);
   const isMobile = useIsMobile();
   const [historyView, setHistoryView] = useState<"timeline"|"charts">("timeline");
@@ -1412,6 +1412,42 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved, onFlagUnrevie
           if (cached) setUpdateDay(cached);
         }
       });
+  }, [client?.uuid]);
+  // Load the client's real check-in history + saved coach responses so the
+  // timeline (and its "Add feedback" editor) works with actual DB rows —
+  // matching the Clients-tab (DietBuilder) semantics.
+  useEffect(() => {
+    if (!client?.uuid) return;
+    (async () => {
+      const rows = await sbGet('weekly_checkins', `client_id=eq.${client.uuid}&order=submitted_at.desc&limit=52`);
+      if (!Array.isArray(rows) || rows.length === 0) return;
+      const mapped = rows.map((r:any) => ({
+        date:            new Date(r.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+        time:            new Date(r.submitted_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
+        weight:          r.weight||'',      temp:          r.temp||'',
+        steps:           r.steps||'',       heartRate:     r.heart_rate||'',
+        hrv:             r.hrv||'',         bloodPressure: r.blood_pressure||'',
+        energy:          r.energy,          sleep:         r.sleep,
+        bloating:        r.bloating,        brainFog:      r.brain_fog,
+        sexDrive:        r.sex_drive,       hunger:        r.hunger,
+        stress:          r.protocol_durations?.__extra?.stress ?? r.stress,
+        compliance:      r.protocol_durations?.__extra?.compliance ?? r.compliance,
+        mood:            r.protocol_durations?.__extra?.mood || r.mood || '',
+        sleepWindow:     r.sleep_window||'', sleepCycles:  r.sleep_cycles||'',
+        sleepDisruption: r.sleep_disruption||'',
+        bowelCount:      r.bowel_count||'',  bowelType:    r.bowel_type||'',
+        clientNotes:     r.other_notes || r.notes || '',
+        coachNotes:      '',                loomUrl:       '',
+        _dbId:           r.id,
+      }));
+      const resps = await sbGet('coach_responses', `client_id=eq.${client.uuid}&order=updated_at.desc`);
+      const byDate: Record<string,any> = {};
+      (Array.isArray(resps) ? resps : []).forEach((r:any) => { if (!byDate[r.checkin_date]) byDate[r.checkin_date] = r; });
+      setLocalHistory(mapped.map((e:any) => {
+        const resp = byDate[e.date];
+        return resp ? { ...e, coachNotes: resp.coach_notes || '', loomUrl: resp.coach_loom || '' } : e;
+      }));
+    })();
   }, [client?.uuid]);
 
   if (!client) return null;
@@ -1826,10 +1862,24 @@ const ClientDetailModal = ({ client, onClose, onNavigate, onSaved, onFlagUnrevie
                               padding:"7px 10px", color:B.text, fontSize:11, outline:"none",
                               boxSizing:"border-box", marginBottom:8 }}/>
                           <div style={{ display:"flex", gap:8 }}>
-                            <button onClick={()=>{
-                                setLocalHistory(prev => prev.map((e:any,i:number) =>
-                                  i===idx ? {...e, coachNotes:draftNote, loomUrl:draftLoom} : e));
+                            <button onClick={async ()=>{
+                                const note = draftNote.trim(), loom = draftLoom.trim();
                                 setEditingIdx(null);
+                                if (!client?.uuid || !coachId || !entry?.date) {
+                                  alert('Could not save feedback — please try again from the Clients tab.');
+                                  return;
+                                }
+                                const ok = await sbUpsert('coach_responses', {
+                                  client_id: client.uuid, coach_id: coachId, checkin_date: entry.date,
+                                  coach_notes: note, coach_loom: loom, updated_at: new Date().toISOString(),
+                                }, 'client_id,checkin_date');
+                                if (!ok) { alert('Could not save feedback — check your connection and try again.'); return; }
+                                setLocalHistory(prev => prev.map((e:any,i:number) =>
+                                  i===idx ? {...e, coachNotes:note, loomUrl:loom} : e));
+                                // Mark the check-in reviewed + bell-notify the client (never self)
+                                if (entry._dbId) sbPatch('weekly_checkins', `id=eq.${entry._dbId}`, { coach_reviewed_at: new Date().toISOString() });
+                                sendNotification({ recipientId: client.uuid, senderId: coachId, type: 'coach_response',
+                                  body: `💬 Your coach reviewed your ${entry.date} check-in — new feedback waiting` });
                               }}
                               style={{ flex:1, background:B.gold, border:"none", borderRadius:7, padding:"7px",
                                 color:"#000", fontWeight:700, fontSize:12, cursor:"pointer" }}>
@@ -2570,7 +2620,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
       </div>
 
       {selectedClient && (
-        <ClientDetailModal client={selectedClient} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}
+        <ClientDetailModal client={selectedClient} coachId={myIds?.id} onClose={()=>setSelectedClient(null)} onNavigate={onNavigate}
           onSaved={(uuid:string, patch:any)=>setClients((prev:any[])=>prev.map((c:any)=>c.uuid===uuid?{...c,...patch}:c))}
           onFlagUnreviewed={async ()=>{
             if (!selectedClient?.lastCheckinId) return false;
@@ -2604,6 +2654,19 @@ async function sbGet(table:string, params='') {
 }
 async function sbInsert(table:string, body:any) {
   try { const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:SB_H,body:JSON.stringify(body)}); if(!r.ok) return null; const t=await r.text(); return t?JSON.parse(t):null; } catch { return null; }
+}
+// Insert-or-update keyed on onConflict columns (PostgREST merge-duplicates upsert)
+async function sbUpsert(table:string, body:any, onConflict:string):Promise<boolean> {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+      method:'POST',
+      headers:{ 'apikey':SB_ANON, 'Authorization':sbBearer(), 'Content-Type':'application/json',
+        'Prefer':'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { console.error('UPSERT', table, await r.text().catch(()=> '')); return false; }
+    return true;
+  } catch (e) { console.error('UPSERT', table, e); return false; }
 }
 // Returns true only when the PATCH succeeded AND at least one row was actually
 // updated (SB_H sends Prefer: return=representation, so the response body holds
