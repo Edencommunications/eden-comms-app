@@ -10,6 +10,7 @@ import { sendNotification } from './Notifications'
 import LoomEmbed from './LoomEmbed'
 import { useDeadline } from '../lib/tz'
 import { useCheckinForm } from '../lib/checkinForm'
+import { checkinDateKey } from '../lib/checkinDate'
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -1039,7 +1040,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       .then(rows => {
         if (!Array.isArray(rows) || rows.length === 0) return
         const dbCheckins = rows.map(r => ({
-          date:             new Date(r.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+          date:             checkinDateKey(r.submitted_at),
           time:             new Date(r.submitted_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
           weight:           r.weight||'',       temp:             r.temp||'',
           steps:            r.steps||'',        heartRate:        r.heart_rate||'',
@@ -3370,7 +3371,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   const _now=new Date()
                   const _newId=Array.isArray(inserted)?inserted[0]?.id:inserted?.id
                   setLocalCheckins((prev: any)=>[{
-                    date:_now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+                    date:checkinDateKey(_now),
                     time:_now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
                     weight:V('weight',ci.weight)||'', temp:V('temp',ci.temp)||'',
                     steps:V('steps',ci.steps)||'', heartRate:V('heartRate',ci.heartRate)||'',

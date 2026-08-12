@@ -31,6 +31,7 @@ import DbaChat from "./components/DbaChat";
 import DbaHuddles from "./components/DbaHuddles";
 import DbaCalendar from "./components/DbaCalendar";
 import { useTeamHubUnread, useMessagesUnread } from "./lib/teamUnread";
+import { checkinDateKey } from "./lib/checkinDate";
 
 // Capture ?goto=<tab> from a tapped phone notification as soon as the app
 // loads — even if the user still has to log in, we land them there afterwards.
@@ -1452,7 +1453,7 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
       const rows = await sbGet('weekly_checkins', `client_id=eq.${client.uuid}&order=submitted_at.desc&limit=52`);
       if (!Array.isArray(rows) || rows.length === 0) return;
       const mapped = rows.map((r:any) => ({
-        date:            new Date(r.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+        date:            checkinDateKey(r.submitted_at),
         time:            new Date(r.submitted_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
         weight:          r.weight||'',      temp:          r.temp||'',
         steps:           r.steps||'',       heartRate:     r.heart_rate||'',
