@@ -369,7 +369,7 @@ async function notifyAdmins(companyId: string, body: string): Promise<boolean> {
   const admins = await dbGet<any>(`user_profiles?company_id=eq.${encodeURIComponent(companyId)}&role=eq.super_admin&is_active=not.is.false&select=id`);
   let ok = admins.length > 0;
   for (const a of admins) {
-    if (!(await dbInsert("notifications", { recipient_id: a.id, type: "meta_ads", body, is_read: false }))) ok = false;
+    if (!(await dbInsert("notifications", { recipient_id: a.id, type: "meta_ads", body, is_read: false, link_to: "admin" }))) ok = false;
   }
   return ok;
 }

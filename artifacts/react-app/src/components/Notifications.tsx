@@ -322,7 +322,20 @@ export default function Notifications({ currentUser, onNavigate }: any) {
   async function handleNotifClick(notif: any) {
     markRead(notif.id)
     setOpen(false)
-    if (!onNavigate || !notif.link_to) return
+    // Older notification rows were saved without a link — fall back to a
+    // sensible destination per type so every notification still navigates.
+    const FALLBACK_GOTO: any = {
+      message: 'msgs', dm_thread_reply: 'team', diet_update: 'diet', supp_update: 'diet',
+      workout_update: 'workout', checkin_received: 'checkin', lab_uploaded: 'labs',
+      update_note: 'checkin', loom_posted: 'checkin', community_post: 'community',
+      community_added: 'community', community: 'community', meta_ads: 'admin',
+      mention: 'team', huddle_invite: 'team', huddle_ping: 'team', team_message: 'team',
+      broadcast: 'msgs', coach_response: 'checkin', coach_update: 'checkin',
+      start_reminder_7: 'home', start_reminder_1: 'home', start_reminder_0: 'home',
+    }
+    const dest = notif.link_to || FALLBACK_GOTO[notif.type]
+    if (!onNavigate || !dest) return
+    notif = { ...notif, link_to: dest }
     // Check-in notifications deep-link to the submitting client's Check-In Hub:
     // look up the sender's profile so the app can pre-select that client.
     // DM thread replies deep-link to the sender's DM in the Team Hub: look up

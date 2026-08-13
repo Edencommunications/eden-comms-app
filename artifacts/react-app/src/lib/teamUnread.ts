@@ -141,7 +141,7 @@ export function useTeamHubUnread(user: any) {
         // device clears this device's badge within a poll cycle.
         const seen = await syncSeen(me.id)
         if (stopped) return
-        const any = rows.some((m: any) => {
+        let any = rows.some((m: any) => {
           const t = new Date(m.created_at).getTime()
           if (m.is_dm) {
             if (m.dm_to_id !== me.id) return false
@@ -149,15 +149,57 @@ export function useTeamHubUnread(user: any) {
           }
           return t > seenAt(seen, 'general')
         })
-        setUnread(any)
+        // Team-context communities live inside the Team Hub too — light the
+        // dot when any of them has a message newer than its last-read stamp.
+        if (!any) {
+          try {
+            const isAdminRole = role === 'super_admin' || role === 'company_admin'
+            let comms: any[] = []
+            if (isAdminRole) {
+              const rc = await fetch(`${SUPABASE_URL}/rest/v1/communities?company_id=eq.${orgId}&context=eq.team&is_active=eq.true&select=id`, { headers: H })
+              comms = rc.ok ? await rc.json() : []
+            } else {
+              const rms = await fetch(`${SUPABASE_URL}/rest/v1/community_members?user_id=eq.${me.id}&select=community_id`, { headers: H })
+              const memberIds = (rms.ok ? await rms.json() : []).map((m: any) => m.community_id)
+              const [mine, joined] = await Promise.all([
+                fetch(`${SUPABASE_URL}/rest/v1/communities?created_by=eq.${me.id}&context=eq.team&is_active=eq.true&select=id`, { headers: H }).then(r => r.ok ? r.json() : []),
+                memberIds.length
+                  ? fetch(`${SUPABASE_URL}/rest/v1/communities?id=in.(${memberIds.join(',')})&context=eq.team&is_active=eq.true&select=id`, { headers: H }).then(r => r.ok ? r.json() : [])
+                  : Promise.resolve([]),
+              ])
+              const dedup = new Set()
+              comms = [...mine, ...joined].filter((c: any) => { if (dedup.has(c.id)) return false; dedup.add(c.id); return true })
+            }
+            if (comms.length && !stopped) {
+              // Communities.jsx keeps its own local seen-map (ISO or ms stamps);
+              // the server copy (already merged into `seen`) uses comm:<id> keys.
+              let localComm: any = {}
+              try { localComm = JSON.parse(localStorage.getItem(`community_seen_${me.id}`) || '{}') || {} } catch {}
+              const stamp = (v: any) => typeof v === 'number' ? v : (Date.parse(v) || 0)
+              const rm = await fetch(
+                `${SUPABASE_URL}/rest/v1/community_messages?community_id=in.(${comms.map((c: any) => c.id).join(',')})&sender_id=neq.${me.id}&order=created_at.desc&limit=100&select=community_id,created_at`,
+                { headers: H })
+              const msgs = rm.ok ? await rm.json() : []
+              any = (Array.isArray(msgs) ? msgs : []).some((m: any) => {
+                const lastRead = Math.max(stamp(localComm[m.community_id]), Number(seen[`comm:${m.community_id}`]) || 0)
+                return new Date(m.created_at).getTime() > lastRead
+              })
+            }
+          } catch {}
+        }
+        if (!stopped) setUnread(any)
       } catch {}
     }
     check()
     const iv = setInterval(check, 20000)
     const onSeen = () => check()
     window.addEventListener('teamhub-seen', onSeen)
+    // Communities.jsx fires this when a community chat is opened/read
+    window.addEventListener('hub-seen-updated', onSeen)
     return () => {
-      stopped = true; clearInterval(iv); window.removeEventListener('teamhub-seen', onSeen)
+      stopped = true; clearInterval(iv)
+      window.removeEventListener('teamhub-seen', onSeen)
+      window.removeEventListener('hub-seen-updated', onSeen)
       try { if (liveChan) supabase.removeChannel(liveChan) } catch {}
     }
   }, [email, role]) // eslint-disable-line
