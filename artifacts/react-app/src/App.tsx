@@ -763,7 +763,8 @@ const WL_PLACEHOLDER_SOCIALS = [
 ];
 
 const CommunityScreen = ({ user }:any) => {
-  const isAdmin  = user?.role === 'super_admin';
+  // company_admin = a white-label org's own admin — same Connect powers as Eden's super admin
+  const isAdmin  = user?.role === 'super_admin' || user?.role === 'company_admin';
   const isCoach  = user?.role === 'coach';
 
   // White-label company context: null = Lifestyle of Eden (default experience)
@@ -789,12 +790,14 @@ const CommunityScreen = ({ user }:any) => {
   const [rowId,   setRowId]   = useState<string>('');
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState<any[]>(DEFAULT_SOCIALS);
+  const [linksLoading, setLinksLoading] = useState(true); // block edit/save until the picked target's row is loaded
 
   // Step 1: resolve identity + company (white-label users get their own Connect space)
   useEffect(()=>{ (async () => {
-    const rows:any[] = await csGet('user_profiles',`email=eq.${encodeURIComponent(user?.email||'')}&select=id,company_id`);
+    const rows:any[] = await csGet('user_profiles',`email=eq.${encodeURIComponent(user?.email||'')}&select=id,company_id,coach_id`);
     const myId = rows?.[0]?.id;
     const cid  = rows?.[0]?.company_id;
+    let isWl = false;
     if (cid && cid !== EDEN_ORG_ID) {
       const org:any[] = await csGet('organizations',`id=eq.${cid}&select=id,name,brand_color,calendar_url`);
       if (org?.[0]) {
@@ -802,52 +805,85 @@ const CommunityScreen = ({ user }:any) => {
         // Palette column added later — fetch separately so a missing column can't break primary branding
         const pal:any[] = await csGet('organizations',`id=eq.${cid}&select=brand_colors&limit=1`);
         if (Array.isArray(pal?.[0]?.brand_colors)) row = { ...row, brand_colors: pal[0].brand_colors };
-        setMyCompany(row); return; // white-label: company links, no coach logic
+        setMyCompany(row); isWl = true; // white-label: org links by default, per-coach overrides below
       }
     }
+    // Per-coach links work the same in Eden and white labels; coach lists are
+    // always scoped to the viewer's own org.
+    const coachScope = isWl
+      ? `company_id=eq.${cid}&role=in.(coach,head_coach)`
+      : `or=(company_id.eq.${EDEN_ORG_ID},company_id.is.null)&role=in.(coach,head_coach)`;
     if (isAdmin) {
-      csGet('user_profiles','role=in.(coach,head_coach)&select=id,name&order=name.asc').then((rows2:any[])=>{
+      csGet('user_profiles',`${coachScope}&select=id,name&order=name.asc`).then((rows2:any[])=>{
         setCoachList(rows2||[]);
-        if (rows2?.[0]?.id) setPickedCoachId(rows2[0].id);
+        // White-label admins start on the org-wide links; Eden admins on the first coach
+        if (!isWl && rows2?.[0]?.id) setPickedCoachId(rows2[0].id);
       });
     } else if (isCoach) {
       if (myId) setMyCoachId(myId);
     } else if (myId) {
+      // Clients: own profile's coach_id (readable under RLS); client_access is staff-only
+      if (rows?.[0]?.coach_id) { setMyCoachId(rows[0].coach_id); return; }
       const ca:any[] = await csGet('client_access',`client_id=eq.${myId}&select=staff_id&limit=1`);
       if (ca?.[0]?.staff_id) setMyCoachId(ca[0].staff_id);
     }
   })() },[user?.email]);
 
-  // Step 2: load links — company links for white-label users, coach links otherwise
+  // Step 2: load links. Everyone resolves a coach the same way; white-label
+  // users fall back to the org-wide company links when the coach has none.
+  // (For white-label admins, pickedCoachId '' = editing the org-wide links.)
   const activeCoachId = isAdmin ? pickedCoachId : myCoachId;
   useEffect(()=>{
-    if (myCompany) {
-      setEditing(false);
-      csGet('company_links',`company_id=eq.${myCompany.id}&limit=1`).then((rows:any[])=>{
+    let stale = false;
+    // Reset selection-bound state SYNCHRONOUSLY so a fast edit+save after
+    // switching the picker can never write the previous target's row.
+    setEditing(false); setRowId(''); setLinksLoading(true);
+    (async () => {
+      const done = () => { if (!stale) setLinksLoading(false); };
+      // Per-coach links first — same table for Eden and white labels
+      if (activeCoachId) {
+        const rows:any[] = await csGet('coach_social_links',`coach_id=eq.${activeCoachId}&limit=1`);
+        if (stale) return;
+        if (rows?.[0]?.links?.length) {
+          setSocials(rows[0].links); setDraft(rows[0].links); setRowId(rows[0].id); done(); return;
+        }
+        if (!myCompany) { // Eden: coach without links shows the Eden defaults
+          setSocials(DEFAULT_SOCIALS); setDraft(DEFAULT_SOCIALS); done(); return;
+        }
+        // White-label admin editing a coach with no links yet: start from blanks
+        if (isAdmin) { setSocials(WL_PLACEHOLDER_SOCIALS); setDraft(WL_PLACEHOLDER_SOCIALS); done(); return; }
+        // White-label coach/client: fall through to the org-wide links below
+      }
+      if (myCompany) {
+        const rows:any[] = await csGet('company_links',`company_id=eq.${myCompany.id}&limit=1`);
+        if (stale) return;
         if (rows?.[0]?.links?.length) {
           setSocials(rows[0].links); setDraft(rows[0].links); setRowId(rows[0].id);
         } else {
-          setSocials(WL_PLACEHOLDER_SOCIALS); setDraft(WL_PLACEHOLDER_SOCIALS); setRowId('');
+          setSocials(WL_PLACEHOLDER_SOCIALS); setDraft(WL_PLACEHOLDER_SOCIALS);
         }
-      });
-      return;
-    }
-    if (!activeCoachId) return;
-    setEditing(false);
-    csGet('coach_social_links',`coach_id=eq.${activeCoachId}&limit=1`).then((rows:any[])=>{
-      if (rows?.[0]?.links?.length) {
-        setSocials(rows[0].links); setDraft(rows[0].links); setRowId(rows[0].id);
-      } else {
-        setSocials(DEFAULT_SOCIALS); setDraft(DEFAULT_SOCIALS); setRowId('');
       }
-    });
+      done();
+    })();
+    return () => { stale = true };
   },[activeCoachId, myCompany?.id]);
 
   const updateDraft = (i:number, field:string, val:string) =>
     setDraft(prev=>prev.map((s:any,idx:number)=>idx===i?{...s,[field]:val}:s));
 
   const saveLinks = async () => {
+    if (linksLoading) return; // target row still resolving — never save against stale state
     setSocials(draft); setEditing(false);
+    // Admin picked a specific coach (Eden or white label) → per-coach row
+    if (activeCoachId) {
+      if (rowId) {
+        await csSave('coach_social_links',{links:draft,updated_at:new Date().toISOString()},rowId);
+      } else {
+        const res:any = await csSave('coach_social_links',{coach_id:activeCoachId,links:draft});
+        if (res?.[0]?.id) setRowId(res[0].id);
+      }
+      return;
+    }
     if (myCompany) {
       if (rowId) {
         await csSave('company_links',{links:draft,updated_at:new Date().toISOString()},rowId);
@@ -856,13 +892,6 @@ const CommunityScreen = ({ user }:any) => {
         if (res?.[0]?.id) setRowId(res[0].id);
       }
       return;
-    }
-    if (!activeCoachId) return;
-    if (rowId) {
-      await csSave('coach_social_links',{links:draft,updated_at:new Date().toISOString()},rowId);
-    } else {
-      const res:any = await csSave('coach_social_links',{coach_id:activeCoachId,links:draft});
-      if (res?.[0]?.id) setRowId(res[0].id);
     }
   };
 
@@ -877,12 +906,15 @@ const CommunityScreen = ({ user }:any) => {
         </p>
       </div>
 
-      {/* Admin: coach picker */}
-      {!myCompany && isAdmin && coachList.length > 0 && (
+      {/* Admin: coach picker — Eden and white-label orgs alike. White-label
+          admins also get an "Organization links" option (the org-wide default
+          shown to anyone whose coach has no links of their own). */}
+      {isAdmin && coachList.length > 0 && (
         <div style={{ padding:"12px 20px 0" }}>
-          <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>Editing links for coach</p>
+          <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:"0 0 6px" }}>Editing links for</p>
           <select value={pickedCoachId} onChange={e=>{ setPickedCoachId(e.target.value); setEditing(false); }}
             style={{ width:"100%", background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px", color:B.text, fontSize:13, outline:"none", cursor:"pointer" }}>
+            {myCompany && <option value="">🏢 {myCompany.name} — organization links (default)</option>}
             {coachList.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
@@ -892,7 +924,7 @@ const CommunityScreen = ({ user }:any) => {
       <div style={{ padding:"16px 20px 0" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
           <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:"uppercase", margin:0 }}>Follow &amp; Subscribe</p>
-          {isAdmin && !editing && (
+          {isAdmin && !editing && !linksLoading && (
             <button onClick={()=>{ setDraft(socials); setEditing(true); }}
               style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:6, padding:"3px 10px", color:B.gold, fontSize:11, fontWeight:700, cursor:"pointer" }}>
               ✏️ Edit Links
@@ -904,10 +936,12 @@ const CommunityScreen = ({ user }:any) => {
         {editing && isAdmin && (
           <div style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:14, padding:16, marginBottom:14 }}>
             <p style={{ fontSize:11, fontWeight:700, color:B.gold, margin:"0 0 4px" }}>
-              Edit links — {myCompany ? myCompany.name : (coachList.find((c:any)=>c.id===pickedCoachId)?.name||'Coach')}
+              Edit links — {pickedCoachId ? (coachList.find((c:any)=>c.id===pickedCoachId)?.name||'Coach') : (myCompany?.name||'Coach')}
             </p>
             <p style={{ fontSize:10, color:B.muted, margin:"0 0 12px" }}>
-              {myCompany ? 'These links appear for everyone in your company. Set the label, handle, and URL for each.' : 'Eden defaults pre-filled. Change any field and save.'}
+              {pickedCoachId
+                ? (myCompany ? "This coach's clients see these instead of the organization links." : 'Eden defaults pre-filled. Change any field and save.')
+                : 'These links appear for everyone in your company whose coach has no links of their own. Set the label, handle, and URL for each.'}
             </p>
             {draft.map((s:any, i:number) => (
               <div key={i} style={{ borderBottom:`1px solid ${B.border}`, paddingBottom:12, marginBottom:12 }}>
@@ -930,7 +964,7 @@ const CommunityScreen = ({ user }:any) => {
               </button>
               <button onClick={saveLinks}
                 style={{ flex:2, background:B.gold, border:"none", borderRadius:8, padding:"9px", fontWeight:800, color:"#000", fontSize:12, cursor:"pointer" }}>
-                Save {myCompany ? `for ${myCompany.name}` : `for ${coachList.find((c:any)=>c.id===pickedCoachId)?.name?.split(' ')[0]||'Coach'}`}
+                Save {pickedCoachId ? `for ${coachList.find((c:any)=>c.id===pickedCoachId)?.name?.split(' ')[0]||'Coach'}` : `for ${myCompany?.name||'Coach'}`}
               </button>
             </div>
           </div>
@@ -5141,13 +5175,108 @@ const AdminDashboard = ({ user }:any) => {
 
 
 // ─── BOOKING / BOOK A CALL SCREEN (client sidebar item) ──────────────────────
-function BookingScreen({ currentUser }: { currentUser: any }) {
-  const isCoach = currentUser?.role === 'coach' || currentUser?.role === 'super_admin'
+// Every coach can have their OWN 1v1 booking calendar (Calendly/GHL link),
+// in Eden and in every white-label org. Stored in admin_settings under
+// `booking_url:<coachId>` (org-scoped). Clients see THEIR coach's calendar;
+// fallback order: coach link → org default (organizations.calendar_url for
+// white labels, the Eden link for Eden). Admins pick any coach in their org
+// and set that coach's link; coaches can update their own.
+function BookingScreen({ currentUser, viewer }: { currentUser: any, viewer?: any }) {
   const DEFAULT_URL = 'https://links.lifestyleofeden.com/widget/booking/2kKUGzYZqAaNBVpd5uzA'
-  const [url,     setUrl]     = useState(DEFAULT_URL)
-  const [editing, setEditing] = useState(false)
-  const [tempUrl, setTempUrl] = useState('')
+  const viewerRole = viewer?.role || currentUser?.role
+  const isAdmin  = viewerRole === 'super_admin' || viewerRole === 'company_admin'
+  const isCoach  = viewerRole === 'coach'
+  const [orgId,     setOrgId]     = useState<string>('')
+  const [orgUrl,    setOrgUrl]    = useState<string>('')   // org-wide fallback link
+  const [viewerId,  setViewerId]  = useState<string>('')   // logged-in user's profile id
+  const [coachId,   setCoachId]   = useState<string>('')   // whose calendar is shown
+  const [coachList, setCoachList] = useState<any[]>([])    // admins: coaches in this org
+  const [urls,      setUrls]      = useState<any>({})      // coachId -> saved link
+  const [loaded,    setLoaded]    = useState(false)
+  const [editing,   setEditing]   = useState(false)
+  const [tempUrl,   setTempUrl]   = useState('')
+  const [saveMsg,   setSaveMsg]   = useState('')
   const isMob = useIsMobile()
+
+  useEffect(() => { let stale = false; (async () => {
+    // Whose calendar? currentUser is the screen's data context (the client
+    // when a coach/admin opened it through client tools).
+    const rows:any[] = await csGet('user_profiles', `email=eq.${encodeURIComponent(currentUser?.email||'')}&select=id,company_id,role,coach_id`)
+    const p = rows?.[0]
+    if (!p?.id || stale) { setLoaded(true); return }
+    const cid = p.company_id || EDEN_ORG_ID
+    setOrgId(cid)
+    // Org-wide fallback link
+    if (cid !== EDEN_ORG_ID) {
+      const org:any[] = await csGet('organizations', `id=eq.${cid}&select=calendar_url`)
+      if (!stale && org?.[0]?.calendar_url) setOrgUrl(org[0].calendar_url)
+    } else setOrgUrl(DEFAULT_URL)
+    // Resolve the logged-in viewer (may differ from currentUser in client tools)
+    let vId = p.id
+    if (viewer?.email && viewer.email !== currentUser?.email) {
+      const vr:any[] = await csGet('user_profiles', `email=eq.${encodeURIComponent(viewer.email)}&select=id`)
+      if (vr?.[0]?.id) vId = vr[0].id
+    }
+    if (!stale) setViewerId(vId)
+    // Whose calendar to show first
+    let target = ''
+    if (p.role === 'client') {
+      // Own profile's coach_id first (clients can read their own row under RLS);
+      // client_access works only when a staff member opened this client's tools.
+      target = p.coach_id || ''
+      if (!target) {
+        const ca:any[] = await csGet('client_access', `client_id=eq.${p.id}&select=staff_id&limit=1`)
+        target = ca?.[0]?.staff_id || ''
+      }
+    } else target = p.id
+    // Admins: coach picker across their org
+    if (isAdmin) {
+      const scope = cid !== EDEN_ORG_ID
+        ? `company_id=eq.${cid}&role=in.(coach,head_coach)`
+        : `or=(company_id.eq.${EDEN_ORG_ID},company_id.is.null)&role=in.(coach,head_coach)`
+      const cl:any[] = await csGet('user_profiles', `${scope}&select=id,name&order=name.asc`)
+      if (!stale) {
+        setCoachList(cl || [])
+        if (!target && cl?.[0]?.id) target = cl[0].id
+      }
+    }
+    if (!stale) { setCoachId(target); setLoaded(true) }
+  })(); return () => { stale = true } }, [currentUser?.email, viewer?.email]) // eslint-disable-line
+
+  // Load the chosen coach's saved link
+  useEffect(() => { if (!coachId || !orgId || urls[coachId] !== undefined) return
+    let stale = false
+    csGet('admin_settings', `company_id=eq.${orgId}&key=eq.${encodeURIComponent('booking_url:'+coachId)}&select=value`)
+      .then((rows:any[]) => {
+        if (stale) return
+        let u = ''
+        try { u = JSON.parse(rows?.[0]?.value || '{}')?.url || '' } catch {}
+        setUrls((prev:any) => ({ ...prev, [coachId]: u }))
+      })
+    return () => { stale = true }
+  }, [coachId, orgId]) // eslint-disable-line
+
+  const url = (coachId && urls[coachId]) || orgUrl
+  // Editing waits until the picked coach's saved link is resolved, so a quick
+  // save after switching coaches can never wipe an existing link with a blank.
+  const coachUrlLoaded = !!coachId && urls[coachId] !== undefined
+  const canEdit = (isAdmin || (isCoach && !!coachId && coachId === viewerId)) && coachUrlLoaded
+
+  const saveUrl = async () => {
+    const clean = tempUrl.trim()
+    if (!coachId || !orgId) return
+    const r = await fetch(`${CS_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+      method: 'POST',
+      headers: { ...CS_H, Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({ company_id: orgId, key: 'booking_url:'+coachId,
+        value: JSON.stringify({ url: clean }), updated_at: new Date().toISOString() }),
+    })
+    if (!r.ok) { setSaveMsg('⚠️ Could not save — try again'); return }
+    setUrls((prev:any) => ({ ...prev, [coachId]: clean }))
+    setEditing(false)
+    setSaveMsg('✓ Saved')
+    setTimeout(() => setSaveMsg(''), 2500)
+  }
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:B.black, overflow:'hidden' }}>
@@ -5157,22 +5286,34 @@ function BookingScreen({ currentUser }: { currentUser: any }) {
         display:'flex', alignItems:'center', flexWrap:'wrap', gap:8 }}>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:15, fontWeight:700, color:B.white }}>📅 Book a Call</div>
-          <div style={{ fontSize:11, color:B.muted, marginTop:2 }}>Schedule your next coaching session</div>
+          <div style={{ fontSize:11, color:B.muted, marginTop:2 }}>
+            Schedule your next coaching session
+            {coachId && coachList.length > 0 ? ` — ${coachList.find((c:any)=>c.id===coachId)?.name || 'coach'}` : ''}
+          </div>
         </div>
-        {isCoach && !editing && (
-          <button onClick={() => { setEditing(true); setTempUrl(url) }}
+        {saveMsg && <span style={{ fontSize:11, color:saveMsg.startsWith('✓') ? B.success : '#ffa600', fontWeight:700, flexShrink:0 }}>{saveMsg}</span>}
+        {/* Admins: pick which coach's calendar to view/set */}
+        {isAdmin && coachList.length > 0 && (
+          <select value={coachId} onChange={e => { setCoachId(e.target.value); setEditing(false) }}
+            style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8,
+              padding:'7px 10px', color:B.white, fontSize:12, outline:'none', cursor:'pointer', flexShrink:0, maxWidth:180 }}>
+            {coachList.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+        {canEdit && !editing && (
+          <button onClick={() => { setEditing(true); setTempUrl((coachId && urls[coachId]) || '') }}
             style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8,
               padding:'7px 12px', color:B.muted, fontSize:11, cursor:'pointer', flexShrink:0 }}>
-            ✏️ Update URL
+            ✏️ {isAdmin ? "Set coach's calendar" : 'Update my calendar'}
           </button>
         )}
-        {isCoach && editing && (
+        {canEdit && editing && (
           <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', width:'100%' }}>
             <input value={tempUrl} onChange={e => setTempUrl(e.target.value)}
-              placeholder="Paste GHL or Calendly URL…"
+              placeholder={`Paste ${coachList.find((c:any)=>c.id===coachId)?.name || 'this coach'}'s GHL or Calendly URL… (blank = org default)`}
               style={{ flex:1, minWidth:180, background:B.card, border:`1px solid ${B.border}`,
                 borderRadius:8, padding:'8px 10px', color:B.white, fontSize:12, outline:'none' }}/>
-            <button onClick={() => { setUrl(tempUrl.trim()); setEditing(false) }}
+            <button onClick={saveUrl}
               style={{ background:B.gold, border:'none', borderRadius:8, padding:'8px 14px',
                 fontWeight:700, color:B.black, fontSize:12, cursor:'pointer', flexShrink:0 }}>
               Save
@@ -5195,13 +5336,15 @@ function BookingScreen({ currentUser }: { currentUser: any }) {
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
             height:'100%', flexDirection:'column', gap:12 }}>
             <div style={{ fontSize:48 }}>📅</div>
-            <div style={{ fontSize:15, fontWeight:700, color:B.white }}>No booking link configured</div>
-            {isCoach && <div style={{ fontSize:12, color:B.muted }}>Paste your URL above</div>}
+            <div style={{ fontSize:15, fontWeight:700, color:B.white }}>{loaded ? 'No booking link configured' : 'Loading…'}</div>
+            {loaded && canEdit && <div style={{ fontSize:12, color:B.muted }}>Paste a Calendly or GHL URL above</div>}
+            {loaded && !canEdit && <div style={{ fontSize:12, color:B.muted }}>Your team is setting this up — check back soon</div>}
           </div>
         )}
       </div>
 
-      {/* Resource links */}
+      {/* Resource links — Eden-specific, hidden for white-label orgs */}
+      {(!orgId || orgId === EDEN_ORG_ID) && (
       <div style={{ padding:'10px 14px', borderTop:`1px solid ${B.border}`, flexShrink:0,
         display:'flex', gap:6, flexWrap:'wrap' }}>
         {[
@@ -5218,6 +5361,7 @@ function BookingScreen({ currentUser }: { currentUser: any }) {
           </a>
         ))}
       </div>
+      )}
     </div>
   )
 }
@@ -5669,7 +5813,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
     const onBack = coachClient ? () => { setTab(clientNavSource); } : undefined;
     if (tab === "diet")         return <DietBuilder key="diet" currentUser={toolUser} demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "supplements")  return <DietBuilder key="supplements" currentUser={toolUser} initialTab="supplements" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
-    if (tab === "calendar")     return <BookingScreen currentUser={toolUser}/>;
+    if (tab === "calendar")     return <BookingScreen currentUser={toolUser} viewer={user}/>;
     if (tab === "labs")         return <Week4 key="labs" currentUser={toolUser} initialTab="labs" onBack={onBack}/>;
     if (tab === "checkin")      return <DietBuilder key="checkin" currentUser={toolUser} initialTab="checkin" demoCheckins={ciDemoCheckins} onBack={onBack}/>;
     if (tab === "habits")       return <HabitTrackerScreen/>;
