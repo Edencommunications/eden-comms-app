@@ -1461,13 +1461,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const openClientRef = useRef<any>(null) // which client's consultation data is currently loading
   function openClient(client: any) {
     setSelectedClient(client)
-    // The last-clicked client is the Loom spotlight: only they show by name when
-    // Loom Mode is (or gets turned) on — everyone else stays hidden
-    if (client?.name) { setLoomFeatured(new Set([client.name])); loomShow(client.name) }
+    // Clicking a client's name no longer fills their Loom checkbox — the coach
+    // ticks the checkmark itself to choose who stays visible in Loom Mode.
     // Report the click up to the app shell so Split View follows the last-clicked client
     if (client?.email) onClientFocus({ email: client.email, name: client.name, role: client.role || 'client' })
-    // Opening a client no longer auto-clears the pending-review flag — the
-    // coach clears it by clicking the pending marker on the roster directly.
+    if (client.hasUpdate || pendingReviewMap[client.uuid]) markViewed(client.uuid)
     // Load this client's saved consultation data so admin/coach always see what's in the DB.
     // Track which client is open so late responses from a previous client never overwrite the current one.
     openClientRef.current = client.uuid
@@ -2100,9 +2098,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                           {!hidden && isAdmin ? client.coachName+' · ' : ''}{hidden ? '—' : client.checkInDay+'s'}
                         </div>
                         {!hidden && ((client.hasUpdate||pendingReviewMap[client.uuid])
-                          ? <div title="Click to mark reviewed"
-                              onClick={(e: any)=>{e.stopPropagation();markViewed(client.uuid)}}
-                              style={{fontSize:9,color:C.gold,fontWeight:700,marginTop:2,cursor:'pointer'}}>● CHECK-IN PENDING REVIEW — click to clear</div>
+                          ? <div style={{fontSize:9,color:C.gold,fontWeight:700,marginTop:2}}>● CHECK-IN PENDING REVIEW</div>
                           : weekSubs.has(client.uuid)
                           ? <div style={{fontSize:9,color:C.success,fontWeight:700,marginTop:2}}>✓ CHECKED IN THIS WEEK</div>
                           : <div style={{fontSize:9,color:C.muted,fontWeight:700,marginTop:2}}>● ACTIVE</div>)}
