@@ -333,7 +333,10 @@ export default function Notifications({ currentUser, onNavigate }: any) {
       broadcast: 'msgs', coach_response: 'checkin', coach_update: 'checkin',
       start_reminder_7: 'home', start_reminder_1: 'home', start_reminder_0: 'home',
     }
-    const dest = notif.link_to || FALLBACK_GOTO[notif.type]
+    let dest = notif.link_to || FALLBACK_GOTO[notif.type]
+    // Clients never have the staff-only Team Hub or admin tabs — reroute
+    // those destinations to a tab the client actually has.
+    if (role === 'client' && (dest === 'team' || dest === 'admin')) dest = 'community'
     if (!onNavigate || !dest) return
     notif = { ...notif, link_to: dest }
     // Check-in notifications deep-link to the submitting client's Check-In Hub:

@@ -112,8 +112,11 @@ export function useTeamHubUnread(user: any) {
     let stopped = false
     let me: any = null
     let liveChan: any = null
+    let checking = false // in-flight guard: poll + seen events must not overlap
     const H = { apikey: SUPABASE_ANON, get Authorization() { return sbBearer() } }
     async function check() {
+      if (checking) return
+      checking = true
       try {
         if (!me) {
           const r = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,company_id`, { headers: H })
@@ -176,19 +179,23 @@ export function useTeamHubUnread(user: any) {
               let localComm: any = {}
               try { localComm = JSON.parse(localStorage.getItem(`community_seen_${me.id}`) || '{}') || {} } catch {}
               const stamp = (v: any) => typeof v === 'number' ? v : (Date.parse(v) || 0)
-              const rm = await fetch(
-                `${SUPABASE_URL}/rest/v1/community_messages?community_id=in.(${comms.map((c: any) => c.id).join(',')})&sender_id=neq.${me.id}&order=created_at.desc&limit=100&select=community_id,created_at`,
-                { headers: H })
-              const msgs = rm.ok ? await rm.json() : []
-              any = (Array.isArray(msgs) ? msgs : []).some((m: any) => {
-                const lastRead = Math.max(stamp(localComm[m.community_id]), Number(seen[`comm:${m.community_id}`]) || 0)
-                return new Date(m.created_at).getTime() > lastRead
-              })
+              // Check each community against ITS OWN seen stamp (one busy,
+              // already-read community must not mask an unread quiet one)
+              const hits = await Promise.all(comms.map(async (c: any) => {
+                const lastRead = Math.max(stamp(localComm[c.id]), Number(seen[`comm:${c.id}`]) || 0)
+                const since = new Date(lastRead || 0).toISOString()
+                const rm = await fetch(
+                  `${SUPABASE_URL}/rest/v1/community_messages?community_id=eq.${c.id}&sender_id=neq.${me.id}&created_at=gt.${encodeURIComponent(since)}&select=id&limit=1`,
+                  { headers: H })
+                const msgs = rm.ok ? await rm.json() : []
+                return Array.isArray(msgs) && msgs.length > 0
+              }))
+              any = hits.some(Boolean)
             }
           } catch {}
         }
         if (!stopped) setUnread(any)
-      } catch {}
+      } catch {} finally { checking = false }
     }
     check()
     const iv = setInterval(check, 20000)
