@@ -5772,7 +5772,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
               )}
             </button>
           )}
-          {(user.role === "coach" || user.role === "super_admin") && <LoomPicker isMobile={isMobile}/>}
+          {user.role === "super_admin" && <LoomPicker isMobile={isMobile}/>}
           <DndButton isMobile={isMobile}/>
           <Notifications currentUser={{ email: user.email, name: user.name, role: user.role }} onNavigate={(dest: string, client?: any) => {
             // Deep-link: check-in notifications carry the submitting client, so
