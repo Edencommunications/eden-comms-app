@@ -1961,7 +1961,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               </div>
             ):(
               <div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginBottom:8}}>
-                {isCoach?'No weekdays assigned yet.':'Your coach hasn\u2019t set a weekly schedule — follow their guidance on which day to do.'}
+                {dayPlanList.length===1
+                  ? (isCoach?'One diet day with no weekdays assigned — the client sees this plan as their everyday diet.':'This plan applies every day.')
+                  : (isCoach?'No weekdays assigned yet.':'Your coach hasn\u2019t set a weekly schedule — follow their guidance on which day to do.')}
               </div>
             )}
             {/* Coach note about the schedule */}
