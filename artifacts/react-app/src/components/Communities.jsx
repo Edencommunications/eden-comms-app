@@ -227,9 +227,26 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
         list = [...mine, ...inIds].filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
       }
       setCommunities(list)
+      // Bell-notification deep-link: auto-open the community it pointed at
+      // (only if it lives in THIS pane's context — otherwise leave the id
+      // for the other Communities instance to consume).
+      try {
+        const wanted = sessionStorage.getItem('eden_open_community')
+        if (wanted && list.some(c => c.id === wanted)) {
+          sessionStorage.removeItem('eden_open_community')
+          setActiveId(wanted)
+        }
+      } catch {}
     } finally { setLoaded(true) }
   }
   useEffect(() => { loadCommunities() }, [myId, companyId, context])
+  // Deep-link arriving while this pane is already mounted (bell clicked on
+  // the same tab): re-run the loader so the stored community id gets opened.
+  useEffect(() => {
+    const h = () => loadCommunities()
+    window.addEventListener('eden-open-community', h)
+    return () => window.removeEventListener('eden-open-community', h)
+  }, [myId, companyId, context, isAdmin]) // eslint-disable-line
   // Refresh unread badges when the list changes + every 30s; opening a community clears its badge.
   // Each cycle first pulls the DB read state, so a community read on another
   // device clears this device's badge within a poll cycle.

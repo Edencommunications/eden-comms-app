@@ -334,6 +334,19 @@ export default function Notifications({ currentUser, onNavigate }: any) {
       start_reminder_7: 'home', start_reminder_1: 'home', start_reminder_0: 'home',
     }
     let dest = notif.link_to || FALLBACK_GOTO[notif.type]
+    // Community deep-link: "<tab>?comm=<communityId>" — stash the community id
+    // so the Communities pane auto-opens that exact conversation after the
+    // tab switch (Week7 / CommunityScreen pick it up on mount).
+    if (typeof dest === 'string' && dest.includes('?comm=')) {
+      const [tab, commId] = dest.split('?comm=')
+      try {
+        sessionStorage.setItem('eden_open_community', commId)
+        // Already on the destination tab? A mount won't happen — let the
+        // mounted components react to the deep-link immediately.
+        window.dispatchEvent(new CustomEvent('eden-open-community'))
+      } catch {}
+      dest = tab
+    }
     // Clients never have the staff-only Team Hub or admin tabs — reroute
     // those destinations to a tab the client actually has.
     if (role === 'client' && (dest === 'team' || dest === 'admin')) dest = 'community'

@@ -187,7 +187,17 @@ export default function Week7({ currentUser, initialDm }: any) {
   }
 
   // ── Section tab ────────────────────────────────────────────
-  const [section, setSection] = useState('chat') // chat | calendar | huddle | dbas
+  const [section, setSection] = useState(() => {
+    // A community deep-link (bell notification) is waiting — land on the
+    // Communities pane; Communities.jsx consumes the stored id to auto-open it.
+    try { if (sessionStorage.getItem('eden_open_community')) return 'communities' } catch {}
+    return 'chat'
+  }) // chat | communities | calendar | huddle | dbas
+  useEffect(() => {
+    const h = () => { try { if (sessionStorage.getItem('eden_open_community')) setSection('communities') } catch {} }
+    window.addEventListener('eden-open-community', h)
+    return () => window.removeEventListener('eden-open-community', h)
+  }, [])
 
   // ── My DBAs (sub-brands I coach or was delegated into) ──────
   // The server scopes the list: admins get every org DBA, other staff only

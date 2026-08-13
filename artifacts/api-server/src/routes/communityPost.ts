@@ -103,14 +103,24 @@ export async function mutedUserIds(communityId: string): Promise<Set<string>> {
   } catch { return new Set(); }
 }
 
+// Where a notification about this community should take the recipient:
+// team/DBA-context communities live inside the Team Hub, client-context
+// ones under the Community tab. `?comm=<id>` lets the app open the exact
+// community after switching tabs.
+function communityLink(communityId: string, context?: string | null): string {
+  const tab = /^(team|dba)/.test(String(context || "")) ? "team" : "community";
+  return `${tab}?comm=${communityId}`;
+}
+
 // Notify community members a new post landed — feeds the top bell AND phone
 // push (the push watcher mirrors notifications rows). Skips the sender and
 // anyone who muted this community.
 export async function notifyCommunityMembers(communityId: string, communityName: string, senderId: string | null): Promise<void> {
   try {
-    const [members, muted] = await Promise.all([
+    const [members, muted, commRows] = await Promise.all([
       dbGet<any>(`community_members?community_id=eq.${encodeURIComponent(communityId)}&select=user_id&limit=200`),
       mutedUserIds(communityId),
+      dbGet<any>(`communities?id=eq.${encodeURIComponent(communityId)}&select=context&limit=1`),
     ]);
     const rows = members
       .map((m: any) => m.user_id)
@@ -121,6 +131,7 @@ export async function notifyCommunityMembers(communityId: string, communityName:
         type: "community_post",
         body: `💬 New post in #${communityName} — check your communities`,
         is_read: false,
+        link_to: communityLink(communityId, commRows?.[0]?.context),
       }));
     if (rows.length) await dbInsert("notifications", rows);
   } catch (e) {
@@ -309,7 +320,7 @@ router.post("/communities/:id/notify-post", async (req: Request, res: Response) 
     if (!caller) { res.status(401).json({ error: "Not authorized" }); return; }
 
     const comm = (await dbGet<any>(
-      `communities?id=eq.${encodeURIComponent(communityId)}&is_active=eq.true&select=id,name,company_id&limit=1`,
+      `communities?id=eq.${encodeURIComponent(communityId)}&is_active=eq.true&select=id,name,company_id,context&limit=1`,
     ))[0];
     if (!comm) { res.status(404).json({ error: "Community not found" }); return; }
 
@@ -353,6 +364,7 @@ router.post("/communities/:id/notify-post", async (req: Request, res: Response) 
         type: "mention",
         body: `💬 ${senderName || "Someone"} tagged you in "${comm.name}": "${content.slice(0, 80)}"`,
         is_read: false,
+        link_to: communityLink(comm.id, comm.context),
       }));
     if (mentionRows.length) await dbInsert("notifications", mentionRows);
 
@@ -368,6 +380,7 @@ router.post("/communities/:id/notify-post", async (req: Request, res: Response) 
       type: "community_post",
       body: senderName ? `💬 ${senderName} posted in #${comm.name}` : `💬 New post in #${comm.name} — check your communities`,
       is_read: false,
+      link_to: communityLink(comm.id, comm.context),
     }));
     if (rows.length && !(await dbInsert("notifications", rows))) {
       res.status(502).json({ error: "Could not create notifications" }); return;
