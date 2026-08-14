@@ -2322,6 +2322,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       ['💪 Workout',      'workout'],
                       ['🧪 Labs',         'labs'],
                       ['⌚ Wearables',    'wearables'],
+                      ['📅 Book a Call',  'calendar'],
                       ['📝 Consultation', 'consultation'],
                     ].map(([label,dest])=>(
                       <button key={dest}
