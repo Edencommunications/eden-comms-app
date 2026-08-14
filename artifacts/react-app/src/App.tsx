@@ -5619,6 +5619,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
     { key:"msgs",      icon:"msg",       label:"Messages" },
     { key:"admin",     icon:"admin",     label:"Clients" },
     { key:"team",      icon:"team",      label:"Team Hub" },
+    { key:"calendar",  icon:"calendar",  label:"My Calendar" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
@@ -5627,6 +5628,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
     { key:"msgs",      icon:"msg",       label:"Messages" },
     { key:"admin",     icon:"admin",     label:"Admin" },
     { key:"team",      icon:"team",      label:"Team Hub" },
+    { key:"calendar",  icon:"calendar",  label:"1v1 Calendars" },
     { key:"learn",     icon:"learn",     label:"Learn" },
     { key:"community", icon:"community", label:"Connect" },
   ];
