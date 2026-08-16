@@ -52,6 +52,7 @@ export const FOODS = [
   {name:'Chia Seeds',serving:'12g',cal:58,pro:2,fat:3.7,carb:5,fib:4.1,cat:'Fats'},
   {name:'Raw Honey',serving:'7g',cal:20,pro:0,fat:0,carb:6,fib:0,cat:'Fats'},
   {name:'Blueberries',serving:'100g',cal:68,pro:0.7,fat:0.3,carb:14.5,fib:2.4,cat:'Fruits/Vegetables'},
+  {name:'Wild Blueberries (frozen)',serving:'100g',cal:50,pro:0.7,fat:0.4,carb:12,fib:4.3,cat:'Fruits/Vegetables'},
   {name:'Mixed Berries (frozen)',serving:'100g',cal:55,pro:0.8,fat:0.3,carb:12,fib:2.5,cat:'Fruits/Vegetables'},
   {name:'Strawberries',serving:'100g',cal:30,pro:0.8,fat:0.1,carb:6,fib:2,cat:'Fruits/Vegetables'},
   {name:'Banana',serving:'100g',cal:103,pro:1.2,fat:0.3,carb:23.2,fib:2.6,cat:'Fruits/Vegetables'},

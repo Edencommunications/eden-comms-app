@@ -2123,10 +2123,12 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             const recM = mealRecs.reduce((a: any,r: any)=>({
               cal: a.cal+(r.cal||0)*(r.servings||1), pro: a.pro+(r.pro||0)*(r.servings||1),
               fat: a.fat+(r.fat||0)*(r.servings||1), carb:a.carb+(r.carb||0)*(r.servings||1),
-            }),{cal:0,pro:0,fat:0,carb:0})
+              fib: a.fib+(r.fib||0)*(r.servings||1),
+            }),{cal:0,pro:0,fat:0,carb:0,fib:0})
             const totalMt = {
               cal: mt.cal+Math.round(recM.cal), pro: mt.pro+Math.round(recM.pro),
               fat: mt.fat+Math.round(recM.fat), carb:mt.carb+Math.round(recM.carb),
+              fib: (mt.fib||0)+Math.round(recM.fib),
             }
             return (
               <Card key={mi} sx={{marginBottom:10}}>
@@ -2134,7 +2136,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   <div style={{fontWeight:700,fontSize:14,color:C.white}}>{meal.name}</div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:11,color:C.gold,fontWeight:600}}>{totalMt.cal} cal</span>
-                    <span style={{fontSize:10,color:C.muted}}>P:{totalMt.pro}g C:{totalMt.carb}g F:{totalMt.fat}g</span>
+                    <span style={{fontSize:10,color:C.muted}}>P:{totalMt.pro}g C:{totalMt.carb}g F:{totalMt.fat}g Fib:{totalMt.fib}g</span>
                     {/* + Food button — coach only */}
                     {isCoach&&(
                       <button onClick={()=>{setAltTarget(null);setActiveMeal(mi);setShowPicker(true)}}
@@ -2162,7 +2164,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,color:C.white,fontWeight:500}}>{item.food.name}</div>
                               <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                                {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g
+                                {actualAmt}{ps.unit} · {Math.round(item.food.cal*item.servings)}cal · P:{Math.round(item.food.pro*item.servings)}g C:{Math.round(item.food.carb*item.servings)}g F:{Math.round(item.food.fat*item.servings)}g Fib:{Math.round((item.food.fib||0)*item.servings)}g
                               </div>
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
@@ -2186,7 +2188,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                 <div style={{flex:1,minWidth:0}}>
                                   <div style={{fontSize:12,color:C.white,fontWeight:500}}>{alt.food.name}</div>
                                   <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                                    {aAmt}{aps.unit} · {Math.round(alt.food.cal*alt.servings)}cal · P:{Math.round(alt.food.pro*alt.servings)}g C:{Math.round(alt.food.carb*alt.servings)}g F:{Math.round(alt.food.fat*alt.servings)}g
+                                    {aAmt}{aps.unit} · {Math.round(alt.food.cal*alt.servings)}cal · P:{Math.round(alt.food.pro*alt.servings)}g C:{Math.round(alt.food.carb*alt.servings)}g F:{Math.round(alt.food.fat*alt.servings)}g Fib:{Math.round((alt.food.fib||0)*alt.servings)}g
                                   </div>
                                 </div>
                                 <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
@@ -2226,7 +2228,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                               <div style={{fontSize:12,fontWeight:700,color:C.gold,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{rName} <span style={{fontSize:9,fontWeight:400,color:C.muted}}>· view ›</span></div>
                               <div style={{fontSize:10,color:C.muted,marginTop:1}}>
                                 {s!==1&&<span style={{color:C.gold,marginRight:3}}>×{s}</span>}
-                                {Math.round((r.cal||0)*s)} cal · P:{Math.round((r.pro||0)*s)}g · C:{Math.round((r.carb||0)*s)}g · F:{Math.round((r.fat||0)*s)}g
+                                {Math.round((r.cal||0)*s)} cal · P:{Math.round((r.pro||0)*s)}g · C:{Math.round((r.carb||0)*s)}g · F:{Math.round((r.fat||0)*s)}g · Fib:{Math.round((r.fib||0)*s)}g
                               </div>
                             </div>
                             {isCoach&&(
@@ -2295,7 +2297,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                       <div onClick={()=>setViewRecipe(r)} style={{flex:1,minWidth:0,cursor:'pointer'}} title="View full recipe">
                         <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
-                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g · <span style={{color:C.gold}}>view ›</span></div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g · Fib:{r.fib||0}g · <span style={{color:C.gold}}>view ›</span></div>
                         {r.meal_name&&<div style={{fontSize:10,color:C.gold,marginTop:3,fontWeight:600}}>📍 {r.meal_name}</div>}
                       </div>
                       <button onClick={()=>removeRecipe(r.db_id, r.name||r.recipe_name)}
@@ -2320,7 +2322,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
-                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g · <span style={{color:C.gold}}>view recipe ›</span></div>
+                        <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g · Fib:{r.fib||0}g · <span style={{color:C.gold}}>view recipe ›</span></div>
                       </div>
                       <span style={{fontSize:9,fontWeight:700,padding:'3px 9px',borderRadius:20,background:`${C.gold}22`,color:C.gold,flexShrink:0}}>✓ Unlocked</span>
                     </div>
@@ -4235,7 +4237,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           </div>
                           <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
                             <div style={{fontSize:12,color:C.gold,fontWeight:600}}>{food.cal} cal</div>
-                            <div style={{fontSize:10,color:C.muted}}>P:{food.pro}g C:{food.carb}g F:{food.fat}g</div>
+                            <div style={{fontSize:10,color:C.muted}}>P:{food.pro}g C:{food.carb}g F:{food.fat}g Fib:{food.fib||0}g</div>
                           </div>
                         </button>
                         {isAdmin&&food.fromDB&&(
@@ -4440,7 +4442,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         <span style={{fontSize:24,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:13,fontWeight:600,color:already?C.gold:isPending?C.gold:C.white}}>{r.name}</div>
-                          <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:2}}>{r.category} · {r.cal} cal · P:{r.pro}g · C:{r.carb}g · F:{r.fat}g · Fib:{r.fib||0}g</div>
                         </div>
                         {details&&(
                           <button onClick={e=>{e.stopPropagation();setPreviewRecipe(isPreviewing?null:r.name)}}
