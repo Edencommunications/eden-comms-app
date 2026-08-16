@@ -5,6 +5,7 @@ import { startStartDateReminders } from "./lib/startDateReminders";
 import { startDietPlanDuplicateWatcher } from "./lib/dietPlanDuplicates";
 import { startMetaAdsScheduler } from "./routes/metaAds";
 import { startGhlKpiScheduler } from "./routes/ghlKpi";
+import { startContentScheduler } from "./routes/contentScheduler";
 import { startPushWatcher } from "./routes/push";
 import { startRealtimeWatch } from "./lib/realtimeWatch";
 import { startSuppLibrarySync } from "./lib/suppLibrarySync";
@@ -37,6 +38,7 @@ app.listen(port, (err) => {
   startHealthAlertWatcher();
   startMetaAdsScheduler();
   startGhlKpiScheduler();
+  startContentScheduler();
   startPushWatcher();
   startRealtimeWatch();
   startSuppLibrarySync();

@@ -22,6 +22,7 @@ import DietBuilder from "./components/DietBuilder";
 import LoomEmbed from "./components/LoomEmbed";
 import Notifications, { sendNotification } from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
+import ContentSchedulerAdmin from "./components/ContentSchedulerAdmin";
 import { LN, LoomPicker, loomSet, loomShow, loomIsShown, useLoomOn } from "./components/LoomPrivacy";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
@@ -4662,6 +4663,8 @@ const AdminDashboard = ({ user }:any) => {
               )}
               {metaMsg && <p style={{ fontSize:12, color:metaMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{metaMsg}</p>}
             </Card>
+            {/* Social content scheduler — Eden HQ only for now */}
+            {isOwnerHQ && <ContentSchedulerAdmin B={B} Card={Card} Btn={Btn} communities={metaCommunities} />}
             {/* GHL KPI reports — every org connects its own GoHighLevel */}
             {(
               <Card style={{ marginBottom:20 }}>

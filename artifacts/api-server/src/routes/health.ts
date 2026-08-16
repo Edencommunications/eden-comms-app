@@ -5,6 +5,7 @@ import { getDietPlanDuplicatesHealth } from "../lib/dietPlanDuplicates";
 import { getRealtimeWatchHealth } from "../lib/realtimeWatch";
 import { getSuppSyncHealth } from "../lib/suppLibrarySync";
 import { getGhlKpiHealth } from "./ghlKpi";
+import { getContentSchedHealth } from "./contentScheduler";
 
 const router: IRouter = Router();
 
@@ -29,10 +30,13 @@ router.get("/healthz", (_req, res) => {
   // Weekly GHL KPI report: degraded when the last scheduled run failed or
   // the 15-minute scheduler silently stopped while reports are turned on.
   const ghlKpi = getGhlKpiHealth();
-  const healthy = reminders.healthy && dietPlanDuplicates.healthy && realtimeWatch.healthy && suppSync.healthy && ghlKpi.healthy;
+  // Social content scheduler (Eden-only): degraded when the last publish/stats
+  // pass failed or the 5-minute scheduler silently stopped.
+  const contentSched = getContentSchedHealth();
+  const healthy = reminders.healthy && dietPlanDuplicates.healthy && realtimeWatch.healthy && suppSync.healthy && ghlKpi.healthy && contentSched.healthy;
   res
     .status(healthy ? 200 : 503)
-    .json({ ...data, status: healthy ? "ok" : "degraded", startDateReminders: reminders, dietPlanDuplicates, realtimeWatch, suppSync, ghlKpi });
+    .json({ ...data, status: healthy ? "ok" : "degraded", startDateReminders: reminders, dietPlanDuplicates, realtimeWatch, suppSync, ghlKpi, contentSched });
 });
 
 
