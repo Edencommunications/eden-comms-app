@@ -457,6 +457,83 @@ const PROTOCOLS = [
   'Male Low Protein Flush Diet','Male Vegan Diet',
 ]
 
+// ── 14-Day Flush Diet templates (foods & amounts only — supps excluded) ──
+// Loaded via the "Load Flush Diet meals" button when a Flush protocol is picked.
+// Fresh objects on every call so loaded plans never share references.
+const flushFood = (name: string, serving: string, cal: number, pro: number, fat: number, carb: number, fib: number, cat = 'Flush Diet') =>
+  ({name, serving, cal, pro, fat, carb, fib, cat})
+const FLUSH_F = {
+  medipure:   () => flushFood('Medipure Protein (shake)','1 scoop',110,24,1,2,0),
+  spinach:    () => flushFood('Spinach','60g',14,1.7,0.2,2.2,1.3),
+  cucumber:   () => flushFood('Cucumber','80g',12,0.5,0.1,2.9,0.4),
+  papaya:     () => flushFood('Papaya','150g',65,0.7,0.4,16,2.6),
+  wildBlue:   () => flushFood('Wild Blueberries (frozen)','100g',50,0.7,0.4,12,4.3),
+  chia:       () => flushFood('Chia Seeds','15g',73,2.5,4.6,6.3,5.2),
+  appleJuice: () => flushFood('Organic Apple Juice','250ml',115,0.2,0.3,28,0.5),
+  pearJuice:  () => flushFood('Organic Pear Juice','250ml',120,0.2,0.2,30,0.7),
+  egg:        () => flushFood('Omega-3 Egg (whole)','1 egg',70,6,5,0.5,0),
+  boneBroth:  () => flushFood('Beef Bone Broth (high-protein)','150ml',30,9,0.5,0,0),
+  oatmeal:    () => flushFood('Oatmeal (dry)','40g',150,5,3,27,4),
+  pineapple:  () => flushFood('Pineapple','120g',60,0.6,0.1,15.7,1.7),
+  strawberry: () => flushFood('Strawberries','100g',30,0.8,0.1,6,2),
+  salmon:     () => flushFood('Wild-Caught Salmon','4oz',237,28.7,13.6,0,0),
+  brownRice:  () => flushFood('Brown Rice (cooked)','100g',112,2.3,0.8,23,1.8),
+  kiwi:       () => flushFood('Kiwi (skin on)','1 kiwi',42,0.8,0.4,10,2.3),
+  evoo:       () => flushFood('Extra Virgin Olive Oil','15g',133,0,15,0,0),
+  squash:     () => flushFood('Spaghetti Squash','5oz',44,1,0.4,10,2.2),
+  cherries:   () => flushFood('Dark Sweet Cherries','100g',63,1.1,0.2,16,2.1),
+  mahi:       () => flushFood('Mahi Mahi','4oz',100,21,1,0,0),
+  coconutOil: () => flushFood('Coconut Oil (unrefined)','20g',173,0,20,0,0),
+  raspberry:  () => flushFood('Raspberries','50g',26,0.6,0.3,6,3.3),
+  oranges:    () => flushFood('Oranges','150g',70,1.4,0.2,17.6,3.6),
+  greenBeans: () => flushFood('Green Beans','4oz',35,2.1,0.3,8,3.1),
+}
+const it = (foodFn: () => any, servings = 1, alts?: Array<{food: any, servings: number}>) =>
+  ({food: foodFn(), servings, ...(alts ? {alts} : {})})
+function flushMeals(sex: 'female'|'male') {
+  const F = FLUSH_F, fem = sex === 'female'
+  return [
+    {name:'Meal 1', water:'16oz', foods:[
+      it(F.medipure, fem?1:2),
+      it(F.spinach),
+      it(F.cucumber),
+      it(F.papaya, fem?1:1.2, [{food:F.wildBlue(), servings: fem?1.5:1.8}]),
+      it(F.chia),
+      it(F.appleJuice),
+    ]},
+    {name:'Meal 2', water:'16oz', foods:[
+      it(F.egg, fem?1:2),
+      it(F.boneBroth, fem?1:1.6),
+      it(F.oatmeal, fem?1:2),
+      it(F.pineapple, fem?1:1.25),
+      it(F.strawberry, fem?1.2:1),
+    ]},
+    {name:'Meal 3', water:'16oz', foods:[
+      it(F.salmon, fem?0.625:1),
+      it(F.brownRice, fem?1.8:2),
+      it(F.kiwi, 2),
+      it(F.evoo),
+      it(F.squash),
+    ]},
+    {name:'Meal 4', water:'', foods:[
+      it(F.medipure, fem?1:2),
+      it(F.spinach),
+      it(F.cucumber),
+      it(F.chia),
+      it(F.cherries, fem?0.8:1),
+      it(F.wildBlue, 0.8),
+      it(F.appleJuice, 1, [{food:F.pearJuice(), servings:1}]),
+    ]},
+    {name:'Meal 5', water:'16oz', foods:[
+      it(F.mahi, fem?0.75:1),
+      it(F.coconutOil),
+      it(F.brownRice, 1.5),
+      ...(fem ? [it(F.raspberry)] : [it(F.oranges)]),
+      it(F.greenBeans),
+    ]},
+  ]
+}
+
 const ACTIVITY_LEVELS = [
   {label:'Minimal (<5000 Steps/Day)',mult:1.2},
   {label:'Light (5000-7500 Steps/Day)',mult:1.375},
@@ -1949,6 +2026,17 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           {isCoach&&(
             <Card sx={{marginBottom:12}}>
               <Sel label="Diet Protocol" value={protocol} onChange={setProtocol} options={PROTOCOLS}/>
+              {/Flush Diet/i.test(protocol) && (
+                <button onClick={()=>{
+                  const sex = /female/i.test(protocol) ? 'female' : 'male'
+                  const hasFoods = meals.some((m: any)=>m.foods?.length>0)
+                  if (hasFoods && !window.confirm(`Load the ${sex} Flush Diet meals into "${activeDay.name}"? This replaces the foods currently in this day.`)) return
+                  setMeals(flushMeals(sex))
+                }}
+                  style={{marginTop:10,width:'100%',background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'9px 12px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                  ⚡ Load {/female/i.test(protocol)?'Female':'Male'} Flush Diet meals into this day
+                </button>
+              )}
             </Card>
           )}
 
@@ -2146,6 +2234,18 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     )}
                   </div>
                 </div>
+
+                {/* Water for this meal — coach edits, client sees */}
+                {isCoach ? (
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                    <span style={{fontSize:11}}>💧</span>
+                    <input value={meal.water||''} placeholder="Water (e.g. 16oz)"
+                      onChange={e=>setMeals((p: any)=>p.map((m: any,i: any)=>i===mi?{...m,water:e.target.value}:m))}
+                      style={{width:120,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.white,fontSize:11,outline:'none'}}/>
+                  </div>
+                ) : meal.water ? (
+                  <div style={{fontSize:11,color:'#6FB8E8',fontWeight:600,marginBottom:6}}>💧 {meal.water} water</div>
+                ) : null}
 
                 {meal.foods.length===0?(
                   <div style={{fontSize:12,color:C.muted,fontStyle:'italic',padding:'6px 0'}}>
