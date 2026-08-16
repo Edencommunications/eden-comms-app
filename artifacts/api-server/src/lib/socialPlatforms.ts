@@ -222,6 +222,44 @@ export async function ttPublishVideo(token: string, mediaUrl: string, caption: s
   } finally { dl.cleanup(); }
 }
 
+// Photo / carousel direct post. Photos only support PULL_FROM_URL — TikTok
+// fetches each image itself, and the URL prefix must be a verified URL
+// property on the developer app (hence the api-server media relay).
+export async function ttPublishPhotos(token: string, imageUrls: string[], caption: string): Promise<{ publishId: string; videoId?: string; privacy: string }> {
+  const info = await ttCreatorInfo(token);
+  const privacy = ttPickPrivacy(info.privacyOptions);
+  const firstLine = String(caption || "").split("\n")[0].trim().slice(0, 90);
+  const init = await ttPost("/v2/post/publish/content/init/", token, {
+    post_info: {
+      title: firstLine, description: String(caption || "").slice(0, 4000),
+      privacy_level: privacy, disable_comment: false, auto_add_music: true,
+    },
+    source_info: { source: "PULL_FROM_URL", photo_cover_index: 0, photo_images: imageUrls },
+    post_mode: "DIRECT_POST",
+    media_type: "PHOTO",
+  });
+  const publishId = String(init?.data?.publish_id || "");
+  if (!publishId) throw new Error("TikTok did not accept the photo post");
+  // Session exists — failures past this point are ambiguous.
+  try {
+    for (let i = 0; i < 18; i++) { // photos process faster than video; ~3 min
+      await sleep(10_000);
+      const st = await ttPost("/v2/post/publish/status/fetch/", token, { publish_id: publishId });
+      const status = String(st?.data?.status || "");
+      if (status === "PUBLISH_COMPLETE") {
+        const ids = st?.data?.publicaly_available_post_id;
+        return { publishId, videoId: Array.isArray(ids) && ids[0] != null ? String(ids[0]) : undefined, privacy };
+      }
+      if (status === "FAILED") throw new Error(`TikTok rejected the photos: ${st?.data?.fail_reason || "unknown reason"} (is the media URL prefix verified in your TikTok app?)`);
+    }
+    logger.warn({ publishId }, "[ContentSched] TikTok photos still processing after 3 min — assuming success");
+    return { publishId, privacy };
+  } catch (e) {
+    if (String((e as Error).message).startsWith("TikTok rejected the photos")) throw e;
+    throw new AmbiguousPublishError(`TikTok outcome unknown: ${String((e as Error).message).slice(0, 200)}`, publishId);
+  }
+}
+
 export async function ttVideoStats(token: string, videoId: string): Promise<any> {
   const r = await fetch(`${TT_API}/v2/video/query/?fields=like_count,comment_count,share_count,view_count`, {
     method: "POST",

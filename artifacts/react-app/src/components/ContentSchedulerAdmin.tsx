@@ -19,7 +19,7 @@ type Draft = {
   caption: string
   platIG: boolean
   platFB: boolean
-  platTT: boolean        // TikTok (videos only)
+  platTT: boolean        // TikTok (videos, photos & carousels)
   platYT: boolean        // YouTube Shorts (videos only)
   when: string           // datetime-local
   uploaded?: string[]    // cached upload URLs so a retry doesn't re-upload
@@ -33,6 +33,9 @@ function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, 
   const [cid, setCid] = useState('')
   const [csec, setCsec] = useState('')
   const [redirect, setRedirect] = useState('')
+  const [mediaPrefix, setMediaPrefix] = useState('')
+  const [vName, setVName] = useState('')
+  const [vContent, setVContent] = useState('')
   const [busy, setBusy] = useState(false)
 
   const start = async (save: boolean) => {
@@ -40,12 +43,15 @@ function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, 
     try {
       const r = await fetch(`/api/content-sched/oauth/${platform}/app`, {
         method: 'POST', headers: jhdr,
-        body: JSON.stringify(save ? { client_id: cid.trim(), client_secret: csec.trim() } : {}),
+        body: JSON.stringify(save
+          ? { client_id: cid.trim(), client_secret: csec.trim(), verify_name: vName.trim(), verify_content: vContent.trim() }
+          : { verify_name: vName.trim(), verify_content: vContent.trim() }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) flash(`⚠️ ${d?.error || 'Could not save'}`)
       else {
         setRedirect(d.redirect_uri)
+        if (d.media_prefix) setMediaPrefix(d.media_prefix)
         if (save) { flash('✅ App saved — register the redirect URL, then click Connect'); setCsec('') }
         else if (d.authorize_url) window.open(d.authorize_url, '_blank', 'noopener')
       }
@@ -82,6 +88,18 @@ function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, 
             <p style={{ fontSize: 11, color: B.text, margin: '0 0 8px', wordBreak: 'break-all' }}>
               Register this redirect URL in the app's settings:<br /><code style={{ color: B.gold }}>{redirect}</code>
             </p>
+          )}
+          {platform === 'tiktok' && (
+            <div style={{ margin: '0 0 8px' }}>
+              <p style={{ fontSize: 11, color: B.muted, margin: '0 0 6px', lineHeight: 1.6 }}>
+                <strong>For photo & carousel posts:</strong> TikTok fetches images from your app's address, so it must be verified. In the TikTok app go to <strong>URL properties → Add property → URL prefix</strong>{mediaPrefix ? <>, enter <code style={{ color: B.gold, wordBreak: 'break-all' }}>{mediaPrefix}</code></> : ' (save the app first to see the exact address)'}, pick <strong>file verification</strong>, and paste the file name and contents TikTok gives you here:
+              </p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <input value={vName} onChange={e => setVName(e.target.value)} placeholder="Verification file name (tiktok….txt)" style={{ ...inp, flex: 1, minWidth: 160 }} />
+                <input value={vContent} onChange={e => setVContent(e.target.value)} placeholder="File contents" style={{ ...inp, flex: 1, minWidth: 160 }} />
+                <Btn onClick={() => start(true)} disabled={busy || !vName.trim() || !vContent.trim()}>Save file</Btn>
+              </div>
+            </div>
           )}
           {(appSaved || redirect) && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -173,7 +191,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
     const mk = (type: Draft['type'], fs: File[]): Draft => ({
       key: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
       type, files: fs, cover: null, caption: '', platIG: true, platFB: true,
-      platTT: type === 'video' && !!status?.tt_connected,
+      platTT: !!status?.tt_connected,
       platYT: type === 'video' && !!status?.yt_connected,
       when: '',
     })
@@ -239,7 +257,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
           media_type: d.type, caption: d.caption, client_key: d.key,
           platforms: [
             ...(d.platIG ? ['ig'] : []), ...(d.platFB ? ['fb'] : []),
-            ...(d.platTT && d.type === 'video' ? ['tt'] : []),
+            ...(d.platTT ? ['tt'] : []),
             ...(d.platYT && d.type === 'video' ? ['yt'] : []),
           ],
           scheduled_at: new Date(d.when).toISOString(),
@@ -394,7 +412,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
                   <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platFB ? '#4A90D9' : B.muted, fontWeight: 700 }}>
                     <input type="checkbox" checked={d.platFB} onChange={e => patchDraft(d.key, { platFB: e.target.checked })} /> FB
                   </label>
-                  {d.type === 'video' && status?.tt_connected && (
+                  {status?.tt_connected && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platTT ? '#25F4EE' : B.muted, fontWeight: 700 }}>
                       <input type="checkbox" checked={d.platTT} onChange={e => patchDraft(d.key, { platTT: e.target.checked })} /> TikTok
                     </label>

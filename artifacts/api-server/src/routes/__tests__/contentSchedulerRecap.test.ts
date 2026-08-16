@@ -2,7 +2,22 @@
 // used by the weekly recap window, and the recap text itself.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isOurs, isImage, isVideo, OUR_PREFIX, localParts, buildWeeklyText } from "../contentScheduler";
+import { isOurs, isImage, isVideo, OUR_PREFIX, localParts, buildWeeklyText, ttRelayUrls } from "../contentScheduler";
+
+test("TikTok photo URLs relay through our own domain (verifiable URL prefix)", () => {
+  const cfg = { public_base: "https://app.example.com" };
+  const single = ttRelayUrls(cfg, { media_type: "image", media_url: `${OUR_PREFIX}i-1-a-pic.jpg` });
+  assert.deepEqual(single, ["https://app.example.com/api/content-sched/media/i-1-a-pic.jpg"]);
+  const carousel = ttRelayUrls(cfg, {
+    media_type: "carousel", media_url: `${OUR_PREFIX}i-1-a.jpg`,
+    media_urls: [`${OUR_PREFIX}i-1-a.jpg`, `${OUR_PREFIX}i-2-b.jpg`],
+  });
+  assert.equal(carousel.length, 2);
+  assert.ok(carousel.every((u) => u.startsWith("https://app.example.com/api/content-sched/media/i-")));
+  // Without a captured public base we pass the raw URLs (TikTok errors clearly).
+  const raw = ttRelayUrls({}, { media_type: "image", media_url: `${OUR_PREFIX}i-1-a.jpg` });
+  assert.equal(raw[0], `${OUR_PREFIX}i-1-a.jpg`);
+});
 
 test("media URLs must live in our bucket", () => {
   assert.equal(isOurs(`${OUR_PREFIX}i-123-abc-pic.jpg`), true);

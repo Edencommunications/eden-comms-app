@@ -23,7 +23,7 @@ import { notifyCommunityMembers } from "./communityPost";
 import { requireStaff } from "./checkinForm";
 import {
   signState, verifyState, AmbiguousPublishError,
-  ttAuthorizeUrl, ttExchangeCode, ttRefreshToken, ttCreatorInfo, ttPublishVideo, ttVideoStats,
+  ttAuthorizeUrl, ttExchangeCode, ttRefreshToken, ttCreatorInfo, ttPublishVideo, ttPublishPhotos, ttVideoStats,
   ytAuthorizeUrl, ytExchangeCode, ytRefreshToken, ytChannelInfo, ytUploadVideo, ytVideoStats,
 } from "../lib/socialPlatforms";
 
@@ -124,6 +124,11 @@ type SchedCfg = {
   yt_expires_at?: string;
   yt_channel_id?: string;
   yt_channel_title?: string;
+  // TikTok photo posts (PULL_FROM_URL): images relay through our own domain,
+  // which the admin verifies as a URL property in the TikTok app.
+  public_base?: string;        // https://<host> captured when saving app creds
+  tt_verify_name?: string;     // TikTok verification file name (e.g. tiktokABC.txt)
+  tt_verify_content?: string;  // its exact contents
 };
 const CFG_KEY = "content_sched";
 
@@ -162,6 +167,18 @@ export const OUR_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
 export const isOurs = (u: string) => u.startsWith(OUR_PREFIX);
 export const isImage = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("v-");
 export const isVideo = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("i-");
+
+// TikTok fetches photo posts itself (PULL_FROM_URL) and only from a URL
+// prefix verified in the developer app. Supabase's domain can't be verified
+// by the user, so photos relay through our own /api/content-sched/media/
+// path on the app's domain. Exported for tests.
+export function ttRelayUrls(cfg: { public_base?: string }, post: { media_type: string; media_url: string; media_urls?: string[] }): string[] {
+  const urls = post.media_type === "carousel" ? (post.media_urls || []) : [post.media_url];
+  if (!cfg.public_base) return urls; // not configured — TikTok will reject with a clear error
+  return urls.map((u) => (u.startsWith(OUR_PREFIX)
+    ? `${cfg.public_base}/api/content-sched/media/${encodeURIComponent(u.slice(OUR_PREFIX.length))}`
+    : u));
+}
 
 // ── Post rows ───────────────────────────────────────────────────
 type PostRow = {
@@ -535,7 +552,9 @@ export async function processDue(now = new Date()): Promise<void> {
         }
         if (claimed.platforms.includes("tt")) {
           const token = await ensureTtToken(cfg);
-          const tt = await ttPublishVideo(token, claimed.media_url, claimed.caption || "");
+          const tt = claimed.media_type === "video"
+            ? await ttPublishVideo(token, claimed.media_url, claimed.caption || "")
+            : await ttPublishPhotos(token, ttRelayUrls(cfg, claimed), claimed.caption || "");
           claimed.tt_publish_id = tt.publishId; claimed.tt_video_id = tt.videoId; claimed.tt_privacy = tt.privacy;
         }
         if (claimed.platforms.includes("yt")) {
@@ -791,9 +810,9 @@ router.post("/content-sched/posts", async (req: Request, res: Response) => {
   const mediaUrl = String(b.media_url || mediaUrls[0] || "").trim();
   const coverUrl = String(b.cover_url || "").trim();
   const platforms = Array.isArray(b.platforms) ? b.platforms.filter((p: any) => p === "ig" || p === "fb" || p === "tt" || p === "yt") : [];
-  // TikTok + YouTube Shorts are video-only platforms.
-  if ((platforms.includes("tt") || platforms.includes("yt")) && mediaType !== "video") {
-    res.status(400).json({ error: "TikTok and YouTube can only receive videos" }); return;
+  // YouTube Shorts is video-only. (TikTok takes photos/carousels too.)
+  if (platforms.includes("yt") && mediaType !== "video") {
+    res.status(400).json({ error: "YouTube can only receive videos" }); return;
   }
   const scheduledAt = new Date(String(b.scheduled_at || ""));
   if (mediaType === "carousel") {
@@ -861,6 +880,28 @@ router.delete("/content-sched/posts/:id", async (req: Request, res: Response) =>
   res.json({ ok: true });
 });
 
+// ── Public media relay (for TikTok PULL_FROM_URL photo posts) ──
+// Unauthenticated by design: TikTok's servers fetch these. Serves only
+// image objects from our own bucket, plus the TikTok verification file the
+// admin saved (so the URL prefix can be verified as a TikTok URL property).
+router.get("/content-sched/media/:name", async (req: Request, res: Response) => {
+  const name = String(req.params.name || "");
+  if (!/^[A-Za-z0-9._-]{1,200}$/.test(name)) { res.status(404).end(); return; }
+  const loaded = await loadCfgRaw();
+  if (loaded?.cfg.tt_verify_name && name === loaded.cfg.tt_verify_name) {
+    res.type("text/plain").send(loaded.cfg.tt_verify_content || ""); return;
+  }
+  if (!name.startsWith("i-")) { res.status(404).end(); return; } // images only
+  const up = await fetch(`${OUR_PREFIX}${name}`);
+  if (!up.ok || !up.body) { res.status(404).end(); return; }
+  res.status(200);
+  res.setHeader("Content-Type", up.headers.get("content-type") || "image/jpeg");
+  const len = up.headers.get("content-length"); if (len) res.setHeader("Content-Length", len);
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  const { Readable } = await import("node:stream");
+  Readable.fromWeb(up.body as any).pipe(res);
+});
+
 // ── TikTok / YouTube OAuth ──────────────────────────────────────
 // The public callback URL must include the /api prefix (the platform proxy
 // strips it before routes see the path).
@@ -879,9 +920,20 @@ router.post("/content-sched/oauth/:platform/app", async (req: Request, res: Resp
   const clientSecret = String(req.body?.client_secret || "").trim();
   const loaded = await loadCfgRaw();
   const cfg: SchedCfg = { ...(loaded?.cfg || {}) };
-  if (clientId && clientSecret) {
-    if (platform === "tiktok") { cfg.tt_client_key = clientId; cfg.tt_client_secret = clientSecret; }
-    else { cfg.yt_client_id = clientId; cfg.yt_client_secret = clientSecret; }
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0];
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
+  const publicBase = host ? `${proto}://${host}` : "";
+  const verifyName = String(req.body?.verify_name || "").trim().replace(/[^A-Za-z0-9._-]/g, "");
+  const verifyContent = String(req.body?.verify_content || "").trim().slice(0, 500);
+  const changedVerify = platform === "tiktok" && verifyName && verifyContent;
+  const changedBase = publicBase && cfg.public_base !== publicBase;
+  if (clientId && clientSecret || changedVerify || changedBase) {
+    if (publicBase) cfg.public_base = publicBase;
+    if (changedVerify) { cfg.tt_verify_name = verifyName; cfg.tt_verify_content = verifyContent; }
+    if (clientId && clientSecret) {
+      if (platform === "tiktok") { cfg.tt_client_key = clientId; cfg.tt_client_secret = clientSecret; }
+      else { cfg.yt_client_id = clientId; cfg.yt_client_secret = clientSecret; }
+    }
     const ok = loaded
       ? await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg(cfg))
       : await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg(cfg));
@@ -893,7 +945,8 @@ router.post("/content-sched/oauth/:platform/app", async (req: Request, res: Resp
   const redirectUri = oauthRedirectUri(req, platform);
   const state = signState(platform);
   const authorizeUrl = platform === "tiktok" ? ttAuthorizeUrl(key, redirectUri, state) : ytAuthorizeUrl(key, redirectUri, state);
-  res.json({ ok: true, redirect_uri: redirectUri, authorize_url: authorizeUrl });
+  const mediaPrefix = platform === "tiktok" && cfg.public_base ? `${cfg.public_base}/api/content-sched/media/` : undefined;
+  res.json({ ok: true, redirect_uri: redirectUri, authorize_url: authorizeUrl, media_prefix: mediaPrefix });
 });
 
 // Browser lands here after approving access. No session — state is the auth.
