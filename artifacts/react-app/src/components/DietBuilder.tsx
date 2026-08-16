@@ -1272,6 +1272,23 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       }).catch(()=>{})
     return ()=>{stale=true}
   },[myUUID,myCompanyId])
+  // Rx/prescription protocol persists per client in admin_settings 'rx_plan:<uuid>'
+  useEffect(()=>{
+    if (!myUUID || !myCompanyId) return
+    let stale=false
+    dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('rx_plan:'+myUUID)}&select=value`)
+      .then(rows=>{
+        if (stale) return
+        try {
+          const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
+          if (v) {
+            if (Array.isArray(v.rxList))        setRxList(v.rxList)
+            if (typeof v.rxNotes==='string')    setClientRxNotes(v.rxNotes)
+          }
+        } catch(e){}
+      }).catch(()=>{})
+    return ()=>{stale=true}
+  },[myUUID,myCompanyId])
   // Day-plan config (names, weekly schedule, note, extra days' meals) persists
   // per client in admin_settings 'diet_days:<uuid>' — the diet_plans row keeps
   // holding meals for the first two days so older saved plans load unchanged.
@@ -1345,6 +1362,29 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     auditPlanSave('supp_protocol_saved', myUUID, info?.name||currentUser?.name, role)
     await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your supplement protocol — check your Supplements tab', 'supplements')
     alert('Supplement protocol saved!')
+  }
+  async function saveRxProtocol() {
+    if (!myUUID || !myCompanyId) { alert('Still loading this client\'s profile — try again in a second.'); return }
+    const ok = await dbUpsert('admin_settings',{
+      company_id: myCompanyId, key: 'rx_plan:'+myUUID,
+      value: JSON.stringify({rxList, rxNotes: clientRxNotes}),
+      updated_at: new Date().toISOString(),
+    },'company_id,key')
+    if (!ok) { alert('Could not save the prescription protocol — please try again.'); return }
+    auditPlanSave('rx_protocol_saved', myUUID, info?.name||currentUser?.name, role)
+    await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your prescriptions — check your Supplements tab', 'supplements')
+    alert('Prescription protocol saved!')
+  }
+  async function saveClientRxNotes() {
+    if (!myUUID || !myCompanyId) { alert('Still loading — try again in a second.'); return }
+    // Read-modify-write: preserve rxList (coach-owned), update client notes only
+    const ok = await dbUpsert('admin_settings',{
+      company_id: myCompanyId, key: 'rx_plan:'+myUUID,
+      value: JSON.stringify({rxList, rxNotes: clientRxNotes}),
+      updated_at: new Date().toISOString(),
+    },'company_id,key')
+    if (!ok) { alert('Could not save your notes — please try again.'); return }
+    alert('Notes saved!')
   }
   // Client's own notes on their supplement experience
   const [clientSuppNotes, setClientSuppNotes] = useState<any>('')
@@ -3963,6 +4003,12 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 ))}
               </Card>
 
+              <button
+                onClick={saveRxProtocol}
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
+                Save Rx Protocol
+              </button>
+
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Coach Notes to Client"/>
                 <textarea value={coachNotes} onChange={e=>setCoachNotes(e.target.value)}
@@ -4090,7 +4136,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </Card>
               )}
 
-              <button style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
+              <button onClick={saveClientRxNotes} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
                 Save My Notes
               </button>
             </>
