@@ -8,7 +8,8 @@ import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-const MAX_MB = 18
+const MAX_IMG_MB = 25       // photos
+const MAX_VID_MB = 512      // videos go straight to storage now — no more 18 MB cap
 
 type Draft = {
   key: string            // stable — doubles as the server idempotency key
@@ -18,17 +19,81 @@ type Draft = {
   caption: string
   platIG: boolean
   platFB: boolean
+  platTT: boolean        // TikTok (videos only)
+  platYT: boolean        // YouTube Shorts (videos only)
   when: string           // datetime-local
   uploaded?: string[]    // cached upload URLs so a retry doesn't re-upload
   uploadedCover?: string
 }
 
-const readB64 = (f: File): Promise<string> => new Promise((res, rej) => {
-  const fr = new FileReader()
-  fr.onload = () => res(String(fr.result).split(',')[1] || '')
-  fr.onerror = rej
-  fr.readAsDataURL(f)
-})
+// Connect card for an OAuth platform (TikTok / YouTube): save the developer
+// app's credentials once, then a one-click browser handshake links the account.
+function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, jhdr, flash, reload, help }: any) {
+  const [open, setOpen] = useState(false)
+  const [cid, setCid] = useState('')
+  const [csec, setCsec] = useState('')
+  const [redirect, setRedirect] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const start = async (save: boolean) => {
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/content-sched/oauth/${platform}/app`, {
+        method: 'POST', headers: jhdr,
+        body: JSON.stringify(save ? { client_id: cid.trim(), client_secret: csec.trim() } : {}),
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) flash(`⚠️ ${d?.error || 'Could not save'}`)
+      else {
+        setRedirect(d.redirect_uri)
+        if (save) { flash('✅ App saved — register the redirect URL, then click Connect'); setCsec('') }
+        else if (d.authorize_url) window.open(d.authorize_url, '_blank', 'noopener')
+      }
+    } catch { flash('⚠️ Could not reach the server') }
+    setBusy(false)
+  }
+  const disconnect = async () => {
+    if (!window.confirm(`Disconnect ${label}? Scheduled ${label} posts will fail.`)) return
+    await fetch(`/api/content-sched/oauth/${platform}/disconnect`, { method: 'POST', headers: jhdr })
+    reload()
+  }
+
+  return (
+    <div style={{ flex: 1, minWidth: 260, background: B.surface, border: `1px solid ${B.border}`, borderRadius: 10, padding: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: B.text }}>
+          {platform === 'tiktok' ? '🎵' : '▶️'} {label}
+          {connected ? <span style={{ color: '#4FD89A', fontWeight: 400 }}> — connected ({who})</span>
+            : <span style={{ color: B.muted, fontWeight: 400 }}> — not connected</span>}
+        </span>
+        {connected
+          ? <button onClick={disconnect} style={{ background: 'none', border: 'none', color: B.muted, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>disconnect</button>
+          : <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', color: B.gold, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>{open ? 'hide setup' : 'set up'}</button>}
+      </div>
+      {!connected && open && (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ fontSize: 11, color: B.muted, margin: '0 0 8px', lineHeight: 1.6 }}>{help}</p>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            <input value={cid} onChange={e => setCid(e.target.value)} placeholder={platform === 'tiktok' ? 'Client key' : 'Client ID'} style={{ ...inp, flex: 1, minWidth: 140 }} />
+            <input type="password" value={csec} onChange={e => setCsec(e.target.value)} placeholder="Client secret" style={{ ...inp, flex: 1, minWidth: 140 }} />
+            <Btn onClick={() => start(true)} disabled={busy || !cid.trim() || !csec.trim()}>Save app</Btn>
+          </div>
+          {redirect && (
+            <p style={{ fontSize: 11, color: B.text, margin: '0 0 8px', wordBreak: 'break-all' }}>
+              Register this redirect URL in the app's settings:<br /><code style={{ color: B.gold }}>{redirect}</code>
+            </p>
+          )}
+          {(appSaved || redirect) && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Btn onClick={() => start(false)} disabled={busy}>🔗 Connect {label}</Btn>
+              <button onClick={reload} style={{ background: 'none', border: 'none', color: B.muted, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>I finished connecting — refresh</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any) {
   const [status, setStatus] = useState<any>(null)
@@ -102,12 +167,15 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
     const videos = files.filter(f => /^video\//.test(f.type))
     const images = files.filter(f => /^image\//.test(f.type))
     if (videos.length + images.length !== files.length) return flash('⚠️ Only photos and videos are supported')
-    const tooBig = files.find(f => f.size > MAX_MB * 1024 * 1024)
-    if (tooBig) return flash(`⚠️ ${tooBig.name} is over ${MAX_MB} MB — too big for now`)
+    const tooBig = files.find(f => f.size > (/^video\//.test(f.type) ? MAX_VID_MB : MAX_IMG_MB) * 1024 * 1024)
+    if (tooBig) return flash(`⚠️ ${tooBig.name} is over ${/^video\//.test(tooBig.type) ? MAX_VID_MB : MAX_IMG_MB} MB`)
 
     const mk = (type: Draft['type'], fs: File[]): Draft => ({
       key: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
-      type, files: fs, cover: null, caption: '', platIG: true, platFB: true, when: '',
+      type, files: fs, cover: null, caption: '', platIG: true, platFB: true,
+      platTT: type === 'video' && !!status?.tt_connected,
+      platYT: type === 'video' && !!status?.yt_connected,
+      when: '',
     })
     const next: Draft[] = []
     if (videos.length && images.length) {
@@ -134,20 +202,27 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
   }
   const removeDraft = (key: string) => { if (!busy) setDrafts(ds => ds.filter(d => d.key !== key)) }
 
+  // Direct-to-storage upload: get a signed link, then PUT the raw file —
+  // the server never touches the bytes, so big videos are fine.
   const upload = async (f: File): Promise<string> => {
-    const r = await fetch('/api/content-sched/upload', {
+    const r = await fetch('/api/content-sched/upload-url', {
       method: 'POST', headers: jhdr,
-      body: JSON.stringify({ filename: f.name, contentType: f.type, dataBase64: await readB64(f) }),
+      body: JSON.stringify({ filename: f.name, contentType: f.type }),
     })
     const d = await r.json().catch(() => null)
     if (!r.ok) throw new Error(d?.error || `Upload of ${f.name} failed`)
-    return d.url
+    const put = await fetch(d.upload_url, { method: 'PUT', headers: { 'Content-Type': f.type }, body: f })
+    if (!put.ok) {
+      const pd = await put.json().catch(() => null)
+      throw new Error(pd?.message || pd?.error || `Upload of ${f.name} failed — if it's a big video, your storage plan may cap file size`)
+    }
+    return d.public_url
   }
 
   const scheduleAll = async () => {
     const missing = drafts.find(d => !d.when)
     if (missing) return flash('⚠️ Every post needs a date & time')
-    const noPlat = drafts.find(d => !d.platIG && !d.platFB)
+    const noPlat = drafts.find(d => !d.platIG && !d.platFB && !d.platTT && !d.platYT)
     if (noPlat) return flash('⚠️ Every post needs at least one platform')
     setBusy(true)
     let done = 0
@@ -162,7 +237,11 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
         d.uploaded = urls; d.uploadedCover = coverUrl || undefined
         const body: any = {
           media_type: d.type, caption: d.caption, client_key: d.key,
-          platforms: [...(d.platIG ? ['ig'] : []), ...(d.platFB ? ['fb'] : [])],
+          platforms: [
+            ...(d.platIG ? ['ig'] : []), ...(d.platFB ? ['fb'] : []),
+            ...(d.platTT && d.type === 'video' ? ['tt'] : []),
+            ...(d.platYT && d.type === 'video' ? ['yt'] : []),
+          ],
           scheduled_at: new Date(d.when).toISOString(),
         }
         if (d.type === 'carousel') body.media_urls = urls
@@ -206,7 +285,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
 
   return (
     <Card style={{ marginBottom: 20 }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: B.gold, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 4px' }}>📱 Content Scheduler (IG + FB)</p>
+      <p style={{ fontSize: 11, fontWeight: 700, color: B.gold, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 4px' }}>📱 Content Scheduler (IG · FB · TikTok · YouTube)</p>
       {status === null ? (
         <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>Checking connection…</p>
       ) : !status.connected ? (
@@ -256,6 +335,16 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
             </select>
           </div>
 
+          {/* TikTok + YouTube connections */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+            <PlatformCard platform="tiktok" label="TikTok" connected={!!status.tt_connected} who={status.tt_username ? `@${status.tt_username}` : 'your TikTok'}
+              appSaved={!!status.tt_app_saved} B={B} Btn={Btn} inp={inp} jhdr={jhdr} flash={flash} reload={load}
+              help={<>Create a free app at <a href="https://developers.tiktok.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.gold }}>developers.tiktok.com</a> → Manage apps → add the <strong>Content Posting API</strong> product with Direct Post, and <strong>Login Kit</strong>. Paste the app's <strong>Client key</strong> and <strong>Client secret</strong> below, register the redirect URL it gives you, then connect.<br/>⚠️ Until TikTok approves your app (their audit), posts land as <strong>private (only you)</strong> — flip them public in the TikTok app, or wait for approval.</>} />
+            <PlatformCard platform="youtube" label="YouTube Shorts" connected={!!status.yt_connected} who={status.yt_channel_title || 'your channel'}
+              appSaved={!!status.yt_app_saved} B={B} Btn={Btn} inp={inp} jhdr={jhdr} flash={flash} reload={load}
+              help={<>In <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.gold }}>Google Cloud Console</a>: create a project → enable the <strong>YouTube Data API v3</strong> → OAuth consent screen (External, add yourself as a test user) → Credentials → <strong>OAuth client ID (Web application)</strong>. Paste the Client ID and secret below, add the redirect URL it gives you, then connect.<br/>⚠️ Until Google verifies the app, uploads are locked <strong>private</strong> — you can flip each one public in YouTube Studio, or complete verification.</>} />
+          </div>
+
           {/* Batch builder */}
           <div style={{ background: B.surface, border: `1px solid ${B.border}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: B.text, margin: '0 0 4px' }}>Build your batch</p>
@@ -293,7 +382,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
                   <label style={{ display: 'inline-block', fontSize: 11, color: d.cover ? B.muted : B.gold, cursor: 'pointer', marginBottom: 8, textDecoration: 'underline' }}>
                     {d.cover ? 'Change cover photo' : '🖼 Add the cover photo for this Reel'}
                     <input type="file" accept="image/*" style={{ display: 'none' }}
-                      onChange={e => { const f = e.target.files?.[0]; if (f) { if (f.size > MAX_MB * 1024 * 1024) flash(`⚠️ Cover too big (${MAX_MB} MB max)`); else patchDraft(d.key, { cover: f }) } }} />
+                      onChange={e => { const f = e.target.files?.[0]; if (f) { if (f.size > MAX_IMG_MB * 1024 * 1024) flash(`⚠️ Cover too big (${MAX_IMG_MB} MB max)`); else patchDraft(d.key, { cover: f }) } }} />
                   </label>
                 )}
                 <textarea value={d.caption} onChange={e => patchDraft(d.key, { caption: e.target.value })} placeholder="Caption (hashtags welcome)…" rows={2}
@@ -305,6 +394,16 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
                   <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platFB ? '#4A90D9' : B.muted, fontWeight: 700 }}>
                     <input type="checkbox" checked={d.platFB} onChange={e => patchDraft(d.key, { platFB: e.target.checked })} /> FB
                   </label>
+                  {d.type === 'video' && status?.tt_connected && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platTT ? '#25F4EE' : B.muted, fontWeight: 700 }}>
+                      <input type="checkbox" checked={d.platTT} onChange={e => patchDraft(d.key, { platTT: e.target.checked })} /> TikTok
+                    </label>
+                  )}
+                  {d.type === 'video' && status?.yt_connected && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platYT ? '#FF4444' : B.muted, fontWeight: 700 }}>
+                      <input type="checkbox" checked={d.platYT} onChange={e => patchDraft(d.key, { platYT: e.target.checked })} /> YouTube
+                    </label>
+                  )}
                   <input type="datetime-local" value={d.when} onChange={e => patchDraft(d.key, { when: e.target.value })} style={inp} />
                   {!d.when && <span style={{ fontSize: 11, color: '#ffa600' }}>← pick when this posts</span>}
                 </div>
@@ -349,6 +448,16 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
                   {p.stats?.fb && (
                     <p style={{ fontSize: 11, color: B.muted, margin: '2px 0 0' }}>
                       FB: {n(p.stats.fb.views ?? p.stats.fb.impressions)} {p.stats.fb.views != null ? 'views' : 'impressions'} · {n(p.stats.fb.likes)} likes · {n(p.stats.fb.comments)} comments
+                    </p>
+                  )}
+                  {p.stats?.tt && !p.stats.tt.error && (
+                    <p style={{ fontSize: 11, color: B.muted, margin: '2px 0 0' }}>
+                      {p.stats.tt.note ? `TikTok: ${p.stats.tt.note}` : <>TikTok: {n(p.stats.tt.views)} views · {n(p.stats.tt.likes)} likes · {n(p.stats.tt.comments)} comments · {n(p.stats.tt.shares)} shares</>}
+                    </p>
+                  )}
+                  {p.stats?.yt && !p.stats.yt.error && (
+                    <p style={{ fontSize: 11, color: B.muted, margin: '2px 0 0' }}>
+                      YouTube: {n(p.stats.yt.views)} views · {n(p.stats.yt.likes)} likes · {n(p.stats.yt.comments)} comments
                     </p>
                   )}
                   {p.status === 'published' && !p.stats && <p style={{ fontSize: 11, color: B.muted, margin: '4px 0 0' }}>Numbers arrive ~24h after posting.</p>}

@@ -21,6 +21,11 @@ import crypto from "node:crypto";
 import { logger } from "../lib/logger";
 import { notifyCommunityMembers } from "./communityPost";
 import { requireStaff } from "./checkinForm";
+import {
+  signState, verifyState,
+  ttAuthorizeUrl, ttExchangeCode, ttRefreshToken, ttCreatorInfo, ttPublishVideo, ttVideoStats,
+  ytAuthorizeUrl, ytExchangeCode, ytRefreshToken, ytChannelInfo, ytUploadVideo, ytVideoStats,
+} from "../lib/socialPlatforms";
 
 const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -103,19 +108,44 @@ type SchedCfg = {
   tz?: string;
   last_weekly?: string;        // ISO date of the Monday-week marker already posted
   connected_by_name?: string;
+  // TikTok (per-app OAuth; plaintext fields live in memory only)
+  tt_client_key?: string;
+  tt_client_secret?: string;   tt_client_secret_enc?: string;
+  tt_access?: string;          tt_access_enc?: string;
+  tt_refresh?: string;         tt_refresh_enc?: string;
+  tt_expires_at?: string;      // ISO — access token expiry
+  tt_open_id?: string;
+  tt_username?: string;
+  // YouTube (Google OAuth)
+  yt_client_id?: string;
+  yt_client_secret?: string;   yt_client_secret_enc?: string;
+  yt_access?: string;          yt_access_enc?: string;
+  yt_refresh?: string;         yt_refresh_enc?: string;
+  yt_expires_at?: string;
+  yt_channel_id?: string;
+  yt_channel_title?: string;
 };
 const CFG_KEY = "content_sched";
 
+// Every secret config field is AES-encrypted at rest (admin_settings is
+// org-readable under RLS). Plaintext lives only in parsed in-memory copies.
+const SECRET_FIELDS = ["page_token", "tt_client_secret", "tt_access", "tt_refresh", "yt_client_secret", "yt_access", "yt_refresh"] as const;
+
 function serializeCfg(cfg: SchedCfg): string {
-  const { page_token, ...rest } = cfg;
-  if (page_token) rest.page_token_enc = encToken(page_token);
+  const rest: any = { ...cfg };
+  for (const f of SECRET_FIELDS) {
+    if (rest[f]) rest[`${f}_enc`] = encToken(String(rest[f]));
+    delete rest[f];
+  }
   return JSON.stringify(rest);
 }
 function parseCfg(raw: string): SchedCfg | null {
   try {
-    const cfg = JSON.parse(raw) as SchedCfg;
-    if (cfg.page_token_enc) cfg.page_token = decToken(cfg.page_token_enc);
-    return cfg;
+    const cfg = JSON.parse(raw) as any;
+    for (const f of SECRET_FIELDS) {
+      if (cfg[`${f}_enc`]) cfg[f] = decToken(String(cfg[`${f}_enc`]));
+    }
+    return cfg as SchedCfg;
   } catch { return null; }
 }
 async function loadCfgRaw(): Promise<{ raw: string; cfg: SchedCfg } | null> {
@@ -124,6 +154,14 @@ async function loadCfgRaw(): Promise<{ raw: string; cfg: SchedCfg } | null> {
   const cfg = parseCfg(String(rows[0].value));
   return cfg ? { raw: String(rows[0].value), cfg } : null;
 }
+
+// ── Media-kind checks (exported for tests) ─────────────────────
+// Uploads are prefixed i-/v- by verified content type; legacy files have no
+// prefix and are treated as matching (they predate carousels/covers anyway).
+export const OUR_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+export const isOurs = (u: string) => u.startsWith(OUR_PREFIX);
+export const isImage = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("v-");
+export const isVideo = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("i-");
 
 // ── Post rows ───────────────────────────────────────────────────
 type PostRow = {
@@ -135,13 +173,17 @@ type PostRow = {
   cover_url?: string;          // reel cover photo (IG only; FB auto-generates)
   media_type: "image" | "video" | "carousel";
   caption: string;
-  platforms: Array<"ig" | "fb">;
+  platforms: Array<"ig" | "fb" | "tt" | "yt">;
   scheduled_at: string;        // ISO
   status: "scheduled" | "publishing" | "published" | "failed" | "canceled";
   attempts?: number;
   ig_media_id?: string;
   fb_post_id?: string;
   fb_video_id?: string;
+  tt_publish_id?: string;      // TikTok publish handle (always set on success)
+  tt_video_id?: string;        // public TikTok video id (once processing done)
+  tt_privacy?: string;         // privacy level TikTok actually allowed
+  yt_video_id?: string;
   published_at?: string;
   claimed_at?: string;         // when a scheduler instance claimed the publish
   error?: string;
@@ -255,6 +297,39 @@ async function publishToFacebook(cfg: SchedCfg, post: PostRow): Promise<{ postId
   return { postId: String(p.post_id || p.id) };
 }
 
+// ── TikTok / YouTube token upkeep ───────────────────────────────
+// Access tokens rotate (TikTok ~24h, Google ~1h). Refresh on demand and
+// persist the rotated tokens; a lost CAS just merges on a fresh read.
+async function persistTokenFields(patch: Partial<SchedCfg>): Promise<void> {
+  const loaded = await loadCfgRaw();
+  if (!loaded) return;
+  if (!(await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg({ ...loaded.cfg, ...patch })))) {
+    const again = await loadCfgRaw();
+    if (again) await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg({ ...again.cfg, ...patch }));
+  }
+}
+async function ensureTtToken(cfg: SchedCfg): Promise<string> {
+  if (!cfg.tt_refresh || !cfg.tt_client_key || !cfg.tt_client_secret) throw new Error("TikTok not connected");
+  const exp = cfg.tt_expires_at ? new Date(cfg.tt_expires_at).getTime() : 0;
+  if (cfg.tt_access && exp - Date.now() > 10 * 60 * 1000) return cfg.tt_access;
+  const t = await ttRefreshToken(cfg.tt_client_key, cfg.tt_client_secret, cfg.tt_refresh);
+  cfg.tt_access = t.access_token;
+  if (t.refresh_token) cfg.tt_refresh = t.refresh_token; // TikTok rotates refresh tokens
+  cfg.tt_expires_at = new Date(Date.now() + t.expires_in * 1000).toISOString();
+  await persistTokenFields({ tt_access: cfg.tt_access, tt_refresh: cfg.tt_refresh, tt_expires_at: cfg.tt_expires_at });
+  return cfg.tt_access;
+}
+async function ensureYtToken(cfg: SchedCfg): Promise<string> {
+  if (!cfg.yt_refresh || !cfg.yt_client_id || !cfg.yt_client_secret) throw new Error("YouTube not connected");
+  const exp = cfg.yt_expires_at ? new Date(cfg.yt_expires_at).getTime() : 0;
+  if (cfg.yt_access && exp - Date.now() > 5 * 60 * 1000) return cfg.yt_access;
+  const t = await ytRefreshToken(cfg.yt_client_id, cfg.yt_client_secret, cfg.yt_refresh);
+  cfg.yt_access = t.access_token;
+  cfg.yt_expires_at = new Date(Date.now() + t.expires_in * 1000).toISOString();
+  await persistTokenFields({ yt_access: cfg.yt_access, yt_expires_at: cfg.yt_expires_at });
+  return cfg.yt_access;
+}
+
 // ── Analytics (~24h after publish) ─────────────────────────────
 async function pullIgStats(cfg: SchedCfg, post: PostRow): Promise<any> {
   const token = cfg.page_token || "";
@@ -315,7 +390,7 @@ async function pullFbStats(cfg: SchedCfg, post: PostRow): Promise<any> {
 }
 
 // ── Weekly recap ────────────────────────────────────────────────
-function localParts(tz: string, d = new Date()): { ymd: string; weekday: number; hour: number } {
+export function localParts(tz: string, d = new Date()): { ymd: string; weekday: number; hour: number } {
   const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false, weekday: "short" });
   const parts = Object.fromEntries(f.formatToParts(d).map((p) => [p.type, p.value]));
   const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -328,13 +403,13 @@ function localParts(tz: string, d = new Date()): { ymd: string; weekday: number;
 
 const fmtN = (n: any) => (typeof n === "number" ? n.toLocaleString("en-US") : "—");
 
-function buildWeeklyText(posts: PostRow[], weekLabel: string): string {
+export function buildWeeklyText(posts: PostRow[], weekLabel: string): string {
   const lines: string[] = [`📱 Content Recap — week of ${weekLabel}`, ""];
   if (!posts.length) {
     lines.push("No posts went out this week.");
     return lines.join("\n");
   }
-  let igViews = 0, fbViews = 0;
+  let igViews = 0, fbViews = 0, ttViews = 0, ytViews = 0;
   for (const p of posts) {
     const when = new Date(p.published_at || p.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const cap = (p.caption || "(no caption)").replace(/\s+/g, " ").slice(0, 60);
@@ -350,10 +425,24 @@ function buildWeeklyText(posts: PostRow[], weekLabel: string): string {
       fbViews += fb.views || 0;
       lines.push(`   FB: ${fmtN(fb.views ?? fb.impressions)} ${fb.views != null ? "views" : "impressions"} · ${fmtN(fb.likes)} likes · ${fmtN(fb.comments)} comments${fb.shares != null ? ` · ${fmtN(fb.shares)} shares` : ""}`);
     }
+    const tt = p.stats?.tt, yt = p.stats?.yt;
+    if (tt && !tt.error && !tt.note) {
+      ttViews += tt.views || 0;
+      lines.push(`   TikTok: ${fmtN(tt.views)} views · ${fmtN(tt.likes)} likes · ${fmtN(tt.comments)} comments · ${fmtN(tt.shares)} shares`);
+    } else if (tt?.note) {
+      lines.push(`   TikTok: posted (stats unavailable — post is private until the app is approved)`);
+    }
+    if (yt && !yt.error) {
+      ytViews += yt.views || 0;
+      lines.push(`   YouTube: ${fmtN(yt.views)} views · ${fmtN(yt.likes)} likes · ${fmtN(yt.comments)} comments`);
+    }
     if (p.status === "failed") lines.push(`   ⚠️ this post FAILED: ${p.error || "unknown error"}`);
     lines.push("");
   }
-  lines.push(`Totals: ${fmtN(igViews)} IG views · ${fmtN(fbViews)} FB views across ${posts.length} post${posts.length === 1 ? "" : "s"}.`);
+  const totalBits = [`${fmtN(igViews)} IG views`, `${fmtN(fbViews)} FB views`];
+  if (ttViews) totalBits.push(`${fmtN(ttViews)} TikTok views`);
+  if (ytViews) totalBits.push(`${fmtN(ytViews)} YouTube views`);
+  lines.push(`Totals: ${totalBits.join(" · ")} across ${posts.length} post${posts.length === 1 ? "" : "s"}.`);
   lines.push("Numbers are captured ~24h after each post; platforms keep counting after that.");
   return lines.join("\n");
 }
@@ -437,13 +526,22 @@ export async function processDue(now = new Date()): Promise<void> {
           const fb = await publishToFacebook(cfg, claimed);
           claimed.fb_post_id = fb.postId; claimed.fb_video_id = fb.videoId;
         }
+        if (claimed.platforms.includes("tt")) {
+          const token = await ensureTtToken(cfg);
+          const tt = await ttPublishVideo(token, claimed.media_url, claimed.caption || "");
+          claimed.tt_publish_id = tt.publishId; claimed.tt_video_id = tt.videoId; claimed.tt_privacy = tt.privacy;
+        }
+        if (claimed.platforms.includes("yt")) {
+          const token = await ensureYtToken(cfg);
+          claimed.yt_video_id = await ytUploadVideo(token, claimed.media_url, claimed.caption || "");
+        }
         claimed.status = "published"; claimed.published_at = new Date().toISOString(); claimed.error = "";
         health.published++;
       } catch (e) {
         claimed.error = String((e as Error).message).slice(0, 300);
         // Partial success (IG went out, FB failed) still counts as published —
         // retrying would double-post the side that succeeded.
-        claimed.status = claimed.ig_media_id || claimed.fb_post_id || claimed.fb_video_id
+        claimed.status = claimed.ig_media_id || claimed.fb_post_id || claimed.fb_video_id || claimed.tt_publish_id || claimed.yt_video_id
           ? "published" : (claimed.attempts! >= 3 ? "failed" : "scheduled");
         if (claimed.status === "published") claimed.published_at = new Date().toISOString();
         if (claimed.status === "failed" || claimed.status === "published") await notifyAdminsOfFailure(claimed);
@@ -472,6 +570,16 @@ export async function processDue(now = new Date()): Promise<void> {
       const stats: any = {};
       if (post.ig_media_id) stats.ig = await pullIgStats(cfg, post);
       if (post.fb_post_id || post.fb_video_id) stats.fb = await pullFbStats(cfg, post);
+      if (post.tt_video_id) {
+        try { stats.tt = await ttVideoStats(await ensureTtToken(cfg), post.tt_video_id); }
+        catch (e) { stats.tt = { error: String((e as Error).message).slice(0, 200) }; }
+      } else if (post.tt_publish_id) {
+        stats.tt = { note: "posted (video id not returned — private/unaudited posts don't expose stats)" };
+      }
+      if (post.yt_video_id) {
+        try { stats.yt = await ytVideoStats(await ensureYtToken(cfg), post.yt_video_id); }
+        catch (e) { stats.yt = { error: String((e as Error).message).slice(0, 200) }; }
+      }
       claimed.stats = stats;
       claimed.stats_at = new Date().toISOString();
       await savePost(claimed);
@@ -596,8 +704,16 @@ router.get("/content-sched/status", async (req: Request, res: Response) => {
   const staff = await requireEdenAdmin(req, res); if (!staff) return;
   const loaded = await loadCfgRaw();
   if (!loaded) { res.json({ connected: false }); return; }
-  const { page_token, page_token_enc, ...safe } = loaded.cfg;
-  res.json({ connected: !!(loaded.cfg.page_token && loaded.cfg.ig_user_id), ...safe });
+  const safe: any = { ...loaded.cfg };
+  for (const f of SECRET_FIELDS) { delete safe[f]; delete safe[`${f}_enc`]; }
+  res.json({
+    connected: !!(loaded.cfg.page_token && loaded.cfg.ig_user_id),
+    tt_connected: !!loaded.cfg.tt_refresh,
+    yt_connected: !!loaded.cfg.yt_refresh,
+    tt_app_saved: !!(loaded.cfg.tt_client_key && loaded.cfg.tt_client_secret),
+    yt_app_saved: !!(loaded.cfg.yt_client_id && loaded.cfg.yt_client_secret),
+    ...safe,
+  });
 });
 
 router.post("/content-sched/settings", async (req: Request, res: Response) => {
@@ -656,17 +772,15 @@ router.post("/content-sched/upload", async (req: Request, res: Response) => {
 router.post("/content-sched/posts", async (req: Request, res: Response) => {
   const staff = await requireEdenAdmin(req, res); if (!staff) return;
   const b = req.body || {};
-  const OUR_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
-  const isOurs = (u: string) => u.startsWith(OUR_PREFIX);
-  // Uploads are prefixed i-/v- by verified content type; legacy files have no
-  // prefix and are treated as matching (they predate carousels/covers anyway).
-  const isImage = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("v-");
-  const isVideo = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("i-");
   const mediaType = b.media_type === "video" ? "video" : b.media_type === "carousel" ? "carousel" : "image";
   const mediaUrls: string[] = Array.isArray(b.media_urls) ? b.media_urls.map((u: any) => String(u).trim()).filter(Boolean) : [];
   const mediaUrl = String(b.media_url || mediaUrls[0] || "").trim();
   const coverUrl = String(b.cover_url || "").trim();
-  const platforms = Array.isArray(b.platforms) ? b.platforms.filter((p: any) => p === "ig" || p === "fb") : [];
+  const platforms = Array.isArray(b.platforms) ? b.platforms.filter((p: any) => p === "ig" || p === "fb" || p === "tt" || p === "yt") : [];
+  // TikTok + YouTube Shorts are video-only platforms.
+  if ((platforms.includes("tt") || platforms.includes("yt")) && mediaType !== "video") {
+    res.status(400).json({ error: "TikTok and YouTube can only receive videos" }); return;
+  }
   const scheduledAt = new Date(String(b.scheduled_at || ""));
   if (mediaType === "carousel") {
     if (mediaUrls.length < 2 || mediaUrls.length > 10) { res.status(400).json({ error: "A carousel needs 2-10 photos" }); return; }
@@ -677,6 +791,11 @@ router.post("/content-sched/posts", async (req: Request, res: Response) => {
   if (coverUrl && !isImage(coverUrl)) { res.status(400).json({ error: "The cover must be an uploaded photo" }); return; }
   if (!platforms.length) { res.status(400).json({ error: "Pick at least one platform" }); return; }
   if (isNaN(scheduledAt.getTime())) { res.status(400).json({ error: "Bad scheduled time" }); return; }
+  if (platforms.includes("tt") || platforms.includes("yt")) {
+    const loaded = await loadCfgRaw();
+    if (platforms.includes("tt") && !loaded?.cfg.tt_refresh) { res.status(400).json({ error: "Connect TikTok first" }); return; }
+    if (platforms.includes("yt") && !loaded?.cfg.yt_refresh) { res.status(400).json({ error: "Connect YouTube first" }); return; }
+  }
   // Idempotency: the frontend sends a stable per-draft client_key. If a post
   // with that key already exists (response was lost, user hit retry), return
   // it instead of creating a duplicate.
@@ -726,6 +845,123 @@ router.delete("/content-sched/posts/:id", async (req: Request, res: Response) =>
   if (post.status === "publishing") { res.status(400).json({ error: "Post is publishing right now" }); return; }
   await deleteSetting(EDEN_ORG_ID, postKey(id));
   res.json({ ok: true });
+});
+
+// ── TikTok / YouTube OAuth ──────────────────────────────────────
+// The public callback URL must include the /api prefix (the platform proxy
+// strips it before routes see the path).
+function oauthRedirectUri(req: Request, platform: string): string {
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0];
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
+  return `${proto}://${host}/api/content-sched/oauth/${platform}/callback`;
+}
+
+// Save the developer-app credentials and get back the authorize URL.
+router.post("/content-sched/oauth/:platform/app", async (req: Request, res: Response) => {
+  const staff = await requireEdenAdmin(req, res); if (!staff) return;
+  const platform = req.params.platform === "tiktok" ? "tiktok" : req.params.platform === "youtube" ? "youtube" : null;
+  if (!platform) { res.status(400).json({ error: "Unknown platform" }); return; }
+  const clientId = String(req.body?.client_id || "").trim();
+  const clientSecret = String(req.body?.client_secret || "").trim();
+  const loaded = await loadCfgRaw();
+  const cfg: SchedCfg = { ...(loaded?.cfg || {}) };
+  if (clientId && clientSecret) {
+    if (platform === "tiktok") { cfg.tt_client_key = clientId; cfg.tt_client_secret = clientSecret; }
+    else { cfg.yt_client_id = clientId; cfg.yt_client_secret = clientSecret; }
+    const ok = loaded
+      ? await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg(cfg))
+      : await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg(cfg));
+    if (!ok) { res.status(409).json({ error: "Settings changed elsewhere — reload and try again" }); return; }
+  }
+  const key = platform === "tiktok" ? cfg.tt_client_key : cfg.yt_client_id;
+  const secret = platform === "tiktok" ? cfg.tt_client_secret : cfg.yt_client_secret;
+  if (!key || !secret) { res.status(400).json({ error: "Enter the app's client key and secret first" }); return; }
+  const redirectUri = oauthRedirectUri(req, platform);
+  const state = signState(platform);
+  const authorizeUrl = platform === "tiktok" ? ttAuthorizeUrl(key, redirectUri, state) : ytAuthorizeUrl(key, redirectUri, state);
+  res.json({ ok: true, redirect_uri: redirectUri, authorize_url: authorizeUrl });
+});
+
+// Browser lands here after approving access. No session — state is the auth.
+router.get("/content-sched/oauth/:platform/callback", async (req: Request, res: Response) => {
+  const platform = req.params.platform === "tiktok" ? "tiktok" : req.params.platform === "youtube" ? "youtube" : null;
+  const page = (title: string, msg: string) =>
+    `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:40px;text-align:center"><h2>${title}</h2><p>${msg}</p><p>You can close this tab and go back to the app.</p></body>`;
+  if (!platform) { res.status(400).send(page("Hmm", "Unknown platform.")); return; }
+  const code = String(req.query.code || "");
+  const state = String(req.query.state || "");
+  if (!code || !verifyState(state, platform)) {
+    res.status(400).send(page("Connection failed", "The link expired or was invalid — go back to the app and click Connect again."));
+    return;
+  }
+  try {
+    const loaded = await loadCfgRaw();
+    const cfg: SchedCfg = { ...(loaded?.cfg || {}) };
+    const redirectUri = oauthRedirectUri(req, platform);
+    if (platform === "tiktok") {
+      if (!cfg.tt_client_key || !cfg.tt_client_secret) throw new Error("TikTok app credentials missing");
+      const t = await ttExchangeCode(cfg.tt_client_key, cfg.tt_client_secret, code, redirectUri);
+      cfg.tt_access = t.access_token; cfg.tt_refresh = t.refresh_token;
+      cfg.tt_expires_at = new Date(Date.now() + t.expires_in * 1000).toISOString();
+      cfg.tt_open_id = t.open_id;
+      try { cfg.tt_username = (await ttCreatorInfo(t.access_token)).username; } catch { /* audit-pending apps may block this */ }
+    } else {
+      if (!cfg.yt_client_id || !cfg.yt_client_secret) throw new Error("YouTube app credentials missing");
+      const t = await ytExchangeCode(cfg.yt_client_id, cfg.yt_client_secret, code, redirectUri);
+      cfg.yt_access = t.access_token;
+      if (t.refresh_token) cfg.yt_refresh = t.refresh_token;
+      if (!cfg.yt_refresh) throw new Error("Google did not return a refresh token — remove the app's access at myaccount.google.com/permissions and connect again");
+      cfg.yt_expires_at = new Date(Date.now() + t.expires_in * 1000).toISOString();
+      const ch = await ytChannelInfo(t.access_token);
+      cfg.yt_channel_id = ch.channelId; cfg.yt_channel_title = ch.title;
+    }
+    const ok = loaded
+      ? await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg(cfg))
+      : await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg(cfg));
+    if (!ok) await persistTokenFields(cfg);
+    const who = platform === "tiktok" ? (cfg.tt_username || "your TikTok account") : (cfg.yt_channel_title || "your YouTube channel");
+    res.send(page("✅ Connected!", `${platform === "tiktok" ? "TikTok" : "YouTube"} is now linked to ${who}.`));
+  } catch (e) {
+    logger.warn({ err: String(e) }, "[ContentSched] oauth callback failed");
+    res.status(400).send(page("Connection failed", String((e as Error).message).slice(0, 300)));
+  }
+});
+
+router.post("/content-sched/oauth/:platform/disconnect", async (req: Request, res: Response) => {
+  const staff = await requireEdenAdmin(req, res); if (!staff) return;
+  const platform = req.params.platform;
+  const loaded = await loadCfgRaw();
+  if (!loaded) { res.json({ ok: true }); return; }
+  const cfg: any = { ...loaded.cfg };
+  const fields = platform === "tiktok"
+    ? ["tt_client_key", "tt_client_secret", "tt_client_secret_enc", "tt_access", "tt_access_enc", "tt_refresh", "tt_refresh_enc", "tt_expires_at", "tt_open_id", "tt_username"]
+    : ["yt_client_id", "yt_client_secret", "yt_client_secret_enc", "yt_access", "yt_access_enc", "yt_refresh", "yt_refresh_enc", "yt_expires_at", "yt_channel_id", "yt_channel_title"];
+  for (const f of fields) delete cfg[f];
+  await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg(cfg));
+  res.json({ ok: true });
+});
+
+// ── Direct-to-storage uploads (big videos, no 18 MB base64 cap) ─
+// Returns a one-hour signed upload URL; the browser PUTs the file straight
+// to Supabase Storage, so the api-server never buffers the video.
+router.post("/content-sched/upload-url", async (req: Request, res: Response) => {
+  const staff = await requireEdenAdmin(req, res); if (!staff) return;
+  const { filename, contentType } = req.body || {};
+  const ALLOWED = ["image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"];
+  if (!ALLOWED.includes(String(contentType || ""))) { res.status(400).json({ error: "Only JPG/PNG/WebP photos and MP4/MOV videos are supported" }); return; }
+  try { await ensureBucket(); } catch { res.status(502).json({ error: "Storage unavailable" }); return; }
+  const safe = String(filename || "file").slice(-120).replace(/[^A-Za-z0-9._-]+/g, "_") || "file";
+  const kind = String(contentType).startsWith("video/") ? "v" : "i";
+  const objPath = `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${BUCKET}/${objPath}`, {
+    method: "POST", headers: SH, body: JSON.stringify({}),
+  });
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok || !j?.url) { res.status(502).json({ error: "Could not create an upload link — try again" }); return; }
+  res.json({
+    upload_url: `${SUPABASE_URL}/storage/v1${String(j.url).startsWith("/") ? "" : "/"}${j.url}`,
+    public_url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${objPath}`,
+  });
 });
 
 // Kick a scheduler pass right now (also lets an admin test the weekly recap).
