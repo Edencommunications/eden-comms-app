@@ -1,0 +1,63 @@
+This is a great system to design. Let me break down exactly what is possible and what the build looks like before we start anything.
+
+What You Are Describing — Three Separate Systems
+
+System 1 — Content Scheduling and Posting
+Claude helping you schedule and auto-post content to Instagram, Facebook, TikTok, and YouTube Shorts at times you set.
+
+System 2 — Performance Reporting
+Pulling view counts 24 hours after each post and compiling a weekly report automatically.
+
+System 3 — Delivering the Report Inside Eden Communications
+The weekly analytics update appears inside the app the same way your GHL ads analytics already do.
+
+The Honest Breakdown of What Claude Can and Cannot Do Here
+
+What Claude can do right now:
+
+Help you write, format, and plan content
+Generate captions, hashtags, and post copy for any platform
+Help you build a content calendar
+Design the weekly report format and template
+Build the analytics dashboard screen inside Eden Communications
+Write the code that receives webhook data from a scheduling tool and displays it in the app
+
+What Claude cannot do directly:
+Claude cannot log into Instagram, Facebook, TikTok, or YouTube and post on your behalf from this chat interface. Those platforms require OAuth authentication and API access that lives outside Claude. However this is very solvable with the right tools connected together.
+
+The Full System Architecture
+
+Here is exactly how to build what you described:
+
+Step 1 — Content Scheduling: Use Buffer or Later
+
+Both Buffer and Later connect to Instagram, Facebook, TikTok, and YouTube. You upload your content, set your posting schedule, and they post automatically at the time you choose. Buffer has a free tier and a Pro tier at around $15/month that covers all four platforms.
+
+Claude's role here is to help you write the captions and plan the schedule. You paste the content into Buffer or Later and set the time. Once it is set up it runs automatically.
+
+Step 2 — Analytics Pull: Use Buffer Analytics + Platform APIs
+
+Buffer pulls basic analytics from each post. For deeper data — TikTok specifically, and YouTube — you connect directly to their analytics APIs. Both are free. Instagram and Facebook pull through Meta's Graph API.
+
+Step 3 — Weekly Report Automation: Use Make (formerly Integromat)
+
+Make is a workflow automation tool similar to Zapier but more powerful for this use case. You set up a workflow that:
+
+Runs every Monday morning
+Pulls the previous week's post performance from Buffer or directly from each platform API
+Formats it into a clean report
+Sends it to a Supabase table inside Eden Communications via a webhook
+Triggers a notification inside the app
+
+Step 4 — Display Inside Eden Communications
+
+I build an Analytics tab inside the app that pulls from that Supabase table and displays your weekly social media performance the same way your GHL ads data already shows. You open the app, go to Analytics, and see last week's numbers for every post across every platform.
+
+What I Need From You to Build This
+
+Before I write any code I want to confirm two things:
+
+Do you already have Buffer, Later, or any scheduling tool set up — or are you starting from scratch on that side?
+For the Eden app analytics screen — do you want social media stats and GHL ads stats on the same screen together, or separate tabs for each?
+
+Once I know those two things I can build the Eden Communications analytics screen right now, and give you the exact Make workflow setup so the data flows in automatically every week.
