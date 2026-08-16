@@ -197,7 +197,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
 
     const mk = (type: Draft['type'], fs: File[]): Draft => ({
       key: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
-      type, files: fs, cover: null, caption: '', platIG: true, platFB: true,
+      type, files: fs, cover: null, caption: '', platIG: !!status?.connected, platFB: !!status?.connected,
       platTT: !!status?.tt_connected,
       platYT: type === 'video' && !!status?.yt_connected,
       when: '',
@@ -302,6 +302,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
   }
 
   const n = (v: any) => (typeof v === 'number' ? v.toLocaleString() : '—')
+  const anyOn = !!(status?.connected || status?.tt_connected || status?.yt_connected)
   const statusColor: any = { scheduled: '#6FB8E8', publishing: '#ffa600', published: '#4FD89A', failed: '#ff6a6a', canceled: B.muted }
   const typeLabel: any = { image: '🖼 Photo', video: '🎬 Reel', carousel: '🎠 Carousel' }
   const typeIcon = (t: string) => t === 'video' ? '🎬' : t === 'carousel' ? '🎠' : '🖼'
@@ -313,8 +314,9 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
       <p style={{ fontSize: 11, fontWeight: 700, color: B.gold, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 4px' }}>📱 Content Scheduler (IG · FB · TikTok · YouTube)</p>
       {status === null ? (
         <p style={{ fontSize: 12, color: B.muted, margin: 0 }}>Checking connection…</p>
-      ) : !status.connected ? (
+      ) : (
         <>
+          {!status.connected && <>
           <p style={{ fontSize: 12, color: B.muted, margin: '0 0 10px', lineHeight: 1.6 }}>
             Auto-post your content to Instagram + Facebook on a schedule, get each post's numbers 24h later, and a weekly recap in a community — like your ads recaps.
             <br />1. Go to <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" style={{ color: B.gold }}>Meta's Graph API Explorer</a> (same app you used for Ads Recaps)
@@ -337,14 +339,16 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
               ))}
             </div>
           )}
-        </>
-      ) : (
-        <>
+          <div style={{ marginBottom: 14 }} />
+          </>}
+          {status.connected && (
           <p style={{ fontSize: 12, color: '#4FD89A', margin: '0 0 10px' }}>
             ✅ Posting to <strong>{status.page_name}</strong>{status.ig_username ? <> + IG <strong>@{status.ig_username}</strong></> : null}.
           </p>
+          )}
 
           {/* Weekly recap settings */}
+          {anyOn && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
             <span style={{ fontSize: 12, color: B.muted }}>Weekly recap →</span>
             <select value={status.community_id || ''} disabled={busy} onChange={e => saveSettings({ community_id: e.target.value || null })}
@@ -359,6 +363,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
               {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}</option>)}
             </select>
           </div>
+          )}
 
           {/* TikTok + YouTube connections */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -370,6 +375,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
               help={<>In <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.gold }}>Google Cloud Console</a>: create a project → enable the <strong>YouTube Data API v3</strong> → OAuth consent screen (External, add yourself as a test user) → Credentials → <strong>OAuth client ID (Web application)</strong>. Paste the Client ID and secret below, add the redirect URL it gives you, then connect.<br/>⚠️ Until Google verifies the app, uploads are locked <strong>private</strong> — you can flip each one public in YouTube Studio, or complete verification.</>} />
           </div>
 
+          {anyOn && <>
           {/* Batch builder */}
           <div style={{ background: B.surface, border: `1px solid ${B.border}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: B.text, margin: '0 0 4px' }}>Build your batch</p>
@@ -414,10 +420,10 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
                   style={{ ...inp, width: '100%', boxSizing: 'border-box', resize: 'vertical', marginBottom: 8, display: 'block' }} />
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platIG ? '#E1306C' : B.muted, fontWeight: 700 }}>
-                    <input type="checkbox" checked={d.platIG} onChange={e => patchDraft(d.key, { platIG: e.target.checked })} /> IG
+                    <input type="checkbox" checked={d.platIG} onChange={e => patchDraft(d.key, { platIG: e.target.checked })} disabled={!status?.connected} /> IG
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platFB ? '#4A90D9' : B.muted, fontWeight: 700 }}>
-                    <input type="checkbox" checked={d.platFB} onChange={e => patchDraft(d.key, { platFB: e.target.checked })} /> FB
+                    <input type="checkbox" checked={d.platFB} onChange={e => patchDraft(d.key, { platFB: e.target.checked })} disabled={!status?.connected} /> FB
                   </label>
                   {status?.tt_connected && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, color: d.platTT ? '#25F4EE' : B.muted, fontWeight: 700 }}>
@@ -491,7 +497,9 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
             </div>
           )}
 
-          <Btn variant="secondary" onClick={disconnect}>Disconnect</Btn>
+          </>}
+
+          {status.connected && <Btn variant="secondary" onClick={disconnect}>Disconnect Meta</Btn>}
         </>
       )}
       {msg && <p style={{ fontSize: 12, color: msg.startsWith('✅') ? '#4FD89A' : '#ffa600', margin: '10px 0 0' }}>{msg}</p>}

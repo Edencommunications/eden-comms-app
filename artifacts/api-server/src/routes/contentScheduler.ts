@@ -824,8 +824,9 @@ router.post("/content-sched/posts", async (req: Request, res: Response) => {
   if (coverUrl && !isImage(coverUrl)) { res.status(400).json({ error: "The cover must be an uploaded photo" }); return; }
   if (!platforms.length) { res.status(400).json({ error: "Pick at least one platform" }); return; }
   if (isNaN(scheduledAt.getTime())) { res.status(400).json({ error: "Bad scheduled time" }); return; }
-  if (platforms.includes("tt") || platforms.includes("yt")) {
+  {
     const loaded = await loadCfgRaw();
+    if ((platforms.includes("ig") || platforms.includes("fb")) && !loaded?.cfg.page_token) { res.status(400).json({ error: "Connect Instagram/Facebook first" }); return; }
     if (platforms.includes("tt") && !loaded?.cfg.tt_refresh) { res.status(400).json({ error: "Connect TikTok first" }); return; }
     if (platforms.includes("yt") && !loaded?.cfg.yt_refresh) { res.status(400).json({ error: "Connect YouTube first" }); return; }
   }
