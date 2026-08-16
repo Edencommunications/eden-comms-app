@@ -450,11 +450,8 @@ const SUPP_DB = {
 
 // ── Food database ─────────────────────────────────────────────
 const PROTOCOLS = [
-  '2 High 2 Low Female','2 High 2 Low Male',
-  'Base Diet Protocol Female','Base Diet Protocol Male',
-  'Female Leaky Gut Base Diet','Female Low Protein Flush Diet',
-  'Female Vegan Diet','Male Leaky Gut Base Diet',
-  'Male Low Protein Flush Diet','Male Vegan Diet',
+  'Female Low Protein Flush Diet',
+  'Male Low Protein Flush Diet',
 ]
 
 // ── 14-Day Flush Diet templates (foods & amounts only — supps excluded) ──
@@ -2025,7 +2022,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
           {/* Protocol selector — coach only */}
           {isCoach&&(
             <Card sx={{marginBottom:12}}>
-              <Sel label="Diet Protocol" value={protocol} onChange={setProtocol} options={PROTOCOLS}/>
+              <Sel label="Diet Protocol" value={protocol} onChange={setProtocol}
+                options={protocol && !PROTOCOLS.includes(protocol) ? [protocol, ...PROTOCOLS] : PROTOCOLS}/>
               {/Flush Diet/i.test(protocol) && (
                 <button onClick={()=>{
                   const sex = /female/i.test(protocol) ? 'female' : 'male'
@@ -2035,6 +2033,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 }}
                   style={{marginTop:10,width:'100%',background:`${C.gold}22`,border:`1px solid ${C.gold}55`,borderRadius:8,padding:'9px 12px',color:C.gold,fontSize:12,fontWeight:700,cursor:'pointer'}}>
                   ⚡ Load {/female/i.test(protocol)?'Female':'Male'} Flush Diet meals into this day
+                </button>
+              )}
+              {meals.some((m: any)=>m.foods?.length>0 || (m.water||'').trim()) && (
+                <button onClick={()=>{
+                  if (!window.confirm(`Clear all foods and water from "${activeDay.name}" and start from scratch?`)) return
+                  setMeals((p: any)=>p.map((m: any)=>({...m,foods:[],water:''})))
+                }}
+                  style={{marginTop:8,width:'100%',background:'transparent',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                  🗑 Clear this day &amp; start from scratch
                 </button>
               )}
             </Card>
