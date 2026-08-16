@@ -3,7 +3,7 @@ name: Content Scheduler (social auto-posting)
 description: Eden-only IG/FB auto-poster — storage model, CAS safety rules, Meta permission requirements, weekly recap semantics.
 ---
 
-# Content Scheduler (Phase 1: Instagram + Facebook)
+# Content Scheduler (IG + FB + TikTok + YouTube Shorts)
 
 Eden-only (gated `company_id === EDEN_ORG_ID` + super_admin); user may later open it to Tier-3 orgs / DBAs.
 
@@ -18,4 +18,12 @@ Eden-only (gated `company_id === EDEN_ORG_ID` + super_admin); user may later ope
 - Stats pull uses a `stats_claimed_at` lease; `stats_at` written only after success so a crash retries in 30 min.
 - Weekly recap CAS-claims `last_weekly` then rolls it back on post failure so a week is never silently skipped. Window = previous 7 FULL local days (localParts ymd compare), not rolling 168h.
 
-**How to apply:** any Phase-2 platform (TikTok, YouTube) must follow the same claim/lease/rollback pattern and the same "never retry an ambiguous publish" rule.
+**How to apply:** any new platform must follow the same claim/lease/rollback pattern and the same "never retry an ambiguous publish" rule.
+
+# Phase 2: TikTok + YouTube (video-only platforms)
+- Auth is per-app OAuth, NOT paste-a-token: user supplies their own dev-app client id/secret (TikTok developer app, Google Cloud OAuth client); tokens auto-refresh server-side. All secrets/tokens ride encrypted in the same `content_sched` config via a generic SECRET_FIELDS list.
+- OAuth callback is unauthenticated by necessity — protected by platform-bound HMAC state (10-min expiry). Redirect URI must include the `/api` prefix (proxy strips it before routing).
+- **Platform gotchas:** unaudited TikTok apps force SELF_ONLY (private) posts; unverified Google apps lock uploads private — surfaced in UI, not bugs. TikTok FILE_UPLOAD used instead of PULL_FROM_URL (avoids domain verification). TikTok chunk rule: count = floor(size/chunk), final chunk absorbs remainder BUT must stay ≤64MB → 32MB chunk size satisfies both.
+- **Ambiguity rule extended:** once a TikTok publish session inits or YouTube bytes start flowing, any failure throws AmbiguousPublishError → terminal `failed`, never auto-retried (YouTube 4xx = real reject, retryable-safe; 5xx/network = ambiguous).
+- Token rotation persists via bounded CAS-retry field-level merge only — a blind upsert fallback can resurrect credentials a concurrent disconnect wiped.
+- Big videos (>18MB, up to 512MB) upload browser→storage directly via one-hour signed upload URLs; api-server never buffers bytes. Supabase plan's per-file storage cap still applies.
