@@ -2029,7 +2029,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               {/Flush Diet/i.test(protocol) && (
                 <button onClick={()=>{
                   const sex = /female/i.test(protocol) ? 'female' : 'male'
-                  const hasFoods = meals.some((m: any)=>m.foods?.length>0)
+                  const hasFoods = meals.some((m: any)=>m.foods?.length>0 || (m.water||'').trim())
                   if (hasFoods && !window.confirm(`Load the ${sex} Flush Diet meals into "${activeDay.name}"? This replaces the foods currently in this day.`)) return
                   setMeals(flushMeals(sex))
                 }}
