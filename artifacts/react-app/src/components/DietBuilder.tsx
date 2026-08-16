@@ -1272,7 +1272,23 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       }).catch(()=>{})
     return ()=>{stale=true}
   },[myUUID,myCompanyId])
-  // Rx/prescription protocol persists per client in admin_settings 'rx_plan:<uuid>'
+  // Client's own supplement notes — separate key from coach plan to avoid any overwrites
+  useEffect(()=>{
+    if (!myUUID || !myCompanyId) return
+    let stale=false
+    dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('supp_client_notes:'+myUUID)}&select=value`)
+      .then(rows=>{
+        if (stale) return
+        try {
+          const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
+          if (typeof v?.notes==='string') setClientSuppNotes(v.notes)
+        } catch(e){}
+      }).catch(()=>{})
+    return ()=>{stale=true}
+  },[myUUID,myCompanyId])
+  // Rx/prescription protocol persists per client in admin_settings 'rx_plan:<uuid>'.
+  // Also reads rxNotes as a legacy fallback — existing clients who saved notes before
+  // the separate-key migration still see them here until they next save via the API.
   useEffect(()=>{
     if (!myUUID || !myCompanyId) return
     let stale=false
@@ -1282,9 +1298,26 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         try {
           const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
           if (v) {
-            if (Array.isArray(v.rxList))        setRxList(v.rxList)
-            if (typeof v.rxNotes==='string')    setClientRxNotes(v.rxNotes)
+            if (Array.isArray(v.rxList))       setRxList(v.rxList)
+            // Legacy fallback — populated before the separate rx_client_notes key was
+            // introduced; rx_client_notes load below overrides this when present.
+            if (typeof v.rxNotes==='string')   setClientRxNotes(v.rxNotes)
           }
+        } catch(e){}
+      }).catch(()=>{})
+    return ()=>{stale=true}
+  },[myUUID,myCompanyId])
+  // Client's own Rx notes — separate key so coach saves never overwrite them.
+  // Takes precedence over any legacy rxNotes found in rx_plan above.
+  useEffect(()=>{
+    if (!myUUID || !myCompanyId) return
+    let stale=false
+    dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('rx_client_notes:'+myUUID)}&select=value`)
+      .then(rows=>{
+        if (stale) return
+        try {
+          const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
+          if (typeof v?.notes==='string') setClientRxNotes(v.notes)
         } catch(e){}
       }).catch(()=>{})
     return ()=>{stale=true}
@@ -1365,6 +1398,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
   async function saveRxProtocol() {
     if (!myUUID || !myCompanyId) { alert('Still loading this client\'s profile — try again in a second.'); return }
+    // rx_plan stores coach-owned rxList plus rxNotes as a legacy migration field —
+    // clients who haven't yet saved via the API still have their notes here, and
+    // keeping this field prevents coach saves from erasing unmigrated notes.
     const ok = await dbUpsert('admin_settings',{
       company_id: myCompanyId, key: 'rx_plan:'+myUUID,
       value: JSON.stringify({rxList, rxNotes: clientRxNotes}),
@@ -1377,17 +1413,30 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
   }
   async function saveClientRxNotes() {
     if (!myUUID || !myCompanyId) { alert('Still loading — try again in a second.'); return }
-    // Read-modify-write: preserve rxList (coach-owned), update client notes only
-    const ok = await dbUpsert('admin_settings',{
-      company_id: myCompanyId, key: 'rx_plan:'+myUUID,
-      value: JSON.stringify({rxList, rxNotes: clientRxNotes}),
-      updated_at: new Date().toISOString(),
-    },'company_id,key')
-    if (!ok) { alert('Could not save your notes — please try again.'); return }
+    // Goes through the API server: RLS blocks direct client writes to admin_settings.
+    // Server does a read-modify-write preserving coach-owned rxList.
+    const r = await fetch('/api/rx/client-notes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      body: JSON.stringify({ clientNotes: clientRxNotes }),
+    })
+    if (!r.ok) { alert('Could not save your notes — please try again.'); return }
     alert('Notes saved!')
   }
   // Client's own notes on their supplement experience
   const [clientSuppNotes, setClientSuppNotes] = useState<any>('')
+  async function saveClientSuppNotes() {
+    if (!myUUID || !myCompanyId) { alert('Still loading — try again in a second.'); return }
+    // Goes through the API server: RLS blocks direct client writes to admin_settings.
+    // Server does a read-modify-write preserving coach-owned supps/custom/notes.
+    const r = await fetch('/api/supp/client-notes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      body: JSON.stringify({ clientNotes: clientSuppNotes }),
+    })
+    if (!r.ok) { alert('Could not save your notes — please try again.'); return }
+    alert('Supplement notes saved!')
+  }
   // Client's own prescription notes
   const [clientRxNotes, setClientRxNotes] = useState<any>('')
 
@@ -4081,6 +4130,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   placeholder="e.g. Bloat Eaze is working well. Magnesium making me drowsy earlier than expected…"
                   rows={4}
                   style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                <button onClick={saveClientSuppNotes} style={{marginTop:10,width:'100%',background:C.gold,border:'none',borderRadius:10,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  Save My Notes
+                </button>
               </Card>
 
               {/* Prescription section — read-only view of coach's Rx tracker */}
