@@ -129,8 +129,10 @@ async function loadCfgRaw(): Promise<{ raw: string; cfg: SchedCfg } | null> {
 type PostRow = {
   id: string;
   created_at: string;
-  media_url: string;
-  media_type: "image" | "video";
+  media_url: string;           // single photo/video URL (first item for carousels)
+  media_urls?: string[];       // carousel: 2-10 image URLs in order
+  cover_url?: string;          // reel cover photo (IG only; FB auto-generates)
+  media_type: "image" | "video" | "carousel";
   caption: string;
   platforms: Array<"ig" | "fb">;
   scheduled_at: string;        // ISO
@@ -192,9 +194,11 @@ async function publishToInstagram(cfg: SchedCfg, post: PostRow): Promise<string>
   if (!token || !igId) throw new Error("Instagram not connected");
   let creationId: string;
   if (post.media_type === "video") {
-    const c = await gPost(`${igId}/media`, token, {
+    const params: Record<string, string> = {
       media_type: "REELS", video_url: post.media_url, caption: post.caption || "", share_to_feed: "true",
-    });
+    };
+    if (post.cover_url) params.cover_url = post.cover_url;
+    const c = await gPost(`${igId}/media`, token, params);
     creationId = String(c.id);
     // Reels are processed async — poll status up to ~5 minutes.
     for (let i = 0; i < 30; i++) {
@@ -204,6 +208,18 @@ async function publishToInstagram(cfg: SchedCfg, post: PostRow): Promise<string>
       if (s.status_code === "ERROR") throw new Error("Instagram could not process this video (check format/length)");
       if (i === 29) throw new Error("Instagram video processing timed out");
     }
+  } else if (post.media_type === "carousel") {
+    // Create one child container per image, then a CAROUSEL parent.
+    const children: string[] = [];
+    for (const url of post.media_urls || []) {
+      const ch = await gPost(`${igId}/media`, token, { image_url: url, is_carousel_item: "true" });
+      children.push(String(ch.id));
+    }
+    if (children.length < 2) throw new Error("A carousel needs at least 2 photos");
+    const c = await gPost(`${igId}/media`, token, {
+      media_type: "CAROUSEL", children: children.join(","), caption: post.caption || "",
+    });
+    creationId = String(c.id);
   } else {
     const c = await gPost(`${igId}/media`, token, { image_url: post.media_url, caption: post.caption || "" });
     creationId = String(c.id);
@@ -220,6 +236,19 @@ async function publishToFacebook(cfg: SchedCfg, post: PostRow): Promise<{ postId
   if (post.media_type === "video") {
     const v = await gPost(`${pageId}/videos`, token, { file_url: post.media_url, description: post.caption || "" });
     return { videoId: String(v.id) };
+  }
+  if (post.media_type === "carousel") {
+    // Upload each photo unpublished, then attach them all to one feed post.
+    const ids: string[] = [];
+    for (const url of post.media_urls || []) {
+      const ph = await gPost(`${pageId}/photos`, token, { url, published: "false" });
+      ids.push(String(ph.id));
+    }
+    if (ids.length < 2) throw new Error("A carousel needs at least 2 photos");
+    const params: Record<string, string> = { message: post.caption || "" };
+    ids.forEach((id, i) => { params[`attached_media[${i}]`] = JSON.stringify({ media_fbid: id }); });
+    const p = await gPost(`${pageId}/feed`, token, params);
+    return { postId: String(p.id) };
   }
   const p = await gPost(`${pageId}/photos`, token, { url: post.media_url, message: post.caption || "" });
   return { postId: String(p.post_id || p.id) };
@@ -308,7 +337,7 @@ function buildWeeklyText(posts: PostRow[], weekLabel: string): string {
   for (const p of posts) {
     const when = new Date(p.published_at || p.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const cap = (p.caption || "(no caption)").replace(/\s+/g, " ").slice(0, 60);
-    lines.push(`▸ ${when} — ${p.media_type === "video" ? "🎬" : "🖼"} ${cap}${(p.caption || "").length > 60 ? "…" : ""}`);
+    lines.push(`▸ ${when} — ${p.media_type === "video" ? "🎬" : p.media_type === "carousel" ? "🎠" : "🖼"} ${cap}${(p.caption || "").length > 60 ? "…" : ""}`);
     const ig = p.stats?.ig, fb = p.stats?.fb;
     if (ig) {
       igViews += ig.views || 0;
@@ -619,16 +648,26 @@ router.post("/content-sched/upload", async (req: Request, res: Response) => {
 router.post("/content-sched/posts", async (req: Request, res: Response) => {
   const staff = await requireEdenAdmin(req, res); if (!staff) return;
   const b = req.body || {};
-  const mediaUrl = String(b.media_url || "").trim();
-  const mediaType = b.media_type === "video" ? "video" : "image";
+  const OUR_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+  const isOurs = (u: string) => u.startsWith(OUR_PREFIX);
+  const mediaType = b.media_type === "video" ? "video" : b.media_type === "carousel" ? "carousel" : "image";
+  const mediaUrls: string[] = Array.isArray(b.media_urls) ? b.media_urls.map((u: any) => String(u).trim()).filter(Boolean) : [];
+  const mediaUrl = String(b.media_url || mediaUrls[0] || "").trim();
+  const coverUrl = String(b.cover_url || "").trim();
   const platforms = Array.isArray(b.platforms) ? b.platforms.filter((p: any) => p === "ig" || p === "fb") : [];
   const scheduledAt = new Date(String(b.scheduled_at || ""));
-  if (!mediaUrl.startsWith(`${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`)) { res.status(400).json({ error: "Upload the media first" }); return; }
+  if (mediaType === "carousel") {
+    if (mediaUrls.length < 2 || mediaUrls.length > 10) { res.status(400).json({ error: "A carousel needs 2-10 photos" }); return; }
+    if (!mediaUrls.every(isOurs)) { res.status(400).json({ error: "Upload all photos first" }); return; }
+  } else if (!isOurs(mediaUrl)) { res.status(400).json({ error: "Upload the media first" }); return; }
+  if (coverUrl && !isOurs(coverUrl)) { res.status(400).json({ error: "Upload the cover photo first" }); return; }
   if (!platforms.length) { res.status(400).json({ error: "Pick at least one platform" }); return; }
   if (isNaN(scheduledAt.getTime())) { res.status(400).json({ error: "Bad scheduled time" }); return; }
   const post: PostRow = {
     id: crypto.randomUUID(), created_at: new Date().toISOString(),
     media_url: mediaUrl, media_type: mediaType, caption: String(b.caption || "").slice(0, 2200),
+    ...(mediaType === "carousel" ? { media_urls: mediaUrls } : {}),
+    ...(mediaType === "video" && coverUrl ? { cover_url: coverUrl } : {}),
     platforms, scheduled_at: scheduledAt.toISOString(), status: "scheduled", attempts: 0,
   };
   const ok = await savePost(post);
