@@ -72,12 +72,18 @@ function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, 
           {connected ? <span style={{ color: '#4FD89A', fontWeight: 400 }}> — connected ({who})</span>
             : <span style={{ color: B.muted, fontWeight: 400 }}> — not connected</span>}
         </span>
-        {connected
-          ? <button onClick={disconnect} style={{ background: 'none', border: 'none', color: B.muted, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>disconnect</button>
-          : <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', color: B.gold, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>{open ? 'hide setup' : 'set up'}</button>}
+        <span style={{ display: 'flex', gap: 10 }}>
+          {(!connected || platform === 'tiktok') && (
+            <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', color: B.gold, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+              {open ? 'hide setup' : connected ? 'photo post setup' : 'set up'}
+            </button>
+          )}
+          {connected && <button onClick={disconnect} style={{ background: 'none', border: 'none', color: B.muted, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>disconnect</button>}
+        </span>
       </div>
-      {!connected && open && (
+      {open && (
         <div style={{ marginTop: 8 }}>
+          {!connected && <>
           <p style={{ fontSize: 11, color: B.muted, margin: '0 0 8px', lineHeight: 1.6 }}>{help}</p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             <input value={cid} onChange={e => setCid(e.target.value)} placeholder={platform === 'tiktok' ? 'Client key' : 'Client ID'} style={{ ...inp, flex: 1, minWidth: 140 }} />
@@ -89,6 +95,7 @@ function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, 
               Register this redirect URL in the app's settings:<br /><code style={{ color: B.gold }}>{redirect}</code>
             </p>
           )}
+          </>}
           {platform === 'tiktok' && (
             <div style={{ margin: '0 0 8px' }}>
               <p style={{ fontSize: 11, color: B.muted, margin: '0 0 6px', lineHeight: 1.6 }}>
@@ -101,7 +108,7 @@ function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, 
               </div>
             </div>
           )}
-          {(appSaved || redirect) && (
+          {!connected && (appSaved || redirect) && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Btn onClick={() => start(false)} disabled={busy}>🔗 Connect {label}</Btn>
               <button onClick={reload} style={{ background: 'none', border: 'none', color: B.muted, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>I finished connecting — refresh</button>

@@ -113,7 +113,11 @@ async function ttPost(pathName: string, token: string, body: any): Promise<any> 
   });
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok || (j?.error && j.error.code !== "ok")) {
-    throw new Error(j?.error?.message || j?.error?.code || `TikTok ${pathName} failed (${r.status})`);
+    const err = new Error(j?.error?.message || j?.error?.code || `TikTok ${pathName} failed (${r.status})`);
+    // A structured error response means TikTok processed and REJECTED the
+    // call — a definitive outcome, safe to surface as a plain failure.
+    if (j?.error?.code && j.error.code !== "ok") (err as any).definitive = true;
+    throw err;
   }
   return j;
 }
@@ -229,17 +233,26 @@ export async function ttPublishPhotos(token: string, imageUrls: string[], captio
   const info = await ttCreatorInfo(token);
   const privacy = ttPickPrivacy(info.privacyOptions);
   const firstLine = String(caption || "").split("\n")[0].trim().slice(0, 90);
-  const init = await ttPost("/v2/post/publish/content/init/", token, {
-    post_info: {
-      title: firstLine, description: String(caption || "").slice(0, 4000),
-      privacy_level: privacy, disable_comment: false, auto_add_music: true,
-    },
-    source_info: { source: "PULL_FROM_URL", photo_cover_index: 0, photo_images: imageUrls },
-    post_mode: "DIRECT_POST",
-    media_type: "PHOTO",
-  });
+  // Unlike video FILE_UPLOAD (which publishes nothing until chunks arrive),
+  // a PULL_FROM_URL init alone is enough for TikTok to publish. So once the
+  // init request is DISPATCHED, any non-definitive failure is ambiguous.
+  let init: any;
+  try {
+    init = await ttPost("/v2/post/publish/content/init/", token, {
+      post_info: {
+        title: firstLine, description: String(caption || "").slice(0, 4000),
+        privacy_level: privacy, disable_comment: false, auto_add_music: true,
+      },
+      source_info: { source: "PULL_FROM_URL", photo_cover_index: 0, photo_images: imageUrls },
+      post_mode: "DIRECT_POST",
+      media_type: "PHOTO",
+    });
+  } catch (e) {
+    if ((e as any)?.definitive) throw e; // TikTok explicitly rejected it
+    throw new AmbiguousPublishError(`TikTok photo outcome unknown: ${String((e as Error).message).slice(0, 200)}`);
+  }
   const publishId = String(init?.data?.publish_id || "");
-  if (!publishId) throw new Error("TikTok did not accept the photo post");
+  if (!publishId) throw new AmbiguousPublishError("TikTok accepted the request but returned no publish id");
   // Session exists — failures past this point are ambiguous.
   try {
     for (let i = 0; i < 18; i++) { // photos process faster than video; ~3 min
