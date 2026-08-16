@@ -122,7 +122,7 @@ const MEAL_COLOR: any = {
 }
 
 // ── FOOD LOG PANEL ────────────────────────────────────────────
-function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote, setCoachNote }: any) {
+function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote, setCoachNote, onSaveNote }: any) {
   const [showForm,   setShowForm]   = useState(false)
   const [meal,       setMeal]       = useState('Breakfast')
   const [desc,       setDesc]       = useState('')
@@ -136,7 +136,9 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
     setDesc(''); setCals(''); setShowForm(false)
   }
 
-  function saveNote() {
+  async function saveNote() {
+    const ok = onSaveNote ? await onSaveNote(coachNote.trim()) : false
+    if (!ok) { alert('Could not save the note — please try again.'); return }
     setNoteSaved(true)
     setTimeout(() => setNoteSaved(false), 2500)
   }
@@ -328,7 +330,7 @@ export default function Wearables({ currentUser }: any) {
   const [profileRow, setProfileRow] = useState<any>(null)
   useEffect(() => {
     if (!email) return
-    fetch(`${SB_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name`, { headers: SB_HEADERS })
+    fetch(`${SB_URL}/rest/v1/user_profiles?email=eq.${encodeURIComponent(email)}&select=id,name,company_id`, { headers: SB_HEADERS })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(rows => { if (Array.isArray(rows) && rows[0]) setProfileRow(rows[0]) })
       .catch(() => {})
@@ -341,6 +343,33 @@ export default function Wearables({ currentUser }: any) {
   const [coachNote,    setCoachNote]    = useState('')
   const [nutritionNote,setNutritionNote]= useState('')
   const [noteSaved,    setNoteSaved]    = useState(false)
+
+  // ── Coach notes persistence (admin_settings, org-scoped, per client) ──
+  const EDEN_CID = 'b0000000-0000-0000-0000-000000000001'
+  const noteCompanyId = profileRow?.company_id || EDEN_CID
+  useEffect(() => {
+    if (!clientUUID) return
+    let stale = false
+    const load = (key: string, set: (v: string) => void) =>
+      fetch(`${SB_URL}/rest/v1/admin_settings?company_id=eq.${noteCompanyId}&key=eq.${encodeURIComponent(key + ':' + clientUUID)}&select=value`, { headers: SB_HEADERS })
+        .then(r => r.ok ? r.json() : [])
+        .then((rows: any[]) => { if (!stale && rows?.[0]?.value) { try { set(JSON.parse(rows[0].value)?.text || '') } catch {} } })
+        .catch(() => {})
+    load('wearable_note', setCoachNote)
+    load('nutrition_note', setNutritionNote)
+    return () => { stale = true }
+  }, [clientUUID]) // eslint-disable-line
+
+  async function persistNote(key: string, text: string): Promise<boolean> {
+    if (!clientUUID) return false
+    const r = await fetch(`${SB_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+      method: 'POST',
+      headers: { ...SB_HEADERS, Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({ company_id: noteCompanyId, key: key + ':' + clientUUID,
+        value: JSON.stringify({ text }), updated_at: new Date().toISOString() }),
+    }).catch(() => null)
+    return !!r?.ok
+  }
 
   // ── Persistent food log ──────────────────────────────────────
   // Primary store: Supabase `food_log_entries` table (syncs across all devices —
@@ -448,8 +477,10 @@ export default function Wearables({ currentUser }: any) {
 
   const latest = oura.readings?.[0]
 
-  function saveNote() {
+  async function saveNote() {
     if (!coachNote.trim()) return
+    const ok = await persistNote('wearable_note', coachNote.trim())
+    if (!ok) { alert('Could not save the note — please try again.'); return }
     setNoteSaved(true)
     setTimeout(() => setNoteSaved(false), 2500)
   }
@@ -644,6 +675,7 @@ export default function Wearables({ currentUser }: any) {
             clientName={clientName}
             coachNote={nutritionNote}
             setCoachNote={setNutritionNote}
+            onSaveNote={(text: string) => persistNote('nutrition_note', text)}
           />
         )}
 

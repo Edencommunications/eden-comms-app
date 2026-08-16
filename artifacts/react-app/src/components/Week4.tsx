@@ -284,7 +284,10 @@ Training Principles:
   const [newCardioType,      setNewCardioType]      = useState('')
 
   // ── Calendar state ────────────────────────────────────────
-  const [calendarUrl, setCalendarUrl] = useState(DEFAULT_CALENDAR_URL)
+  // Read-only here: shows the per-coach booking link saved from the sidebar
+  // "My Calendar" / "1v1 Calendars" tabs (admin_settings booking_url:<coachId>),
+  // falling back to the org default, then the Eden default.
+  const [calendarUrl, setCalendarUrl] = useState('')
 
   // Which organization this user belongs to — scopes the cardio-type library per org
   const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
@@ -296,6 +299,27 @@ Training Principles:
       setMyCompanyId(rows?.[0]?.company_id || EDEN_ORG_ID)
     } catch { setMyCompanyId(EDEN_ORG_ID) }
   })() },[email])
+
+  // Load the per-coach booking link for the calendar tab
+  useEffect(()=>{ if (!myCompanyId || !dbProfile) return
+    let stale = false
+    ;(async()=>{
+      try {
+        // Client context → their coach's calendar; coach/staff context → their own
+        const target = dbProfile.coach_id || dbProfile.id
+        if (target) {
+          const rows = await dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('booking_url:'+target)}&select=value`)
+          if (stale) return
+          try { const u = JSON.parse(rows?.[0]?.value||'{}')?.url; if (u) { setCalendarUrl(u); return } } catch {}
+        }
+        if (myCompanyId !== EDEN_ORG_ID) {
+          const org = await dbGet('organizations',`id=eq.${myCompanyId}&select=calendar_url`)
+          if (!stale) setCalendarUrl(org?.[0]?.calendar_url || '')
+        } else if (!stale) setCalendarUrl(DEFAULT_CALENDAR_URL)
+      } catch { if (!stale && myCompanyId === EDEN_ORG_ID) setCalendarUrl(DEFAULT_CALENDAR_URL) }
+    })()
+    return ()=>{ stale = true }
+  },[myCompanyId, dbProfile?.id, dbProfile?.coach_id])
 
   // Per-org "Helpful Resources & Lab Links" (company_resource_links); Eden defaults until the org has its own rows
   const [resourceLinks, setResourceLinks] = useState<any>(null)
@@ -1468,14 +1492,9 @@ Training Principles:
               <div style={{fontSize:11,color:C.muted,marginTop:1}}>Schedule your next coaching session</div>
             </div>
             {isCoach&&(
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input value={calendarUrl} onChange={e=>setCalendarUrl(e.target.value)}
-                  placeholder="Paste GHL or Calendly URL…"
-                  style={{width:280,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',color:C.white,fontSize:11,outline:'none'}}/>
-                <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>
-                  {calendarUrl.includes('calendly')?'Calendly':'GHL'} detected
-                </span>
-              </div>
+              <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>
+                Set this in the sidebar → My Calendar / 1v1 Calendars
+              </span>
             )}
           </div>
 
