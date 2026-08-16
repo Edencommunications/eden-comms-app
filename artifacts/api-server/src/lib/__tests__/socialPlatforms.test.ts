@@ -28,17 +28,22 @@ test("small/medium TikTok videos upload as a single chunk", () => {
 });
 
 test("big TikTok videos chunk correctly with the last chunk absorbing the remainder", () => {
-  const CHUNK = 50 * 1024 * 1024;
-  const size = 3 * CHUNK + 7 * 1024 * 1024; // 157 MB
-  const p = planTtChunks(size);
-  assert.equal(p.count, 3, "count = floor(size / chunk)");
-  assert.equal(p.ranges[0].start, 0);
-  assert.equal(p.ranges[0].end, CHUNK - 1);
-  assert.equal(p.ranges[2].end, size - 1, "last chunk reaches the final byte");
-  // Ranges are contiguous with no gaps or overlaps.
-  for (let i = 1; i < p.ranges.length; i++) assert.equal(p.ranges[i].start, p.ranges[i - 1].end + 1);
-  // Every chunk except the last is exactly CHUNK; last is >= CHUNK (absorbs remainder).
-  assert.ok(p.ranges[2].end - p.ranges[2].start + 1 >= CHUNK);
+  const CHUNK = 32 * 1024 * 1024;
+  const MAX_CHUNK = 64 * 1024 * 1024;
+  for (const size of [65 * 1024 * 1024, 149 * 1024 * 1024, 3 * CHUNK + 7 * 1024 * 1024, 512 * 1024 * 1024]) {
+    const p = planTtChunks(size);
+    assert.equal(p.count, Math.floor(size / CHUNK), "count = floor(size / chunk) per TikTok's rule");
+    assert.equal(p.ranges[0].start, 0);
+    assert.equal(p.ranges[p.ranges.length - 1].end, size - 1, "last chunk reaches the final byte");
+    // Ranges are contiguous with no gaps or overlaps.
+    for (let i = 1; i < p.ranges.length; i++) assert.equal(p.ranges[i].start, p.ranges[i - 1].end + 1);
+    // EVERY chunk (final one included) stays within TikTok's 64 MB ceiling.
+    for (const rg of p.ranges) {
+      const len = rg.end - rg.start + 1;
+      assert.ok(len <= MAX_CHUNK, `chunk of ${len} bytes exceeds 64 MB for size ${size}`);
+      assert.ok(len >= 5 * 1024 * 1024, "every chunk is at least 5 MB");
+    }
+  }
 });
 
 test("tt privacy picks the most public level available", () => {

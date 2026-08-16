@@ -20,6 +20,18 @@ import { logger } from "./logger";
 const TT_API = "https://open.tiktokapis.com";
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
+// Thrown when a publish MAY have landed remotely (session created / bytes
+// sent) but we lost track of the outcome. Callers must NEVER auto-retry
+// these — that's how double-posts happen.
+export class AmbiguousPublishError extends Error {
+  publishId?: string;
+  constructor(message: string, publishId?: string) {
+    super(message);
+    this.name = "AmbiguousPublishError";
+    this.publishId = publishId;
+  }
+}
+
 // ── OAuth state (HMAC-signed, 10-minute expiry) ─────────────────
 const STATE_KEY = crypto.createHash("sha256").update(`content-sched-oauth:${process.env.SESSION_SECRET || ""}`).digest();
 export function signState(platform: string, now = Date.now()): string {
@@ -114,10 +126,12 @@ export async function ttCreatorInfo(token: string): Promise<{ username: string; 
   };
 }
 
-// TikTok chunk rules: each chunk 5–64 MB except the final one, which absorbs
-// the remainder. total_chunk_count = floor(size / chunk_size), min 1.
+// TikTok chunk rules: total_chunk_count = floor(size / chunk_size), with the
+// final chunk absorbing the remainder — AND every chunk must stay ≤64 MB.
+// A 32 MB chunk size satisfies both: the final chunk is at most
+// 32 MB + (remainder < 32 MB) < 64 MB.
 export function planTtChunks(size: number): { chunkSize: number; count: number; ranges: Array<{ start: number; end: number }> } {
-  const CHUNK = 50 * 1024 * 1024;
+  const CHUNK = 32 * 1024 * 1024;
   if (size <= 64 * 1024 * 1024) return { chunkSize: size, count: 1, ranges: [{ start: 0, end: size - 1 }] };
   const count = Math.floor(size / CHUNK);
   const ranges: Array<{ start: number; end: number }> = [];
@@ -161,6 +175,9 @@ export async function ttPublishVideo(token: string, mediaUrl: string, caption: s
     const publishId = String(init?.data?.publish_id || "");
     const uploadUrl = String(init?.data?.upload_url || "");
     if (!publishId || !uploadUrl) throw new Error("TikTok did not return an upload URL");
+    // From here on a publish session exists on TikTok's side — any failure is
+    // ambiguous (the video may still go live) and must never be auto-retried.
+    try {
     const fd = fs.openSync(dl.filePath, "r");
     try {
       for (const rg of plan.ranges) {
@@ -195,6 +212,13 @@ export async function ttPublishVideo(token: string, mediaUrl: string, caption: s
     // Still processing after 5 min — treat as posted (TikTok has the video).
     logger.warn({ publishId }, "[ContentSched] TikTok still processing after 5 min — assuming success");
     return { publishId, videoId, privacy };
+    } catch (e) {
+      // A definitive FAILED status from TikTok is a real failure — safe to
+      // surface normally. Anything else (network blip mid-upload/polling)
+      // is ambiguous: the video may still publish.
+      if (String((e as Error).message).startsWith("TikTok rejected the video")) throw e;
+      throw new AmbiguousPublishError(`TikTok outcome unknown: ${String((e as Error).message).slice(0, 200)}`, publishId);
+    }
   } finally { dl.cleanup(); }
 }
 
@@ -282,15 +306,24 @@ export async function ytUploadVideo(token: string, mediaUrl: string, caption: st
     }
     const session = init.headers.get("location") || "";
     if (!session) throw new Error("YouTube did not return an upload session");
-    const up = await fetch(session, {
-      method: "PUT",
-      headers: { "Content-Type": "video/mp4", "Content-Length": String(dl.size) },
-      body: fs.createReadStream(dl.filePath) as any,
-      duplex: "half", // node fetch needs this for streamed bodies
-    } as any);
+    // Bytes are about to flow — from here a lost response means the upload
+    // may have completed on YouTube's side. Never auto-retry.
+    let up: globalThis.Response;
+    try {
+      up = await fetch(session, {
+        method: "PUT",
+        headers: { "Content-Type": "video/mp4", "Content-Length": String(dl.size) },
+        body: fs.createReadStream(dl.filePath) as any,
+        duplex: "half", // node fetch needs this for streamed bodies
+      } as any);
+    } catch (e) {
+      throw new AmbiguousPublishError(`YouTube outcome unknown: ${String((e as Error).message).slice(0, 200)}`);
+    }
     const j: any = await up.json().catch(() => ({}));
-    if (!up.ok || !j?.id) throw new Error(j?.error?.message || `YouTube upload failed (${up.status})`);
-    return String(j.id);
+    if (up.ok && j?.id) return String(j.id);
+    // 4xx = YouTube definitively rejected it; 5xx/parse trouble = ambiguous.
+    if (up.status >= 400 && up.status < 500) throw new Error(j?.error?.message || `YouTube rejected the upload (${up.status})`);
+    throw new AmbiguousPublishError(j?.error?.message || `YouTube outcome unknown (${up.status})`);
   } finally { dl.cleanup(); }
 }
 

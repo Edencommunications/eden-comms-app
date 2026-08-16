@@ -22,7 +22,7 @@ import { logger } from "../lib/logger";
 import { notifyCommunityMembers } from "./communityPost";
 import { requireStaff } from "./checkinForm";
 import {
-  signState, verifyState,
+  signState, verifyState, AmbiguousPublishError,
   ttAuthorizeUrl, ttExchangeCode, ttRefreshToken, ttCreatorInfo, ttPublishVideo, ttVideoStats,
   ytAuthorizeUrl, ytExchangeCode, ytRefreshToken, ytChannelInfo, ytUploadVideo, ytVideoStats,
 } from "../lib/socialPlatforms";
@@ -299,14 +299,21 @@ async function publishToFacebook(cfg: SchedCfg, post: PostRow): Promise<{ postId
 
 // ── TikTok / YouTube token upkeep ───────────────────────────────
 // Access tokens rotate (TikTok ~24h, Google ~1h). Refresh on demand and
-// persist the rotated tokens; a lost CAS just merges on a fresh read.
+// persist the rotated tokens with a bounded CAS-retry merge — never a blind
+// upsert, which could resurrect credentials a concurrent disconnect wiped.
 async function persistTokenFields(patch: Partial<SchedCfg>): Promise<void> {
-  const loaded = await loadCfgRaw();
-  if (!loaded) return;
-  if (!(await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg({ ...loaded.cfg, ...patch })))) {
-    const again = await loadCfgRaw();
-    if (again) await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg({ ...again.cfg, ...patch }));
+  for (let i = 0; i < 3; i++) {
+    const loaded = await loadCfgRaw();
+    if (!loaded) return; // config deleted (disconnected) — don't recreate it
+    const fresh: any = { ...loaded.cfg };
+    const p: any = { ...patch };
+    // If the platform was disconnected since we read our copy, drop its fields.
+    if (!fresh.tt_client_key) for (const k of Object.keys(p)) if (k.startsWith("tt_")) delete p[k];
+    if (!fresh.yt_client_id) for (const k of Object.keys(p)) if (k.startsWith("yt_")) delete p[k];
+    if (!Object.keys(p).length) return;
+    if (await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg({ ...fresh, ...p }))) return;
   }
+  logger.warn("[ContentSched] token persist lost 3 CAS rounds — will refresh again next pass");
 }
 async function ensureTtToken(cfg: SchedCfg): Promise<string> {
   if (!cfg.tt_refresh || !cfg.tt_client_key || !cfg.tt_client_secret) throw new Error("TikTok not connected");
@@ -539,10 +546,17 @@ export async function processDue(now = new Date()): Promise<void> {
         health.published++;
       } catch (e) {
         claimed.error = String((e as Error).message).slice(0, 300);
+        const ambiguous = e instanceof AmbiguousPublishError;
+        if (ambiguous && (e as AmbiguousPublishError).publishId) claimed.tt_publish_id = (e as AmbiguousPublishError).publishId;
         // Partial success (IG went out, FB failed) still counts as published —
-        // retrying would double-post the side that succeeded.
-        claimed.status = claimed.ig_media_id || claimed.fb_post_id || claimed.fb_video_id || claimed.tt_publish_id || claimed.yt_video_id
-          ? "published" : (claimed.attempts! >= 3 ? "failed" : "scheduled");
+        // retrying would double-post the side that succeeded. An AMBIGUOUS
+        // outcome (upload may have landed on TikTok/YouTube) is terminal
+        // failed and never auto-retried, for the same reason.
+        claimed.status = claimed.ig_media_id || claimed.fb_post_id || claimed.fb_video_id || claimed.yt_video_id
+          ? "published"
+          : ambiguous ? "failed"
+          : (claimed.attempts! >= 3 ? "failed" : "scheduled");
+        if (ambiguous) claimed.error = `${claimed.error} — it MAY have posted; check the platform before rescheduling.`.slice(0, 300);
         if (claimed.status === "published") claimed.published_at = new Date().toISOString();
         if (claimed.status === "failed" || claimed.status === "published") await notifyAdminsOfFailure(claimed);
         logger.warn({ err: claimed.error, id: claimed.id }, "[ContentSched] publish attempt failed");
@@ -918,7 +932,13 @@ router.get("/content-sched/oauth/:platform/callback", async (req: Request, res: 
     const ok = loaded
       ? await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg(cfg))
       : await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg(cfg));
-    if (!ok) await persistTokenFields(cfg);
+    if (!ok) {
+      // Lost the CAS — merge ONLY this platform's fresh token fields.
+      const patch: Partial<SchedCfg> = platform === "tiktok"
+        ? { tt_access: cfg.tt_access, tt_refresh: cfg.tt_refresh, tt_expires_at: cfg.tt_expires_at, tt_open_id: cfg.tt_open_id, tt_username: cfg.tt_username }
+        : { yt_access: cfg.yt_access, yt_refresh: cfg.yt_refresh, yt_expires_at: cfg.yt_expires_at, yt_channel_id: cfg.yt_channel_id, yt_channel_title: cfg.yt_channel_title };
+      await persistTokenFields(patch);
+    }
     const who = platform === "tiktok" ? (cfg.tt_username || "your TikTok account") : (cfg.yt_channel_title || "your YouTube channel");
     res.send(page("✅ Connected!", `${platform === "tiktok" ? "TikTok" : "YouTube"} is now linked to ${who}.`));
   } catch (e) {
