@@ -140,8 +140,10 @@ type PostRow = {
   fb_post_id?: string;
   fb_video_id?: string;
   published_at?: string;
+  claimed_at?: string;         // when a scheduler instance claimed the publish
   error?: string;
   stats?: any;
+  stats_claimed_at?: string;   // stats-pull lease (retry after 30 min if no stats_at)
   stats_at?: string;
   reported_week?: string;      // set once included in a weekly recap
 };
@@ -377,13 +379,28 @@ export async function processDue(now = new Date()): Promise<void> {
     const { cfg } = loaded;
     const posts = await loadPosts();
 
+    // 0) Recover posts stuck in "publishing" (crash/redeploy mid-publish).
+    //    We can't know whether the Graph call landed, so NEVER auto-retry —
+    //    mark failed and tell the admins to check IG/FB before rescheduling.
+    for (const { raw, post } of posts) {
+      if (post.status !== "publishing") continue;
+      const age = now.getTime() - new Date(post.claimed_at || post.scheduled_at).getTime();
+      if (age < 30 * 60 * 1000) continue; // still plausibly in-flight
+      const recovered: PostRow = {
+        ...post, status: "failed",
+        error: "Publishing was interrupted (server restart). It MAY have partially posted — check IG/FB before rescheduling.",
+      };
+      if (await casPost(raw, recovered)) await notifyAdminsOfFailure(recovered);
+    }
+
     // 1) Publish due posts (CAS-claimed so only one instance wins).
     for (const { raw, post } of posts) {
       if (post.status !== "scheduled") continue;
       if (new Date(post.scheduled_at).getTime() > now.getTime()) continue;
       if ((post.attempts || 0) >= 3) continue;
-      const claimed: PostRow = { ...post, status: "publishing", attempts: (post.attempts || 0) + 1 };
+      const claimed: PostRow = { ...post, status: "publishing", attempts: (post.attempts || 0) + 1, claimed_at: new Date().toISOString() };
       if (!(await casPost(raw, claimed))) continue; // another instance took it
+      const claimedRaw = JSON.stringify(claimed);
       try {
         if (claimed.platforms.includes("ig")) claimed.ig_media_id = await publishToInstagram(cfg, claimed);
         if (claimed.platforms.includes("fb")) {
@@ -402,20 +419,27 @@ export async function processDue(now = new Date()): Promise<void> {
         if (claimed.status === "failed" || claimed.status === "published") await notifyAdminsOfFailure(claimed);
         logger.warn({ err: claimed.error, id: claimed.id }, "[ContentSched] publish attempt failed");
       }
-      await savePost(claimed);
+      // Terminal write is CAS from the claimed value; if it loses (someone
+      // edited the row mid-publish), fall back to a plain save so the real
+      // outcome (published + platform ids) is never lost.
+      if (!(await casPost(claimedRaw, claimed))) await savePost(claimed);
     }
 
     // 2) Pull stats for posts published ≥24h ago that don't have them yet.
+    //    Claim with stats_claimed_at (lease), write stats_at only AFTER a
+    //    successful pull — a crash mid-pull just means a retry in 30 min.
     const fresh = await loadPosts();
     for (const { raw, post } of fresh) {
       if (post.status !== "published" || post.stats_at || !post.published_at) continue;
       if (now.getTime() - new Date(post.published_at).getTime() < 24 * 60 * 60 * 1000) continue;
-      const claimed: PostRow = { ...post, stats_at: new Date().toISOString() };
+      if (post.stats_claimed_at && now.getTime() - new Date(post.stats_claimed_at).getTime() < 30 * 60 * 1000) continue;
+      const claimed: PostRow = { ...post, stats_claimed_at: new Date().toISOString() };
       if (!(await casPost(raw, claimed))) continue;
       const stats: any = {};
       if (post.ig_media_id) stats.ig = await pullIgStats(cfg, post);
       if (post.fb_post_id || post.fb_video_id) stats.fb = await pullFbStats(cfg, post);
       claimed.stats = stats;
+      claimed.stats_at = new Date().toISOString();
       await savePost(claimed);
       health.statsPulled++;
     }
@@ -431,15 +455,27 @@ export async function processDue(now = new Date()): Promise<void> {
         const reread = await loadCfgRaw();
         if (reread && reread.cfg.last_weekly !== lp.ymd) {
           const claimedCfg = { ...reread.cfg, last_weekly: lp.ymd };
-          if (await casSetting(EDEN_ORG_ID, CFG_KEY, reread.raw, serializeCfg(claimedCfg))) {
+          const claimedRaw = serializeCfg(claimedCfg);
+          if (await casSetting(EDEN_ORG_ID, CFG_KEY, reread.raw, claimedRaw)) {
+            // Previous 7 FULL local days: local date in [today-7d .. yesterday].
+            const startYmd = localParts(tz, new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).ymd;
             const weekPosts = (await loadPosts())
               .map((p) => p.post)
-              .filter((p) => (p.status === "published" || p.status === "failed") && p.published_at
-                && now.getTime() - new Date(p.published_at).getTime() < 7 * 24 * 60 * 60 * 1000)
+              .filter((p) => {
+                if (!((p.status === "published" || p.status === "failed") && p.published_at)) return false;
+                const pYmd = localParts(tz, new Date(p.published_at)).ymd;
+                return pYmd >= startYmd && pYmd < lp.ymd;
+              })
               .sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)));
-            const ok = await postWeeklyRecap(claimedCfg, weekPosts, lp.ymd);
+            const endYmd = localParts(tz, new Date(now.getTime() - 24 * 60 * 60 * 1000)).ymd;
+            const ok = await postWeeklyRecap(claimedCfg, weekPosts, `${startYmd} – ${endYmd}`);
             if (ok) health.weeklySent++;
-            else logger.warn("[ContentSched] weekly recap post failed");
+            else {
+              // Roll the marker back (best effort) so the recap retries next
+              // pass instead of silently skipping the whole week.
+              await casSetting(EDEN_ORG_ID, CFG_KEY, claimedRaw, serializeCfg({ ...claimedCfg, last_weekly: reread.cfg.last_weekly }));
+              logger.warn("[ContentSched] weekly recap post failed — marker rolled back");
+            }
           }
         }
       }
@@ -561,6 +597,9 @@ router.post("/content-sched/upload", async (req: Request, res: Response) => {
   const staff = await requireEdenAdmin(req, res); if (!staff) return;
   const { filename, contentType, dataBase64 } = req.body || {};
   if (!filename || !dataBase64) { res.status(400).json({ error: "filename and dataBase64 required" }); return; }
+  const ALLOWED = ["image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"];
+  if (!ALLOWED.includes(String(contentType || ""))) { res.status(400).json({ error: "Only JPG/PNG/WebP photos and MP4/MOV videos are supported" }); return; }
+  if (!/^[A-Za-z0-9+/=\s]+$/.test(String(dataBase64))) { res.status(400).json({ error: "Bad file data" }); return; }
   let buf: Buffer;
   try { buf = Buffer.from(String(dataBase64), "base64"); } catch { res.status(400).json({ error: "Bad file data" }); return; }
   if (!buf.length) { res.status(400).json({ error: "Empty file" }); return; }
@@ -584,7 +623,7 @@ router.post("/content-sched/posts", async (req: Request, res: Response) => {
   const mediaType = b.media_type === "video" ? "video" : "image";
   const platforms = Array.isArray(b.platforms) ? b.platforms.filter((p: any) => p === "ig" || p === "fb") : [];
   const scheduledAt = new Date(String(b.scheduled_at || ""));
-  if (!mediaUrl.startsWith(`${SUPABASE_URL}/storage/v1/object/public/`)) { res.status(400).json({ error: "Upload the media first" }); return; }
+  if (!mediaUrl.startsWith(`${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`)) { res.status(400).json({ error: "Upload the media first" }); return; }
   if (!platforms.length) { res.status(400).json({ error: "Pick at least one platform" }); return; }
   if (isNaN(scheduledAt.getTime())) { res.status(400).json({ error: "Bad scheduled time" }); return; }
   const post: PostRow = {
