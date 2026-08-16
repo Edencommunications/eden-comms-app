@@ -11,7 +11,7 @@ const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Satur
 const MAX_MB = 18
 
 type Draft = {
-  key: string
+  key: string            // stable — doubles as the server idempotency key
   type: 'image' | 'video' | 'carousel'
   files: File[]          // 1 photo, 1 video, or 2-10 carousel photos
   cover: File | null     // optional reel cover photo
@@ -19,6 +19,8 @@ type Draft = {
   platIG: boolean
   platFB: boolean
   when: string           // datetime-local
+  uploaded?: string[]    // cached upload URLs so a retry doesn't re-upload
+  uploadedCover?: string
 }
 
 const readB64 = (f: File): Promise<string> => new Promise((res, rej) => {
@@ -94,6 +96,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
 
   // ── Batch builder ────────────────────────────────────────────
   const addFiles = (list: FileList | null) => {
+    if (busy) return
     const files = Array.from(list || [])
     if (!files.length) return
     const videos = files.filter(f => /^video\//.test(f.type))
@@ -103,8 +106,8 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
     if (tooBig) return flash(`⚠️ ${tooBig.name} is over ${MAX_MB} MB — too big for now`)
 
     const mk = (type: Draft['type'], fs: File[]): Draft => ({
-      key: Math.random().toString(36).slice(2), type, files: fs, cover: null,
-      caption: '', platIG: true, platFB: true, when: '',
+      key: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+      type, files: fs, cover: null, caption: '', platIG: true, platFB: true, when: '',
     })
     const next: Draft[] = []
     if (videos.length && images.length) {
@@ -123,9 +126,13 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  const patchDraft = (key: string, patch: Partial<Draft>) =>
-    setDrafts(ds => ds.map(d => d.key === key ? { ...d, ...patch } : d))
-  const removeDraft = (key: string) => setDrafts(ds => ds.filter(d => d.key !== key))
+  // Queue is frozen while a batch is running — edits mid-run would be lost
+  // or could schedule something the user just removed.
+  const patchDraft = (key: string, patch: Partial<Draft>) => {
+    if (busy) return
+    setDrafts(ds => ds.map(d => d.key === key ? { ...d, ...patch, uploaded: undefined, uploadedCover: undefined } : d))
+  }
+  const removeDraft = (key: string) => { if (!busy) setDrafts(ds => ds.filter(d => d.key !== key)) }
 
   const upload = async (f: File): Promise<string> => {
     const r = await fetch('/api/content-sched/upload', {
@@ -146,13 +153,15 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
     let done = 0
     const failed: Draft[] = []
     for (const d of drafts) {
-      setProgress(`Scheduling ${done + 1} of ${drafts.length}…`)
+      setProgress(`Scheduling ${done + failed.length + 1} of ${drafts.length}…`)
       try {
-        const urls: string[] = []
-        for (const f of d.files) urls.push(await upload(f))
-        const coverUrl = d.cover ? await upload(d.cover) : ''
+        // Reuse cached upload URLs on retry so a failed batch doesn't re-upload.
+        const urls: string[] = d.uploaded && d.uploaded.length === d.files.length ? [...d.uploaded] : []
+        if (!urls.length) for (const f of d.files) urls.push(await upload(f))
+        const coverUrl = d.cover ? (d.uploadedCover || await upload(d.cover)) : ''
+        d.uploaded = urls; d.uploadedCover = coverUrl || undefined
         const body: any = {
-          media_type: d.type, caption: d.caption,
+          media_type: d.type, caption: d.caption, client_key: d.key,
           platforms: [...(d.platIG ? ['ig'] : []), ...(d.platFB ? ['fb'] : [])],
           scheduled_at: new Date(d.when).toISOString(),
         }
@@ -169,7 +178,8 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
       }
     }
     setProgress('')
-    setDrafts(failed)
+    // Keep only drafts that failed AND weren't removed/changed elsewhere.
+    setDrafts(ds => ds.filter(d => failed.some(f => f.key === d.key)))
     if (done) flash(failed.length ? `✅ Scheduled ${done} — ${failed.length} failed (still in the batch below)` : `✅ All ${done} post${done === 1 ? '' : 's'} scheduled!`)
     setBusy(false)
     load()

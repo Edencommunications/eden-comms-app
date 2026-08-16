@@ -129,6 +129,7 @@ async function loadCfgRaw(): Promise<{ raw: string; cfg: SchedCfg } | null> {
 type PostRow = {
   id: string;
   created_at: string;
+  client_key?: string;         // frontend idempotency key (dedupes batch retries)
   media_url: string;           // single photo/video URL (first item for carousels)
   media_urls?: string[];       // carousel: 2-10 image URLs in order
   cover_url?: string;          // reel cover photo (IG only; FB auto-generates)
@@ -448,10 +449,14 @@ export async function processDue(now = new Date()): Promise<void> {
         if (claimed.status === "failed" || claimed.status === "published") await notifyAdminsOfFailure(claimed);
         logger.warn({ err: claimed.error, id: claimed.id }, "[ContentSched] publish attempt failed");
       }
-      // Terminal write is CAS from the claimed value; if it loses (someone
-      // edited the row mid-publish), fall back to a plain save so the real
-      // outcome (published + platform ids) is never lost.
-      if (!(await casPost(claimedRaw, claimed))) await savePost(claimed);
+      // Terminal write is CAS from the claimed value. If it loses, only
+      // overwrite when the row still exists (e.g. stale-claim recovery marked
+      // it failed — our real outcome wins); never recreate a deleted post.
+      if (!(await casPost(claimedRaw, claimed))) {
+        const still = await dbGet<any>(`admin_settings?company_id=eq.${EDEN_ORG_ID}&key=eq.${postKey(claimed.id)}&select=key&limit=1`);
+        if (still[0]) await savePost(claimed);
+        else logger.warn({ id: claimed.id }, "[ContentSched] post row deleted mid-publish — result dropped");
+      }
     }
 
     // 2) Pull stats for posts published ≥24h ago that don't have them yet.
@@ -635,7 +640,10 @@ router.post("/content-sched/upload", async (req: Request, res: Response) => {
   if (buf.length > MAX_BYTES) { res.status(413).json({ error: "File too large (18 MB max for now)" }); return; }
   try { await ensureBucket(); } catch { res.status(502).json({ error: "Storage unavailable" }); return; }
   const safe = String(filename).slice(-120).replace(/[^A-Za-z0-9._-]+/g, "_") || "file";
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+  // Kind prefix ('i-'/'v-') bakes the verified content type into the URL so
+  // the create-post route can enforce photo-vs-video without extra state.
+  const kind = String(contentType).startsWith("video/") ? "v" : "i";
+  const path = `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
   const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
     method: "POST",
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": String(contentType || "application/octet-stream") },
@@ -650,6 +658,10 @@ router.post("/content-sched/posts", async (req: Request, res: Response) => {
   const b = req.body || {};
   const OUR_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
   const isOurs = (u: string) => u.startsWith(OUR_PREFIX);
+  // Uploads are prefixed i-/v- by verified content type; legacy files have no
+  // prefix and are treated as matching (they predate carousels/covers anyway).
+  const isImage = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("v-");
+  const isVideo = (u: string) => isOurs(u) && !u.slice(OUR_PREFIX.length).startsWith("i-");
   const mediaType = b.media_type === "video" ? "video" : b.media_type === "carousel" ? "carousel" : "image";
   const mediaUrls: string[] = Array.isArray(b.media_urls) ? b.media_urls.map((u: any) => String(u).trim()).filter(Boolean) : [];
   const mediaUrl = String(b.media_url || mediaUrls[0] || "").trim();
@@ -658,13 +670,24 @@ router.post("/content-sched/posts", async (req: Request, res: Response) => {
   const scheduledAt = new Date(String(b.scheduled_at || ""));
   if (mediaType === "carousel") {
     if (mediaUrls.length < 2 || mediaUrls.length > 10) { res.status(400).json({ error: "A carousel needs 2-10 photos" }); return; }
-    if (!mediaUrls.every(isOurs)) { res.status(400).json({ error: "Upload all photos first" }); return; }
-  } else if (!isOurs(mediaUrl)) { res.status(400).json({ error: "Upload the media first" }); return; }
-  if (coverUrl && !isOurs(coverUrl)) { res.status(400).json({ error: "Upload the cover photo first" }); return; }
+    if (!mediaUrls.every(isImage)) { res.status(400).json({ error: "Carousels can only contain uploaded photos" }); return; }
+  } else if (mediaType === "video") {
+    if (!isVideo(mediaUrl)) { res.status(400).json({ error: "Upload the video first" }); return; }
+  } else if (!isImage(mediaUrl)) { res.status(400).json({ error: "Upload the photo first" }); return; }
+  if (coverUrl && !isImage(coverUrl)) { res.status(400).json({ error: "The cover must be an uploaded photo" }); return; }
   if (!platforms.length) { res.status(400).json({ error: "Pick at least one platform" }); return; }
   if (isNaN(scheduledAt.getTime())) { res.status(400).json({ error: "Bad scheduled time" }); return; }
+  // Idempotency: the frontend sends a stable per-draft client_key. If a post
+  // with that key already exists (response was lost, user hit retry), return
+  // it instead of creating a duplicate.
+  const clientKey = String(b.client_key || "").slice(0, 64);
+  if (clientKey) {
+    const existing = (await loadPosts()).find((p) => p.post.client_key === clientKey);
+    if (existing) { res.json({ ok: true, post: existing.post, deduped: true }); return; }
+  }
   const post: PostRow = {
     id: crypto.randomUUID(), created_at: new Date().toISOString(),
+    ...(clientKey ? { client_key: clientKey } : {}),
     media_url: mediaUrl, media_type: mediaType, caption: String(b.caption || "").slice(0, 2200),
     ...(mediaType === "carousel" ? { media_urls: mediaUrls } : {}),
     ...(mediaType === "video" && coverUrl ? { cover_url: coverUrl } : {}),
