@@ -2264,7 +2264,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     (()=>{
                       const ps = parseServing(item.food.serving)
                       const actualAmt = Math.round(item.servings * ps.amount * 10) / 10
-                      const step = ps.unit==='g'||ps.unit==='ml'?5:ps.unit==='oz'?0.5:0.25
+                      const step = ps.unit==='g'||ps.unit==='ml'?(item.food.cat==='Fats'?1:5):ps.unit==='oz'?0.5:0.25
                       return (
                         <div key={fi} style={{padding:'7px 0',borderTop:`1px solid ${C.border}`}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -2288,7 +2288,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                           {(item.alts||[]).map((alt: any,ai: any)=>{
                             const aps = parseServing(alt.food.serving)
                             const aAmt = Math.round(alt.servings * aps.amount * 10) / 10
-                            const aStep = aps.unit==='g'||aps.unit==='ml'?5:aps.unit==='oz'?0.5:0.25
+                            const aStep = aps.unit==='g'||aps.unit==='ml'?(alt.food.cat==='Fats'?1:5):aps.unit==='oz'?0.5:0.25
                             return (
                               <div key={ai} style={{display:'flex',alignItems:'center',gap:8,marginTop:5,marginLeft:10,paddingLeft:8,borderLeft:`2px solid ${C.gold}44`}}>
                                 <span style={{fontSize:8,fontWeight:800,color:C.gold,background:`${C.gold}18`,padding:'2px 6px',borderRadius:8,letterSpacing:.5,flexShrink:0}}>OR</span>
