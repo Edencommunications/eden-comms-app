@@ -4191,6 +4191,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 Save Rx Protocol
               </button>
 
+              {/* Client's own prescription notes — read-only for the coach */}
+              {clientRxNotes&&(
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="Client's Prescription Notes"/>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Written by the client in their Supps tab.</div>
+                  <div style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{clientRxNotes}</div>
+                </Card>
+              )}
+
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Coach Notes to Client"/>
                 <textarea value={coachNotes} onChange={e=>setCoachNotes(e.target.value)}
