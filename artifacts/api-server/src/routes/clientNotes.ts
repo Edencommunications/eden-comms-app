@@ -244,7 +244,7 @@ async function notifyOtherParty(
         type: "supp_update",
         body: `💬 ${authorName || "Someone"} added a ${what} note`,
         is_read: false,
-        link_to: "diet",
+        link_to: "supplements",
       }),
     });
   } catch (err) {
