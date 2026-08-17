@@ -344,6 +344,9 @@ export default function Notifications({ currentUser, onNavigate }: any) {
       start_reminder_7: 'home', start_reminder_1: 'home', start_reminder_0: 'home',
     }
     let dest = notif.link_to || FALLBACK_GOTO[notif.type]
+    // Older supp/Rx note rows were saved with link_to 'diet' before the fix —
+    // supp notifications always belong on the Supplements tab.
+    if (notif.type === 'supp_update' && dest === 'diet') dest = 'supplements'
     // Community deep-link: "<tab>?comm=<communityId>" — stash the community id
     // so the Communities pane auto-opens that exact conversation after the
     // tab switch (Week7 / CommunityScreen pick it up on mount).
