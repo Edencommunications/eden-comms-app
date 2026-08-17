@@ -1346,20 +1346,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       }).catch(()=>{})
     return ()=>{stale=true}
   },[myUUID,myCompanyId])
-  // Client's own supplement notes — separate key from coach plan to avoid any overwrites
-  useEffect(()=>{
-    if (!myUUID || !myCompanyId) return
-    let stale=false
-    dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('supp_client_notes:'+myUUID)}&select=value`)
-      .then(rows=>{
-        if (stale) return
-        try {
-          const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
-          if (typeof v?.notes==='string') setClientSuppNotes(v.notes)
-        } catch(e){}
-      }).catch(()=>{})
-    return ()=>{stale=true}
-  },[myUUID,myCompanyId])
+  // (Client supp/rx notes now load as dated threads via /api/notes-thread — see below.)
   // Rx/prescription protocol persists per client in admin_settings 'rx_plan:<uuid>'.
   // Also reads rxNotes as a legacy fallback — existing clients who saved notes before
   // the separate-key migration still see them here until they next save via the API.
@@ -1377,21 +1364,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             // introduced; rx_client_notes load below overrides this when present.
             if (typeof v.rxNotes==='string')   setClientRxNotes(v.rxNotes)
           }
-        } catch(e){}
-      }).catch(()=>{})
-    return ()=>{stale=true}
-  },[myUUID,myCompanyId])
-  // Client's own Rx notes — separate key so coach saves never overwrite them.
-  // Takes precedence over any legacy rxNotes found in rx_plan above.
-  useEffect(()=>{
-    if (!myUUID || !myCompanyId) return
-    let stale=false
-    dbGet('admin_settings',`company_id=eq.${myCompanyId}&key=eq.${encodeURIComponent('rx_client_notes:'+myUUID)}&select=value`)
-      .then(rows=>{
-        if (stale) return
-        try {
-          const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
-          if (typeof v?.notes==='string') setClientRxNotes(v.notes)
         } catch(e){}
       }).catch(()=>{})
     return ()=>{stale=true}
@@ -1485,33 +1457,68 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
     await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your prescriptions — check your Supplements tab', 'supplements')
     alert('Prescription protocol saved!')
   }
-  async function saveClientRxNotes() {
-    if (!myUUID || !myCompanyId) { alert('Still loading — try again in a second.'); return }
-    // Goes through the API server: RLS blocks direct client writes to admin_settings.
-    // Server does a read-modify-write preserving coach-owned rxList.
-    const r = await fetch('/api/rx/client-notes', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
-      body: JSON.stringify({ clientNotes: clientRxNotes }),
+  // ── Supp/Rx note threads — dated entries from client + coach replies.
+  // Stored server-side (admin_settings supp_client_notes:/rx_client_notes:)
+  // as {entries:[...]}; legacy single-notepad values are auto-migrated.
+  const [suppThread,    setSuppThread]    = useState<any>([])
+  const [rxThread,      setRxThread]      = useState<any>([])
+  const [suppNoteInput, setSuppNoteInput] = useState<any>('')
+  const [rxNoteInput,   setRxNoteInput]   = useState<any>('')
+  const [notePosting,   setNotePosting]   = useState<any>(false)
+  useEffect(()=>{
+    if (!myUUID) return
+    let stale=false
+    ;(['supp','rx'] as const).forEach(kind=>{
+      fetch(`/api/notes-thread/${kind}?clientId=${myUUID}`, { headers: { Authorization: sbBearer() } })
+        .then(r=>r.ok?r.json():null)
+        .then(j=>{ if(!stale&&j&&Array.isArray(j.entries)) (kind==='supp'?setSuppThread:setRxThread)(j.entries) })
+        .catch(()=>{})
     })
-    if (!r.ok) { alert('Could not save your notes — please try again.'); return }
-    alert('Notes saved!')
+    return ()=>{stale=true}
+  },[myUUID])
+  async function postNote(kind: 'supp'|'rx') {
+    const text = (kind==='supp'?suppNoteInput:rxNoteInput).trim()
+    if (!text || !myUUID) return
+    setNotePosting(true)
+    try {
+      const r = await fetch(`/api/notes-thread/${kind}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ clientId: myUUID, text }),
+      })
+      if (!r.ok) { alert('Could not save your note — please try again.'); return }
+      const j = await r.json()
+      if (Array.isArray(j.entries)) (kind==='supp'?setSuppThread:setRxThread)(j.entries)
+      ;(kind==='supp'?setSuppNoteInput:setRxNoteInput)('')
+    } catch { alert('Could not save your note — please try again.') }
+    finally { setNotePosting(false) }
   }
-  // Client's own notes on their supplement experience
-  const [clientSuppNotes, setClientSuppNotes] = useState<any>('')
-  async function saveClientSuppNotes() {
-    if (!myUUID || !myCompanyId) { alert('Still loading — try again in a second.'); return }
-    // Goes through the API server: RLS blocks direct client writes to admin_settings.
-    // Server does a read-modify-write preserving coach-owned supps/custom/notes.
-    const r = await fetch('/api/supp/client-notes', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
-      body: JSON.stringify({ clientNotes: clientSuppNotes }),
-    })
-    if (!r.ok) { alert('Could not save your notes — please try again.'); return }
-    alert('Supplement notes saved!')
-  }
-  // Client's own prescription notes
+  // Shared thread renderer: dated entries + an add/reply box
+  const renderNoteThread = (kind: 'supp'|'rx', entries: any[], input: any, setInput: any, placeholder: string) => (
+    <>
+      {entries.length===0&&(
+        <div style={{fontSize:11,color:C.muted,fontStyle:'italic',padding:'4px 0 8px'}}>No notes yet.</div>
+      )}
+      {entries.map((e: any)=>(
+        <div key={e.id} style={{borderLeft:`2px solid ${e.role==='coach'?C.gold:'#6FB8E8'}`,paddingLeft:10,marginBottom:10}}>
+          <div style={{fontSize:10,color:e.role==='coach'?C.gold:'#6FB8E8',fontWeight:700,marginBottom:2}}>
+            {e.role==='coach'?`🧑‍🏫 ${e.author_name||'Coach'}`:`${e.author_name||'Client'}`}
+            <span style={{color:C.muted,fontWeight:400}}> · {e.at?new Date(e.at).toLocaleString([], {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):''}</span>
+          </div>
+          <div style={{fontSize:13,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{e.text}</div>
+        </div>
+      ))}
+      <textarea value={input} onChange={(ev: any)=>setInput(ev.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+      <button onClick={()=>postNote(kind)} disabled={notePosting||!input.trim()}
+        style={{marginTop:8,width:'100%',background:input.trim()?C.gold:`${C.gold}44`,border:'none',borderRadius:10,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:input.trim()?'pointer':'default'}}>
+        {notePosting?'Saving…':isCoach?'Reply to Client':'Add Note'}
+      </button>
+    </>
+  )
+  // Legacy prescription-notes fallback (old rx_plan.rxNotes field) — display only
   const [clientRxNotes, setClientRxNotes] = useState<any>('')
 
   // Recipes — coach assigns individual recipes; client sees preview + buy
@@ -3934,14 +3941,22 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </div>
               </Card>
 
-              {/* Client's own supplement notes — read-only for the coach */}
-              {clientSuppNotes&&(
-                <Card sx={{marginBottom:12}}>
-                  <Lbl t="Client's Supplement Notes"/>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Written by the client in their Supps tab.</div>
-                  <div style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{clientSuppNotes}</div>
-                </Card>
-              )}
+              {/* Client's supplement notes — dated thread with coach replies */}
+              <Card sx={{marginBottom:12}}>
+                <Lbl t="Client's Supplement Notes"/>
+                <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Notes the client writes in their Supps tab. Your replies show up for them with a notification.</div>
+                {renderNoteThread('supp', suppThread, suppNoteInput, setSuppNoteInput, 'Reply to this client about their supplements…')}
+              </Card>
+
+              {/* Client's prescription notes — dated thread with coach replies */}
+              <Card sx={{marginBottom:12}}>
+                <Lbl t="Client's Prescription Notes"/>
+                <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Notes the client writes about their prescriptions. Your replies show up for them with a notification.</div>
+                {clientRxNotes&&rxThread.length===0&&(
+                  <div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap',borderLeft:`2px solid #6FB8E8`,paddingLeft:10,marginBottom:10}}>{clientRxNotes}<div style={{fontSize:9,color:C.muted,marginTop:2}}>(older note, before dated entries)</div></div>
+                )}
+                {renderNoteThread('rx', rxThread, rxNoteInput, setRxNoteInput, 'Reply to this client about their prescriptions…')}
+              </Card>
 
               {/* ── Rx Tracker ── */}
               <Card sx={{marginBottom:12}}>
@@ -4240,17 +4255,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 )}
               </Card>
 
-              {/* Client's own supplement notes — editable */}
+              {/* Client's own supplement notes — dated thread, coach can reply */}
               <Card sx={{marginBottom:12}}>
                 <Lbl t="My Supplement Notes"/>
-                <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Add notes on how you are tolerating each supplement, timing questions, or anything for your coach.</div>
-                <textarea value={clientSuppNotes} onChange={e=>setClientSuppNotes(e.target.value)}
-                  placeholder="e.g. Bloat Eaze is working well. Magnesium making me drowsy earlier than expected…"
-                  rows={4}
-                  style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
-                <button onClick={saveClientSuppNotes} style={{marginTop:10,width:'100%',background:C.gold,border:'none',borderRadius:10,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
-                  Save My Notes
-                </button>
+                <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Add notes on how you are tolerating each supplement, timing questions, or anything for your coach. Each note is saved with its date, and your coach can reply here.</div>
+                {renderNoteThread('supp', suppThread, suppNoteInput, setSuppNoteInput, 'e.g. Bloat Eaze is working well. Magnesium making me drowsy earlier than expected…')}
               </Card>
 
               {/* Prescription section — read-only view of coach's Rx tracker */}
@@ -4287,10 +4296,10 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
                   <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
                     <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:5}}>My Prescription Notes</div>
-                    <textarea value={clientRxNotes} onChange={e=>setClientRxNotes(e.target.value)}
-                      placeholder="Add any questions or notes about your prescriptions for your coach…"
-                      rows={3}
-                      style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+                    {clientRxNotes&&rxThread.length===0&&(
+                      <div style={{fontSize:12,color:C.white,lineHeight:1.6,whiteSpace:'pre-wrap',borderLeft:`2px solid #6FB8E8`,paddingLeft:10,marginBottom:10}}>{clientRxNotes}<div style={{fontSize:9,color:C.muted,marginTop:2}}>(older note, before dated entries)</div></div>
+                    )}
+                    {renderNoteThread('rx', rxThread, rxNoteInput, setRxNoteInput, 'Add any questions or notes about your prescriptions for your coach…')}
                   </div>
                 </Card>
               )}
@@ -4306,11 +4315,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </Card>
               )}
 
-              {rxList.length>0&&(
-                <button onClick={saveClientRxNotes} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
-                  Save My Prescription Notes
-                </button>
-              )}
             </>
           )}
 

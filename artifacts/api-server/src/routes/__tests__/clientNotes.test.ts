@@ -213,7 +213,11 @@ test("authenticated client gets 200 and note is persisted", async () => {
   assert.equal(result.body.ok, true);
   const row = adminSettings.find(r => r.key === `supp_client_notes:${CLIENT_ID}`);
   assert.ok(row, "note row must be written");
-  assert.equal(JSON.parse(row!.value).notes, "feeling great");
+  // Legacy endpoint now appends a dated entry (thread format)
+  const entries = JSON.parse(row!.value).entries;
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].text, "feeling great");
+  assert.equal(entries[0].role, "client");
 });
 
 test("processSuppNotesSave returns 500 on DB failure", async () => {
@@ -240,7 +244,9 @@ test("processRxNotesSave persists to rx_client_notes key for authenticated clien
   assert.equal(result.status, 200);
   const row = adminSettings.find(r => r.key === `rx_client_notes:${CLIENT_ID}`);
   assert.ok(row, "rx note row must be written");
-  assert.equal(JSON.parse(row!.value).notes, "Metformin causing nausea");
+  const entries = JSON.parse(row!.value).entries;
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].text, "Metformin causing nausea");
 });
 
 // ── Legacy Rx migration regression ────────────────────────────
@@ -272,5 +278,5 @@ test("client rx_client_notes save never touches the legacy rx_plan row", async (
   // The new note is in the separate key
   const noteRow = adminSettings.find(r => r.key === `rx_client_notes:${CLIENT_ID}`);
   assert.ok(noteRow, "rx_client_notes row must exist");
-  assert.equal(JSON.parse(noteRow!.value).notes, "new note from client");
+  assert.equal(JSON.parse(noteRow!.value).entries[0].text, "new note from client");
 });
