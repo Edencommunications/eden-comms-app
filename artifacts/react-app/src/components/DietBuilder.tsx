@@ -1430,33 +1430,28 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       }).catch(()=>{})
     return ()=>{stale=true}
   },[myUUID])
-  async function saveSuppProtocol() {
+  // One save for the whole Supps screen: supplement protocol + coach notes + Rx tracker.
+  async function saveSuppAndRx() {
     if (!myUUID || !myCompanyId) { alert('Still loading this client\'s profile — try again in a second.'); return }
-    const ok = await dbUpsert('admin_settings',{
+    const now = new Date().toISOString()
+    const okSupp = await dbUpsert('admin_settings',{
       company_id: myCompanyId, key: 'supp_plan:'+myUUID,
       value: JSON.stringify({supps:clientSupps, custom:customSuppText, notes:coachNotes}),
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     },'company_id,key')
-    if (!ok) { alert('Could not save the supplement protocol — please try again.'); return }
-    auditPlanSave('supp_protocol_saved', myUUID, info?.name||currentUser?.name, role)
-    await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your supplement protocol — check your Supplements tab', 'supplements')
-    alert('Supplement protocol saved!')
-  }
-  async function saveRxProtocol() {
-    if (!myUUID || !myCompanyId) { alert('Still loading this client\'s profile — try again in a second.'); return }
-    // rx_plan stores coach-owned rxList plus rxNotes as a legacy migration field —
-    // clients who haven't yet saved via the API still have their notes here, and
-    // keeping this field prevents coach saves from erasing unmigrated notes.
-    const ok = await dbUpsert('admin_settings',{
+    // rx_plan keeps rxNotes as a legacy migration field — clients who haven't yet
+    // saved via the API still have their notes here; keeping it prevents erasure.
+    const okRx = await dbUpsert('admin_settings',{
       company_id: myCompanyId, key: 'rx_plan:'+myUUID,
       value: JSON.stringify({rxList, rxNotes: clientRxNotes}),
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     },'company_id,key')
-    if (!ok) { alert('Could not save the prescription protocol — please try again.'); return }
+    if (!okSupp || !okRx) { alert('Could not save — please try again.'); return }
     setRxSavedJson(JSON.stringify(rxList))
+    auditPlanSave('supp_protocol_saved', myUUID, info?.name||currentUser?.name, role)
     auditPlanSave('rx_protocol_saved', myUUID, info?.name||currentUser?.name, role)
-    await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your prescriptions — check your Supplements tab', 'supplements')
-    alert('Prescription protocol saved!')
+    await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your supplement & prescription plan — check your Supplements tab', 'supplements')
+    alert('Supplement & prescription plan saved!')
   }
   // ── Supp/Rx note threads — dated entries from client + coach replies.
   // Stored server-side (admin_settings supp_client_notes:/rx_client_notes:)
@@ -4189,17 +4184,6 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 ))}
               </Card>
 
-              {rxDirty&&(
-                <div style={{background:'#3a2b0a',border:`1px solid ${C.gold}`,borderRadius:8,padding:'8px 12px',fontSize:12,color:C.gold,fontWeight:700,marginBottom:8}}>
-                  ⚠️ Unsaved changes — tap "Save Rx Protocol" below or your edits will be lost.
-                </div>
-              )}
-              <button
-                onClick={saveRxProtocol}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
-                {rxDirty?'Save Rx Protocol ●':'Save Rx Protocol'}
-              </button>
-
               <Card sx={{marginBottom:12}}>
                 <Lbl t="Coach Notes to Client"/>
                 <textarea value={coachNotes} onChange={e=>setCoachNotes(e.target.value)}
@@ -4208,10 +4192,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
               </Card>
 
+              {rxDirty&&(
+                <div style={{background:'#3a2b0a',border:`1px solid ${C.gold}`,borderRadius:8,padding:'8px 12px',fontSize:12,color:C.gold,fontWeight:700,marginBottom:8}}>
+                  ⚠️ Unsaved prescription changes — tap Save below or your edits will be lost.
+                </div>
+              )}
               <button
-                onClick={saveSuppProtocol}
+                onClick={saveSuppAndRx}
                 style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
-                Save Protocol
+                {rxDirty?'Save Supps & Rx Plan ●':'Save Supps & Rx Plan'}
               </button>
             </>
           )}
