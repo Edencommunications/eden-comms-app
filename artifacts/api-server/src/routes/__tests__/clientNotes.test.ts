@@ -20,6 +20,10 @@ import {
   upsertNote,
   processSuppNotesSave,
   processRxNotesSave,
+  parseThread,
+  appendThreadEntry,
+  fetchLegacyRxEntry,
+  type NoteEntry,
   type Profile,
 } from "../clientNotes";
 
@@ -79,6 +83,17 @@ before(() => {
         if (i >= 0) adminSettings[i] = { ...adminSettings[i], ...body };
         else adminSettings.push(body);
         return json({}, 201);
+      }
+      if (method === "PATCH") {
+        const body = JSON.parse(String(init.body || "{}"));
+        const keyQP = q.get("key") || "";
+        const k = keyQP.startsWith("eq.") ? decodeURIComponent(keyQP.slice(3)) : "";
+        const updGuard = q.get("updated_at"); // eq.<ts> or is.null
+        const hits = adminSettings.filter((r: any) => r.key === k && (
+          !updGuard || (updGuard === "is.null" ? !r.updated_at : r.updated_at === decodeURIComponent(updGuard.slice(3)))
+        ));
+        hits.forEach((r: any) => Object.assign(r, body));
+        return json(hits, 200);
       }
       // GET — filter by key if provided
       const keyQ = q.get("key") || "";
@@ -247,6 +262,62 @@ test("processRxNotesSave persists to rx_client_notes key for authenticated clien
   const entries = JSON.parse(row!.value).entries;
   assert.equal(entries.length, 1);
   assert.equal(entries[0].text, "Metformin causing nausea");
+});
+
+// ── Note threads ──────────────────────────────────────────────
+
+const mkEntry = (over: Partial<NoteEntry> = {}): NoteEntry => ({
+  id: "e1", author_id: CLIENT_ID, author_name: "Cammy Client",
+  role: "client", text: "hello", at: "2026-08-17T12:00:00.000Z", ...over,
+});
+
+test("parseThread migrates legacy {notes} into one dated client entry", () => {
+  const entries = parseThread(JSON.stringify({ notes: "old notepad text" }), "2026-01-02T03:04:05Z");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].text, "old notepad text");
+  assert.equal(entries[0].role, "client");
+  assert.equal(entries[0].at, "2026-01-02T03:04:05Z");
+});
+
+test("parseThread reads the new {entries} format and drops blank entries", () => {
+  const entries = parseThread(JSON.stringify({ entries: [mkEntry(), mkEntry({ id: "e2", text: "  " })] }));
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].id, "e1");
+});
+
+test("appendThreadEntry keeps existing entries and appends the new one", async () => {
+  const key = buildSuppNoteKey(CLIENT_ID);
+  await appendThreadEntry(ORG, key, mkEntry());
+  const after = await appendThreadEntry(ORG, key, mkEntry({ id: "e2", role: "coach", author_id: COACH_ID, text: "coach reply" }));
+  assert.equal(after!.length, 2);
+  assert.equal(after![1].role, "coach");
+  const row = adminSettings.find(r => r.key === key);
+  assert.equal(JSON.parse(row!.value).entries.length, 2);
+});
+
+test("appendThreadEntry dedupes an identical resubmit by the same author", async () => {
+  const key = buildSuppNoteKey(CLIENT_ID);
+  await appendThreadEntry(ORG, key, mkEntry());
+  const after = await appendThreadEntry(ORG, key, mkEntry({ id: "e2" }));
+  assert.equal(after!.length, 1);
+});
+
+test("first append folds in the legacy rx_plan.rxNotes seed so it never disappears", async () => {
+  adminSettings.push({
+    company_id: ORG, key: `rx_plan:${CLIENT_ID}`,
+    value: JSON.stringify({ rxList: [], rxNotes: "old rx note" }),
+  } as any);
+  const legacy = await fetchLegacyRxEntry(ORG, CLIENT_ID);
+  assert.ok(legacy, "legacy entry must be found");
+  assert.equal(legacy!.text, "old rx note");
+  const key = buildRxNoteKey(CLIENT_ID);
+  const after = await appendThreadEntry(ORG, key, mkEntry({ id: "new1", text: "fresh note" }), [legacy!]);
+  assert.equal(after!.length, 2);
+  assert.equal(after![0].text, "old rx note");
+  assert.equal(after![1].text, "fresh note");
+  // Seed only applies to the FIRST entry — later appends don't duplicate it
+  const again = await appendThreadEntry(ORG, key, mkEntry({ id: "new2", text: "another" }), [legacy!]);
+  assert.equal(again!.filter(e => e.text === "old rx note").length, 1);
 });
 
 // ── Legacy Rx migration regression ────────────────────────────

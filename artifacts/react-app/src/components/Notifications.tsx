@@ -309,11 +309,12 @@ export default function Notifications({ currentUser, onNavigate }: any) {
   async function markRead(id: any) {
     setNotifs((prev: any) => prev.map((n: any) => n.id === id ? { ...n, is_read:true } : n))
     try {
-      await fetch('/api/notifs/read', {
+      const r = await fetch('/api/notifs/read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
         body: JSON.stringify({ id }),
       })
+      if (!r.ok) loadNotifs()
     } catch {}
   }
 

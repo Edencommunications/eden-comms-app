@@ -153,18 +153,47 @@ async function loadThread(companyId: string, key: string): Promise<ThreadRow> {
   return { entries: parseThread(rows[0].value, rows[0].updated_at), updatedAt: rows[0].updated_at || null, exists: true };
 }
 
+/**
+ * Very old Rx notes were embedded in the coach's rx_plan row as `rxNotes`.
+ * Surface that as a dated legacy entry so it never disappears once the
+ * thread gains new entries.
+ */
+export async function fetchLegacyRxEntry(companyId: string, clientId: string): Promise<NoteEntry | null> {
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/admin_settings?company_id=eq.${companyId}&key=eq.${encodeURIComponent("rx_plan:" + clientId)}&select=value,updated_at`,
+    { headers: SH },
+  );
+  const rows = r.ok ? ((await r.json().catch(() => [])) as any[]) : [];
+  if (!rows[0]) return null;
+  try {
+    const v = JSON.parse(rows[0].value);
+    if (typeof v?.rxNotes === "string" && v.rxNotes.trim()) {
+      return {
+        id: "legacy-rxplan", author_id: clientId, author_name: "",
+        role: "client", text: v.rxNotes.slice(0, 5000),
+        at: rows[0].updated_at || new Date().toISOString(),
+      };
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 /** Append one entry with a small CAS-retry loop (concurrent saves keep both). */
 export async function appendThreadEntry(
   companyId: string,
   key: string,
   entry: NoteEntry,
+  seed?: NoteEntry[],
 ): Promise<NoteEntry[] | null> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const cur = await loadThread(companyId, key);
     // Dedupe: same author resubmitting identical text (legacy UI double-save)
     const last = cur.entries[cur.entries.length - 1];
     if (last && last.author_id === entry.author_id && last.text === entry.text) return cur.entries;
-    const entries = [...cur.entries, entry].slice(-MAX_ENTRIES);
+    // First-ever entry: fold in any legacy seed (old rx_plan.rxNotes) so it's
+    // permanently part of the thread instead of vanishing behind new entries.
+    const base = cur.entries.length ? cur.entries : (seed || []);
+    const entries = [...base, entry].slice(-MAX_ENTRIES);
     const now = new Date().toISOString();
     const body = JSON.stringify({ value: JSON.stringify({ entries }), updated_at: now });
     if (cur.exists) {
@@ -293,6 +322,10 @@ router.patch("/supp/client-notes", async (req: Request, res: Response) => {
   try {
     const caller = await requireClient(req);
     const result = await processSuppNotesSave(caller, req.body?.clientNotes);
+    // Old cached UIs land here — still bell the coach like the thread endpoint does.
+    if (result.status === 200 && caller && String(req.body?.clientNotes || "").trim()) {
+      void notifyOtherParty(caller, caller.id, "supp", caller.name || "");
+    }
     res.status(result.status).json(result.body);
   } catch (err) {
     console.error("[clientNotes] supp error", err);
@@ -305,6 +338,9 @@ router.patch("/rx/client-notes", async (req: Request, res: Response) => {
   try {
     const caller = await requireClient(req);
     const result = await processRxNotesSave(caller, req.body?.clientNotes);
+    if (result.status === 200 && caller && String(req.body?.clientNotes || "").trim()) {
+      void notifyOtherParty(caller, caller.id, "rx", caller.name || "");
+    }
     res.status(result.status).json(result.body);
   } catch (err) {
     console.error("[clientNotes] rx error", err);
@@ -329,7 +365,12 @@ router.get("/notes-thread/:kind", async (req: Request, res: Response) => {
     const target = await resolveTargetClient(caller, req.query.clientId);
     if ("error" in target) { res.status(target.status).json({ error: target.error }); return; }
     const t = await loadThread(caller.company_id, threadKey(kind, target.clientId));
-    res.json({ entries: t.entries });
+    let entries = t.entries;
+    if (kind === "rx" && entries.length === 0) {
+      const legacy = await fetchLegacyRxEntry(caller.company_id, target.clientId);
+      if (legacy) entries = [legacy];
+    }
+    res.json({ entries });
   } catch (err) {
     console.error("[clientNotes] thread get error", err);
     res.status(500).json({ error: "Server error" });
@@ -356,7 +397,8 @@ router.post("/notes-thread/:kind", async (req: Request, res: Response) => {
       text,
       at: new Date().toISOString(),
     };
-    const entries = await appendThreadEntry(caller.company_id, threadKey(kind, target.clientId), entry);
+    const seed = kind === "rx" ? await fetchLegacyRxEntry(caller.company_id, target.clientId) : null;
+    const entries = await appendThreadEntry(caller.company_id, threadKey(kind, target.clientId), entry, seed ? [seed] : undefined);
     if (!entries) { res.status(500).json({ error: "Could not save — please try again" }); return; }
     // Bell the other side (coach ← client, client ← coach); fire-and-forget.
     void notifyOtherParty(caller, target.clientId, kind, caller.name || (entry.role === "coach" ? "Your coach" : "Your client"));
