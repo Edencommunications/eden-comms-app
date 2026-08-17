@@ -20,3 +20,6 @@ description: How row-level security is wired — frontend JWT headers, policy sc
 - Identity-carrying columns (sender_id etc.) need per-verb policies, and the UPDATE policy must ALSO pin the column (`sender_id = me()` in both USING and WITH CHECK for non-staff) — otherwise a member inserts as themself then PATCHes sender_id to a victim. One-off policy scripts must drop ALL existing policies on the table first (additive-permissive), and every policy change ships as a paste-and-run script mirrored into the rerunnable lockdown script.
 
 **How to apply:** when adding tables, add company_id where sensible and re-run the policy DO-block; when adding frontend fetch helpers, copy the header-getter pattern from any component.
+
+## Notifications mark-read pitfall
+The `notif_access` policy's WITH CHECK only allows `sender_id = me()` or staff — a CLIENT updating a received notification passes USING but fails WITH CHECK, so browser PATCHes silently update 0 rows. Mark-read must go through api-server `/notifs/read` + `/notifs/read-all` (service key, recipient verified from JWT). Any future client-side UPDATE on a table with asymmetric USING/WITH CHECK has the same trap — route it through the api-server.
