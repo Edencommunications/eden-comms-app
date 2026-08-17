@@ -1359,7 +1359,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         try {
           const v = rows?.[0]?.value ? JSON.parse(rows[0].value) : null
           if (v) {
-            if (Array.isArray(v.rxList))       setRxList(v.rxList)
+            if (Array.isArray(v.rxList))       { setRxList(v.rxList); setRxSavedJson(JSON.stringify(v.rxList)) }
             // Legacy fallback — populated before the separate rx_client_notes key was
             // introduced; rx_client_notes load below overrides this when present.
             if (typeof v.rxNotes==='string')   setClientRxNotes(v.rxNotes)
@@ -1453,6 +1453,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       updated_at: new Date().toISOString(),
     },'company_id,key')
     if (!ok) { alert('Could not save the prescription protocol — please try again.'); return }
+    setRxSavedJson(JSON.stringify(rxList))
     auditPlanSave('rx_protocol_saved', myUUID, info?.name||currentUser?.name, role)
     await insertNotification(myUUID, myCoachId, 'supp_update', '💊 Your coach updated your prescriptions — check your Supplements tab', 'supplements')
     alert('Prescription protocol saved!')
@@ -1530,6 +1531,9 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
   // ── Rx / Prescription tracker ─────────────────────────────
   const [rxList,        setRxList]        = useState<any>([])
+  // Snapshot of the last-saved rxList — drives the "unsaved changes" warning
+  const [rxSavedJson,   setRxSavedJson]   = useState<any>('[]')
+  const rxDirty = JSON.stringify(rxList) !== rxSavedJson
   const [showRxForm,    setShowRxForm]    = useState<any>(false)
   // Fields for the Rx being drafted
   const [rxName,        setRxName]        = useState<any>('')
@@ -4185,10 +4189,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 ))}
               </Card>
 
+              {rxDirty&&(
+                <div style={{background:'#3a2b0a',border:`1px solid ${C.gold}`,borderRadius:8,padding:'8px 12px',fontSize:12,color:C.gold,fontWeight:700,marginBottom:8}}>
+                  ⚠️ Unsaved changes — tap "Save Rx Protocol" below or your edits will be lost.
+                </div>
+              )}
               <button
                 onClick={saveRxProtocol}
                 style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
-                Save Rx Protocol
+                {rxDirty?'Save Rx Protocol ●':'Save Rx Protocol'}
               </button>
 
               <Card sx={{marginBottom:12}}>
