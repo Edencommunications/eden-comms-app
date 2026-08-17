@@ -376,7 +376,13 @@ export default function Notifications({ currentUser, onNavigate }: any) {
         }
       } catch { /* fall through to plain tab navigation */ }
     }
-    if (notif.type === 'checkin_received' && notif.sender_id) {
+    // Same deep-link for supp/Rx note + check-in notifications when a staff
+    // member is the recipient: pre-select the client who wrote it so the tab
+    // opens on their plan instead of a blank page.
+    const needsClientPreselect =
+      notif.type === 'checkin_received' ||
+      (notif.type === 'supp_update' && role !== 'client')
+    if (needsClientPreselect && notif.sender_id) {
       try {
         const rows = await dbGet('user_profiles', `id=eq.${notif.sender_id}&select=email,name`)
         const p = rows?.[0]
