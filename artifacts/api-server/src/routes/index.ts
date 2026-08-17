@@ -27,6 +27,7 @@ import msgUnreadRouter from "./msgUnread";
 import teamMessagesRouter from "./teamMessages";
 import photoDeleteRouter from "./photoDelete";
 import clientNotesRouter from "./clientNotes";
+import notifsRouter from "./notifs";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(msgUnreadRouter);
 router.use(teamMessagesRouter);
 router.use(photoDeleteRouter);
 router.use(clientNotesRouter);
+router.use(notifsRouter);
 
 export default router;

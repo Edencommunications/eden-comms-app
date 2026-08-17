@@ -303,20 +303,29 @@ export default function Notifications({ currentUser, onNavigate }: any) {
     setLoading(false)
   }
 
+  // Mark-read goes through the API server: the notifications RLS policy
+  // blocks clients from updating rows they didn't SEND, so a direct PATCH
+  // silently updated nothing and the badge kept coming back.
   async function markRead(id: any) {
-    await dbUpdate('notifications', `id=eq.${id}`, {
-      is_read: true,
-      read_at: new Date().toISOString(),
-    })
     setNotifs((prev: any) => prev.map((n: any) => n.id === id ? { ...n, is_read:true } : n))
+    try {
+      await fetch('/api/notifs/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ id }),
+      })
+    } catch {}
   }
 
   async function markAllRead() {
-    await dbUpdate('notifications', `recipient_id=eq.${myUUID}&is_read=eq.false`, {
-      is_read: true,
-      read_at: new Date().toISOString(),
-    })
     setNotifs((prev: any) => prev.map((n: any) => ({ ...n, is_read:true })))
+    try {
+      const r = await fetch('/api/notifs/read-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: sbBearer() },
+      })
+      if (!r.ok) loadNotifs()
+    } catch {}
   }
 
   async function handleNotifClick(notif: any) {

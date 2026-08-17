@@ -3934,6 +3934,15 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </div>
               </Card>
 
+              {/* Client's own supplement notes — read-only for the coach */}
+              {clientSuppNotes&&(
+                <Card sx={{marginBottom:12}}>
+                  <Lbl t="Client's Supplement Notes"/>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Written by the client in their Supps tab.</div>
+                  <div style={{fontSize:13,color:C.white,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{clientSuppNotes}</div>
+                </Card>
+              )}
+
               {/* ── Rx Tracker ── */}
               <Card sx={{marginBottom:12}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
@@ -4297,9 +4306,11 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 </Card>
               )}
 
-              <button onClick={saveClientRxNotes} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
-                Save My Notes
-              </button>
+              {rxList.length>0&&(
+                <button onClick={saveClientRxNotes} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
+                  Save My Prescription Notes
+                </button>
+              )}
             </>
           )}
 
