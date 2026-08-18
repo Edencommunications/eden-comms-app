@@ -2549,7 +2549,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
           return (
             <div style={{ marginBottom:16 }}>
               <div style={{ background:B.card, border:"1px solid #ffa60066", borderRadius:10, padding:"12px 14px" }}>
-                <p style={{ fontSize:11, fontWeight:700, color:"#ffa600", letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>
+                <p style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:1, textTransform:"uppercase", margin:"0 0 10px" }}>
                   ⚙️ Needs Setup ({needsSetup.length})
                 </p>
                 {needsSetup.map((c:any, i:number) => {
@@ -2565,7 +2565,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                         </p>
                         <p style={{ fontSize:11, color:B.muted, margin:"2px 0 0" }}>Assign their {missing}</p>
                       </div>
-                      <span style={{ fontSize:11, fontWeight:700, color:"#ffa600", whiteSpace:"nowrap" }}>Set up →</span>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.gold, whiteSpace:"nowrap" }}>Set up →</span>
                     </div>
                   );
                 })}
@@ -2580,7 +2580,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
             background: missingClients.length > 0 ? `#ffa60018` : B.card,
             border:`1px solid ${missingClients.length > 0 ? "#ffa60044" : B.border}`,
             borderRadius:10, cursor:"pointer", padding:"12px 14px", marginBottom: missOpen ? 10 : 16 }}>
-          <span style={{ fontSize:11, fontWeight:700, color: missingClients.length > 0 ? "#ffa600" : B.text, letterSpacing:1, textTransform:"uppercase" }}>
+          <span style={{ fontSize:11, fontWeight:700, color: missingClients.length > 0 ? B.gold : B.text, letterSpacing:1, textTransform:"uppercase" }}>
             {missingClients.length > 0 ? `⚠️ Missing Check-Ins (${loomMode?"—":missingClients.length})` : "✅ Check-In Tracker"}
           </span>
           <span style={{ fontSize:18, color:B.gold, fontWeight:700, display:"inline-block", transition:"transform .2s",
@@ -2615,14 +2615,14 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                 return (
                   <div key={day} style={{ marginBottom:14 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                      <span style={{ fontSize:11, fontWeight:700, color:"#ffa600", letterSpacing:.8, textTransform:"uppercase" }}>{day}</span>
+                      <span style={{ fontSize:11, fontWeight:700, color:B.gold, letterSpacing:.8, textTransform:"uppercase" }}>{day}</span>
                       <span style={{ fontSize:10, color:B.muted }}>
                         {loomMode ? "—" : `${visibleMissing.length} haven't checked in`}
                       </span>
                     </div>
                     {visibleMissing.map((c: any, i: number) => (
                       <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
-                        background:"#1a0a00", border:`1px solid #ffa60033`, borderRadius:8, marginBottom:6 }}>
+                        background:B.goldDim, border:`1px solid ${B.goldMid}`, borderRadius:8, marginBottom:6 }}>
                         <span style={{ fontSize:14, flexShrink:0 }}>⏰</span>
                         <div style={{ flex:1, minWidth:0 }}>
                           <p style={{ fontSize:12, fontWeight:700, color:B.text, margin:0 }}>
