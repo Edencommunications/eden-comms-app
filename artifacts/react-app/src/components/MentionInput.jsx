@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { T as _ThemeT } from '../lib/theme'
 
 // ── Text input with @mention autocomplete ─────────────────────
 // Type "@" → a dropdown lists everyone in the group; keep typing to
@@ -13,11 +14,7 @@ export default function MentionInput({
   placeholder = '', inputStyle = {}, autoFocus = false,
   colors = {},
 }) {
-  const C = {
-    card: '#161616', border: '#2a2a2a', gold: '#c8a24a',
-    white: '#f4f4f4', muted: '#8a8a8a', black: '#0a0a0a',
-    ...colors,
-  }
+  const C = { ..._ThemeT, ...colors }
   const inputRef = useRef(null)
   const [mention, setMention] = useState(null) // { start, query } | null
   const [sel, setSel] = useState(0)

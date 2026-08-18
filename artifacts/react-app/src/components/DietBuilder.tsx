@@ -59,7 +59,7 @@ function PhotoCompare({ photos, isMobile }: any) {
           </div>
         )}
         {isActive && <div style={{ position:'absolute', top:6, left:6, fontSize:9, fontWeight:800, letterSpacing:1,
-          background:C.gold, color:'#000', borderRadius:6, padding:'2px 7px' }}>SELECTED</div>}
+          background:C.gold, color:C.onAccent, borderRadius:6, padding:'2px 7px' }}>SELECTED</div>}
         {p && <button title="Remove this photo from the comparison"
           onClick={(e)=>{ e.stopPropagation(); setPanes((prev: any)=>({ ...prev, [side]:null })); setActive(side) }}
           style={{ position:'absolute', top:6, right:6, width:24, height:24, borderRadius:'50%', cursor:'pointer',
@@ -704,11 +704,11 @@ function CheckInCharts({ checkins }: any) {
   }))
 
   const CT = {
-    grid: '#2a2a2a', tick: '#666',
+    grid: C.border, tick: C.muted,
     tooltip: {
       contentStyle:{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, fontSize:11 },
       labelStyle:{ color:C.white, fontWeight:700 },
-      itemStyle:{ color:'#ccc' },
+      itemStyle:{ color:C.text },
     },
   }
 
@@ -1032,7 +1032,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
       const v=ci[f]
       return v
         ? <span key={k} style={{fontSize:12,color:C.muted}}>{icon} {fmt(v)}</span>
-        : <span key={k} style={{fontSize:11,color:'#555',fontStyle:'italic'}}>{icon} {label} — not provided</span>
+        : <span key={k} style={{fontSize:11,color:C.muted,fontStyle:'italic'}}>{icon} {label} — not provided</span>
     })
   }
   const [customAnswers, setCustomAnswers] = useState<any>({})  // { customMetricLabel: value }
@@ -2428,7 +2428,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 <div style={{marginBottom:14}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>📌 Your Recipes from Coach</div>
                   {assignedRecipes.map((r: any,i: any)=>(
-                    <div key={i} onClick={()=>setViewRecipe(r)} style={{background:'#0d1a00',border:`1px solid ${C.gold}44`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} title="View full recipe">
+                    <div key={i} onClick={()=>setViewRecipe(r)} style={{background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} title="View full recipe">
                       <span style={{fontSize:22,flexShrink:0}}>{RECIPE_CAT_EMOJI[r.category]||'🍽'}</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,color:C.white,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name||r.recipe_name}</div>
@@ -2603,7 +2603,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
 
             {/* Add standalone coach update form */}
             {showAddForm&&(
-              <div style={{background:'#111a00',borderBottom:`1px solid ${C.gold}33`,padding:16,flexShrink:0}}>
+              <div style={{background:C.goldDim,borderBottom:`1px solid ${C.gold}33`,padding:16,flexShrink:0}}>
                 <div style={{fontSize:11,fontWeight:700,color:C.gold,letterSpacing:.8,textTransform:'uppercase',marginBottom:12}}>New Coach Update — visible to client in their Check-In tab</div>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'140px 1fr',gap:10,marginBottom:10}}>
                   <div>
@@ -2659,7 +2659,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 if(item._type==='coach'){
                   const loomId=item.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
                   return (
-                    <div key={`cu-${item.id}`} style={{background:'#111a00',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
+                    <div key={`cu-${item.id}`} style={{background:C.goldDim,border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                         <div style={{display:'flex',alignItems:'center',gap:8}}>
                           <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'2px 8px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>Coach Update</span>
@@ -2803,8 +2803,8 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             ))}
                             {ciForm.custom.filter((cm: any)=>!(ci.custom&&String(ci.custom[cm.label]??'').trim()!=='')).map((cm: any)=>(
                               <div key={cm.label} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0'}}>
-                                <span style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,flexShrink:0}}>{cm.label}</span>
-                                <span style={{fontSize:11,color:'#555',fontStyle:'italic'}}>— not provided</span>
+                                <span style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,flexShrink:0}}>{cm.label}</span>
+                                <span style={{fontSize:11,color:C.muted,fontStyle:'italic'}}>— not provided</span>
                               </div>
                             ))}
                           </div>
@@ -2950,7 +2950,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {Array.isArray(clientPhotos)&&clientPhotos.filter(p=>p.photo_url).length>1&&(
                   <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
                     <button onClick={()=>setPhotoCompare((v: any)=>!v)}
-                      style={{background:photoCompare?C.gold:'none',color:photoCompare?'#000':C.gold,
+                      style={{background:photoCompare?C.gold:'none',color:photoCompare?C.onAccent:C.gold,
                         border:`1px solid ${C.gold}66`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
                       {photoCompare?'✕ Exit Compare':'🔀 Compare Side-by-Side'}
                     </button>
@@ -3066,7 +3066,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   if(item._type==='coach'){
                     const loomId=item.loom?.match(/loom\.com\/share\/([a-zA-Z0-9]+)/)?.[1]
                     return (
-                      <div key={`cu-${item.id}`} style={{background:'#111a00',border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
+                      <div key={`cu-${item.id}`} style={{background:C.goldDim,border:`1.5px solid ${C.gold}44`,borderRadius:12,padding:16,marginBottom:12}}>
                         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                           <span style={{fontSize:9,fontWeight:700,background:`${C.gold}22`,color:C.gold,padding:'2px 8px',borderRadius:20,letterSpacing:.5,textTransform:'uppercase'}}>📝 Coach Update</span>
                           <span style={{fontSize:12,fontWeight:700,color:C.white}}>{item.date}</span>
@@ -3370,7 +3370,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 {Array.isArray(clientPhotos)&&clientPhotos.filter(p=>p.photo_url).length>1&&(
                   <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
                     <button onClick={()=>setPhotoCompare((v: any)=>!v)}
-                      style={{background:photoCompare?C.gold:'none',color:photoCompare?'#000':C.gold,
+                      style={{background:photoCompare?C.gold:'none',color:photoCompare?C.onAccent:C.gold,
                         border:`1px solid ${C.gold}66`,borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
                       {photoCompare?'✕ Exit Compare':'🔀 Compare Side-by-Side'}
                     </button>
@@ -4074,7 +4074,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             </button>
                             <button type="button" onClick={addDraftTaperStep}
                               disabled={!tapDate.trim()||!tapDose.trim()}
-                              style={{flex:2,background:tapDate.trim()&&tapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'6px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:tapDate.trim()&&tapDose.trim()?'pointer':'default'}}>
+                              style={{flex:2,background:tapDate.trim()&&tapDose.trim()?C.gold:C.dim,border:'none',borderRadius:6,padding:'6px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:tapDate.trim()&&tapDose.trim()?'pointer':'default'}}>
                               Add Step
                             </button>
                           </div>
@@ -4089,7 +4089,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         Cancel
                       </button>
                       <button type="button" onClick={saveRx}
-                        style={{flex:2,background:rxName.trim()&&rxDose.trim()?C.gold:'#444',border:'none',borderRadius:7,padding:'10px',fontWeight:800,color:C.onAccent,fontSize:12,cursor:rxName.trim()&&rxDose.trim()?'pointer':'default'}}>
+                        style={{flex:2,background:rxName.trim()&&rxDose.trim()?C.gold:C.dim,border:'none',borderRadius:7,padding:'10px',fontWeight:800,color:C.onAccent,fontSize:12,cursor:rxName.trim()&&rxDose.trim()?'pointer':'default'}}>
                         Save Rx
                       </button>
                     </div>
@@ -4166,7 +4166,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
                           <button type="button" onClick={()=>saveEditTaper(rx.id)}
                             disabled={!editTapDate.trim()||!editTapDose.trim()}
-                            style={{flex:2,background:editTapDate.trim()&&editTapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'7px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:editTapDate.trim()&&editTapDose.trim()?'pointer':'default'}}>
+                            style={{flex:2,background:editTapDate.trim()&&editTapDose.trim()?C.gold:C.dim,border:'none',borderRadius:6,padding:'7px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:editTapDate.trim()&&editTapDose.trim()?'pointer':'default'}}>
                             Save Step
                           </button>
                         </div>
@@ -4751,7 +4751,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <button onClick={()=>setEditSupp(null)}
                       style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
                     <button onClick={saveOrgSupp}
-                      style={{flex:1,background:`linear-gradient(135deg,#ffb733,${C.gold})`,border:'none',borderRadius:8,padding:10,color:'#000',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+                      style={{flex:1,background:`linear-gradient(135deg,#ffb733,${C.gold})`,border:'none',borderRadius:8,padding:10,color:C.onAccent,fontSize:13,fontWeight:700,cursor:'pointer'}}>
                       {editSupp.dbId?'Save Changes':'Add Supplement'}
                     </button>
                   </div>

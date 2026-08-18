@@ -7,11 +7,9 @@
 // any). All membership checks happen on the api-server.
 import { useState, useEffect, useRef } from 'react'
 import { sbAccessToken } from '../lib/sbAuth'
+import { T as _ThemeT } from '../lib/theme'
 
-const C = {
-  black:'#000', card:'#101010', surface:'#161616', border:'#232323',
-  gold:'#E0A82E', white:'#F5F5F5', muted:'#8a8a8a', dim:'#5a5a5a',
-}
+const C = _ThemeT
 
 const newId = () => (crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`)
 

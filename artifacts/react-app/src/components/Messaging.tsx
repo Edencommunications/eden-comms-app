@@ -288,7 +288,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
           </div>
         </div>
         <button onClick={() => setView((v: any) => v === 'history' ? 'compose' : 'history')}
-          style={{ background:view==='history'?`${C.gold}22`:'#1a1a1a', border:`1px solid ${view==='history'?C.gold:C.border}`,
+          style={{ background:view==='history'?`${C.gold}22`:C.card, border:`1px solid ${view==='history'?C.gold:C.border}`,
             borderRadius:8, padding:'6px 12px', color:view==='history'?C.gold:C.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
           {view === 'history' ? '✏️ Compose' : '📋 Sent History'}
         </button>
@@ -429,7 +429,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
                 )})}
               </div>
               {selectedDays.length > 0 && (
-                <div style={{ marginTop:10, padding:'8px 12px', background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:8 }}>
+                <div style={{ marginTop:10, padding:'8px 12px', background:C.goldDim, border:`1px solid ${C.gold}33`, borderRadius:8 }}>
                   <div style={{ fontSize:11, color:C.gold, fontWeight:600, marginBottom:4 }}>Recipients:</div>
                   <div style={{ fontSize:12, color:C.white }}>
                     {filteredClients.map((c: any) => c.name).join(', ')}
@@ -534,15 +534,15 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
                     </select>
                   </div>
                   <button onClick={addScheduleDate} disabled={!newSchedDate||!newSchedTime}
-                    style={{ background:newSchedDate&&newSchedTime?C.gold:'#2a2a2a', border:'none', borderRadius:8, padding:'8px 14px',
-                      color:newSchedDate&&newSchedTime?C.black:C.muted, fontWeight:700, fontSize:12, cursor:newSchedDate&&newSchedTime?'pointer':'not-allowed', whiteSpace:'nowrap', flexShrink:0 }}>
+                    style={{ background:newSchedDate&&newSchedTime?C.gold:C.dim, border:'none', borderRadius:8, padding:'8px 14px',
+                      color:newSchedDate&&newSchedTime?C.onAccent:C.muted, fontWeight:700, fontSize:12, cursor:newSchedDate&&newSchedTime?'pointer':'not-allowed', whiteSpace:'nowrap', flexShrink:0 }}>
                     + Add
                   </button>
                 </div>
 
                 {/* Scheduled dates list */}
                 {scheduleDates.length>0&&(
-                  <div style={{ background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
+                  <div style={{ background:C.goldDim, border:`1px solid ${C.gold}33`, borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
                     <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>
                       📅 {scheduleDates.length} scheduled send{scheduleDates.length>1?'s':''}
                     </div>
@@ -569,8 +569,8 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
 
           {/* Send / Schedule button */}
           <button onClick={send} disabled={!isReady()||sending}
-            style={{ width:'100%', background:isReady()?C.gold:'#2a2a2a', border:'none', borderRadius:12,
-              padding:'14px', fontWeight:800, color:isReady()?C.black:C.muted, fontSize:15,
+            style={{ width:'100%', background:isReady()?C.gold:C.dim, border:'none', borderRadius:12,
+              padding:'14px', fontWeight:800, color:isReady()?C.onAccent:C.muted, fontSize:15,
               cursor:isReady()?'pointer':'not-allowed', marginBottom:16, opacity:sending?0.7:1 }}>
             {sending
               ? (sendMode==='schedule'?'Scheduling…':'Sending…')
@@ -589,7 +589,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
             {sendMode==='schedule'?'Broadcasts Scheduled!':'Broadcast Sent!'}
           </div>
           {sendMode==='schedule'&&scheduleDates.length>0&&(
-            <div style={{ background:'#0d1a00', border:`1px solid ${C.gold}33`, borderRadius:12, padding:'14px 18px', width:'100%', maxWidth:320 }}>
+            <div style={{ background:C.goldDim, border:`1px solid ${C.gold}33`, borderRadius:12, padding:'14px 18px', width:'100%', maxWidth:320 }}>
               <div style={{ fontSize:11, color:C.gold, fontWeight:700, marginBottom:8 }}>Scheduled send times:</div>
               {scheduleDates.sort((a,b)=>a.iso.localeCompare(b.iso)).map(sd=>(
                 <div key={sd.id} style={{ fontSize:12, color:C.white, padding:'4px 0', borderBottom:`1px solid ${C.gold}22` }}>
@@ -1474,7 +1474,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
       const href = /^www\./.test(p) ? `https://${p}` : p
       try { const proto = new URL(href).protocol; if (proto !== 'http:' && proto !== 'https:') return <span key={i}>{p}</span> } catch { return <span key={i}>{p}</span> }
       return <a key={i} href={href} target="_blank" rel="noreferrer"
-        style={{ color: mine ? C.black : C.gold, fontWeight:700, textDecoration:'underline', wordBreak:'break-all' }}>{p}</a>
+        style={{ color: mine ? C.onAccent : C.gold, fontWeight:700, textDecoration:'underline', wordBreak:'break-all' }}>{p}</a>
     })
   }
   function msgTime(msg: any)  { return isLive ? formatTime(msg.created_at) : msg.time }
@@ -1541,7 +1541,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             title="Threads — replies to messages you're part of"
             style={{ position:'relative', background: showThreads ? C.gold : 'transparent',
               border:`1px solid ${showThreads ? C.gold : C.border}`, borderRadius:8,
-              padding:'6px 10px', color: showThreads ? C.black : (unreadThreadCount ? C.gold : C.muted),
+              padding:'6px 10px', color: showThreads ? C.onAccent : (unreadThreadCount ? C.gold : C.muted),
               fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
             🧵 Threads
             {unreadThreadCount > 0 && !showThreads && (
@@ -1556,7 +1556,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           {isAdmin && (
             <button onClick={() => { setShowBroadcast(true); setActiveId(null) }}
               style={{ background:showBroadcast?C.gold:`${C.gold}22`, border:`1px solid ${showBroadcast?C.gold:C.gold+'55'}`,
-                borderRadius:8, padding:'6px 10px', color:showBroadcast?C.black:C.gold,
+                borderRadius:8, padding:'6px 10px', color:showBroadcast?C.onAccent:C.gold,
                 fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
               📢 Broadcast
             </button>
@@ -1687,7 +1687,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                     border:`1px solid ${isActive ? C.gold : C.border}`,
                     display:'flex', alignItems:'center', justifyContent:'center',
                     fontSize:isHidden ? 14 : 13, fontWeight:800,
-                    color: isActive ? C.black : C.muted }}>
+                    color: isActive ? C.onAccent : C.muted }}>
                     {avatarTxt}
                   </div>
                   {/* Online dot — only show for active or non-loom */}
@@ -1720,10 +1720,10 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                     {/* Unread badges hidden for masked entries */}
                     {!isHidden && effectiveUnread(convo) > 0 && (
                       <span style={{ flexShrink:0, marginLeft:4, minWidth:18, height:18, borderRadius:9,
-                        background: markedUnread.has(convo.id) ? '#555' : C.gold,
+                        background: markedUnread.has(convo.id) ? C.dim : C.gold,
                         display:'flex', alignItems:'center', justifyContent:'center',
                         fontSize:10, fontWeight:800,
-                        color: markedUnread.has(convo.id) ? C.white : C.black,
+                        color: markedUnread.has(convo.id) ? C.text : C.onAccent,
                         padding:'0 5px' }}>
                         {markedUnread.has(convo.id) ? '●' : effectiveUnread(convo)}
                       </span>
@@ -1768,7 +1768,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                 markThreadUnread(threadRoot.id)
                 setThreadRootId(null) // close so the kept-unread state is visible
               }}
-              style={{ background: threadMarkedUnread.has(threadRoot.id) ? '#2a2a2a' : 'transparent',
+              style={{ background: threadMarkedUnread.has(threadRoot.id) ? C.dim : 'transparent',
                 border:`1px solid ${threadMarkedUnread.has(threadRoot.id) ? C.gold : C.border}`, borderRadius:8,
                 color: threadMarkedUnread.has(threadRoot.id) ? C.gold : C.muted, fontSize:10, fontWeight:700,
                 cursor:'pointer', padding:'4px 9px', lineHeight:1.4 }}>
@@ -1808,7 +1808,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                           {isAdmin ? `🗑 Deleted by ${r.deleted_by_name||'staff'}: ${r.content||''}` : `Message deleted${r.deleted_by_name?` by ${r.deleted_by_name}`:''}`}
                         </div>
                       ) : (
-                        <div style={{ fontSize:12, color: mine ? C.black : C.white, lineHeight:1.5, wordBreak:'break-word' }}>{linkify(r.content, mine)}</div>
+                        <div style={{ fontSize:12, color: mine ? C.onAccent : C.white, lineHeight:1.5, wordBreak:'break-word' }}>{linkify(r.content, mine)}</div>
                       )}
                       {!r.deleted_at && canDeleteAnyMsg && (
                         <button onClick={() => deleteMsg(r)} title="Delete reply (kept in admin audit log)"
@@ -1920,14 +1920,14 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             title="Mark as unread — flag to come back to later"
             style={{
               display:'flex', alignItems:'center', gap:4, flexShrink:0,
-              background: markedUnread.has(activeId) ? '#2a2a2a' : 'transparent',
-              border:`1px solid ${markedUnread.has(activeId) ? '#555' : C.border}`,
+              background: markedUnread.has(activeId) ? C.dim : 'transparent',
+              border:`1px solid ${markedUnread.has(activeId) ? C.border : C.border}`,
               borderRadius:8, padding: isMobile ? '7px 9px' : '6px 12px',
               cursor:'pointer', color: markedUnread.has(activeId) ? C.white : C.muted,
               fontSize:11, fontWeight:markedUnread.has(activeId) ? 700 : 400,
             }}>
             <span style={{ fontSize:8, lineHeight:1,
-              color: markedUnread.has(activeId) ? '#aaa' : C.muted }}>●</span>
+              color: markedUnread.has(activeId) ? C.text : C.muted }}>●</span>
             {!isMobile && (
               <span>{markedUnread.has(activeId) ? 'Marked unread' : 'Mark unread'}</span>
             )}
@@ -2038,7 +2038,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                         padding:'9px 13px',
                       }}>
                         {(type === 'text' || !isLive) && (
-                          <div style={{ fontSize:13, color:mine?C.black:C.white, lineHeight:1.55, wordBreak:'break-word' }}>
+                          <div style={{ fontSize:13, color:mine?C.onAccent:C.white, lineHeight:1.55, wordBreak:'break-word' }}>
                             {linkify(msgText(msg), mine)}
                           </div>
                         )}
@@ -2049,12 +2049,12 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                         )}
                         {isLive && type === 'file' && (msg.file_type||'').startsWith('audio/') && (
                           <div style={{ maxWidth:260 }}>
-                            <div style={{ fontSize:11, fontWeight:700, color:mine?C.black:C.gold, marginBottom:4 }}>🎙️ Voice memo</div>
+                            <div style={{ fontSize:11, fontWeight:700, color:mine?C.onAccent:C.gold, marginBottom:4 }}>🎙️ Voice memo</div>
                             <audio controls src={msg.file_url} style={{ width:'100%', height:36 }}/>
                             {msg.content && (
                               <details style={{ marginTop:6 }}>
                                 <summary style={{ fontSize:11, fontWeight:700, color:mine?'rgba(0,0,0,.6)':C.muted, cursor:'pointer' }}>📝 Transcript</summary>
-                                <div style={{ fontSize:12, color:mine?C.black:C.white, lineHeight:1.5, marginTop:4, whiteSpace:'pre-wrap' }}>{msg.content}</div>
+                                <div style={{ fontSize:12, color:mine?C.onAccent:C.white, lineHeight:1.5, marginTop:4, whiteSpace:'pre-wrap' }}>{msg.content}</div>
                               </details>
                             )}
                           </div>
@@ -2064,7 +2064,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                             style={{ display:'flex', alignItems:'center', gap:8, textDecoration:'none' }}>
                             <span style={{ fontSize:22 }}>{fileIcon(msg.file_name)}</span>
                             <div style={{ minWidth:0 }}>
-                              <div style={{ fontSize:12, color:mine?C.black:C.gold, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.file_name}</div>
+                              <div style={{ fontSize:12, color:mine?C.onAccent:C.gold, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.file_name}</div>
                               <div style={{ fontSize:10, color:mine?'rgba(0,0,0,.5)':C.muted }}>{formatBytes(msg.file_size)}</div>
                             </div>
                           </a>
@@ -2170,7 +2170,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                     style={{ background: recording ? '#e5484d' : C.card, border:`1px solid ${recording ? '#e5484d' : C.border}`, borderRadius:8,
                       minWidth: isMobile ? 44 : 38, height: isMobile ? 44 : 38, cursor:'pointer', fontSize: recording ? 11 : 17, flexShrink:0,
                       display:'flex', alignItems:'center', justifyContent:'center', gap:4, padding: recording ? '0 8px' : 0,
-                      color:'#fff', fontWeight:800, animation: recording ? 'pulse 1.2s infinite' : 'none' }}>
+                      color:C.text, fontWeight:800, animation: recording ? 'pulse 1.2s infinite' : 'none' }}>
                     {recording ? `■ ${recClock}` : '🎙️'}
                   </button>
                 )}

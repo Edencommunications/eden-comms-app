@@ -8,11 +8,7 @@ import {
   CHECKIN_SECTIONS, CUSTOM_TYPES, DEFAULT_FORM,
   loadFormAtScope, resolveCheckinForm, saveCheckinForm, deleteCheckinForm,
 } from '../lib/checkinForm'
-
-const T = {
-  gold: '#D4AF37', black: '#0B0B0B', card: '#161616', surface: '#1d1d1d',
-  border: '#2a2a2a', text: '#f2f2f2', muted: '#9a9a9a', success: '#4FD89A', danger: '#ff6b6b',
-}
+import { T } from '../lib/theme'
 
 export default function CheckinFormEditor({ companyId, coachId = null, coachName = '', onClose }: any) {
   const [form, setForm]         = useState<any>(null)     // null = loading
@@ -134,7 +130,7 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
             {CUSTOM_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
           <button onClick={addCustom} disabled={!draft.label.trim()}
-            style={{ background: draft.label.trim() ? T.gold : '#333', border: 'none', borderRadius: 8, padding: '8px 14px', color: draft.label.trim() ? T.black : T.muted, fontSize: 12, fontWeight: 800, cursor: draft.label.trim() ? 'pointer' : 'default' }}>
+            style={{ background: draft.label.trim() ? T.gold : T.dim, border: 'none', borderRadius: 8, padding: '8px 14px', color: draft.label.trim() ? T.onAccent : T.muted, fontSize: 12, fontWeight: 800, cursor: draft.label.trim() ? 'pointer' : 'default' }}>
             + Add
           </button>
         </div>
@@ -142,7 +138,7 @@ export default function CheckinFormEditor({ companyId, coachId = null, coachName
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={save} disabled={saving}
-          style={{ background: savedFlash ? T.success : T.gold, border: 'none', borderRadius: 8, padding: '9px 16px', color: T.black, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+          style={{ background: savedFlash ? T.success : T.gold, border: 'none', borderRadius: 8, padding: '9px 16px', color: T.onAccent, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
           {saving ? 'Saving…' : savedFlash ? '✓ Saved — clients see it now' : 'Save Form'}
         </button>
         {!inherited && (

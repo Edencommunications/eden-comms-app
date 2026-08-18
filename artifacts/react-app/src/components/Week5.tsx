@@ -1198,7 +1198,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                     </div>
                     </div>
                   ):(
-                    <div style={{background:'#050505',padding:'36px 16px',textAlign:'center'}}>
+                    <div style={{background:C.surface,padding:'36px 16px',textAlign:'center'}}>
                       <div style={{fontSize:36,marginBottom:10}}>🎬</div>
                       <div style={{fontSize:14,color:C.white,fontWeight:700,marginBottom:6}}>{activeModule.title}</div>
                       <div style={{fontSize:12,color:C.muted,marginBottom:isAdmin?16:0}}>
@@ -1866,27 +1866,27 @@ export function RecipePicker({onSelect, onClose}: any) {
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000,padding:16}}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:480,maxHeight:'82vh',display:'flex',flexDirection:'column'}}>
-        <div style={{padding:'14px 16px 10px',borderBottom:'1px solid #2a2a2a'}}>
-          <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:6}}>🍽 Pull Recipe into Meal</div>
-          <div style={{fontSize:11,color:'#888',marginBottom:8}}>{loading?'Loading from Google Sheets…':`${recipes.length} recipes available`}</div>
+        <div style={{padding:'14px 16px 10px',borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>🍽 Pull Recipe into Meal</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{loading?'Loading from Google Sheets…':`${recipes.length} recipes available`}</div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search recipes…" autoFocus
             style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.text,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
         </div>
         <div style={{flex:1,overflowY:'auto',padding:'4px 0'}}>
           {filtered.map((r,i)=>(
             <button key={i} onClick={()=>onSelect(r)}
-              style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'10px 16px',cursor:'pointer',borderBottom:'1px solid #2a2a2a',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+              style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'10px 16px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}
               onMouseEnter={e=>e.currentTarget.style.background='#ffa60010'}
               onMouseLeave={e=>e.currentTarget.style.background='none'}>
               <div>
-                <div style={{fontSize:13,color:'#fff',fontWeight:500}}>{r.name}</div>
-                <div style={{fontSize:10,color:'#888',marginTop:1}}>1 serving · {r.cal} cal · P:{r.pro}g C:{r.carb}g F:{r.fat}g</div>
+                <div style={{fontSize:13,color:C.text,fontWeight:500}}>{r.name}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:1}}>1 serving · {r.cal} cal · P:{r.pro}g C:{r.carb}g F:{r.fat}g</div>
               </div>
-              <span style={{color:'#ffa600',fontSize:18,flexShrink:0}}>+</span>
+              <span style={{color:C.gold,fontSize:18,flexShrink:0}}>+</span>
             </button>
           ))}
         </div>
-        <div style={{padding:'10px 16px',borderTop:'1px solid #2a2a2a'}}>
+        <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
           <button onClick={onClose} style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
         </div>
       </div>

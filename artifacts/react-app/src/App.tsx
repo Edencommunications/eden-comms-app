@@ -664,7 +664,7 @@ const HomeScreen = ({ user, wlOrg = null }: any) => {
           <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
             <Badge color={primary}>{user.role.replace("_"," ")}</Badge>
             <div style={{ width:42, height:42, borderRadius:21, background:`linear-gradient(135deg,${primary},${secondary})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{user.name[0]}</span>
+              <span style={{ fontSize:16, fontWeight:700, color:B.onAccent }}>{user.name[0]}</span>
             </div>
           </div>
         </div>
@@ -1607,9 +1607,9 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
 
   // Shared chart theme
   const CT = {
-    grid:    "#2a2a2a",
-    tick:    "#666",
-    tooltip: { contentStyle:{ background:"#1a1a1a", border:"1px solid #333", borderRadius:8, fontSize:11 }, labelStyle:{ color:"#fff", fontWeight:700 }, itemStyle:{ color:"#ccc" } },
+    grid:    B.border,
+    tick:    B.muted,
+    tooltip: { contentStyle:{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8, fontSize:11 }, labelStyle:{ color:B.text, fontWeight:700 }, itemStyle:{ color:B.text } },
   };
   const ChartPanel = ({ title, children }: { title:string; children:React.ReactNode }) => (
     <div style={{ marginBottom:20 }}>
@@ -3248,7 +3248,7 @@ const RosterImportExport = () => {
                 Email everyone their login details (they set their own password on first sign-in)
               </label>
               <button onClick={runImport} disabled={importing}
-                style={{ background:B.success, border:'none', borderRadius:8, padding:'10px 16px', color:'#000', fontSize:13, fontWeight:800, cursor:'pointer', opacity:importing?0.6:1 }}>
+                style={{ background:B.success, border:'none', borderRadius:8, padding:'10px 16px', color:B.onAccent, fontSize:13, fontWeight:800, cursor:'pointer', opacity:importing?0.6:1 }}>
                 {importing ? 'Importing… this can take a minute' : `Import ${preview.rows.length} ${preview.rows.length === 1 ? 'person' : 'people'}`}
               </button>
             </>
@@ -4914,7 +4914,7 @@ const AdminDashboard = ({ user }:any) => {
                         <span style={{ fontSize:10, fontWeight:700, color:B.muted, width:90, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</span>
                         <code style={{ flex:1, minWidth:180, fontSize:10, color:B.text, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 8px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{val}</code>
                         <button onClick={() => ghlCopy(label, val)}
-                          style={{ background: ghlCopied === label ? (B.success || '#4FD89A') : 'none', color: ghlCopied === label ? '#000' : B.gold, border:`1px solid ${B.border}`, borderRadius:6, padding:"5px 10px", fontSize:10, fontWeight:700, cursor:"pointer" }}>
+                          style={{ background: ghlCopied === label ? (B.success || '#4FD89A') : 'none', color: ghlCopied === label ? B.onAccent : B.gold, border:`1px solid ${B.border}`, borderRadius:6, padding:"5px 10px", fontSize:10, fontWeight:700, cursor:"pointer" }}>
                           {ghlCopied === label ? '✓ Copied' : 'Copy'}
                         </button>
                       </div>
@@ -4942,7 +4942,7 @@ const AdminDashboard = ({ user }:any) => {
                         <span style={{ fontSize:10, fontWeight:700, color:B.muted, width:90, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</span>
                         <code style={{ flex:1, minWidth:180, fontSize:10, color:B.text, background:B.surface, border:`1px solid ${B.border}`, borderRadius:6, padding:"6px 8px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{val}</code>
                         <button onClick={() => ghlCopy(`cp-${label}`, val)}
-                          style={{ background: ghlCopied === `cp-${label}` ? (B.success || '#4FD89A') : 'none', color: ghlCopied === `cp-${label}` ? '#000' : B.gold, border:`1px solid ${B.border}`, borderRadius:6, padding:"5px 10px", fontSize:10, fontWeight:700, cursor:"pointer" }}>
+                          style={{ background: ghlCopied === `cp-${label}` ? (B.success || '#4FD89A') : 'none', color: ghlCopied === `cp-${label}` ? B.onAccent : B.gold, border:`1px solid ${B.border}`, borderRadius:6, padding:"5px 10px", fontSize:10, fontWeight:700, cursor:"pointer" }}>
                           {ghlCopied === `cp-${label}` ? '✓ Copied' : 'Copy'}
                         </button>
                       </div>
@@ -6729,7 +6729,7 @@ const DbaHq = ({ dba, primary, content }: any) => {
                 <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   <code style={{ flex: 1, minWidth: 180, fontSize: 10, color: B.text, background: B.dim, border: `1px solid ${B.border}`, borderRadius: 6, padding: "6px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</code>
                   <button onClick={() => zapCopy(label, val)}
-                    style={{ background: zapCopied === label ? '#4FD89A' : 'none', color: zapCopied === label ? '#000' : primary, border: `1px solid ${B.border}`, borderRadius: 6, padding: "5px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ background: zapCopied === label ? '#4FD89A' : 'none', color: zapCopied === label ? B.onAccent : primary, border: `1px solid ${B.border}`, borderRadius: 6, padding: "5px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
                     {zapCopied === label ? '✓ Copied' : 'Copy'}
                   </button>
                 </div>

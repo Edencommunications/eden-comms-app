@@ -533,7 +533,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
           <button onClick={copy} style={btn}>{copied ? '✓ Copied' : (att.transcript ? '⧉ Copy text' : '⧉ Copy link')}</button>
         </div>
         {showTx && att.transcript && (
-          <div style={{ marginTop:6, fontSize:11, color:C.muted, lineHeight:1.6, background:'#00000030', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', maxWidth:280, whiteSpace:'pre-wrap' }}>
+          <div style={{ marginTop:6, fontSize:11, color:C.muted, lineHeight:1.6, background:C.dim, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', maxWidth:280, whiteSpace:'pre-wrap' }}>
             {att.transcript}
           </div>
         )}
@@ -794,7 +794,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
           <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:2, flexWrap:'wrap' }}>
             <span style={{ fontSize:11, fontWeight:700, color: mine ? C.gold : C.white }}>{m.sender_name}</span>
             {['super_admin','company_admin'].includes(m.sender_role) && <span style={{ fontSize:8, background:`${C.gold}22`, color:C.gold, padding:'1px 5px', borderRadius:4, fontWeight:700 }}>ADMIN</span>}
-            {m.sender_role==='coach' && <span style={{ fontSize:8, background:'#2a2a2a', color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700 }}>COACH</span>}
+            {m.sender_role==='coach' && <span style={{ fontSize:8, background:C.dim, color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700 }}>COACH</span>}
             <span style={{ fontSize:9, color:C.muted }}>{timeAgo(m.created_at)}</span>
             {pinnedIds.has(m.id) && <span style={{ fontSize:9, color:C.gold }}>📌</span>}
           </div>

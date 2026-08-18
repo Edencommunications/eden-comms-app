@@ -13,13 +13,7 @@
 // back next visit so the reminder stays until they actually install.
 
 import { useEffect, useState, useRef } from 'react'
-
-const GOLD    = '#ffa600'
-const BLACK   = '#000'
-const SURFACE = '#111'
-const WHITE   = '#fff'
-const MUTED   = '#888'
-const BORDER  = '#2a2a2a'
+import { T } from '../lib/theme'
 
 function isStandalone(): boolean {
   return (
@@ -136,8 +130,8 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
         onClick={() => setCollapsed(false)}
         style={{
           position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, background: GOLD, border: 'none', borderRadius: 24,
-          padding: '8px 20px', color: BLACK, fontSize: 12, fontWeight: 800,
+          zIndex: 9999, background: T.gold, border: 'none', borderRadius: 24,
+          padding: '8px 20px', color: T.onAccent, fontSize: 12, fontWeight: 800,
           cursor: 'pointer', boxShadow: '0 4px 20px rgba(255,166,0,.45)',
           display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
         }}
@@ -152,11 +146,11 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999,
-      background: SURFACE, borderTop: `2px solid ${GOLD}`,
+      background: T.surface, borderTop: `2px solid ${T.gold}`,
       boxShadow: '0 -4px 32px rgba(255,166,0,.25)',
     }}>
       {/* Gold accent bar */}
-      <div style={{ height: 3, background: `linear-gradient(90deg,${GOLD},#ffcc55,${GOLD})` }}/>
+      <div style={{ height: 3, background: `linear-gradient(90deg,${T.gold},#ffcc55,${T.gold})` }}/>
 
       <div style={{ padding: '16px 18px 20px' }}>
 
@@ -165,10 +159,10 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 26 }}>📲</span>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: WHITE, letterSpacing: .2 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: T.text, letterSpacing: .2 }}>
                 Add {brandName} to Your Home Screen
               </div>
-              <div style={{ fontSize: 11, color: MUTED, marginTop: 1 }}>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>
                 One tap access — works like a native app
               </div>
             </div>
@@ -176,7 +170,7 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
           {/* Collapse to pill — comes back next session */}
           <button
             onClick={() => { setVisible(false); setCollapsed(true) }}
-            style={{ background: 'none', border: 'none', color: MUTED, fontSize: 22,
+            style={{ background: 'none', border: 'none', color: T.muted, fontSize: 22,
               cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}
             aria-label="Remind me later"
           >×</button>
@@ -185,7 +179,7 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
         {ios ? (
           // ── iOS instructions ─────────────────────────────
           <>
-            <div style={{ fontSize: 12, color: MUTED, marginBottom: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>
               Safari doesn't show an install button — use these two steps:
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -196,17 +190,17 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
               ].map(s => (
                 <div key={s.n} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
-                  background: '#1a1a1a', border: `1px solid ${BORDER}`,
+                  background: T.card, border: `1px solid ${T.border}`,
                   borderRadius: 10, padding: '10px 12px',
                 }}>
                   <span style={{
-                    fontSize: 9, fontWeight: 800, background: GOLD, color: BLACK,
+                    fontSize: 9, fontWeight: 800, background: T.gold, color: T.onAccent,
                     borderRadius: '50%', width: 18, height: 18, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
                   }}>{s.n}</span>
                   <span style={{ fontSize: 13, lineHeight: 1 }}>
                     <span style={{ marginRight: 6 }}>{s.icon}</span>
-                    <span style={{ color: WHITE }}>{s.text}</span>
+                    <span style={{ color: T.text }}>{s.text}</span>
                   </span>
                 </div>
               ))}
@@ -215,8 +209,8 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
             <button
               onClick={() => { markInstalled(); setVisible(false); setCollapsed(false) }}
               style={{
-                width: '100%', background: `${GOLD}22`, border: `1px solid ${GOLD}55`,
-                borderRadius: 10, padding: '11px', color: GOLD, fontSize: 13,
+                width: '100%', background: T.goldDim, border: `1px solid ${T.gold}55`,
+                borderRadius: 10, padding: '11px', color: T.gold, fontSize: 13,
                 fontWeight: 700, cursor: 'pointer',
               }}
             >
@@ -226,7 +220,7 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
         ) : androidSteps ? (
           // ── Android manual instructions (fallback when the one-tap prompt isn't available) ──
           <>
-            <div style={{ fontSize: 12, color: MUTED, marginBottom: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>
               Add {brandName} from your browser's menu — takes two taps:
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -237,17 +231,17 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
               ].map(s => (
                 <div key={s.n} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
-                  background: '#1a1a1a', border: `1px solid ${BORDER}`,
+                  background: T.card, border: `1px solid ${T.border}`,
                   borderRadius: 10, padding: '10px 12px',
                 }}>
                   <span style={{
-                    fontSize: 9, fontWeight: 800, background: GOLD, color: BLACK,
+                    fontSize: 9, fontWeight: 800, background: T.gold, color: T.onAccent,
                     borderRadius: '50%', width: 18, height: 18, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
                   }}>{s.n}</span>
                   <span style={{ fontSize: 13, lineHeight: 1 }}>
                     <span style={{ marginRight: 6 }}>{s.icon}</span>
-                    <span style={{ color: WHITE }}>{s.text}</span>
+                    <span style={{ color: T.text }}>{s.text}</span>
                   </span>
                 </div>
               ))}
@@ -255,8 +249,8 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
             <button
               onClick={() => { markInstalled(); setVisible(false); setCollapsed(false) }}
               style={{
-                width: '100%', background: `${GOLD}22`, border: `1px solid ${GOLD}55`,
-                borderRadius: 10, padding: '11px', color: GOLD, fontSize: 13,
+                width: '100%', background: T.goldDim, border: `1px solid ${T.gold}55`,
+                borderRadius: 10, padding: '11px', color: T.gold, fontSize: 13,
                 fontWeight: 700, cursor: 'pointer',
               }}
             >
@@ -266,16 +260,16 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
         ) : (
           // ── Android / Chrome one-tap install ─────────────
           <>
-            <div style={{ fontSize: 12, color: MUTED, marginBottom: 14, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 14, lineHeight: 1.5 }}>
               Install {brandName} as an app — no App Store needed. Loads instantly, works offline.
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={handleInstall}
                 style={{
-                  flex: 1, background: GOLD, border: 'none', borderRadius: 10,
-                  padding: '13px', fontWeight: 800, color: BLACK, fontSize: 14,
-                  cursor: 'pointer', boxShadow: `0 2px 16px ${GOLD}55`,
+                  flex: 1, background: T.gold, border: 'none', borderRadius: 10,
+                  padding: '13px', fontWeight: 800, color: T.onAccent, fontSize: 14,
+                  cursor: 'pointer', boxShadow: `0 2px 16px ${T.gold}55`,
                 }}
               >
                 📲 Add to Home Screen
@@ -283,8 +277,8 @@ export default function InstallBanner({ brandName = 'Eden' }: { brandName?: stri
               <button
                 onClick={() => { setVisible(false); setCollapsed(true) }}
                 style={{
-                  background: '#1a1a1a', border: `1px solid ${BORDER}`,
-                  borderRadius: 10, padding: '13px 16px', color: MUTED,
+                  background: T.card, border: `1px solid ${T.border}`,
+                  borderRadius: 10, padding: '13px 16px', color: T.muted,
                   fontSize: 13, cursor: 'pointer',
                 }}
               >

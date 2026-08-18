@@ -596,7 +596,7 @@ export default function Week7({ currentUser, initialDm }: any) {
           <button onClick={copy} style={btn}>{copied ? '✓ Copied' : (att.transcript ? '⧉ Copy text' : '⧉ Copy link')}</button>
         </div>
         {showTx && att.transcript && (
-          <div style={{marginTop:6,fontSize:11,color:C.muted,lineHeight:1.6,background:'#00000030',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',maxWidth:280,whiteSpace:'pre-wrap'}}>
+          <div style={{marginTop:6,fontSize:11,color:C.muted,lineHeight:1.6,background:C.dim,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',maxWidth:280,whiteSpace:'pre-wrap'}}>
             {att.transcript}
           </div>
         )}
@@ -619,7 +619,7 @@ export default function Week7({ currentUser, initialDm }: any) {
             </a>
           ) : (
             <a key={i} href={a.url} target="_blank" rel="noreferrer"
-              style={{display:'flex',alignItems:'center',gap:8,background:mine?'#00000018':C.surface,border:`1px solid ${C.border}`,
+              style={{display:'flex',alignItems:'center',gap:8,background:mine?C.goldDim:C.surface,border:`1px solid ${C.border}`,
                 borderRadius:8,padding:'7px 10px',textDecoration:'none',maxWidth:260}}>
               <span style={{fontSize:15}}>📎</span>
               <span style={{fontSize:12,fontWeight:600,color:mine?C.black:C.gold,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>

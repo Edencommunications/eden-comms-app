@@ -12,6 +12,7 @@ import MentionInput from './MentionInput'
 import { sendNotification } from './Notifications'
 import CanvasPanel from './CanvasPanel'
 import { ReactionBar, fetchReactions } from './Reactions'
+import { T as _T } from '../lib/theme'
 
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
@@ -20,11 +21,7 @@ const H = {
   'apikey': SUPABASE_ANON, get Authorization(){ return sbBearer() },
   'Content-Type': 'application/json',
 }
-const C = {
-  gold: '#ffa600', black: '#000000', white: '#ffffff',
-  surface: '#111111', card: '#1a1a1a', border: '#2a2a2a',
-  muted: '#888888', success: '#4FD89A', danger: '#ff4444',
-}
+const C = _T
 
 async function dbGet(table, params = '') {
   try {
@@ -572,14 +569,14 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
       <div key={m.id} id={`cmsg-${m.id}`} style={{ marginBottom: isReply ? 8 : 4, marginLeft: isReply ? 34 : 0, display:'flex', gap:8, alignItems:'flex-start' }}>
         <div style={{ width: isReply?24:30, height: isReply?24:30, borderRadius:6, background: mine ? C.gold : `${C.gold}22`,
           display:'flex', alignItems:'center', justifyContent:'center', fontSize: isReply?9:11, fontWeight:700,
-          color: mine ? C.black : C.gold, flexShrink:0 }}>
+          color: mine ? C.onAccent : C.gold, flexShrink:0 }}>
           {(m.sender_name||'?')[0]}
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:2, flexWrap:'wrap' }}>
             <span style={{ fontSize:11, fontWeight:700, color: mine ? C.gold : C.white }}>{m.sender_name}</span>
             {['super_admin','company_admin'].includes(m.sender_role) && <span style={{ fontSize:8, background:`${C.gold}22`, color:C.gold, padding:'1px 5px', borderRadius:4, fontWeight:700 }}>ADMIN</span>}
-            {m.sender_role==='coach' && <span style={{ fontSize:8, background:'#2a2a2a', color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700 }}>COACH</span>}
+            {m.sender_role==='coach' && <span style={{ fontSize:8, background:C.dim, color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700 }}>COACH</span>}
             <span style={{ fontSize:9, color:C.muted }}>{timeAgo(m.created_at)}</span>
             {pinnedIds.has(m.id) && <span style={{ fontSize:9, color:C.gold }}>📌</span>}
           </div>
@@ -629,7 +626,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
             <div style={{ flex:1, fontSize:13, fontWeight:800, color:C.white }}>👥 Communities</div>
             {canManage && (
               <button onClick={() => { setShowCreate(true); setNewMembers([]); setRoster(null); setRosterSearch(''); fetchRoster() }}
-                style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>＋ New</button>
+                style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.onAccent, fontSize:11, fontWeight:800, cursor:'pointer' }}>＋ New</button>
             )}
           </div>
           <div style={{ flex:1, overflowY:'auto', padding:'4px 8px' }}>
@@ -651,7 +648,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                   <div style={{ fontSize:9, color:C.muted }}>by {c.created_by_name || '—'}</div>
                 </div>
                 {unread[c.id] > 0 && activeId !== c.id && (
-                  <span style={{ background:C.gold, color:C.black, borderRadius:9, minWidth:18, height:18, fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', padding:'0 5px', flexShrink:0 }}>
+                  <span style={{ background:C.gold, color:C.onAccent, borderRadius:9, minWidth:18, height:18, fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', padding:'0 5px', flexShrink:0 }}>
                     {unread[c.id] >= 30 ? '30+' : unread[c.id]}
                   </span>
                 )}
@@ -760,7 +757,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                       padding: isMobile ? '11px 14px' : '9px 13px', color:C.white, fontSize:13, outline:'none' }}/>
                   <button onClick={send} disabled={!newMsg.trim()}
                     style={{ background:C.gold, border:'none', borderRadius:18, padding:'9px 16px',
-                      fontWeight:800, color:C.black, fontSize:12, cursor:'pointer', opacity:newMsg.trim()?1:.4, flexShrink:0 }}>Send</button>
+                      fontWeight:800, color:C.onAccent, fontSize:12, cursor:'pointer', opacity:newMsg.trim()?1:.4, flexShrink:0 }}>Send</button>
                 </div>
               </div>
             ) : (
@@ -807,11 +804,11 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                       onClick={() => setNewMembers(prev => picked ? prev.filter(x => x.id !== p.id) : [...prev, p])}
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 2px', borderBottom:`1px solid ${C.border}`, cursor:'pointer' }}>
                       <span style={{ width:16, height:16, borderRadius:4, border:`1px solid ${picked ? C.gold : C.border}`,
-                        background: picked ? C.gold : 'transparent', color:C.black, fontSize:11, fontWeight:800,
+                        background: picked ? C.gold : 'transparent', color:C.onAccent, fontSize:11, fontWeight:800,
                         display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{picked ? '✓' : ''}</span>
                       <span style={{ flex:1, fontSize:12, color:C.white }}>
                         {p.name || p.full_name || p.email} <span style={{ fontSize:9, color:C.muted }}>({p.role})</span>
-                        {p.role==='client' && p.is_active===false && <span style={{ fontSize:8, background:'#2a2a2a', color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700, marginLeft:5 }}>OFFBOARDED</span>}
+                        {p.role==='client' && p.is_active===false && <span style={{ fontSize:8, background:C.dim, color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700, marginLeft:5 }}>OFFBOARDED</span>}
                       </span>
                     </div>
                   )
@@ -823,7 +820,7 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
               <button onClick={() => setShowCreate(false)}
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 14px', color:C.muted, fontSize:12, cursor:'pointer' }}>Cancel</button>
               <button onClick={createCommunity} disabled={!newName.trim()}
-                style={{ background:C.gold, border:'none', borderRadius:8, padding:'8px 16px', color:C.black, fontSize:12, fontWeight:800, cursor:'pointer', opacity:newName.trim()?1:.4 }}>Create</button>
+                style={{ background:C.gold, border:'none', borderRadius:8, padding:'8px 16px', color:C.onAccent, fontSize:12, fontWeight:800, cursor:'pointer', opacity:newName.trim()?1:.4 }}>Create</button>
             </div>
           </div>
         </div>
@@ -864,11 +861,11 @@ export default function Communities({ me, companyId = EDEN_ORG_ID, context = 'cl
                     <div style={{ fontSize:12, color:C.white, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {p.name || p.full_name || p.email}
                       <span style={{ fontSize:9, color:C.muted }}> ({p.role})</span>
-                      {p.role==='client' && p.is_active===false && <span style={{ fontSize:8, background:'#2a2a2a', color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700, marginLeft:5 }}>OFFBOARDED</span>}
+                      {p.role==='client' && p.is_active===false && <span style={{ fontSize:8, background:C.dim, color:C.muted, padding:'1px 5px', borderRadius:4, fontWeight:700, marginLeft:5 }}>OFFBOARDED</span>}
                     </div>
                   </div>
                   <button onClick={() => addMember(p)}
-                    style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.black, fontSize:10, fontWeight:800, cursor:'pointer' }}>Add</button>
+                    style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.onAccent, fontSize:10, fontWeight:800, cursor:'pointer' }}>Add</button>
                 </div>
               ))}
             </div>
