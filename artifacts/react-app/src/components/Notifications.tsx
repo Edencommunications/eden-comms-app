@@ -666,13 +666,13 @@ export default function Notifications({ currentUser, onNavigate }: any) {
                           <input
                             type="time" value={q.start} aria-label="Quiet hours start"
                             onChange={e => e.target.value && saveQuiet({ start: e.target.value })}
-                            style={{ fontSize:11, background:'transparent', color:C.white, border:`1px solid ${C.border}`, borderRadius:6, padding:'2px 6px', colorScheme:'dark' }}
+                            style={{ fontSize:11, background:'transparent', color:C.white, border:`1px solid ${C.border}`, borderRadius:6, padding:'2px 6px', colorScheme:'inherit' }}
                           />
                           <span style={{ fontSize:10, color:C.muted }}>to</span>
                           <input
                             type="time" value={q.end} aria-label="Quiet hours end"
                             onChange={e => e.target.value && saveQuiet({ end: e.target.value })}
-                            style={{ fontSize:11, background:'transparent', color:C.white, border:`1px solid ${C.border}`, borderRadius:6, padding:'2px 6px', colorScheme:'dark' }}
+                            style={{ fontSize:11, background:'transparent', color:C.white, border:`1px solid ${C.border}`, borderRadius:6, padding:'2px 6px', colorScheme:'inherit' }}
                           />
                         </div>
                       )}

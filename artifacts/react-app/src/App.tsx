@@ -1757,7 +1757,7 @@ const ClientDetailModal = ({ client, coachId, onClose, onNavigate, onSaved, onFl
                   onSaved?.(client.uuid, { startDate: val || null });
                 }}
                 style={{ flex:1, background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"9px 12px",
-                  color: startDate ? B.gold : B.muted, fontSize:13, outline:"none", colorScheme:"dark" }}/>
+                  color: startDate ? B.gold : B.muted, fontSize:13, outline:"none", colorScheme:"inherit" }}/>
               {savingStart
                 ? <span style={{ fontSize:11, color:B.muted, whiteSpace:"nowrap" }}>Saving…</span>
                 : startError
@@ -2507,7 +2507,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
               if (!ok) { setMyTime(prev); setMyTzError(true); return; }
               clearTzCache();
             }}
-            style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer", colorScheme:"dark" }}/>
+            style={{ background:B.card, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 10px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer", colorScheme:"inherit" }}/>
           <select value={myTz} onChange={async e => {
               const tz = e.target.value; const prev = myTz;
               setMyTz(tz); setMyTzError(false);
@@ -3469,10 +3469,10 @@ const AdminActivityLog = ({ user }:any) => {
         </select>
         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
           <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} title="From date"
-            style={{ padding:'8px 10px', borderRadius:8, border:`1px solid ${B.border}`, background:B.surface, color:B.text, fontSize:12, colorScheme:'dark' }}/>
+            style={{ padding:'8px 10px', borderRadius:8, border:`1px solid ${B.border}`, background:B.surface, color:B.text, fontSize:12, colorScheme:'inherit' }}/>
           <span style={{ color:B.muted, fontSize:12 }}>→</span>
           <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} title="To date"
-            style={{ padding:'8px 10px', borderRadius:8, border:`1px solid ${B.border}`, background:B.surface, color:B.text, fontSize:12, colorScheme:'dark' }}/>
+            style={{ padding:'8px 10px', borderRadius:8, border:`1px solid ${B.border}`, background:B.surface, color:B.text, fontSize:12, colorScheme:'inherit' }}/>
           {(dateFrom||dateTo||person!=='all') && (
             <button onClick={()=>{ setDateFrom(''); setDateTo(''); setPerson('all'); }}
               style={{ background:'none', border:`1px solid ${B.border}`, borderRadius:8, padding:'7px 10px', color:B.muted, fontSize:11, fontWeight:700, cursor:'pointer' }}>
@@ -4558,7 +4558,7 @@ const AdminDashboard = ({ user }:any) => {
                       <span style={{ flex:1, minWidth:120, fontSize:13, fontWeight:600, color:B.text }}><LN>{c.name}</LN></span>
                       <input type="time" value={dl.time}
                         onChange={e => { if (e.target.value) saveCoachDl(c.id, { deadline_time: e.target.value }, { time: e.target.value }); }}
-                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 8px", color:B.gold, fontSize:12, outline:"none", colorScheme:"dark" }}/>
+                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 8px", color:B.gold, fontSize:12, outline:"none", colorScheme:"inherit" }}/>
                       <select value={dl.tz}
                         onChange={e => saveCoachDl(c.id, { timezone: e.target.value }, { tz: e.target.value })}
                         style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"6px 8px", color:B.gold, fontSize:12, outline:"none", cursor:"pointer" }}>

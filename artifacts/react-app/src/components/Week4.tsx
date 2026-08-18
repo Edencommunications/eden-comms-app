@@ -859,7 +859,7 @@ Training Principles:
                         setActiveLab((p: any)=>({...p, notes}))
                         setLabs(p=>p.map(l=>l.id===activeLab.id?{...l, notes}:l))
                       }}
-                      style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,color:C.gold,fontSize:10,padding:'2px 6px',outline:'none',colorScheme:'dark'}}/>
+                      style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,color:C.gold,fontSize:10,padding:'2px 6px',outline:'none',colorScheme:'inherit'}}/>
                   </div>
                 </div>
                 {activeLab.file_url&&(

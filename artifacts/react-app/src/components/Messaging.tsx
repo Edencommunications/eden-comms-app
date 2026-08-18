@@ -517,13 +517,13 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
                     <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>Date</div>
                     <input type="date" value={newSchedDate} onChange={e=>setNewSchedDate(e.target.value)}
                       style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px',
-                        color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', colorScheme:'dark' }}/>
+                        color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', colorScheme:'inherit' }}/>
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>Time</div>
                     <input type="time" value={newSchedTime} onChange={e=>setNewSchedTime(e.target.value)}
                       style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px',
-                        color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', colorScheme:'dark' }}/>
+                        color:C.white, fontSize:12, outline:'none', boxSizing:'border-box', colorScheme:'inherit' }}/>
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:4 }}>Timezone</div>

@@ -2236,7 +2236,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                           alert("Couldn't save the start date — try again.")
                         }
                       }}
-                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer',colorScheme:'dark'}}/>
+                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer',colorScheme:'inherit'}}/>
                   </div>
                 )}
               </div>
@@ -2859,12 +2859,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 </button>
               ))}
               <input type="date" value={audFrom&&audFrom===audTo?audFrom:''} onChange={e=>audJumpToDate(e.target.value)} title="Jump to a specific day"
-                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${audFrom&&audFrom===audTo?C.gold+'88':C.border}`,background:C.card,color:audFrom&&audFrom===audTo?C.gold:C.white,fontSize:11,colorScheme:'dark',width:34,cursor:'pointer'}}/>
+                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${audFrom&&audFrom===audTo?C.gold+'88':C.border}`,background:C.card,color:audFrom&&audFrom===audTo?C.gold:C.white,fontSize:11,colorScheme:'inherit',width:34,cursor:'pointer'}}/>
               <input type="date" value={audFrom} onChange={e=>setAudFrom(e.target.value)} title="From date"
-                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:11,colorScheme:'dark'}}/>
+                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:11,colorScheme:'inherit'}}/>
               <span style={{color:C.muted,fontSize:12}}>→</span>
               <input type="date" value={audTo} onChange={e=>setAudTo(e.target.value)} title="To date"
-                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:11,colorScheme:'dark'}}/>
+                style={{padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.white,fontSize:11,colorScheme:'inherit'}}/>
               {(audFrom||audTo||audPerson!=='all'||audAction!=='all'||audSearch)&&(
                 <button onClick={()=>{setAudFrom('');setAudTo('');setAudPerson('all');setAudAction('all');setAudSearch('')}}
                   style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px',color:C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>Clear</button>

@@ -667,7 +667,7 @@ export function DndButton({ isMobile }: any) {
               <input type="datetime-local" value={customVal} min={customLimits.min} max={customLimits.max}
                 onChange={e => setCustomVal(e.target.value)}
                 style={{ flex:1, minWidth:0, background:C.surface, border:`1px solid ${C.border}`, borderRadius:7,
-                  padding:'7px 8px', color:C.white, fontSize:11, colorScheme:'dark' }}/>
+                  padding:'7px 8px', color:C.white, fontSize:11, colorScheme:'inherit' }}/>
               <button onClick={saveCustom} disabled={!customVal}
                 style={{ background: customVal ? C.gold : C.border, border:'none', borderRadius:7, padding:'7px 12px',
                   color:C.onAccent, fontSize:11, fontWeight:800, cursor: customVal ? 'pointer' : 'default' }}>
