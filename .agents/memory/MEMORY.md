@@ -33,4 +33,5 @@
 - [Messages unread model](messages-unread.md) — unread = messages.is_read polling + manual marks in admin_settings via /msgs/unread; realtime topics msgs-user-* / msgs-tab-* can't share subscribers.
 - [GHL KPI reports](ghl-kpi-reports.md) — token in env secret only; pipelines resolved by name; Central-time windows; per-report CAS claims; Meta /debug_token self-check is unreliable.
 - [Supp/Rx note threads](supp-rx-note-threads.md) — client supp/rx notes are dated threads with coach replies via /notes-thread API; legacy notepads auto-migrate; never overwrite these keys whole.
+- [Dark/Light theme system](theme-system.md) — all palettes alias mutable T in lib/theme.ts; never capture token values at module scope; text-on-gold uses `onAccent`; prefs via /prefs/theme.
 - [Deleted-message redaction](deleted-message-redaction.md) — Team Hub chat reads go through GET /api/team/messages (service key + server-side redaction); direct RLS SELECT hides soft-deleted rows entirely. Client renders placeholders via shared DeletedBubble.
