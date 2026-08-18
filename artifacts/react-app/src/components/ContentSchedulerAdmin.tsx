@@ -361,7 +361,8 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities, dbas 
             <span style={{ fontSize: 12, color: B.muted }}>Weekly recap →</span>
             <CommunityDestPicker B={B} communities={communities} dbas={dbas}
               value={status.community_id || ''} disabled={busy}
-              onPick={(id: string) => saveSettings({ community_id: id })}/>
+              onPick={(id: string) => saveSettings({ community_id: id })}
+              onClear={() => saveSettings({ community_id: null })}/>
             <select value={status.weekly_day ?? 1} disabled={busy} onChange={e => saveSettings({ weekly_day: Number(e.target.value) })} style={sel}>
               {DAYS.map((d, i) => <option key={i} value={i}>{d}s</option>)}
             </select>
