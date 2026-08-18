@@ -39,6 +39,7 @@ const CHECKS = [
   { name: "community-notify-throttle (push throttle & exclusions)", file: "community-notify-throttle.mjs", mode: "script" },
   { name: "push-categories (per-category push preferences)", file: "push-categories.mjs", mode: "script" },
   { name: "rls-team-messages (deleted chat content can't leak via direct REST)", file: "rls-team-messages.mjs", mode: "script" },
+  { name: "rls-staff-meta-lockdown (staff cannot self-grant tab access via direct REST)", file: "rls-staff-meta-lockdown.mjs", mode: "script" },
   { name: "dba-boundary (DBA org-boundary access rules)", file: "dba-boundary.mjs", mode: "script", needsApi: true },
   { name: "auth.integration (auth provisioning hardening)", file: "auth.integration.mjs", mode: "test", needsApi: true },
 ];
