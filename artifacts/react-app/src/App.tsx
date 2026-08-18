@@ -828,6 +828,18 @@ const CommunityScreen = ({ user }:any) => {
     } else if (isCoach) {
       if (myId) setMyCoachId(myId);
     } else if (myId) {
+      // Staff (VA/head coach): the admin picks whose links they see via
+      // staff_meta connect_coach — blank means the default/company links.
+      const isStaffViewer = !['client','coach','super_admin','company_admin'].includes(user?.role);
+      if (isStaffViewer) {
+        try {
+          const sm:any[] = await csGet('admin_settings',`key=eq.${encodeURIComponent('staff_meta:'+myId)}&select=value`);
+          const v = sm?.[0]?.value;
+          const meta = v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
+          if (meta?.connect_coach) setMyCoachId(meta.connect_coach);
+        } catch {}
+        return;
+      }
       // Clients: own profile's coach_id (readable under RLS); client_access is staff-only
       if (rows?.[0]?.coach_id) { setMyCoachId(rows[0].coach_id); return; }
       const ca:any[] = await csGet('client_access',`client_id=eq.${myId}&select=staff_id&limit=1`);

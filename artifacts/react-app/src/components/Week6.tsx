@@ -438,7 +438,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [showNewUser,  setShowNewUser]  = useState(false)
   const [newUser, setNewUser] = useState<any>({
     name:'', email:'', role:'client', coachId:'', checkInDay:'Wednesday',
-    title:'', accessHome:true, accessMsgs:true, accessTeam:true, accessLearn:false, accessConnect:false,
+    title:'', accessHome:true, accessMsgs:true, accessTeam:true, accessLearn:false, accessConnect:false, connectCoachId:'',
   })
   const setNU = (k: any)=>(v: any)=>setNewUser((p: any)=>({...p,[k]:v}))
 
@@ -1640,24 +1640,26 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [editStaff, setEditStaff] = useState<any>(null) // {id, name, label, tabs:{home,msgs,team}, saving}
   async function openEditStaff(s: any) {
     // Load their current staff_meta (may not exist yet — defaults to all tabs)
-    let label = '', tabs: any = { home:true, msgs:true, team:true, learn:false, community:false }
+    let label = '', connectCoach = '', tabs: any = { home:true, msgs:true, team:true, learn:false, community:false }
     try {
       const rows = await dbGet('admin_settings', `key=eq.${encodeURIComponent('staff_meta:'+s.id)}&select=value`)
       const v = rows?.[0]?.value
       if (v) {
         const meta = typeof v === 'string' ? JSON.parse(v) : v
         label = meta?.label || ''
+        connectCoach = meta?.connect_coach || ''
         if (Array.isArray(meta?.tabs) && meta.tabs.length)
           tabs = { home:meta.tabs.includes('home'), msgs:meta.tabs.includes('msgs'), team:meta.tabs.includes('team'),
                    learn:meta.tabs.includes('learn'), community:meta.tabs.includes('community') }
       }
     } catch(e) {}
-    setEditStaff({ id:s.id, name:s.name||s.full_name||s.email, label, tabs, saving:false })
+    setEditStaff({ id:s.id, name:s.name||s.full_name||s.email, label, tabs, connectCoach, saving:false })
   }
   async function saveEditStaff() {
     if (!editStaff) return
     const tabList = ['home','msgs','team','learn','community'].filter(k=>editStaff.tabs[k])
-    const meta = { label: editStaff.label.trim() || null, tabs: tabList.length ? tabList : ['team'] }
+    const meta = { label: editStaff.label.trim() || null, tabs: tabList.length ? tabList : ['team'],
+                   connect_coach: (editStaff.tabs.community && editStaff.connectCoach) ? editStaff.connectCoach : null }
     setEditStaff((p: any)=>({ ...p, saving:true }))
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
@@ -1714,7 +1716,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       if (newUser.accessTeam) tabs.push('team')
       if (newUser.accessLearn) tabs.push('learn')
       if (newUser.accessConnect) tabs.push('community')
-      staffMeta = { label: newUser.title.trim() || null, tabs: tabs.length ? tabs : ['team'] }
+      staffMeta = { label: newUser.title.trim() || null, tabs: tabs.length ? tabs : ['team'],
+                    connect_coach: (newUser.accessConnect && newUser.connectCoachId) ? newUser.connectCoachId : null }
     }
 
     // One atomic server call: login + user_profiles row + client_access +
@@ -1776,7 +1779,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbInsert('audit_logs',{ action:'user_added', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:localUser.uuid||null,
       details:{ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role } }).catch(()=>{})
-    setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday',title:'',accessHome:true,accessMsgs:true,accessTeam:true,accessLearn:false,accessConnect:false})
+    setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday',title:'',accessHome:true,accessMsgs:true,accessTeam:true,accessLearn:false,accessConnect:false,connectCoachId:''})
     setShowNewUser(false)
   }
 
@@ -2571,6 +2574,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       </label>
                     ))}
                   </div>
+                  {editStaff.tabs.community&&(
+                    <Sel label="Whose links they see in Connect" value={editStaff.connectCoach||''}
+                      onChange={(v: any)=>setEditStaff((p: any)=>({...p,connectCoach:v}))}
+                      options={[{value:'',label:'Default (company links)'},...allCoaches.map((c: any)=>({value:c.uuid,label:c.name}))]}/>
+                  )}
                   {!editStaff.tabs.home&&!editStaff.tabs.msgs&&!editStaff.tabs.team&&(
                     <div style={{fontSize:10,color:(C as any).warning||'#e8b74f',marginBottom:8}}>With nothing checked they'll get Team Hub only.</div>
                   )}
@@ -3311,6 +3319,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     ))}
                   </div>
                   <div style={{fontSize:10,color:C.muted,marginTop:5,lineHeight:1.5}}>Untick Messages and My Clients to make them Team-Hub-only. You can change this anytime by re-saving them here.</div>
+                  {newUser.accessConnect&&(
+                    <div style={{marginTop:10}}>
+                      <Sel label="Whose links they see in Connect" value={newUser.connectCoachId||''} onChange={setNU('connectCoachId')}
+                        options={[{value:'',label:'Default (company links)'},...allCoaches.map((c: any)=>({value:c.uuid,label:c.name}))]}/>
+                    </div>
+                  )}
                 </div>
               </>
             )}

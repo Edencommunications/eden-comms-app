@@ -423,7 +423,10 @@ router.post("/auth/create-account", async (req: Request, res: Response) => {
   if (b.staff_meta && typeof b.staff_meta === "object" && companyId) {
     try {
       const tabs = Array.isArray(b.staff_meta.tabs) ? b.staff_meta.tabs.filter((t: any) => ["home", "msgs", "team", "learn", "community"].includes(t)) : [];
-      const metaRow = { label: b.staff_meta.label ? String(b.staff_meta.label) : null, tabs: tabs.length ? tabs : ["team"] };
+      // connect_coach = which coach's social links this staff member sees in Connect
+      const connectCoach = typeof b.staff_meta.connect_coach === "string" && /^[0-9a-f-]{36}$/i.test(b.staff_meta.connect_coach)
+        ? b.staff_meta.connect_coach : null;
+      const metaRow = { label: b.staff_meta.label ? String(b.staff_meta.label) : null, tabs: tabs.length ? tabs : ["team"], connect_coach: connectCoach };
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
         method: "POST",
         headers: { ...restHeaders(SERVICE_KEY), Prefer: "resolution=merge-duplicates,return=minimal" },

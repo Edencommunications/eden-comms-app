@@ -791,15 +791,19 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
   // manager must grant to real profile IDs, never the old demo placeholder list.
   const [rosterCoaches, setRosterCoaches] = useState<any[]>([])
   const [rosterClients, setRosterClients] = useState<any[]>([])
+  const [rosterStaff,   setRosterStaff]   = useState<any[]>([])
   async function loadRoster() {
     const cid = companyCtx?.companyId || EDEN_ORG_ID
     const rows = await dbGet('user_profiles',
-      `company_id=eq.${cid}&role=in.(coach,client)&select=id,name,role,coach_id,is_active&order=name.asc`)
+      `company_id=eq.${cid}&role=in.(coach,client,va,head_coach)&select=id,name,role,coach_id,is_active&order=name.asc`)
     const coaches = (rows||[]).filter((r: any)=>r.role==='coach')
     const nameById = Object.fromEntries(coaches.map((c: any)=>[c.id,c.name]))
     setRosterCoaches(coaches.map((c: any)=>({uuid:c.id,name:c.name,role:'coach'})))
     setRosterClients((rows||[]).filter((r: any)=>r.role==='client'&&r.is_active!==false)
       .map((c: any)=>({uuid:c.id,name:c.name,role:'client',coachId:c.coach_id,coachName:nameById[c.coach_id]||''})))
+    // Team members (VAs / staff) can be granted courses individually too
+    setRosterStaff((rows||[]).filter((r: any)=>['va','head_coach'].includes(r.role)&&r.is_active!==false)
+      .map((c: any)=>({uuid:c.id,name:c.name,role:c.role==='va'?'team member':'head coach'})))
   }
 
   async function openAccessManager(course: any) {
@@ -1464,7 +1468,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
 
               {/* Individual grant */}
               <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>Individual Access</div>
-              {[...rosterCoaches,...rosterClients].map(user=>{
+              {[...rosterCoaches,...rosterStaff,...rosterClients].map(user=>{
                 const hasIt = accessList.find(a=>a.user_id===user.uuid)
                 return (
                   <div key={user.uuid} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderTop:`1px solid ${C.border}`}}>
