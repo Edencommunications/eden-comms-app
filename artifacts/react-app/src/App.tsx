@@ -49,6 +49,7 @@ try {
 import Wearables from "./components/Wearables";
 import CheckinFormEditor from "./components/CheckinFormEditor";
 import InstallBanner from "./components/InstallBanner";
+import { TermsPage, PrivacyPage } from "./components/LegalPages";
 import { applyPwaBrand, resetPwaBrand } from "./pwaBrand";
 import { supabase } from "./supabaseClient";
 
@@ -391,6 +392,10 @@ const LoginScreen = ({ onLogin, onForgot, brandOrg = null }: any) => {
 
           <p style={{ textAlign:"center", fontSize:10, color:"#444444", marginTop:20, lineHeight:1.6 }}>
             {brandOrg ? "🔒 All data encrypted" : "🔒 All data encrypted · edencommunications.io"}
+          </p>
+          <p style={{ textAlign:"center", fontSize:10, marginTop:6 }}>
+            <a href={`${import.meta.env.BASE_URL || '/'}terms`} style={{ color:"#666666", textDecoration:"none", marginRight:12 }}>Terms &amp; Conditions</a>
+            <a href={`${import.meta.env.BASE_URL || '/'}privacy`} style={{ color:"#666666", textDecoration:"none" }}>Privacy Policy</a>
           </p>
         </div>
       </div>
@@ -7657,7 +7662,7 @@ export default function App() {
       if (!slug) {
         // Subpath form: first path segment is treated as an org slug
         // (reserved app routes excluded). Unknown slugs fall back to Eden login.
-        const RESERVED = new Set(['video', 'api', '__mockup']);
+        const RESERVED = new Set(['video', 'api', '__mockup', 'terms', 'privacy']);
         // Base-path aware: strip the app's mount path before reading the slug segment
         const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
         const path = window.location.pathname.startsWith(base)
@@ -7699,6 +7704,16 @@ export default function App() {
       .then(b => setMyDbas(Array.isArray(b?.dbas) ? b.dbas : []))
       .catch(() => setMyDbas([]));
   }, [user?.email, user?.mustChangePassword, isDbaMember, cameViaDba]);
+
+  // Public legal pages — /terms and /privacy work signed in or out
+  {
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
+    const path = window.location.pathname.startsWith(base)
+      ? window.location.pathname.slice(base.length) : window.location.pathname;
+    const seg = (path.split('/').filter(Boolean)[0] || '').toLowerCase();
+    if (seg === 'terms') return <TermsPage/>;
+    if (seg === 'privacy') return <PrivacyPage/>;
+  }
 
   if (!user) {
     // Oura OAuth return in a signed-out tab (phones often open the redirect
@@ -7764,6 +7779,11 @@ export default function App() {
       <AppShell user={user} onLogout={fullLogout}
         myDbas={user.role === 'client' ? [] : (myDbas || [])}
         onOpenDba={() => { setDbaExited(false); setDbaEntered(true); }}/>
+      {/* Legal footer — shows for every signed-in account */}
+      <div style={{ background: B.black, borderTop: `1px solid ${B.border}`, padding: "10px 16px", textAlign: "center" }}>
+        <a href={`${import.meta.env.BASE_URL || '/'}terms`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#666666", textDecoration: "none", marginRight: 14 }}>Terms &amp; Conditions</a>
+        <a href={`${import.meta.env.BASE_URL || '/'}privacy`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#666666", textDecoration: "none" }}>Privacy Policy</a>
+      </div>
       <InstallBanner />
     </AuthContext.Provider>
   );
