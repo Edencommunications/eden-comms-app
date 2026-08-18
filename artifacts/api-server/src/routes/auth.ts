@@ -423,9 +423,20 @@ router.post("/auth/create-account", async (req: Request, res: Response) => {
   if (b.staff_meta && typeof b.staff_meta === "object" && companyId) {
     try {
       const tabs = Array.isArray(b.staff_meta.tabs) ? b.staff_meta.tabs.filter((t: any) => ["home", "msgs", "team", "learn", "community"].includes(t)) : [];
-      // connect_coach = which coach's social links this staff member sees in Connect
-      const connectCoach = typeof b.staff_meta.connect_coach === "string" && /^[0-9a-f-]{36}$/i.test(b.staff_meta.connect_coach)
-        ? b.staff_meta.connect_coach : null;
+      // connect_coach = which coach's social links this staff member sees in Connect.
+      // Validate it's a real, active coach/head coach in the SAME company — never
+      // trust a raw UUID from the client (cross-org link leakage).
+      let connectCoach: string | null = null;
+      if (typeof b.staff_meta.connect_coach === "string" && /^[0-9a-f-]{36}$/i.test(b.staff_meta.connect_coach)) {
+        try {
+          const chk = await fetch(
+            `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${b.staff_meta.connect_coach}&company_id=eq.${companyId}&role=in.(coach,head_coach)&is_active=not.is.false&select=id&limit=1`,
+            { headers: restHeaders(SERVICE_KEY) },
+          );
+          const rows = chk.ok ? await chk.json() : [];
+          if (Array.isArray(rows) && rows.length) connectCoach = b.staff_meta.connect_coach;
+        } catch {}
+      }
       const metaRow = { label: b.staff_meta.label ? String(b.staff_meta.label) : null, tabs: tabs.length ? tabs : ["team"], connect_coach: connectCoach };
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
         method: "POST",

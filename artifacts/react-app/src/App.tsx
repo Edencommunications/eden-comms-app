@@ -836,7 +836,15 @@ const CommunityScreen = ({ user }:any) => {
           const sm:any[] = await csGet('admin_settings',`key=eq.${encodeURIComponent('staff_meta:'+myId)}&select=value`);
           const v = sm?.[0]?.value;
           const meta = v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
-          if (meta?.connect_coach) setMyCoachId(meta.connect_coach);
+          if (meta?.connect_coach) {
+            // Ignore stale/invalid assignments: the target must still be an
+            // active coach/head coach in this same org, else fall back to defaults.
+            const orgFilter = (cid && cid !== EDEN_ORG_ID)
+              ? `company_id=eq.${cid}` : `or=(company_id.eq.${EDEN_ORG_ID},company_id.is.null)`;
+            const ok:any[] = await csGet('user_profiles',
+              `id=eq.${meta.connect_coach}&${orgFilter}&role=in.(coach,head_coach)&is_active=not.is.false&select=id&limit=1`);
+            if (ok?.length) setMyCoachId(meta.connect_coach);
+          }
         } catch {}
         return;
       }
