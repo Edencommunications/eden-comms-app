@@ -6,6 +6,7 @@
 // chosen community.
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
+import CommunityDestPicker from './CommunityDestPicker'
 
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const MAX_IMG_MB = 25       // photos
@@ -127,7 +128,7 @@ function PlatformCard({ platform, label, connected, who, appSaved, appFromEnv, B
   )
 }
 
-export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any) {
+export default function ContentSchedulerAdmin({ B, Card, Btn, communities, dbas }: any) {
   const [status, setStatus] = useState<any>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
@@ -358,11 +359,9 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
           {anyOn && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
             <span style={{ fontSize: 12, color: B.muted }}>Weekly recap →</span>
-            <select value={status.community_id || ''} disabled={busy} onChange={e => saveSettings({ community_id: e.target.value || null })}
-              style={{ ...sel, color: status.community_id ? B.gold : B.text }}>
-              <option value="">— pick a community —</option>
-              {communities.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <CommunityDestPicker B={B} communities={communities} dbas={dbas}
+              value={status.community_id || ''} disabled={busy}
+              onPick={(id: string) => saveSettings({ community_id: id })}/>
             <select value={status.weekly_day ?? 1} disabled={busy} onChange={e => saveSettings({ weekly_day: Number(e.target.value) })} style={sel}>
               {DAYS.map((d, i) => <option key={i} value={i}>{d}s</option>)}
             </select>

@@ -23,6 +23,7 @@ import LoomEmbed from "./components/LoomEmbed";
 import Notifications, { sendNotification } from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
 import ContentSchedulerAdmin from "./components/ContentSchedulerAdmin";
+import CommunityDestPicker from "./components/CommunityDestPicker";
 import { LN, LoomPicker, loomSet, loomShow, loomIsShown, useLoomOn } from "./components/LoomPrivacy";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
@@ -4338,11 +4339,17 @@ const AdminDashboard = ({ user }:any) => {
     } catch { setMetaAds({ connected:false }); }
   };
   useEffect(() => { loadMetaAds(); }, []);
+  const [metaDbas, setMetaDbas] = useState<any[]>([]);
   useEffect(() => {
     const cid = isOwnerHQ ? EDEN_COMPANY_ID : (myOrg?.id || EDEN_COMPANY_ID);
     sbGet('communities', `company_id=eq.${cid}&is_active=eq.true&select=id,name,context&order=name`)
       .then((rows:any[]) => setMetaCommunities(Array.isArray(rows) ? rows : []))
       .catch(() => setMetaCommunities([]));
+    // DBA names so the pickers can fold DBA channels into per-DBA "folders"
+    fetch('/api/dba/list', { headers: { Authorization: sbBearer() } })
+      .then(r => r.json())
+      .then(d => setMetaDbas(Array.isArray(d?.dbas) ? d.dbas.map((x:any) => ({ id: x.id, name: x.name })) : []))
+      .catch(() => setMetaDbas([]));
   }, [myOrg?.id]);
   const metaConnect = async () => {
     setMetaBusy(true); setMetaMsg('');
@@ -4643,12 +4650,9 @@ const AdminDashboard = ({ user }:any) => {
                   </p>
                   <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                     <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post recaps into</span>
-                    <select value={metaAds.community_id || ''} disabled={metaBusy}
-                      onChange={e => e.target.value && metaSaveSettings({ communityId: e.target.value })}
-                      style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:metaAds.community_id ? B.gold : B.text, fontSize:12, outline:"none", cursor:"pointer", maxWidth:"100%" }}>
-                      <option value="">Choose a community…</option>
-                      {metaCommunities.map((c:any) => <option key={c.id} value={c.id}>{c.context === 'team' ? '👥' : '💬'} {c.name}</option>)}
-                    </select>
+                    <CommunityDestPicker B={B} communities={metaCommunities} dbas={metaDbas}
+                      value={metaAds.community_id || ''} disabled={metaBusy}
+                      onPick={(id:string) => metaSaveSettings({ communityId: id })}/>
                   </div>
                   <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:10 }}>
                     {[['daily','Daily'],['weekly','Weekly (Mondays)'],['monthly','Monthly (1st)']].map(([k, label]) => (
@@ -4689,7 +4693,7 @@ const AdminDashboard = ({ user }:any) => {
               {metaMsg && <p style={{ fontSize:12, color:metaMsg.startsWith('✅') ? "#4FD89A" : "#ffa600", margin:"10px 0 0" }}>{metaMsg}</p>}
             </Card>
             {/* Social content scheduler — Eden HQ only for now */}
-            {isOwnerHQ && <ContentSchedulerAdmin B={B} Card={Card} Btn={Btn} communities={metaCommunities} />}
+            {isOwnerHQ && <ContentSchedulerAdmin B={B} Card={Card} Btn={Btn} communities={metaCommunities} dbas={metaDbas} />}
             {/* GHL KPI reports — every org connects its own GoHighLevel */}
             {(
               <Card style={{ marginBottom:20 }}>
@@ -4721,12 +4725,9 @@ const AdminDashboard = ({ user }:any) => {
                     </p>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                       <span style={{ fontSize:11, fontWeight:700, color:B.muted, textTransform:"uppercase", letterSpacing:0.5 }}>Post reports into</span>
-                      <select value={ghlKpi.community_id || ''} disabled={ghlKpiBusy}
-                        onChange={e => e.target.value && ghlKpiSave({ communityId: e.target.value })}
-                        style={{ background:B.surface, border:`1px solid ${B.border}`, borderRadius:8, padding:"7px 10px", color:ghlKpi.community_id ? B.gold : B.text, fontSize:12, outline:"none", cursor:"pointer", maxWidth:"100%" }}>
-                        <option value="">Choose a community…</option>
-                        {metaCommunities.map((c:any) => <option key={c.id} value={c.id}>{c.context === 'team' ? '👥' : '💬'} {c.name}</option>)}
-                      </select>
+                      <CommunityDestPicker B={B} communities={metaCommunities} dbas={metaDbas}
+                        value={ghlKpi.community_id || ''} disabled={ghlKpiBusy}
+                        onPick={(id:string) => ghlKpiSave({ communityId: id })}/>
                     </div>
                     <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:10 }}>
                       {[['weekly','Weekly KPI report'],['payout','Monthly payout report']].map(([k, label]) => (
