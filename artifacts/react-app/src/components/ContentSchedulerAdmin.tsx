@@ -28,7 +28,7 @@ type Draft = {
 
 // Connect card for an OAuth platform (TikTok / YouTube): save the developer
 // app's credentials once, then a one-click browser handshake links the account.
-function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, jhdr, flash, reload, help }: any) {
+function PlatformCard({ platform, label, connected, who, appSaved, appFromEnv, B, Btn, inp, jhdr, flash, reload, help }: any) {
   const [open, setOpen] = useState(false)
   const [cid, setCid] = useState('')
   const [csec, setCsec] = useState('')
@@ -84,12 +84,19 @@ function PlatformCard({ platform, label, connected, who, appSaved, B, Btn, inp, 
       {open && (
         <div style={{ marginTop: 8 }}>
           {!connected && <>
-          <p style={{ fontSize: 11, color: B.muted, margin: '0 0 8px', lineHeight: 1.6 }}>{help}</p>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-            <input value={cid} onChange={e => setCid(e.target.value)} placeholder={platform === 'tiktok' ? 'Client key' : 'Client ID'} style={{ ...inp, flex: 1, minWidth: 140 }} />
-            <input type="password" value={csec} onChange={e => setCsec(e.target.value)} placeholder="Client secret" style={{ ...inp, flex: 1, minWidth: 140 }} />
-            <Btn onClick={() => start(true)} disabled={busy || !cid.trim() || !csec.trim()}>Save app</Btn>
-          </div>
+          {appFromEnv
+            ? <p style={{ fontSize: 11, color: B.muted, margin: '0 0 8px', lineHeight: 1.6 }}>
+                ✅ App credentials are pre-configured via server environment variables — no need to paste them here. Click <strong>Connect {label}</strong> below to link your account.
+              </p>
+            : <>
+              <p style={{ fontSize: 11, color: B.muted, margin: '0 0 8px', lineHeight: 1.6 }}>{help}</p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                <input value={cid} onChange={e => setCid(e.target.value)} placeholder={platform === 'tiktok' ? 'Client key' : 'Client ID'} style={{ ...inp, flex: 1, minWidth: 140 }} />
+                <input type="password" value={csec} onChange={e => setCsec(e.target.value)} placeholder="Client secret" style={{ ...inp, flex: 1, minWidth: 140 }} />
+                <Btn onClick={() => start(true)} disabled={busy || !cid.trim() || !csec.trim()}>Save app</Btn>
+              </div>
+            </>
+          }
           {redirect && (
             <p style={{ fontSize: 11, color: B.text, margin: '0 0 8px', wordBreak: 'break-all' }}>
               Register this redirect URL in the app's settings:<br /><code style={{ color: B.gold }}>{redirect}</code>
@@ -368,7 +375,7 @@ export default function ContentSchedulerAdmin({ B, Card, Btn, communities }: any
           {/* TikTok + YouTube connections */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             <PlatformCard platform="tiktok" label="TikTok" connected={!!status.tt_connected} who={status.tt_username ? `@${status.tt_username}` : 'your TikTok'}
-              appSaved={!!status.tt_app_saved} B={B} Btn={Btn} inp={inp} jhdr={jhdr} flash={flash} reload={load}
+              appSaved={!!status.tt_app_saved} appFromEnv={!!status.tt_app_from_env} B={B} Btn={Btn} inp={inp} jhdr={jhdr} flash={flash} reload={load}
               help={<>Create a free app at <a href="https://developers.tiktok.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.gold }}>developers.tiktok.com</a> → Manage apps → add the <strong>Content Posting API</strong> product with Direct Post, and <strong>Login Kit</strong>. Paste the app's <strong>Client key</strong> and <strong>Client secret</strong> below, register the redirect URL it gives you, then connect.<br/>⚠️ Until TikTok approves your app (their audit), posts land as <strong>private (only you)</strong> — flip them public in the TikTok app, or wait for approval.</>} />
             <PlatformCard platform="youtube" label="YouTube Shorts" connected={!!status.yt_connected} who={status.yt_channel_title || 'your channel'}
               appSaved={!!status.yt_app_saved} B={B} Btn={Btn} inp={inp} jhdr={jhdr} flash={flash} reload={load}

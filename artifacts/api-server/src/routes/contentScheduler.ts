@@ -31,6 +31,12 @@ const SUPABASE_URL = "https://jzdoojlwgpqlmworwcsr.supabase.co";
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const EDEN_ORG_ID = "b0000000-0000-0000-0000-000000000001";
+// TikTok developer-app credentials may be supplied as server env secrets so
+// the admin never has to paste them manually. Admin_settings values take
+// precedence (allowing per-instance overrides), but env vars are used as a
+// transparent fallback at every call site.
+const TT_ENV_KEY = process.env.TIKTOK_CLIENT_KEY || "";
+const TT_ENV_SECRET = process.env.TIKTOK_CLIENT_SECRET || "";
 const BUCKET = "content-media";
 const MAX_BYTES = 18 * 1024 * 1024; // express json limit is 25mb; base64 of 18MB ≈ 24MB
 const DEFAULT_TZ = "America/Chicago";
@@ -318,14 +324,20 @@ async function publishToFacebook(cfg: SchedCfg, post: PostRow): Promise<{ postId
 // Access tokens rotate (TikTok ~24h, Google ~1h). Refresh on demand and
 // persist the rotated tokens with a bounded CAS-retry merge — never a blind
 // upsert, which could resurrect credentials a concurrent disconnect wiped.
-async function persistTokenFields(patch: Partial<SchedCfg>): Promise<void> {
+// Exported for regression testing; callers outside this module should not
+// call it directly — use ensureTtToken / ensureYtToken instead.
+export async function persistTokenFields(patch: Partial<SchedCfg>): Promise<void> {
   for (let i = 0; i < 3; i++) {
     const loaded = await loadCfgRaw();
     if (!loaded) return; // config deleted (disconnected) — don't recreate it
     const fresh: any = { ...loaded.cfg };
     const p: any = { ...patch };
     // If the platform was disconnected since we read our copy, drop its fields.
-    if (!fresh.tt_client_key) for (const k of Object.keys(p)) if (k.startsWith("tt_")) delete p[k];
+    // Detect active connection via the REFRESH TOKEN (not the app credentials),
+    // because in an env-var setup tt_client_key is intentionally absent from
+    // admin_settings — its absence must never be mis-read as a disconnect.
+    // The disconnect endpoint wipes tt_refresh, so its absence is the true signal.
+    if (!fresh.tt_refresh) for (const k of Object.keys(p)) if (k.startsWith("tt_")) delete p[k];
     if (!fresh.yt_client_id) for (const k of Object.keys(p)) if (k.startsWith("yt_")) delete p[k];
     if (!Object.keys(p).length) return;
     if (await casSetting(EDEN_ORG_ID, CFG_KEY, loaded.raw, serializeCfg({ ...fresh, ...p }))) return;
@@ -333,10 +345,14 @@ async function persistTokenFields(patch: Partial<SchedCfg>): Promise<void> {
   logger.warn("[ContentSched] token persist lost 3 CAS rounds — will refresh again next pass");
 }
 async function ensureTtToken(cfg: SchedCfg): Promise<string> {
-  if (!cfg.tt_refresh || !cfg.tt_client_key || !cfg.tt_client_secret) throw new Error("TikTok not connected");
+  // Credentials may live in admin_settings (admin pasted them) OR in env secrets
+  // (pre-configured by the server operator). Admin_settings take precedence.
+  const clientKey = cfg.tt_client_key || TT_ENV_KEY;
+  const clientSecret = cfg.tt_client_secret || TT_ENV_SECRET;
+  if (!cfg.tt_refresh || !clientKey || !clientSecret) throw new Error("TikTok not connected");
   const exp = cfg.tt_expires_at ? new Date(cfg.tt_expires_at).getTime() : 0;
   if (cfg.tt_access && exp - Date.now() > 10 * 60 * 1000) return cfg.tt_access;
-  const t = await ttRefreshToken(cfg.tt_client_key, cfg.tt_client_secret, cfg.tt_refresh);
+  const t = await ttRefreshToken(clientKey, clientSecret, cfg.tt_refresh);
   cfg.tt_access = t.access_token;
   if (t.refresh_token) cfg.tt_refresh = t.refresh_token; // TikTok rotates refresh tokens
   cfg.tt_expires_at = new Date(Date.now() + t.expires_in * 1000).toISOString();
@@ -736,14 +752,24 @@ router.post("/content-sched/connect", async (req: Request, res: Response) => {
 router.get("/content-sched/status", async (req: Request, res: Response) => {
   const staff = await requireEdenAdmin(req, res); if (!staff) return;
   const loaded = await loadCfgRaw();
-  if (!loaded) { res.json({ connected: false }); return; }
+  if (!loaded) {
+    res.json({
+      connected: false,
+      tt_app_saved: !!(TT_ENV_KEY && TT_ENV_SECRET),
+      tt_app_from_env: !!(TT_ENV_KEY && TT_ENV_SECRET),
+    });
+    return;
+  }
   const safe: any = { ...loaded.cfg };
   for (const f of SECRET_FIELDS) { delete safe[f]; delete safe[`${f}_enc`]; }
   res.json({
     connected: !!(loaded.cfg.page_token && loaded.cfg.ig_user_id),
     tt_connected: !!loaded.cfg.tt_refresh,
     yt_connected: !!loaded.cfg.yt_refresh,
-    tt_app_saved: !!(loaded.cfg.tt_client_key && loaded.cfg.tt_client_secret),
+    // tt_app_saved is true if credentials were pasted via the UI OR supplied
+    // as server env secrets (TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET).
+    tt_app_saved: !!(loaded.cfg.tt_client_key && loaded.cfg.tt_client_secret) || !!(TT_ENV_KEY && TT_ENV_SECRET),
+    tt_app_from_env: !!(TT_ENV_KEY && TT_ENV_SECRET) && !(loaded.cfg.tt_client_key && loaded.cfg.tt_client_secret),
     yt_app_saved: !!(loaded.cfg.yt_client_id && loaded.cfg.yt_client_secret),
     ...safe,
   });
@@ -940,8 +966,10 @@ router.post("/content-sched/oauth/:platform/app", async (req: Request, res: Resp
       : await upsertSetting(EDEN_ORG_ID, CFG_KEY, serializeCfg(cfg));
     if (!ok) { res.status(409).json({ error: "Settings changed elsewhere — reload and try again" }); return; }
   }
-  const key = platform === "tiktok" ? cfg.tt_client_key : cfg.yt_client_id;
-  const secret = platform === "tiktok" ? cfg.tt_client_secret : cfg.yt_client_secret;
+  // For TikTok, env secrets act as a transparent fallback so the admin can
+  // click Connect without having to paste credentials into the UI.
+  const key = platform === "tiktok" ? (cfg.tt_client_key || TT_ENV_KEY) : cfg.yt_client_id;
+  const secret = platform === "tiktok" ? (cfg.tt_client_secret || TT_ENV_SECRET) : cfg.yt_client_secret;
   if (!key || !secret) { res.status(400).json({ error: "Enter the app's client key and secret first" }); return; }
   const redirectUri = oauthRedirectUri(req, platform);
   const state = signState(platform);
@@ -967,8 +995,10 @@ router.get("/content-sched/oauth/:platform/callback", async (req: Request, res: 
     const cfg: SchedCfg = { ...(loaded?.cfg || {}) };
     const redirectUri = oauthRedirectUri(req, platform);
     if (platform === "tiktok") {
-      if (!cfg.tt_client_key || !cfg.tt_client_secret) throw new Error("TikTok app credentials missing");
-      const t = await ttExchangeCode(cfg.tt_client_key, cfg.tt_client_secret, code, redirectUri);
+      const clientKey = cfg.tt_client_key || TT_ENV_KEY;
+      const clientSecret = cfg.tt_client_secret || TT_ENV_SECRET;
+      if (!clientKey || !clientSecret) throw new Error("TikTok app credentials missing — check TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET server env vars");
+      const t = await ttExchangeCode(clientKey, clientSecret, code, redirectUri);
       cfg.tt_access = t.access_token; cfg.tt_refresh = t.refresh_token;
       cfg.tt_expires_at = new Date(Date.now() + t.expires_in * 1000).toISOString();
       cfg.tt_open_id = t.open_id;
