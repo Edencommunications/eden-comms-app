@@ -1663,10 +1663,13 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                    connect_coach: (editStaff.tabs.community && editStaff.connectCoach) ? editStaff.connectCoach : null }
     setEditStaff((p: any)=>({ ...p, saving:true }))
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
+      // staff_meta writes are admin-only and go through the API server (the
+      // org-scoped RLS on admin_settings can't express "admins only for
+      // staff_meta:* keys" — a staff member could otherwise unlock their own tabs).
+      const res = await fetch('/api/staff/meta', {
         method:'POST',
-        headers:{ ...H, 'Prefer':'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ company_id: adminCompanyId, key:`staff_meta:${editStaff.id}`, value: JSON.stringify(meta) }),
+        headers:{ 'Content-Type':'application/json', Authorization: sbBearer() },
+        body: JSON.stringify({ profileId: editStaff.id, label: meta.label, tabs: meta.tabs, connect_coach: meta.connect_coach }),
       })
       if (!res.ok) throw new Error('save failed')
       addAudit(info.name,'Updated staff title/access',editStaff.name, meta.label ? `Title: ${meta.label} · Tabs: ${meta.tabs.join(', ')}` : `Tabs: ${meta.tabs.join(', ')}`)

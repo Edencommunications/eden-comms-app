@@ -28,6 +28,7 @@ import teamMessagesRouter from "./teamMessages";
 import photoDeleteRouter from "./photoDelete";
 import clientNotesRouter from "./clientNotes";
 import notifsRouter from "./notifs";
+import staffMetaRouter from "./staffMeta";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(teamMessagesRouter);
 router.use(photoDeleteRouter);
 router.use(clientNotesRouter);
 router.use(notifsRouter);
+router.use(staffMetaRouter);
 
 export default router;

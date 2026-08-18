@@ -320,9 +320,18 @@ with check (public.is_staff() and company_id = public.current_company_id());
 
 create policy asettings_read on public.admin_settings for select to authenticated
 using (company_id = public.current_company_id());
+-- staff_meta:* keys hold each staff member's tab access/title — writable by
+-- admins only (a staff member could otherwise grant themselves extra tabs).
+-- The app writes them via the API server (service key): POST /api/staff/meta.
 create policy asettings_write on public.admin_settings for insert to authenticated
-with check (public.is_staff() and company_id = public.current_company_id());
+with check (public.is_staff() and company_id = public.current_company_id()
+  and (key not like 'staff_meta:%' or public.my_role() in ('admin','super_admin')));
+-- UPDATE guards BOTH sides so a row can't be renamed INTO staff_meta:*.
 create policy asettings_upd on public.admin_settings for update to authenticated
-using (public.is_staff() and company_id = public.current_company_id());
+using (public.is_staff() and company_id = public.current_company_id()
+  and (key not like 'staff_meta:%' or public.my_role() in ('admin','super_admin')))
+with check (public.is_staff() and company_id = public.current_company_id()
+  and (key not like 'staff_meta:%' or public.my_role() in ('admin','super_admin')));
 create policy asettings_del on public.admin_settings for delete to authenticated
-using (public.is_staff() and company_id = public.current_company_id());
+using (public.is_staff() and company_id = public.current_company_id()
+  and (key not like 'staff_meta:%' or public.my_role() in ('admin','super_admin')));
