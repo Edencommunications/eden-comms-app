@@ -46,7 +46,7 @@ const DARK = {
 };
 
 const LIGHT = {
-  gold:    '#b07500',   // deeper gold — readable as text/borders on white
+  gold:    '#ffa600',   // TRUE brand gold (user choice — accepts lower text contrast on white)
   black:   '#f2f2f4',   // page background flips to light gray
   white:   '#17171a',   // "white" is the text alias → near-black in light mode
   surface: '#ffffff',
@@ -58,8 +58,8 @@ const LIGHT = {
   danger:  '#c93a3a',
   success: '#178a55',
   text:    '#17171a',
-  goldDim: '#b0750018',
-  goldMid: '#b0750040',
+  goldDim: '#ffa60022',
+  goldMid: '#ffa60055',
   onAccent:'#000000',
   chrome:      '#ffffff',
   onChrome:    '#17171a',
