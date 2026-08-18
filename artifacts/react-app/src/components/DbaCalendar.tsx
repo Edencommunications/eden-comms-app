@@ -11,13 +11,11 @@
 // • Everything loads from /api/dba/calendar and is stored server-side
 //   per DBA — other DBAs and the wider org never see any of it.
 // ════════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 
-const C = {
-  black:'#000', white:'#fff', surface:'#111', card:'#1a1a1a',
-  border:'#2a2a2a', muted:'#888', success:'#4FD89A', danger:'#ff4444',
-}
+const C: any = T
 
 const API = (p: any) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`
 

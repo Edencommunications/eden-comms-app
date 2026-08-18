@@ -12,13 +12,11 @@
 // huddles they're allowed into. Several huddles can run at once.
 // Rooms self-expire after 4 hours (same as org huddles).
 // ════════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 
-const C = {
-  black:'#000', white:'#fff', surface:'#111', card:'#1a1a1a',
-  border:'#2a2a2a', muted:'#888', success:'#4FD89A', danger:'#ff4444',
-}
+const C: any = T
 
 const API = (p: any) => `${(import.meta.env.BASE_URL || '/')}api/dba/${p}`
 

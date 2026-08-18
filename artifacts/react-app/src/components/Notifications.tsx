@@ -7,6 +7,7 @@
 // 2. Add <Notifications currentUser={currentUser} /> anywhere
 //    in your top bar / header area
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
@@ -14,11 +15,7 @@ import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444',
-}
+const C: any = T
 
 const H = {
   'apikey': SUPABASE_ANON,

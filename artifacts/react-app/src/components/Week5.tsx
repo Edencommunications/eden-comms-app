@@ -5,6 +5,7 @@
 // Coach sees client progress dashboards
 // Place at: src/components/Week5.jsx
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 
@@ -22,11 +23,7 @@ const DEMO_CLIENTS = []
 
 const CEO_COURSE_ID = 'a0000000-0000-0000-0000-000000000001'
 
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
-}
+const C: any = T
 const H = {
   'apikey':SUPABASE_ANON,
   get Authorization(){ return sbBearer() },
@@ -1219,7 +1216,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                             placeholder="Paste Vimeo, Loom, or YouTube embed URL…"
                             style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:12,outline:'none'}}/>
                           <button onClick={saveVideoUrl} disabled={savingUrl}
-                            style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',opacity:savingUrl?.6:1}}>
+                            style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 16px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer',opacity:savingUrl?.6:1}}>
                             {savingUrl?'Saving…':'Publish'}
                           </button>
                           <button onClick={()=>{setShowUrlInput(false);setTempUrl('')}}
@@ -1244,7 +1241,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                           <input value={tempUrl} onChange={e=>setTempUrl(e.target.value)}
                             style={{width:200,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.white,fontSize:11,outline:'none'}}/>
                           <button onClick={saveVideoUrl}
-                            style={{background:C.gold,border:'none',borderRadius:6,padding:'4px 10px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>Save</button>
+                            style={{background:C.gold,border:'none',borderRadius:6,padding:'4px 10px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:'pointer'}}>Save</button>
                           <button onClick={()=>{setShowUrlInput(false);setTempUrl('')}}
                             style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',color:C.muted,fontSize:11,cursor:'pointer'}}>✕</button>
                         </div>
@@ -1265,7 +1262,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                   {!isAdmin&&(
                     !completed.has(activeModule.module_id)?(
                       <button onClick={()=>markComplete(activeModule.module_id)}
-                        style={{width:'100%',background:activeModule.section_color||C.gold,border:'none',borderRadius:10,padding:13,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:12}}>
+                        style={{width:'100%',background:activeModule.section_color||C.gold,border:'none',borderRadius:10,padding:13,fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer',marginBottom:12}}>
                         ✓ Mark as Complete
                       </button>
                     ):(
@@ -1331,7 +1328,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                 <div style={{fontSize:12,fontWeight:700,color:C.white,marginBottom:4}}>🔒 Full Recipe Book Access</div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:9,lineHeight:1.5}}>Pull any recipe into your diet plan free. Unlock full access for ingredients, instructions, and weekly new recipes.</div>
                 <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
-                  style={{display:'block',background:C.gold,borderRadius:7,padding:'8px',textAlign:'center',textDecoration:'none',color:C.black,fontWeight:800,fontSize:12}}>
+                  style={{display:'block',background:C.gold,borderRadius:7,padding:'8px',textAlign:'center',textDecoration:'none',color:C.onAccent,fontWeight:800,fontSize:12}}>
                   Unlock Full Recipe Book →
                 </a>
               </div>
@@ -1381,7 +1378,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                     alert(`${selectedRecipe.name} added to your diet plan!`)
                   }
                 }}
-                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:13,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:12}}>
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:13,fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer',marginBottom:12}}>
                   + Pull Into Diet Plan
                 </button>
                 {(hasRecipeAccess||isAdmin||isCoach||assignedRecipeNames.has(selectedRecipe.name))?(
@@ -1417,7 +1414,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                     <div style={{fontSize:13,fontWeight:700,color:C.white,marginBottom:6}}>🔒 Full Recipe Locked</div>
                     <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>Macros pulled into your plan above for free. Unlock for full ingredients and instructions.</div>
                     <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
-                      style={{display:'block',background:C.gold,borderRadius:8,padding:'11px',textAlign:'center',textDecoration:'none',color:C.black,fontWeight:800,fontSize:13}}>
+                      style={{display:'block',background:C.gold,borderRadius:8,padding:'11px',textAlign:'center',textDecoration:'none',color:C.onAccent,fontWeight:800,fontSize:13}}>
                       Unlock Full Recipe Book →
                     </a>
                   </div>
@@ -1556,7 +1553,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
               <button onClick={()=>setShowTiers(false)}
                 style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
               <button onClick={saveTiers} disabled={savingTiers}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:savingTiers?.6:1}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:savingTiers?.6:1}}>
                 {savingTiers?'Saving…':tierSel.size===0?'Save — Eden Only':`Save — ${tierSel.size} Tier${tierSel.size>1?'s':''}`}
               </button>
             </div>
@@ -1585,7 +1582,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                   </label>
                   <div style={{display:'flex',gap:8,marginTop:8}}>
                     <button onClick={saveCourseEdit} disabled={savingCourseEdit||!courseEdit.title.trim()}
-                      style={{background:C.gold,border:'none',borderRadius:7,padding:'7px 14px',color:C.black,fontSize:11,fontWeight:800,cursor:'pointer',opacity:savingCourseEdit||!courseEdit.title.trim()?.5:1}}>
+                      style={{background:C.gold,border:'none',borderRadius:7,padding:'7px 14px',color:C.onAccent,fontSize:11,fontWeight:800,cursor:'pointer',opacity:savingCourseEdit||!courseEdit.title.trim()?.5:1}}>
                       {savingCourseEdit?'Saving…':'Save Details'}
                     </button>
                     <button onClick={()=>setCourseEdit(null)}
@@ -1633,7 +1630,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                             onKeyDown={e=>{if(e.key==='Enter')saveSectionTitle(sec,secEdit.title)}}
                             style={{flex:1,background:C.card,border:`1px solid ${C.gold}44`,borderRadius:6,padding:'5px 9px',color:C.white,fontSize:12,outline:'none'}}/>
                           <button onClick={()=>saveSectionTitle(sec,secEdit.title)}
-                            style={{background:C.gold,border:'none',borderRadius:6,padding:'5px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
+                            style={{background:C.gold,border:'none',borderRadius:6,padding:'5px 10px',color:C.onAccent,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
                           <button onClick={()=>setSecEdit(null)}
                             style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
                         </>
@@ -1668,7 +1665,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                               <input value={modEdit.duration||''} onChange={e=>setModEdit({...modEdit,duration:e.target.value})} placeholder="e.g. 12 min"
                                 style={{width:70,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:11,outline:'none'}}/>
                               <button onClick={saveModuleEdit}
-                                style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
+                                style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.onAccent,fontSize:10,fontWeight:700,cursor:'pointer'}}>Save</button>
                               <button onClick={()=>setModEdit(null)}
                                 style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
                             </div>
@@ -1729,7 +1726,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
                           <input value={newModDur} onChange={e=>setNewModDur(e.target.value)} placeholder="e.g. 12 min"
                             style={{width:70,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.white,fontSize:11,outline:'none'}}/>
                           <button onClick={()=>addModule(sec)} disabled={builderBusy||!newModTitle.trim()}
-                            style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.black,fontSize:10,fontWeight:700,cursor:'pointer',opacity:builderBusy||!newModTitle.trim()?.5:1}}>
+                            style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 10px',color:C.onAccent,fontSize:10,fontWeight:700,cursor:'pointer',opacity:builderBusy||!newModTitle.trim()?.5:1}}>
                             {builderBusy?'Adding…':'Add'}
                           </button>
                           <button onClick={()=>{setNewModFor(null);setNewModTitle('');setNewModDur('')}}
@@ -1758,7 +1755,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
             </div>
             <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
               <button onClick={closeBuilder}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,color:C.black,fontSize:13,fontWeight:800,cursor:'pointer'}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,color:C.onAccent,fontSize:13,fontWeight:800,cursor:'pointer'}}>
                 Done
               </button>
             </div>
@@ -1787,7 +1784,7 @@ export default function Week5({currentUser, onAddRecipeToDiet}: any) {
               <button onClick={closeNewCourse}
                 style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:11,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
               <button onClick={createCourse} disabled={savingCourse||!newTitle.trim()}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newTitle.trim()&&!savingCourse?1:.5}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:newTitle.trim()&&!savingCourse?1:.5}}>
                 {savingCourse?'Creating…':'Create Course'}
               </button>
             </div>

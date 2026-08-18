@@ -6,6 +6,7 @@
 // import Week4 from './components/Week4'
 // {tab === 'workout' && <Week4 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
@@ -28,11 +29,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 // White-label coaches replace this with their own GHL or Calendly link
 const DEFAULT_CALENDAR_URL = 'https://links.lifestyleofeden.com/widget/booking/2kKUGzYZqAaNBVpd5uzA'
 
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
-}
+const C: any = T
 
 const H = {
   'apikey':SUPABASE_ANON,
@@ -760,7 +757,7 @@ Training Principles:
               <input type="file" ref={labFileRef} onChange={handleLabUpload} style={{display:'none'}}
                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/>
               <button onClick={()=>labFileRef.current?.click()} disabled={uploading}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:'9px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',opacity:uploading?.6:1}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:'9px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer',opacity:uploading?.6:1}}>
                 {uploading?'Uploading…':'⬆ Upload Lab Result'}
               </button>
             </div>
@@ -942,7 +939,7 @@ Training Principles:
                   placeholder="Add a comment or coach note…"
                   style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none'}}/>
                 <button onClick={()=>postComment(activeLab.id)} disabled={!newComment.trim()}
-                  style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newComment.trim()?1:.4}}>
+                  style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 16px',fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:newComment.trim()?1:.4}}>
                   Post
                 </button>
               </div>
@@ -1022,7 +1019,7 @@ Training Principles:
               </div>
               {isCoach && (
                 <button onClick={()=>{setWorkouts([{name:'Workout 1',exercises:[],notes:''}]);setActiveWorkout(0)}}
-                  style={{marginTop:6,background:C.gold,border:'none',borderRadius:10,padding:'10px 18px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  style={{marginTop:6,background:C.gold,border:'none',borderRadius:10,padding:'10px 18px',fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer'}}>
                   + Create First Workout
                 </button>
               )}
@@ -1037,7 +1034,7 @@ Training Principles:
                 style={{flex:1,background:isCoach?C.surface:C.dim,border:`1px solid ${isCoach?C.border:C.dim}`,borderRadius:8,padding:'8px 12px',color:isCoach?C.white:C.muted,fontSize:14,fontWeight:700,outline:'none',cursor:isCoach?'text':'not-allowed'}}/>
               {isCoach&&(
                 <button onClick={()=>setShowExPicker(true)}
-                  style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
                   + Add Exercise
                 </button>
               )}
@@ -1222,14 +1219,14 @@ Training Principles:
 
               {isCoach&&(
                 <button onClick={saveWorkoutPlan}
-                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20}}>
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer',marginBottom:20}}>
                   Save Workout Plan
                 </button>
               )}
 
               {!isCoach&&(
                 <button onClick={saveWorkoutLog} disabled={logSaving}
-                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20,opacity:logSaving?.6:1}}>
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer',marginBottom:20,opacity:logSaving?.6:1}}>
                   {logSaving?'Saving…':`Save Week ${activeWeek} Log`}
                 </button>
               )}
@@ -1296,7 +1293,7 @@ Training Principles:
                   placeholder="e.g. Sled Push"
                   style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                 <button onClick={addCompanyCardioType}
-                  style={{background:C.gold,border:'none',borderRadius:6,padding:'7px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+                  style={{background:C.gold,border:'none',borderRadius:6,padding:'7px 16px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer'}}>Add</button>
               </div>
               {companyCardioTypes.length>0&&(
                 <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
@@ -1464,7 +1461,7 @@ Training Principles:
             })}
             {!isCoach&&(
               <button onClick={saveWorkoutLog} disabled={logSaving}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginTop:12,opacity:logSaving?.6:1}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',marginTop:12,opacity:logSaving?.6:1}}>
                 {logSaving?'Saving…':'Save Cardio Log'}
               </button>
             )}
@@ -1472,7 +1469,7 @@ Training Principles:
 
           {isCoach&&(
             <button onClick={saveWorkoutPlan}
-              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:20}}>
+              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer',marginBottom:20}}>
               Save Cardio Protocol
             </button>
           )}

@@ -10,6 +10,7 @@
 //
 // Week7 consumes this via useHuddle() instead of holding its own state.
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { LN } from './LoomPrivacy'
@@ -19,11 +20,7 @@ const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444',
-}
+const C: any = T
 
 const H = {
   'apikey': SUPABASE_ANON,
@@ -540,7 +537,7 @@ export function HuddleProvider({ currentUser, children }: any) {
               </button>
               <button onClick={answerIncoming}
                 style={{ flex:1, background:C.success, border:'none', borderRadius:12,
-                  padding:'14px 0', color:C.black, fontSize:15, fontWeight:800, cursor:'pointer' }}>
+                  padding:'14px 0', color:C.onAccent, fontSize:15, fontWeight:800, cursor:'pointer' }}>
                 ✓ Join
               </button>
             </div>
@@ -673,7 +670,7 @@ export function DndButton({ isMobile }: any) {
                   padding:'7px 8px', color:C.white, fontSize:11, colorScheme:'dark' }}/>
               <button onClick={saveCustom} disabled={!customVal}
                 style={{ background: customVal ? C.gold : C.border, border:'none', borderRadius:7, padding:'7px 12px',
-                  color:C.black, fontSize:11, fontWeight:800, cursor: customVal ? 'pointer' : 'default' }}>
+                  color:C.onAccent, fontSize:11, fontWeight:800, cursor: customVal ? 'pointer' : 'default' }}>
                 Set
               </button>
             </div>

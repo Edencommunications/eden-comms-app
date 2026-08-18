@@ -6,6 +6,7 @@
 //   import Week7 from './components/Week7'
 //   {tab === 'team' && <Week7 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
@@ -44,11 +45,7 @@ const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 // Demo roster removed — the team list loads live from the database.
 const DEMO_COACHES: any[] = []
 
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
-}
+const C: any = T
 
 const H = {
   'apikey': SUPABASE_ANON,
@@ -1100,7 +1097,7 @@ export default function Week7({ currentUser, initialDm }: any) {
   const totalDmUnread = otherCoaches.reduce((n: any, c: any) => n + dmUnreadCount([myUUID, c.uuid].sort().join('_')), 0)
   const chatUnread = generalUnread + totalDmUnread
   const UnreadPill = ({ n }: any) => n > 0 ? (
-    <span style={{marginLeft:'auto',background:C.gold,color:C.black,borderRadius:9,fontSize:9,fontWeight:800,padding:'1px 6px',flexShrink:0,lineHeight:1.5}}>
+    <span style={{marginLeft:'auto',background:C.gold,color:C.onAccent,borderRadius:9,fontSize:9,fontWeight:800,padding:'1px 6px',flexShrink:0,lineHeight:1.5}}>
       {n > 9 ? '9+' : n}
     </span>
   ) : null
@@ -1164,7 +1161,7 @@ export default function Week7({ currentUser, initialDm }: any) {
               {h.creator_name ? ` — started by ${h.creator_name}` : ''}
             </div>
             <button onClick={() => joinLiveHuddle(h)}
-              style={{background:C.success,border:'none',borderRadius:8,padding:'6px 16px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer',flexShrink:0}}>
+              style={{background:C.success,border:'none',borderRadius:8,padding:'6px 16px',color:C.onAccent,fontSize:12,fontWeight:800,cursor:'pointer',flexShrink:0}}>
               Join
             </button>
           </div>
@@ -1195,7 +1192,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                   style={{width:'100%',textAlign:'left',background:chatView==='threads'?`${C.gold}15`:C.surface,border:'none',borderRadius:6,padding:'6px 8px',color:chatView==='threads'?C.gold:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
                   <span>🧵</span> Threads
                   {messages.filter(m=>!m.isDm&&isThreadUnread(m)).length>0 && (
-                    <span style={{marginLeft:'auto',fontSize:9,fontWeight:800,color:C.black,background:C.gold,borderRadius:8,padding:'1px 6px'}}>{messages.filter(m=>!m.isDm&&isThreadUnread(m)).length}</span>
+                    <span style={{marginLeft:'auto',fontSize:9,fontWeight:800,color:C.onAccent,background:C.gold,borderRadius:8,padding:'1px 6px'}}>{messages.filter(m=>!m.isDm&&isThreadUnread(m)).length}</span>
                   )}
                 </button>
               </div>
@@ -1372,7 +1369,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                         placeholder={`Message #${generalName}… tag with @Name (Enter to send)`}
                         inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
                       <button onClick={sendMessage} disabled={!newMessage.trim() && !hasPending('main')}
-                        style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:(newMessage.trim()||hasPending('main'))?1:.4}}>
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:(newMessage.trim()||hasPending('main'))?1:.4}}>
                         Send
                       </button>
                     </div>
@@ -1453,7 +1450,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                           placeholder="Reply in thread…"
                           inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                         <button onClick={sendReply} disabled={!newReply.trim() && !hasPending('thread')}
-                          style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:(newReply.trim()||hasPending('thread'))?1:.4}}>
+                          style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.onAccent,fontSize:12,cursor:'pointer',opacity:(newReply.trim()||hasPending('thread'))?1:.4}}>
                           Reply
                         </button>
                       </div>
@@ -1549,7 +1546,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                     placeholder={`Message ${dmTarget.name.split(' ')[0]}…`}
                     inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 13px',color:C.white,fontSize:13,outline:'none'}}/>
                   <button onClick={sendDm} disabled={!newDm.trim() && !hasPending('dm')}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:(newDm.trim()||hasPending('dm'))?1:.4}}>
+                    style={{background:C.gold,border:'none',borderRadius:8,padding:'10px 16px',fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:(newDm.trim()||hasPending('dm'))?1:.4}}>
                     Send
                   </button>
                   </div>
@@ -1632,7 +1629,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                           placeholder="Reply in thread…"
                           inputStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                         <button onClick={sendDmReply} disabled={!newDmReply.trim() && !hasPending('dm-thread')}
-                          style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:(newDmReply.trim()||hasPending('dm-thread'))?1:.4}}>
+                          style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:800,color:C.onAccent,fontSize:12,cursor:'pointer',opacity:(newDmReply.trim()||hasPending('dm-thread'))?1:.4}}>
                           Reply
                         </button>
                       </div>
@@ -1717,7 +1714,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                     placeholder="Paste Google Calendar embed URL…"
                     style={{width: isMobile ? '100%' : 280,background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 10px',color:C.white,fontSize:11,outline:'none'}}/>
                   <button onClick={saveCalendarUrl}
-                    style={{background:C.gold,border:'none',borderRadius:7,padding:'6px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
+                    style={{background:C.gold,border:'none',borderRadius:7,padding:'6px 12px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:'pointer'}}>
                     Save
                   </button>
                   <button onClick={() => { setEditingCal(false); setTempCalUrl('') }}
@@ -1838,7 +1835,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                       <div style={{fontSize:10,color:C.muted,marginTop:1}}>Started by {h.creator_name || 'a teammate'} · {timeAgo(h.created_at)}</div>
                     </div>
                     <button onClick={() => joinLiveHuddle(h)}
-                      style={{background:C.success,border:'none',borderRadius:8,padding:'8px 18px',color:C.black,fontSize:12,fontWeight:800,cursor:'pointer'}}>
+                      style={{background:C.success,border:'none',borderRadius:8,padding:'8px 18px',color:C.onAccent,fontSize:12,fontWeight:800,cursor:'pointer'}}>
                       Join Huddle
                     </button>
                   </div>
@@ -1852,7 +1849,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                         {liveHuddle.creator_name || 'A teammate'} started a live huddle. Jump in!
                       </div>
                       <button onClick={joinLiveHuddle}
-                        style={{background:C.success,border:'none',borderRadius:12,padding:'14px 32px',fontWeight:800,color:C.black,fontSize:16,cursor:'pointer'}}>
+                        style={{background:C.success,border:'none',borderRadius:12,padding:'14px 32px',fontWeight:800,color:C.onAccent,fontSize:16,cursor:'pointer'}}>
                         Join Huddle
                       </button>
                     </>
@@ -1863,7 +1860,7 @@ export default function Week7({ currentUser, initialDm }: any) {
                         Instant face-to-face call with your team. One click to start, one click to join.
                       </div>
                       <button onClick={startHuddle}
-                        style={{background:C.gold,border:'none',borderRadius:12,padding:'14px 32px',fontWeight:800,color:C.black,fontSize:16,cursor:'pointer'}}>
+                        style={{background:C.gold,border:'none',borderRadius:12,padding:'14px 32px',fontWeight:800,color:C.onAccent,fontSize:16,cursor:'pointer'}}>
                         🎙 Start Huddle Now
                       </button>
                     </>

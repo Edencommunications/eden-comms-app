@@ -13,6 +13,7 @@
 // materializes membership so canvases + posting work for every member).
 // 1v1s open via /api/dba/dm-open (server enforces who may DM whom).
 // ════════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { supabase } from '../supabaseClient'
@@ -105,11 +106,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
   // Channel rows cycle through the DBA's saved palette so extra colors show up
   // Channels always use the brand's primary color — no palette cycling
   const channelColor = (_i: any) => primary
-  const C = {
-    gold: primary, black: '#000000', white: '#ffffff',
-    surface: '#111111', card: '#1a1a1a', border: '#2a2a2a',
-    muted: '#888888', success: '#4FD89A', danger: '#ff4444',
-  }
+  const C: any = { ...T, gold: primary }
   const dbaId = dba?.id || null
 
   // ── Server config: identity, roster, flags, gates ───────────
@@ -295,7 +292,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
     setUnread((u: any) => { const next: any = { ...u }; for (const [id, n] of results) next[id] = n; return next })
   }
   const UnreadBadge = ({ n }: any) => n > 0 ? (
-    <span style={{ background:C.gold, color:C.black, borderRadius:9, minWidth:18, height:18, fontSize:10, fontWeight:800,
+    <span style={{ background:C.gold, color:C.onAccent, borderRadius:9, minWidth:18, height:18, fontSize:10, fontWeight:800,
       display:'flex', alignItems:'center', justifyContent:'center', padding:'0 5px', flexShrink:0 }}>
       {n >= 30 ? '30+' : n}
     </span>
@@ -847,7 +844,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
             <div style={{ flex:1, fontSize:13, fontWeight:800, color:C.white }}>👥 Community</div>
             {canManage && (
               <button onClick={() => { setShowCreate(true); setNewMembers([]); setNewAll(true) }}
-                style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>＋ New</button>
+                style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.onAccent, fontSize:11, fontWeight:800, cursor:'pointer' }}>＋ New</button>
             )}
           </div>
           <div style={{ flex:1, overflowY:'auto', padding:'4px 8px' }}>
@@ -1025,7 +1022,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                       padding: isMobile ? '11px 14px' : '9px 13px', color:C.white, fontSize:13, outline:'none' }}/>
                   <button onClick={send} disabled={!newMsg.trim() && pendingFiles.length === 0}
                     style={{ background:C.gold, border:'none', borderRadius:18, padding:'9px 16px',
-                      fontWeight:800, color:C.black, fontSize:12, cursor:'pointer', opacity:(newMsg.trim()||pendingFiles.length)?1:.4, flexShrink:0 }}>Send</button>
+                      fontWeight:800, color:C.onAccent, fontSize:12, cursor:'pointer', opacity:(newMsg.trim()||pendingFiles.length)?1:.4, flexShrink:0 }}>Send</button>
                 </div>
               </div>
             ) : (
@@ -1052,7 +1049,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
 
             <div onClick={() => setNewAll(a => !a)} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', marginBottom:12 }}>
               <span style={{ width:16, height:16, borderRadius:4, border:`1px solid ${newAll ? C.gold : C.border}`,
-                background: newAll ? C.gold : 'transparent', color:C.black, fontSize:11, fontWeight:800,
+                background: newAll ? C.gold : 'transparent', color:C.onAccent, fontSize:11, fontWeight:800,
                 display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{newAll ? '✓' : ''}</span>
               <span style={{ fontSize:12, color:C.white }}>Everyone in this community <span style={{ fontSize:10, color:C.muted }}>(new members join automatically)</span></span>
             </div>
@@ -1069,7 +1066,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                       onClick={() => setNewMembers((prev: any) => picked ? prev.filter((x: any) => x.id !== p.id) : [...prev, p])}
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 2px', borderBottom:`1px solid ${C.border}`, cursor:'pointer' }}>
                       <span style={{ width:16, height:16, borderRadius:4, border:`1px solid ${picked ? C.gold : C.border}`,
-                        background: picked ? C.gold : 'transparent', color:C.black, fontSize:11, fontWeight:800,
+                        background: picked ? C.gold : 'transparent', color:C.onAccent, fontSize:11, fontWeight:800,
                         display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{picked ? '✓' : ''}</span>
                       <span style={{ flex:1, fontSize:12, color:C.white }}>
                         {p.name} <span style={{ fontSize:9, color:C.muted }}>({p.kind === 'coach' ? 'coach' : p.kind === 'admin' ? 'admin' : 'member'})</span>
@@ -1084,7 +1081,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
               <button onClick={() => setShowCreate(false)}
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 14px', color:C.muted, fontSize:12, cursor:'pointer' }}>Cancel</button>
               <button onClick={createChannel} disabled={!newName.trim()}
-                style={{ background:C.gold, border:'none', borderRadius:8, padding:'8px 16px', color:C.black, fontSize:12, fontWeight:800, cursor:'pointer', opacity:newName.trim()?1:.4 }}>Create</button>
+                style={{ background:C.gold, border:'none', borderRadius:8, padding:'8px 16px', color:C.onAccent, fontSize:12, fontWeight:800, cursor:'pointer', opacity:newName.trim()?1:.4 }}>Create</button>
             </div>
           </div>
         </div>
@@ -1099,7 +1096,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
             <div style={{ fontSize:15, fontWeight:800, color:C.white, marginBottom:2 }}>Members — {active?.name}</div>
             <div onClick={() => active && toggleAllDba(active)} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', margin:'10px 0 12px' }}>
               <span style={{ width:16, height:16, borderRadius:4, border:`1px solid ${active && allFlags[active.id] ? C.gold : C.border}`,
-                background: active && allFlags[active.id] ? C.gold : 'transparent', color:C.black, fontSize:11, fontWeight:800,
+                background: active && allFlags[active.id] ? C.gold : 'transparent', color:C.onAccent, fontSize:11, fontWeight:800,
                 display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{active && allFlags[active.id] ? '✓' : ''}</span>
               <span style={{ fontSize:12, color:C.white }}>Everyone in this community <span style={{ fontSize:10, color:C.muted }}>(new members join automatically)</span></span>
             </div>
@@ -1149,7 +1146,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                 {authPick === null ? (
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                     <button onClick={() => applyAuthority('this')}
-                      style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 10px', color:C.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>This group only</button>
+                      style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 10px', color:C.onAccent, fontSize:11, fontWeight:800, cursor:'pointer' }}>This group only</button>
                     <button onClick={() => applyAuthority('all')}
                       style={{ background:'none', border:`1px solid ${C.gold}`, borderRadius:7, padding:'6px 10px', color:C.gold, fontSize:11, fontWeight:700, cursor:'pointer' }}>All groups</button>
                     <button onClick={() => setAuthPick(new Set([activeId]))}
@@ -1166,7 +1163,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                           <div key={c.id} onClick={() => setAuthPick((prev: any) => { const n = new Set(prev); on ? n.delete(c.id) : n.add(c.id); return n })}
                             style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0', cursor:'pointer' }}>
                             <span style={{ width:14, height:14, borderRadius:4, border:`1px solid ${on ? C.gold : C.border}`, background: on ? C.gold : 'transparent',
-                              color:C.black, fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{on ? '✓' : ''}</span>
+                              color:C.onAccent, fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{on ? '✓' : ''}</span>
                             <span style={{ fontSize:12, color:C.white }}>{c.name}</span>
                           </div>
                         )
@@ -1174,7 +1171,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                     </div>
                     <div style={{ display:'flex', gap:6 }}>
                       <button onClick={() => applyAuthority('pick')}
-                        style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 12px', color:C.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>Apply</button>
+                        style={{ background:C.gold, border:'none', borderRadius:7, padding:'6px 12px', color:C.onAccent, fontSize:11, fontWeight:800, cursor:'pointer' }}>Apply</button>
                       <button onClick={() => { setAuthPrompt(null); setAuthPick(null) }}
                         style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, padding:'6px 10px', color:C.muted, fontSize:11, cursor:'pointer' }}>Cancel</button>
                     </div>
@@ -1191,7 +1188,7 @@ export default function DbaChat({ dba, primary = '#ffa600', palette = null, isMo
                     {p.name} <span style={{ fontSize:9, color:C.muted }}>({p.kind === 'coach' ? 'coach' : p.kind === 'admin' ? 'admin' : 'member'})</span>
                   </div>
                   <button onClick={() => addMember(p)}
-                    style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.black, fontSize:10, fontWeight:800, cursor:'pointer' }}>Add</button>
+                    style={{ background:C.gold, border:'none', borderRadius:6, padding:'4px 10px', color:C.onAccent, fontSize:10, fontWeight:800, cursor:'pointer' }}>Add</button>
                 </div>
               ))}
               {pickable.filter((p: any) => !members.some((m: any) => m.user_id === p.id)).length === 0 &&

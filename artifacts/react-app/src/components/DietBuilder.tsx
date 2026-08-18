@@ -4,6 +4,7 @@
 // Client: view-only on coach content, editable on their own sections
 // Place at: src/components/DietBuilder.jsx in Replit
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { sendNotification } from './Notifications'
@@ -31,11 +32,7 @@ const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
 
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
-}
+const C: any = T
 
 // Side-by-side photo compare: two panes, tap a pane to select it, tap a
 // thumbnail below to fill ONLY that pane (never the whole page).
@@ -1509,7 +1506,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
         rows={3}
         style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
       <button onClick={()=>postNote(kind)} disabled={notePosting||!input.trim()}
-        style={{marginTop:8,width:'100%',background:input.trim()?C.gold:`${C.gold}44`,border:'none',borderRadius:10,padding:10,fontWeight:800,color:C.black,fontSize:13,cursor:input.trim()?'pointer':'default'}}>
+        style={{marginTop:8,width:'100%',background:input.trim()?C.gold:`${C.gold}44`,border:'none',borderRadius:10,padding:10,fontWeight:800,color:C.onAccent,fontSize:13,cursor:input.trim()?'pointer':'default'}}>
         {notePosting?'Saving…':isCoach?'Reply to Client':'Add Note'}
       </button>
     </>
@@ -2380,7 +2377,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               if(!okCfg){alert('Could not save the diet plan — please try again.');return}
               const ok=await saveDietPlanRow({client_id:myUUID,coach_id:myCoachId,protocol,high_day_meals:JSON.stringify(highMeals),low_day_meals:JSON.stringify(lowMeals),targets:JSON.stringify(targets),updated_at:new Date().toISOString()});if(!ok){alert('The day schedule saved, but the meals did not — please hit Save again.');return}
               setPlanUpdatedAt(new Date().toISOString());auditPlanSave('diet_plan_saved', myUUID, info?.name||currentUser?.name, role);await insertNotification(myUUID, myCoachId, 'diet_update', '🥗 Your coach updated your diet plan — check your Diet tab', 'diet');alert('Diet plan saved!')}}
-              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:16}}>
+              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer',marginBottom:16}}>
               Save Diet Plan
             </button>
           )}
@@ -2493,7 +2490,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     Full macros, ingredients &amp; step-by-step instructions<br/>for all {STATIC_RECIPES.length} whole food recipes
                   </div>
                   <a href={RECIPE_BUY} target="_blank" rel="noreferrer"
-                    style={{display:'block',background:C.gold,borderRadius:10,padding:'12px 0',fontWeight:800,color:C.black,fontSize:14,textDecoration:'none',textAlign:'center'}}>
+                    style={{display:'block',background:C.gold,borderRadius:10,padding:'12px 0',fontWeight:800,color:C.onAccent,fontSize:14,textDecoration:'none',textAlign:'center'}}>
                     🍽 Get the Full Recipe Book
                   </a>
                 </div>
@@ -2559,7 +2556,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                 ↺ Reset Calculator & Targets
               </button>
               <button onClick={runCalc}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:'pointer',marginBottom:12}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer',marginBottom:12}}>
                 Calculate Macros
               </button>
               {results&&(
@@ -2627,7 +2624,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',color:C.white,fontSize:13,outline:'none',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
                 </div>
                 <button onClick={addCoachUpdate}
-                  style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.onAccent,fontSize:13,cursor:'pointer'}}>
                   Post Update
                 </button>
               </div>
@@ -2908,7 +2905,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                                     insertNotification(clientId, coachId, 'coach_response',
                                       `💬 Your coach reviewed your ${saved.date} check-in — new feedback waiting`, 'checkin')
                                   }
-                                }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.black,fontSize:13,cursor:'pointer'}}>
+                                }} style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,color:C.onAccent,fontSize:13,cursor:'pointer'}}>
                                   Save
                                 </button>
                                 <button onClick={()=>setEditingCi(null)}
@@ -3758,7 +3755,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                   },...prev])
                   alert('Check-in submitted! Your coach will review within 48 hours.')
                   }finally{setCiSubmitting(false)}
-                }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:14,cursor:ciSubmitting?'wait':'pointer',opacity:ciSubmitting?0.6:1,marginBottom:16}}>
+                }} style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:14,cursor:ciSubmitting?'wait':'pointer',opacity:ciSubmitting?0.6:1,marginBottom:16}}>
                   {ciSubmitting?'⏳ Submitting…':'Submit Weekly Check-In'}
                 </button>
 
@@ -3860,7 +3857,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             })}
           </Card>
           {isClient&&(
-            <button style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:20}}>
+            <button style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',marginBottom:20}}>
               Save Habit Tracker
             </button>
           )}
@@ -4077,7 +4074,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             </button>
                             <button type="button" onClick={addDraftTaperStep}
                               disabled={!tapDate.trim()||!tapDose.trim()}
-                              style={{flex:2,background:tapDate.trim()&&tapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'6px',fontWeight:700,color:C.black,fontSize:11,cursor:tapDate.trim()&&tapDose.trim()?'pointer':'default'}}>
+                              style={{flex:2,background:tapDate.trim()&&tapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'6px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:tapDate.trim()&&tapDose.trim()?'pointer':'default'}}>
                               Add Step
                             </button>
                           </div>
@@ -4092,7 +4089,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         Cancel
                       </button>
                       <button type="button" onClick={saveRx}
-                        style={{flex:2,background:rxName.trim()&&rxDose.trim()?C.gold:'#444',border:'none',borderRadius:7,padding:'10px',fontWeight:800,color:C.black,fontSize:12,cursor:rxName.trim()&&rxDose.trim()?'pointer':'default'}}>
+                        style={{flex:2,background:rxName.trim()&&rxDose.trim()?C.gold:'#444',border:'none',borderRadius:7,padding:'10px',fontWeight:800,color:C.onAccent,fontSize:12,cursor:rxName.trim()&&rxDose.trim()?'pointer':'default'}}>
                         Save Rx
                       </button>
                     </div>
@@ -4169,7 +4166,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                             style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
                           <button type="button" onClick={()=>saveEditTaper(rx.id)}
                             disabled={!editTapDate.trim()||!editTapDose.trim()}
-                            style={{flex:2,background:editTapDate.trim()&&editTapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'7px',fontWeight:700,color:C.black,fontSize:11,cursor:editTapDate.trim()&&editTapDose.trim()?'pointer':'default'}}>
+                            style={{flex:2,background:editTapDate.trim()&&editTapDose.trim()?C.gold:'#555',border:'none',borderRadius:6,padding:'7px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:editTapDate.trim()&&editTapDose.trim()?'pointer':'default'}}>
                             Save Step
                           </button>
                         </div>
@@ -4199,7 +4196,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               )}
               <button
                 onClick={saveSuppAndRx}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginBottom:12}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',marginBottom:12}}>
                 {rxDirty?'Save Supps & Rx Plan ●':'Save Supps & Rx Plan'}
               </button>
             </>
@@ -4398,7 +4395,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                         {['Proteins','Carbohydrates','Fats','Fruits/Vegetables','Supplements','Drinks/Condiments'].map(c=><option key={c} value={c}>{c}</option>)}
                       </select>
                       <button onClick={addCompanyFood}
-                        style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer'}}>Add</button>
                       <button onClick={()=>setShowAddFood(false)}
                         style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancel</button>
                     </div>
@@ -4463,7 +4460,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     placeholder="e.g. 10-min evening walk"
                     style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                   <button onClick={addCustomHabit}
-                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+                    style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer'}}>Add</button>
                 </div>
                 <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Assigned only to this client — not added to the company library.</div>
               </div>
@@ -4478,7 +4475,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                       {[1,2,3,4,5,6,7].map(n=><option key={n} value={n}>{n}x/wk</option>)}
                     </select>
                     <button onClick={addCompanyHabit}
-                      style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>Add</button>
+                      style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer'}}>Add</button>
                   </div>
                   <div style={{fontSize:9,color:C.muted}}>This habit will appear for all coaches across the company.</div>
                 </div>
@@ -4486,7 +4483,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             </div>
             <div style={{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}>
               <button onClick={()=>setShowHabitPicker(false)}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,color:C.black,fontWeight:800,fontSize:13,cursor:'pointer'}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:8,padding:10,color:C.onAccent,fontWeight:800,fontSize:13,cursor:'pointer'}}>
                 Done — {assignedHabits.length} habits assigned
               </button>
             </div>
@@ -4508,7 +4505,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
                     <button onClick={()=>setEditHabit(null)}
                       style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
                     <button onClick={saveCompanyHabit}
-                      style={{flex:1,background:C.gold,border:'none',borderRadius:8,padding:10,color:C.black,fontSize:13,fontWeight:700,cursor:'pointer'}}>Save Changes</button>
+                      style={{flex:1,background:C.gold,border:'none',borderRadius:8,padding:10,color:C.onAccent,fontSize:13,fontWeight:700,cursor:'pointer'}}>Save Changes</button>
                   </div>
                 </div>
               </div>
@@ -4598,7 +4595,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
             {/* Footer */}
             <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
               <button onClick={()=>{setShowRecipePicker(false);setPendingRecipe(null)}}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:'11px 0',fontWeight:800,color:C.black,fontSize:14,cursor:'pointer'}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:'11px 0',fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer'}}>
                 Done — {assignedRecipes.length} recipe{assignedRecipes.length!==1?'s':''} assigned
               </button>
             </div>
@@ -4818,7 +4815,7 @@ export default function DietBuilder({currentUser, initialTab='plan', demoCheckin
               </div>
               <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
                 <button onClick={()=>setViewRecipe(null)}
-                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:'11px 0',fontWeight:800,color:C.black,fontSize:14,cursor:'pointer'}}>
+                  style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:'11px 0',fontWeight:800,color:C.onAccent,fontSize:14,cursor:'pointer'}}>
                   Done
                 </button>
               </div>

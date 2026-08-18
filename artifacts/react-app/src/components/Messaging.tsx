@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // Messaging.jsx — Multi-client conversation list
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer, sbAccessToken } from '../lib/sbAuth'
 import { supabase } from '../supabaseClient'
@@ -25,11 +26,7 @@ const SUPABASE_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZG9vamx3Z3BxbG13b3J3Y3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NTgzNzYsImV4cCI6MjA5OTUzNDM3Nn0.gIIdDMvbxOP-dELZTjmmTfzcbrLPVsFk_NGXqWg_guU'
 
 // ── Brand colors ──────────────────────────────────────────────
-const C = {
-  gold: '#ffa600', black: '#000000', white: '#ffffff',
-  surface: '#111111', card: '#1a1a1a', border: '#2a2a2a',
-  muted: '#888888', success: '#4FD89A', danger: '#ff4444',
-}
+const C: any = T
 
 // Demo conversation seed data removed — conversations load live from the database.
 
@@ -462,7 +459,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
                       background: selectedClients.has(cl.id) ? `${C.gold}12` : C.card, cursor:'pointer', textAlign:'left' }}>
                     <div style={{ width:20, height:20, borderRadius:4, border:`2px solid ${selectedClients.has(cl.id) ? C.gold : C.border}`,
                       background: selectedClients.has(cl.id) ? C.gold : 'transparent', flexShrink:0,
-                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:C.black, fontWeight:800 }}>
+                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:C.onAccent, fontWeight:800 }}>
                       {selectedClients.has(cl.id) ? '✓' : ''}
                     </div>
                     <div style={{ flex:1 }}>
@@ -606,7 +603,7 @@ function BroadcastComposer({ onClose, senderName, senderEmail }: any) {
           </div>
           <div style={{ display:'flex', gap:10, marginTop:8 }}>
             <button onClick={reset}
-              style={{ background:C.gold, border:'none', borderRadius:10, padding:'12px 24px', fontWeight:800, color:C.black, fontSize:14, cursor:'pointer' }}>
+              style={{ background:C.gold, border:'none', borderRadius:10, padding:'12px 24px', fontWeight:800, color:C.onAccent, fontSize:14, cursor:'pointer' }}>
               {sendMode==='schedule'?'Schedule Another':'Send Another'}
             </button>
             <button onClick={()=>{ setHistTab(sendMode==='schedule'?'scheduled':'sent'); setView('history') }}
@@ -1549,7 +1546,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
             🧵 Threads
             {unreadThreadCount > 0 && !showThreads && (
               <span style={{ position:'absolute', top:-6, right:-6, minWidth:16, height:16,
-                borderRadius:8, background:C.gold, color:C.black, fontSize:9, fontWeight:800,
+                borderRadius:8, background:C.gold, color:C.onAccent, fontSize:9, fontWeight:800,
                 display:'flex', alignItems:'center', justifyContent:'center', padding:'0 4px' }}>
                 {unreadThreadCount}
               </span>
@@ -1845,7 +1842,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                 padding: isMobile ? '11px 14px' : '9px 13px', color:C.white, fontSize:13, outline:'none', minWidth:0 }}/>
             <button onClick={sendThreadReply} disabled={!threadMsg.trim()}
               style={{ background:C.gold, border:'none', borderRadius:18, padding:'9px 16px',
-                fontWeight:800, color:C.black, fontSize:12, cursor:'pointer', opacity: threadMsg.trim() ? 1 : 0.4 }}>
+                fontWeight:800, color:C.onAccent, fontSize:12, cursor:'pointer', opacity: threadMsg.trim() ? 1 : 0.4 }}>
               ↑
             </button>
           </div>
@@ -1906,7 +1903,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
           <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
             <div style={{ width:30, height:30, borderRadius:15, background:C.gold,
               display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:11, fontWeight:800, color:C.black, flexShrink:0 }}>
+              fontSize:11, fontWeight:800, color:C.onAccent, flexShrink:0 }}>
               {activeConvo.initials}
             </div>
             <div style={{ minWidth:0 }}>
@@ -2135,7 +2132,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                     {mine && (
                       <div style={{ width:26, height:26, borderRadius:13, background:C.gold,
                         display:'flex', alignItems:'center', justifyContent:'center',
-                        fontSize:10, fontWeight:700, color:C.black, flexShrink:0, marginLeft:6 }}>
+                        fontSize:10, fontWeight:700, color:C.onAccent, flexShrink:0, marginLeft:6 }}>
                         {myName?.[0]}
                       </div>
                     )}
@@ -2185,7 +2182,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
                 <button onClick={sendMessage} disabled={!newMsg.trim()}
                   style={{ background:C.gold, border:'none', borderRadius:20,
                     padding: isMobile ? '12px 20px' : '10px 20px',
-                    fontWeight:800, color:C.black, fontSize: isMobile ? 16 : 13, cursor:'pointer',
+                    fontWeight:800, color:C.onAccent, fontSize: isMobile ? 16 : 13, cursor:'pointer',
                     opacity:newMsg.trim()?1:0.4, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
                   {isMobile ? '↑' : 'Send'}
                 </button>
@@ -2214,7 +2211,7 @@ export default function Messaging({ currentUser, loomMode = false, loomFeatured 
               {isLive && (
                 <button onClick={() => fileRef.current?.click()}
                   style={{ background:C.gold, border:'none', borderRadius:8, padding:'8px 16px',
-                    fontWeight:700, color:C.black, fontSize:12, cursor:'pointer' }}>
+                    fontWeight:700, color:C.onAccent, fontSize:12, cursor:'pointer' }}>
                   ⬆ Upload
                 </button>
               )}

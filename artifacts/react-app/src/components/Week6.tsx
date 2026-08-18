@@ -5,6 +5,7 @@
 //
 // In App.jsx:
 //   import Week6 from './components/Week6'
+import { T } from "../lib/theme";
 import LoomEmbed from './LoomEmbed'
 //   {tab === 'admin' && <Week6 currentUser={currentUser} />}
 // ═══════════════════════════════════════════════════════════════
@@ -76,11 +77,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const EDEN_ORG_ID = 'b0000000-0000-0000-0000-000000000001'
 
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
-}
+const C: any = T
 
 const H = {
   'apikey':SUPABASE_ANON,
@@ -2289,7 +2286,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       {isDeactivated(selectedClient)?(
                         <div style={{display:'flex',flexDirection:'column',gap:6,alignItems: isMobile ? 'flex-start' : 'flex-end'}}>
                           <button onClick={()=>reactivateClient(selectedClient)}
-                            style={{background:C.success,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+                            style={{background:C.success,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
                             ✓ Reactivate
                           </button>
                           {isAdmin&&(
@@ -2363,7 +2360,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       <Lbl t="📎 Documents & Forms"/>
                       {isAdmin&&(
                         <button onClick={()=>setShowAddDoc(true)}
-                          style={{background:C.gold,border:'none',borderRadius:6,padding:'4px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
+                          style={{background:C.gold,border:'none',borderRadius:6,padding:'4px 12px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:'pointer'}}>
                           + Add
                         </button>
                       )}
@@ -2401,7 +2398,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     </div>
                     <button
                       onClick={()=>onNavigate&&onNavigate('checkin',{email:selectedClient.email,name:selectedClient.name,role:selectedClient.role})}
-                      style={{marginTop:10,background:C.gold,border:'none',borderRadius:6,padding:'6px 14px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>
+                      style={{marginTop:10,background:C.gold,border:'none',borderRadius:6,padding:'6px 14px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:'pointer'}}>
                       Review Check-In →
                     </button>
                   </div>
@@ -2588,7 +2585,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   )}
                   <div style={{display:'flex',gap:8}}>
                     <button onClick={saveEditStaff} disabled={editStaff.saving}
-                      style={{background:C.gold,border:'none',borderRadius:6,padding:'7px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',opacity:editStaff.saving?0.6:1}}>
+                      style={{background:C.gold,border:'none',borderRadius:6,padding:'7px 16px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer',opacity:editStaff.saving?0.6:1}}>
                       {editStaff.saving?'Saving…':'Save'}
                     </button>
                     <button onClick={()=>setEditStaff(null)}
@@ -2613,7 +2610,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <div style={{fontSize:11,color:C.muted,marginTop:2}}>Manage white-label companies and their access</div>
             </div>
             <button onClick={()=>{ if(!planOptions.includes(newOrg.plan)) setNO('plan')(planOptions[0]); setShowNewOrg(true) }}
-              style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>
+              style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer'}}>
               + New Org
             </button>
           </div>
@@ -2649,7 +2646,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                       <input type="checkbox" checked={!!editPkg.includes_courses} onChange={e=>setEditPkg((p: any)=>({...p,includes_courses:e.target.checked}))}/>🎓 Learn tab (make their own courses)
                     </label>
                     <button onClick={savePackage}
-                      style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer'}}>Save</button>
+                      style={{background:C.gold,border:'none',borderRadius:6,padding:'6px 12px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:'pointer'}}>Save</button>
                     <button onClick={()=>setEditPkg(null)}
                       style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 10px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
                   </>
@@ -2707,7 +2704,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               <input value={newPkg.price} onChange={e=>setNewPkg((p: any)=>({...p,price:e.target.value}))} placeholder="Price / mo" inputMode="decimal"
                 style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
               <button onClick={addPackage} disabled={!newPkg.name.trim()||isNaN(parseFloat(newPkg.price))}
-                style={{background:C.gold,border:'none',borderRadius:6,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer',
+                style={{background:C.gold,border:'none',borderRadius:6,padding:'8px 14px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer',
                   opacity:(!newPkg.name.trim()||isNaN(parseFloat(newPkg.price)))?.5:1}}>+ Add Tier</button>
             </div>
             <div style={{display:'flex',gap:14,marginTop:8}}>
@@ -2960,7 +2957,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
 
             {(isCoach||isAdmin)&&(
               <button onClick={saveIntake}
-                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',marginTop:4}}>
+                style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',marginTop:4}}>
                 Save Intake Record
               </button>
             )}
@@ -2982,7 +2979,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </div>
             {(isCoach||isAdmin)&&(
               <button onClick={()=>setShowNewCall(true)}
-                style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.black,fontSize:12,cursor:'pointer'}}>
+                style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 14px',fontWeight:700,color:C.onAccent,fontSize:12,cursor:'pointer'}}>
                 + Add Call Note
               </button>
             )}
@@ -3102,7 +3099,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
             </div>
 
             <button onClick={()=>setLastAdded(null)}
-              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+              style={{width:'100%',background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer'}}>
               Got It
             </button>
           </div>
@@ -3133,7 +3130,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Cancel
               </button>
               <button onClick={addAdminDoc}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:10,padding:12,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer'}}>
                 Save & Push to Client
               </button>
             </div>
@@ -3160,7 +3157,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         onKeyDown={e=>{if(e.key==='Enter')renameStaffRole(r); if(e.key==='Escape'){setEditingRole(null);setEditRoleName('')}}}
                         style={{flex:1,background:C.surface,border:`1px solid ${C.gold}`,borderRadius:8,padding:'6px 9px',color:C.white,fontSize:12,outline:'none'}}/>
                       <button onClick={()=>renameStaffRole(r)} disabled={!editRoleName.trim()}
-                        style={{background:C.gold,border:'none',borderRadius:8,padding:'6px 12px',fontWeight:800,color:C.black,fontSize:11,cursor:'pointer',opacity:editRoleName.trim()?1:.4}}>Save</button>
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'6px 12px',fontWeight:800,color:C.onAccent,fontSize:11,cursor:'pointer',opacity:editRoleName.trim()?1:.4}}>Save</button>
                       <button onClick={()=>{setEditingRole(null);setEditRoleName('')}}
                         style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
                     </>
@@ -3182,7 +3179,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 placeholder='New role name — e.g. "Sales", "Module Mentor"'
                 style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',color:C.white,fontSize:12,outline:'none'}}/>
               <button onClick={saveNewStaffRole} disabled={!newRoleName.trim()}
-                style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 14px',fontWeight:800,color:C.black,fontSize:12,cursor:'pointer',opacity:newRoleName.trim()?1:.4}}>+ Add</button>
+                style={{background:C.gold,border:'none',borderRadius:8,padding:'9px 14px',fontWeight:800,color:C.onAccent,fontSize:12,cursor:'pointer',opacity:newRoleName.trim()?1:.4}}>+ Add</button>
             </div>
             <button onClick={()=>{setShowRoleMgr(false);setEditingRole(null);setEditRoleName('')}}
               style={{marginTop:12,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',color:C.muted,fontSize:12,cursor:'pointer',alignSelf:'flex-end'}}>Close</button>
@@ -3274,7 +3271,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                             onKeyDown={e=>{if(e.key==='Enter')renameStaffRole(r); if(e.key==='Escape'){setEditingRole(null);setEditRoleName('')}}}
                             style={{width:120,background:C.surface,border:`1px solid ${C.gold}`,borderRadius:8,padding:'5px 8px',color:C.white,fontSize:11,outline:'none'}}/>
                           <button onClick={()=>renameStaffRole(r)} disabled={!editRoleName.trim()}
-                            style={{background:C.gold,border:'none',borderRadius:8,padding:'5px 8px',fontWeight:700,color:C.black,fontSize:10,cursor:'pointer',opacity:editRoleName.trim()?1:.4}}>Save</button>
+                            style={{background:C.gold,border:'none',borderRadius:8,padding:'5px 8px',fontWeight:700,color:C.onAccent,fontSize:10,cursor:'pointer',opacity:editRoleName.trim()?1:.4}}>Save</button>
                           <button onClick={()=>{setEditingRole(null);setEditRoleName('')}}
                             style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',color:C.muted,fontSize:10,cursor:'pointer'}}>✕</button>
                         </div>
@@ -3305,7 +3302,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         placeholder="e.g. Closer, Sales Mentor, Module Mentor" autoFocus
                         style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.white,fontSize:12,outline:'none'}}/>
                       <button onClick={saveNewStaffRole} disabled={!newRoleName.trim()}
-                        style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.black,fontSize:11,cursor:'pointer',opacity:newRoleName.trim()?1:.4}}>Save</button>
+                        style={{background:C.gold,border:'none',borderRadius:8,padding:'8px 12px',fontWeight:700,color:C.onAccent,fontSize:11,cursor:'pointer',opacity:newRoleName.trim()?1:.4}}>Save</button>
                       <button onClick={()=>{setAddingRole(false);setNewRoleName('')}}
                         style={{background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancel</button>
                     </div>
@@ -3351,7 +3348,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Cancel
               </button>
               <button onClick={addUser} disabled={!newUser.name.trim()||!newUser.email.trim()}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newUser.name.trim()&&newUser.email.trim()?1:.5}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:newUser.name.trim()&&newUser.email.trim()?1:.5}}>
                 Add User
               </button>
             </div>
@@ -3472,7 +3469,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                   </button>
                   <button onClick={buildClientPreview}
                     disabled={!acCoachId||!(acSingle.name.trim()&&acSingle.email.trim())}
-                    style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',
+                    style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',
                       opacity:(acCoachId&&acSingle.name.trim()&&acSingle.email.trim())?1:.5}}>
                     Preview →
                   </button>
@@ -3485,7 +3482,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     ← Back
                   </button>
                   <button onClick={confirmAddClients} disabled={!acRows.some(r=>r.status==='ready')}
-                    style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:acRows.some(r=>r.status==='ready')?1:.5}}>
+                    style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:acRows.some(r=>r.status==='ready')?1:.5}}>
                     Confirm — Add {acRows.filter(r=>r.status==='ready').length} Client{acRows.filter(r=>r.status==='ready').length!==1?'s':''}
                   </button>
                 </>
@@ -3495,7 +3492,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
               )}
               {acStep==='done'&&(
                 <button onClick={resetAddClients}
-                  style={{flex:1,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer'}}>
+                  style={{flex:1,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer'}}>
                   Done
                 </button>
               )}
@@ -3562,7 +3559,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Cancel
               </button>
               <button onClick={saveCallNote} disabled={!newCall.summary.trim()}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newCall.summary.trim()?1:.5}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:newCall.summary.trim()?1:.5}}>
                 Save Call Note
               </button>
             </div>
@@ -3600,7 +3597,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Cancel
               </button>
               <button onClick={saveManagedOrg} disabled={!manageOrg.name.trim()}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:manageOrg.name.trim()?1:.5}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:manageOrg.name.trim()?1:.5}}>
                 Save Changes
               </button>
             </div>
@@ -3655,7 +3652,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Cancel
               </button>
               <button onClick={createOrg} disabled={!newOrg.name.trim()}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:newOrg.name.trim()?1:.5}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:newOrg.name.trim()?1:.5}}>
                 Create Organization
               </button>
             </div>
@@ -3691,7 +3688,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 Cancel
               </button>
               <button onClick={saveEditIdentity} disabled={editIdentity.saving}
-                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.black,fontSize:13,cursor:'pointer',opacity:editIdentity.saving?0.6:1}}>
+                style={{flex:2,background:C.gold,border:'none',borderRadius:8,padding:11,fontWeight:800,color:C.onAccent,fontSize:13,cursor:'pointer',opacity:editIdentity.saving?0.6:1}}>
                 {editIdentity.saving?'Saving…':'Save Changes'}
               </button>
             </div>

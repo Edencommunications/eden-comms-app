@@ -24,6 +24,7 @@ import Notifications, { sendNotification } from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
 import ContentSchedulerAdmin from "./components/ContentSchedulerAdmin";
 import CommunityDestPicker from "./components/CommunityDestPicker";
+import { T, themeMode, chooseTheme, onThemeChange, initThemeForUser, resetThemeOnLogout } from "./lib/theme";
 import { LN, LoomPicker, loomSet, loomShow, loomIsShown, useLoomOn } from "./components/LoomPrivacy";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
@@ -56,22 +57,9 @@ import { supabase } from "./supabaseClient";
 
 // ─── BRAND TOKENS — Official Eden Colors ─────────────────────────────────────
 // Primary: #ffa600 (Eden Gold)  Base: #000000 (Black)  Light: #ffffff (White)
-const B = {
-  gold:    "#ffa600",   // PRIMARY — buttons, accents, active states
-  black:   "#000000",   // BASE — page backgrounds
-  white:   "#ffffff",   // TEXT — all labels, headings
-  surface: "#111111",   // cards, panels (near-black for depth)
-  bg:      "#111111",   // alias of surface — subtle inner backgrounds
-  card:    "#1a1a1a",   // elevated cards
-  border:  "#2a2a2a",   // dividers, input borders
-  muted:   "#888888",   // secondary text, inactive icons
-  dim:     "#333333",   // subtle backgrounds inside cards
-  danger:  "#ff4444",   // errors, alerts
-  success: "#4FD89A",   // positive states
-  text:    "#ffffff",   // alias for white — body text
-  goldDim: "#ffa60022", // gold at low opacity for backgrounds
-  goldMid: "#ffa60044", // gold at medium opacity for borders
-};
+// Tokens now live in lib/theme.ts and switch between Dark and Light in place;
+// the App root re-renders the tree whenever the theme changes.
+const B: any = T;
 
 // ─── WHITE-LABEL PALETTE ─────────────────────────────────────────────────────
 // Turns an organizations row (brand_color + brand_colors jsonb) into a full
@@ -84,6 +72,20 @@ const wlPalette = (org: any) => {
   const accent = extra[1] || extra[0] || primary;
   const all = [primary, ...extra];
   return { primary, secondary, accent, extra, all, nth: (i: any) => all[i % all.length] };
+};
+
+// ─── THEME TOGGLE ─────────────────────────────────────────────────────────────
+// Dark ↔ Light switch shown in every logged-in header. chooseTheme() applies
+// instantly, caches on the device, and syncs to the server per login.
+const ThemeToggle = ({ compact }: any) => {
+  const dark = themeMode() === "dark";
+  return (
+    <button onClick={() => chooseTheme(dark ? "light" : "dark")} title={dark ? "Switch to light mode" : "Switch to dark mode"}
+      style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
+      <span style={{ fontSize:13, lineHeight:1 }}>{dark ? "☀️" : "🌙"}</span>
+      {!compact && <span style={{ fontSize:11, color:B.muted }}>{dark ? "Light" : "Dark"}</span>}
+    </button>
+  );
 };
 
 // ─── AUTH CONTEXT ─────────────────────────────────────────────────────────────
@@ -1189,7 +1191,7 @@ const DietScreen = () => {
         <div style={{ background:`linear-gradient(135deg, #111100, ${"#ffa600"})`, borderRadius:14, padding:16, marginBottom:32, border:`1px solid ${B.gold}33` }}>
           <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:"0 0 6px" }}>🍽 Eden Recipe Book</p>
           <p style={{ fontSize:12, color:"rgba(255,255,255,0.7)", margin:"0 0 12px" }}>Unlock 100+ clean eating recipes and pull meals directly into your diet plan.</p>
-          <Btn style={{ background:B.gold, color:B.black, padding:"10px 16px" }}>Unlock Recipe Book</Btn>
+          <Btn style={{ background:B.gold, color:B.onAccent, padding:"10px 16px" }}>Unlock Recipe Book</Btn>
         </div>
       </div>
     </Screen>
@@ -2692,7 +2694,7 @@ const CoachDashboard = ({ user, onNavigate, loomMode, setLoomMode, loomFeatured,
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                         <p style={{ fontSize:14, fontWeight:700, color:B.text, margin:0 }}>{displayName(c,i)}</p>
                         {!loomMode && c.needsReview && !missingCycle && (
-                          <span style={{ fontSize:9, fontWeight:800, color:B.black, background:B.gold,
+                          <span style={{ fontSize:9, fontWeight:800, color:B.onAccent, background:B.gold,
                             borderRadius:4, padding:"2px 6px", letterSpacing:.5, whiteSpace:"nowrap" }}>📋 NEW CHECK-IN</span>
                         )}
                         {!loomMode && missingCycle && (
@@ -2933,7 +2935,7 @@ const StaffAccessManager = ({ user }:any) => {
           <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, textTransform:'uppercase', margin:'0 0 2px' }}>Staff Access Control</p>
           {usingDemo && <p style={{ fontSize:10, color:'#f06060', margin:0 }}>⚠️ Demo mode — populate user_profiles in Supabase to persist</p>}
         </div>
-        <button onClick={openAdd} style={{ background:B.gold, border:'none', borderRadius:8, padding:'8px 14px', color:B.black, fontSize:12, fontWeight:800, cursor:'pointer' }}>
+        <button onClick={openAdd} style={{ background:B.gold, border:'none', borderRadius:8, padding:'8px 14px', color:B.onAccent, fontSize:12, fontWeight:800, cursor:'pointer' }}>
           + Add Assignment
         </button>
       </div>
@@ -3056,7 +3058,7 @@ const StaffAccessManager = ({ user }:any) => {
             </div>
 
             <button onClick={save} disabled={saving||(!editing&&!fStaff)}
-              style={{ width:'100%', background:B.gold, border:'none', borderRadius:10, padding:'13px', color:B.black, fontSize:14, fontWeight:800, cursor:'pointer', opacity:(saving||(!editing&&!fStaff))?0.4:1 }}>
+              style={{ width:'100%', background:B.gold, border:'none', borderRadius:10, padding:'13px', color:B.onAccent, fontSize:14, fontWeight:800, cursor:'pointer', opacity:(saving||(!editing&&!fStaff))?0.4:1 }}>
               {saving ? 'Saving…' : editing ? 'Save Changes' : 'Assign Access'}
             </button>
           </div>
@@ -3212,7 +3214,7 @@ const RosterImportExport = () => {
       </p>
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: preview || result ? 12 : 0 }}>
         <button onClick={() => fileRef.current?.click()}
-          style={{ background:B.gold, border:'none', borderRadius:8, padding:'9px 14px', color:B.black, fontSize:12, fontWeight:800, cursor:'pointer' }}>
+          style={{ background:B.gold, border:'none', borderRadius:8, padding:'9px 14px', color:B.onAccent, fontSize:12, fontWeight:800, cursor:'pointer' }}>
           ⬆ Upload CSV…
         </button>
         <button onClick={exportRoster} disabled={exporting}
@@ -3270,7 +3272,7 @@ const RosterImportExport = () => {
                   </p>
                   <button onClick={() => downloadFile('login-details.csv',
                       ['name,email,temp_password', ...withTempPw.map((x:any) => [csvCell(x.name), csvCell(x.email), csvCell(x.temp_password)].join(','))].join('\n'))}
-                    style={{ background:B.gold, border:'none', borderRadius:6, padding:'6px 12px', color:B.black, fontSize:11, fontWeight:800, cursor:'pointer' }}>
+                    style={{ background:B.gold, border:'none', borderRadius:6, padding:'6px 12px', color:B.onAccent, fontSize:11, fontWeight:800, cursor:'pointer' }}>
                     ⬇ Download login details
                   </button>
                 </div>
@@ -5344,7 +5346,7 @@ function BookingScreen({ currentUser, viewer }: { currentUser: any, viewer?: any
                 borderRadius:8, padding:'8px 10px', color:B.white, fontSize:12, outline:'none' }}/>
             <button onClick={saveUrl}
               style={{ background:B.gold, border:'none', borderRadius:8, padding:'8px 14px',
-                fontWeight:700, color:B.black, fontSize:12, cursor:'pointer', flexShrink:0 }}>
+                fontWeight:700, color:B.onAccent, fontSize:12, cursor:'pointer', flexShrink:0 }}>
               Save
             </button>
             <button onClick={() => setEditing(false)}
@@ -5978,6 +5980,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
             if (client?.email && (user.role === 'coach' || user.role === 'super_admin')) openClientTool(dest, client, tab);
             else navTab(dest);
           }}/>
+          <ThemeToggle compact={isMobile}/>
           {hasAuthSession && (
             <button onClick={() => setShowChangePw(true)} title="Change password"
               style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
@@ -5986,7 +5989,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
             </button>
           )}
           <div style={{ width:30, height:30, borderRadius:15, background:`linear-gradient(135deg, ${shellPrimary}, ${shellSecondary})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ fontSize:13, fontWeight:800, color:B.black }}>{user.name[0]}</span>
+            <span style={{ fontSize:13, fontWeight:800, color:B.onAccent }}>{user.name[0]}</span>
           </div>
           <button onClick={onLogout} style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
             <Ic n="logout" size={14} c={B.muted}/>
@@ -6176,7 +6179,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               <button onClick={stayLoggedIn}
                 style={{ background:B.gold, border:"none", borderRadius:10, padding:"13px 0",
-                  fontWeight:800, fontSize:14, color:B.black, cursor:"pointer", width:"100%" }}>
+                  fontWeight:800, fontSize:14, color:B.onAccent, cursor:"pointer", width:"100%" }}>
                 Stay Signed In
               </button>
               <button onClick={() => forceLogout()}
@@ -6982,6 +6985,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
               Open the full app →
             </button>
           )}
+          <ThemeToggle compact/>
           <button onClick={onLogout}
             style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
             Log out
@@ -7640,6 +7644,13 @@ export default function App() {
   const [matchVideo] = useRoute("/video");
 
   const [user, setUser] = useState<any>(null);
+  // Theme: re-render everything when tokens swap; load the person's saved
+  // choice right after login (device cache first, then server-synced value).
+  const [, setThemeTick] = useState(0);
+  useEffect(() => onThemeChange(() => setThemeTick((t) => t + 1)), []);
+  useEffect(() => {
+    if (user?.id || user?.email) initThemeForUser(user.id || user.email);
+  }, [user?.id, user?.email]);
   const [authScreen, setAuthScreen] = useState("login");
 
   if (matchVideo) {
@@ -7681,6 +7692,7 @@ export default function App() {
 
   const fullLogout = () => {
     setUser(null);
+    resetThemeOnLogout();   // login screen is always the dark brand look
     supabase.auth.signOut().catch(()=>{});
   };
 

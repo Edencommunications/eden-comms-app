@@ -1,8 +1,9 @@
 // Collapsible Loom video — shows a compact "Watch" button until clicked,
 // so recordings never dominate the page for people who aren't watching them.
+import { T } from "../lib/theme";
 import { useState } from 'react'
 
-const C = { gold:'#ffa600', black:'#000', white:'#fff', border:'#2a2a2a', muted:'#888' }
+const C: any = T
 
 // Accepts a share URL, an embed URL, or a bare video id.
 function loomEmbedUrl(raw: any): string | null {

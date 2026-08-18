@@ -5,14 +5,11 @@
 //   • Client's own Wearables tab (client viewing their own data)
 // currentUser.role determines coach vs. client view
 // ═══════════════════════════════════════════════════════════════
+import { T } from "../lib/theme";
 import { useState, useEffect, useRef } from 'react'
 import { sbBearer } from '../lib/sbAuth'
 
-const C = {
-  gold:'#ffa600', black:'#000', white:'#fff',
-  surface:'#111', card:'#1a1a1a', border:'#2a2a2a',
-  muted:'#888', success:'#4FD89A', danger:'#ff4444', dim:'#333',
-}
+const C: any = T
 
 // ── Supabase (food log persistence) ──────────────────────────
 const SB_URL  = 'https://jzdoojlwgpqlmworwcsr.supabase.co'
@@ -190,7 +187,7 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
           {!showForm ? (
             <button
               onClick={() => setShowForm(true)}
-              style={{ width:'100%', background:C.gold, border:'none', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, color:C.black, cursor:'pointer' }}>
+              style={{ width:'100%', background:C.gold, border:'none', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, color:C.onAccent, cursor:'pointer' }}>
               + Log a Meal
             </button>
           ) : (
@@ -236,7 +233,7 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
                   Cancel
                 </button>
                 <button onClick={handleAdd} disabled={!desc.trim()}
-                  style={{ flex:2, background:desc.trim()?C.gold:'#333', border:'none', borderRadius:8, padding:'9px', fontWeight:700, color:C.black, fontSize:13, cursor:'pointer' }}>
+                  style={{ flex:2, background:desc.trim()?C.gold:'#333', border:'none', borderRadius:8, padding:'9px', fontWeight:700, color:C.onAccent, fontSize:13, cursor:'pointer' }}>
                   Save Entry
                 </button>
               </div>
@@ -259,7 +256,7 @@ function FoodLogPanel({ entries, onAdd, onDelete, isCoach, clientName, coachNote
           <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8, gap:8, alignItems:'center' }}>
             {noteSaved && <span style={{ fontSize:11, color:C.success, fontWeight:700 }}>✓ Saved</span>}
             <button onClick={saveNote}
-              style={{ background:coachNote.trim()?C.gold:'#333', border:'none', borderRadius:7, padding:'7px 18px', fontWeight:700, color:C.black, fontSize:12, cursor:'pointer' }}>
+              style={{ background:coachNote.trim()?C.gold:'#333', border:'none', borderRadius:7, padding:'7px 18px', fontWeight:700, color:C.onAccent, fontSize:12, cursor:'pointer' }}>
               Save Note
             </button>
           </div>
@@ -623,7 +620,7 @@ export default function Wearables({ currentUser }: any) {
                   <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8, gap:8, alignItems:'center' }}>
                     {noteSaved && <span style={{ fontSize:11, color:C.success, fontWeight:700 }}>✓ Saved</span>}
                     <button onClick={saveNote}
-                      style={{ background:coachNote.trim()?C.gold:'#333', border:'none', borderRadius:7, padding:'7px 18px', fontWeight:700, color:C.black, fontSize:12, cursor:'pointer' }}>
+                      style={{ background:coachNote.trim()?C.gold:'#333', border:'none', borderRadius:7, padding:'7px 18px', fontWeight:700, color:C.onAccent, fontSize:12, cursor:'pointer' }}>
                       Save Note
                     </button>
                   </div>
