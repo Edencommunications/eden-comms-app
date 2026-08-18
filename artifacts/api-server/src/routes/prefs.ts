@@ -50,13 +50,13 @@ router.get("/prefs/theme", async (req: Request, res: Response) => {
   const me = await requireUser(req);
   if (!me) { res.status(401).json({ error: "Not signed in" }); return; }
   const prefs = await loadPrefs(me);
-  res.json({ ok: true, mode: prefs.theme === "light" ? "light" : "dark" });
+  res.json({ ok: true, mode: prefs.theme === "light" || prefs.theme === "brand" ? prefs.theme : "dark" });
 });
 
 router.post("/prefs/theme", async (req: Request, res: Response) => {
   const me = await requireUser(req);
   if (!me) { res.status(401).json({ error: "Not signed in" }); return; }
-  const m = req.body?.mode === "light" ? "light" : "dark";
+  const m = req.body?.mode === "light" || req.body?.mode === "brand" ? req.body.mode : "dark";
   const cid = me.company_id || EDEN_ID;
   const prefs = await loadPrefs(me);
   prefs.theme = m;

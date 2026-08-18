@@ -12,7 +12,14 @@
 //   onAccent — text drawn ON gold/brand-colored fills (dark in both themes)
 import { sbBearer } from './sbAuth';
 
-export type ThemeMode = 'dark' | 'light';
+export type ThemeMode = 'dark' | 'light' | 'brand';
+
+// Mix two hex colors: t=1 → pure a, t=0 → pure b.
+const mix = (a: string, b: string, t: number) => {
+  const pa = a.match(/\w\w/g)!.map((h) => parseInt(h, 16));
+  const pb = b.match(/\w\w/g)!.map((h) => parseInt(h, 16));
+  return '#' + pa.map((v, i) => Math.round(v * t + pb[i] * (1 - t)).toString(16).padStart(2, '0')).join('');
+};
 
 const DARK = {
   gold:    '#ffa600',
@@ -50,21 +57,53 @@ const LIGHT = {
   onAccent:'#000000',
 };
 
+// Brand-heavy: the whole chrome is washed in a deep shade of the org's brand
+// color (dark-based so text stays readable), with the bright brand color as
+// the accent. The accent comes from the active org/DBA via setBrandAccent().
+const brandTokens = (accent: string) => ({
+  gold:    accent,
+  black:   mix(accent, '#000000', 0.16),
+  white:   '#ffffff',
+  surface: mix(accent, '#0c0c0c', 0.20),
+  bg:      mix(accent, '#0c0c0c', 0.20),
+  card:    mix(accent, '#161616', 0.24),
+  border:  mix(accent, '#242424', 0.40),
+  muted:   mix(accent, '#999999', 0.35),
+  dim:     mix(accent, '#2c2c2c', 0.32),
+  danger:  '#ff5b5b',
+  success: '#4FD89A',
+  text:    '#ffffff',
+  goldDim: accent + '22',
+  goldMid: accent + '44',
+  onAccent:'#000000',
+});
+
 export const T: any = { ...DARK };
 
 let mode: ThemeMode = 'dark';
+let brandAccent = '#ffa600';
+
+// Called by the org/DBA shells once branding is known, so Brand-heavy uses
+// each organization's own color. Re-applies live if Brand mode is active.
+export function setBrandAccent(hex: string) {
+  if (typeof hex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(hex.trim())) return;
+  const v = hex.trim();
+  if (v === brandAccent) return;
+  brandAccent = v;
+  if (mode === 'brand') applyTheme('brand');
+}
 const listeners = new Set<() => void>();
 
 export const themeMode = (): ThemeMode => mode;
 export const onThemeChange = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
 export function applyTheme(m: ThemeMode) {
-  mode = m === 'light' ? 'light' : 'dark';
-  Object.assign(T, mode === 'light' ? LIGHT : DARK);
+  mode = m === 'light' ? 'light' : m === 'brand' ? 'brand' : 'dark';
+  Object.assign(T, mode === 'light' ? LIGHT : mode === 'brand' ? brandTokens(brandAccent) : DARK);
   try {
     document.body.style.background = T.black;
     document.body.style.color = T.text;
-    document.documentElement.style.colorScheme = mode;
+    document.documentElement.style.colorScheme = mode === 'light' ? 'light' : 'dark';
   } catch { /* SSR-safe no-op */ }
   listeners.forEach((fn) => { try { fn(); } catch { /* listener errors can't break theming */ } });
 }
@@ -79,7 +118,7 @@ export function loadLocalTheme(forUser?: string): ThemeMode {
   try {
     const k = forUser ? `eden_theme:${forUser}` : lsKey();
     const v = localStorage.getItem(k) || localStorage.getItem('eden_theme');
-    return v === 'light' ? 'light' : 'dark';
+    return v === 'light' ? 'light' : v === 'brand' ? 'brand' : 'dark';
   } catch { return 'dark'; }
 }
 
@@ -95,7 +134,7 @@ export function initThemeForUser(id: string) {
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       if (gen !== generation) return;   // logged out / switched accounts meanwhile
-      const m = d?.mode === 'light' ? 'light' : d?.mode === 'dark' ? 'dark' : null;
+      const m = d?.mode === 'light' || d?.mode === 'brand' || d?.mode === 'dark' ? d.mode : null;
       if (m && m !== mode) { try { localStorage.setItem(lsKey(), m); } catch {} applyTheme(m); }
     })
     .catch(() => {});

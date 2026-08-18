@@ -24,7 +24,7 @@ import Notifications, { sendNotification } from "./components/Notifications";
 import { HuddleProvider, DndButton } from "./components/HuddleHub";
 import ContentSchedulerAdmin from "./components/ContentSchedulerAdmin";
 import CommunityDestPicker from "./components/CommunityDestPicker";
-import { T, themeMode, chooseTheme, onThemeChange, initThemeForUser, resetThemeOnLogout } from "./lib/theme";
+import { T, themeMode, chooseTheme, onThemeChange, initThemeForUser, resetThemeOnLogout, setBrandAccent } from "./lib/theme";
 import { LN, LoomPicker, loomSet, loomShow, loomIsShown, useLoomOn } from "./components/LoomPrivacy";
 import Week4 from "./components/Week4";
 import Week5 from "./components/Week5";
@@ -77,13 +77,16 @@ const wlPalette = (org: any) => {
 // ─── THEME TOGGLE ─────────────────────────────────────────────────────────────
 // Dark ↔ Light switch shown in every logged-in header. chooseTheme() applies
 // instantly, caches on the device, and syncs to the server per login.
+const THEME_CYCLE: any = { dark: "light", light: "brand", brand: "dark" };
+const THEME_FACE: any = { dark: { icon: "🌙", label: "Dark" }, light: { icon: "☀️", label: "Light" }, brand: { icon: "🎨", label: "Brand" } };
 const ThemeToggle = ({ compact }: any) => {
-  const dark = themeMode() === "dark";
+  const m = themeMode();
+  const next = THEME_CYCLE[m] || "dark";
   return (
-    <button onClick={() => chooseTheme(dark ? "light" : "dark")} title={dark ? "Switch to light mode" : "Switch to dark mode"}
+    <button onClick={() => chooseTheme(next)} title={`Appearance: ${THEME_FACE[m].label} — click for ${THEME_FACE[next].label}`}
       style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
-      <span style={{ fontSize:13, lineHeight:1 }}>{dark ? "☀️" : "🌙"}</span>
-      {!compact && <span style={{ fontSize:11, color:B.muted }}>{dark ? "Light" : "Dark"}</span>}
+      <span style={{ fontSize:13, lineHeight:1 }}>{THEME_FACE[m].icon}</span>
+      {!compact && <span style={{ fontSize:11, color:B.muted }}>{THEME_FACE[m].label}</span>}
     </button>
   );
 };
@@ -5447,9 +5450,11 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
   }, [user.email]);
   // Full org palette (primary + secondary/accent) — falls back to Eden gold
   const wp = wlPalette(wlOrg);
-  const shellPrimary   = wlOrg ? wp.primary   : B.gold;
+  const shellPrimary   = wlOrg ? wp.primary   : "#ffa600";
   const shellSecondary = wlOrg ? wp.secondary : B.gold;
   const shellAccent    = wlOrg ? wp.accent    : B.gold;
+  // Brand-heavy mode paints the chrome with the active org's color
+  useEffect(() => { setBrandAccent(shellPrimary); }, [shellPrimary]);
   const [loomMode,     setLoomMode]     = useState(false);
   const [loomFeatured, setLoomFeatured] = useState<Set<string>>(new Set());
   const [coachClient, setCoachClient] = useState<{email:string,name:string,role:string}|null>(null);
@@ -6868,9 +6873,10 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   });
   const dba = dbas.find((d: any) => d.id === activeId) || dbas[0];
   const wl = wlPalette(dba);
-  const primary = wl?.primary || B.gold;
+  const primary = wl?.primary || "#ffa600";
   const secondary = wl?.secondary || primary;
   const accent = wl?.accent || primary;
+  useEffect(() => { setBrandAccent(primary); }, [primary]);
   const hasPalette = (wl?.extra || []).length > 0;
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<"home" | "community" | "huddles" | "calendar" | "connect" | "learn" | "hq">("home");
