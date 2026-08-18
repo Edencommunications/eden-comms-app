@@ -422,7 +422,7 @@ router.post("/auth/create-account", async (req: Request, res: Response) => {
   // Staff custom title + tab access — zero-DDL admin_settings row
   if (b.staff_meta && typeof b.staff_meta === "object" && companyId) {
     try {
-      const tabs = Array.isArray(b.staff_meta.tabs) ? b.staff_meta.tabs.filter((t: any) => ["home", "msgs", "team"].includes(t)) : [];
+      const tabs = Array.isArray(b.staff_meta.tabs) ? b.staff_meta.tabs.filter((t: any) => ["home", "msgs", "team", "learn", "community"].includes(t)) : [];
       const metaRow = { label: b.staff_meta.label ? String(b.staff_meta.label) : null, tabs: tabs.length ? tabs : ["team"] };
       await fetch(`${SUPABASE_URL}/rest/v1/admin_settings?on_conflict=company_id,key`, {
         method: "POST",

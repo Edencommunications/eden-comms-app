@@ -5663,9 +5663,13 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
 
   // Manual per-staff access control — admin_settings key staff_meta:<profileId>
   // holds {label, tabs:['home','msgs','team']}. When set, staff only see those tabs.
-  const [staffAllowedTabs, setStaffAllowedTabs] = useState<string[]|null>(null);
+  // undefined = still loading meta; null = no meta saved (classic 3-tab default);
+  // array = explicit allow-list, normalized against the canonical staff tab set.
+  const STAFF_TAB_KEYS = ['home','msgs','team','learn','community'];
+  const [staffAllowedTabs, setStaffAllowedTabs] = useState<string[]|null|undefined>(undefined);
   useEffect(() => {
     if (!isStaff) { setStaffAllowedTabs(null); return; }
+    setStaffAllowedTabs(undefined);
     let cancelled = false;
     let cleanup: (() => void) | null = null;
     const readMeta = async (id: string) => {
@@ -5675,7 +5679,8 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
         const v = s?.[0]?.value;
         if (!v) { setStaffAllowedTabs(null); return; }
         const meta = typeof v === 'string' ? JSON.parse(v) : v;
-        setStaffAllowedTabs(Array.isArray(meta?.tabs) && meta.tabs.length ? meta.tabs : null);
+        const norm = Array.isArray(meta?.tabs) ? meta.tabs.filter((t: any) => STAFF_TAB_KEYS.includes(t)) : [];
+        setStaffAllowedTabs(norm.length ? norm : null);
       } catch {}
     };
     (async () => {
@@ -5730,16 +5735,17 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
   }, [isStaff, user.email]);
   // Staff with no staff_meta saved keep the classic 3 tabs — Learn/Connect are
   // opt-in via the admin's access checkboxes, never granted by default.
-  const visibleTabs = isStaff
-    ? tabs.filter(t => (staffAllowedTabs ?? ['home','msgs','team']).includes(t.key))
-    : tabs;
+  // While the meta is still loading (undefined), stay on the conservative trio.
+  const staffAllowed: string[] | null = !isStaff ? null
+    : (staffAllowedTabs === undefined ? ['home','msgs','team'] : (staffAllowedTabs ?? ['home','msgs','team']));
+  const visibleTabs = isStaff && staffAllowed ? tabs.filter(t => staffAllowed.includes(t.key)) : tabs;
 
   // Team Hub chat unread dot — lights up on the sidebar tab when #general or a DM
   // has messages newer than last viewed (tracked in localStorage by Week7).
   const teamHubUnread = useTeamHubUnread(user);
   const messagesUnread = useMessagesUnread(user);
   useEffect(() => {
-    if (isStaff && staffAllowedTabs && !staffAllowedTabs.includes(tab) && visibleTabs.length) setTab(visibleTabs[0].key);
+    if (isStaff && staffAllowed && !staffAllowed.includes(tab) && visibleTabs.length) setTab(visibleTabs[0].key);
   }, [isStaff, staffAllowedTabs, tab]); // eslint-disable-line
 
   // Safety net: if someone is sitting on Learn when the tier gate resolves to
@@ -5815,8 +5821,10 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
       if (tab === "home") return <StaffClientPanel user={user}/>;
       if (tab === "msgs") return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
       if (tab === "team") return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }} initialDm={coachClient}/>;
-      if (tab === "learn") return learnAllowed === true ? <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/> : null;
-      if (tab === "community") return <CommunityScreen user={user}/>;
+      // Render-level enforcement (not just hidden nav): Learn/Connect require an
+      // explicit staff_meta grant — direct navigation (?goto=…) must not bypass it.
+      if (tab === "learn") return (learnAllowed === true && staffAllowed?.includes('learn')) ? <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/> : null;
+      if (tab === "community") return staffAllowed?.includes('community') ? <CommunityScreen user={user}/> : null;
       return <StaffClientPanel user={user}/>;
     }
     // Shared screens
