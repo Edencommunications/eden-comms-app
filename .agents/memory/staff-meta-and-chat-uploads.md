@@ -9,3 +9,10 @@ description: Zero-DDL storage for custom staff titles, per-staff tab access, and
 **How to apply:** any new per-staff setting → another `staff_meta` field; any new chat embed → a new `[[...]]` marker type parsed in renderBody, always URL-validated.
 
 **Live access updates (Aug 2026):** the app shell subscribes per-staff to a `staff-meta-<profileId>` realtime channel — postgres_changes on admin_settings plus a broadcast `staff-meta-changed` nudge sent by the admin UI on save — with a slow always-on poll fallback. admin_settings was verified NOT in the supabase_realtime publication, so the broadcast nudge is the guaranteed instant path; if the user later runs ALTER PUBLICATION for admin_settings, postgres_changes starts working too.
+
+## Learn/Connect staff tabs (Aug 2026)
+- staff_meta.tabs may now include `learn` and `community` (opt-in, default off). Canonical tab set: home,msgs,team,learn,community — normalized on read in App.tsx and on write in auth.ts create-account.
+- Access is enforced at RENDER level in the staff branch (not just hidden nav) — direct `?goto=` cannot bypass; while meta loads, staff get the conservative classic trio.
+- `staff_meta.connect_coach` = which coach's social links the staff member sees in Connect. Server validates same-org active coach/head_coach; CommunityScreen re-validates on read (stale/removed coach falls back to default links).
+- Course grants for staff: Week5 access-manager roster includes va/head_coach; staff Learn works like clients via course_access.
+- KNOWN GAP: admin_settings RLS lets any same-company user write staff_meta rows → staff could self-escalate their own tabs. Needs write-path hardening (API-only writes or admin-only RLS).
