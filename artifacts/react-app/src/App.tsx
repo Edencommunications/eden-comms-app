@@ -7017,8 +7017,9 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
       {/* Mobile menu — same hamburger/dropdown pattern as the main app */}
       {isMobile && menuOpen && (
         <>
-          <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 998 }} />
-          <div style={{ position: "fixed", top: 56, left: 8, width: 230, background: B.surface, border: `1px solid ${B.border}`, borderRadius: 12, boxShadow: "0 8px 30px rgba(0,0,0,0.6)", zIndex: 999, overflow: "hidden" }}>
+          {/* Above the huddle call window (z 2000) and install banner (z 9999) so the open menu is always topmost */}
+          <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000 }} />
+          <div style={{ position: "fixed", top: 56, left: 8, width: 230, background: B.surface, border: `1px solid ${B.border}`, borderRadius: 12, boxShadow: "0 8px 30px rgba(0,0,0,0.6)", zIndex: 10001, overflow: "hidden" }}>
             <div style={{ padding: "10px 14px", borderBottom: `1px solid ${B.border}` }}>
               <p style={{ fontSize: 12, fontWeight: 800, color: B.text, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
               {dba?.org?.name && <p style={{ fontSize: 9, color: B.muted, margin: 0 }}>part of {dba.org.name}</p>}

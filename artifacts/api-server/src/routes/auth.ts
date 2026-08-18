@@ -136,7 +136,7 @@ export async function provisionNewAuthUser(
     try {
       const rows = await dbGet(
         "user_profiles",
-        `email=ilike.${encodeURIComponent(emailNorm.replace(/[%_\\]/g, ""))}&select=id,is_active,name`,
+        `email=ilike.${encodeURIComponent(emailNorm.replace(/[%_\\]/g, ""))}&select=id,is_active`,
       );
       if (rows.length && rows.every((r: any) => r.is_active === false)) {
         return "This email belongs to a deactivated account — reactivate that user instead of creating a new one. No new account was created.";
