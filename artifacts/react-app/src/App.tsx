@@ -5894,20 +5894,20 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
     <HuddleProvider currentUser={{ email: user.email, name: user.name, role: user.role }}>
     <div style={{ display:"flex", flexDirection:"column", height:"100vh", width:"100%", background:B.black, overflow:"hidden" }}>
       {/* Top bar */}
-      <div style={{ background:B.surface, borderBottom:`1px solid ${B.border}`, padding: isMobile ? "8px 10px" : "8px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, flexWrap: isMobile ? "wrap" : "nowrap", rowGap:6 }}>
+      <div style={{ background:B.chrome, borderBottom:`1px solid ${B.chromeBorder}`, padding: isMobile ? "8px 10px" : "8px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0, flexWrap: isMobile ? "wrap" : "nowrap", rowGap:6 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
           {/* Hamburger menu — mobile only */}
           {isMobile && (
             <button onClick={() => setMenuOpen(v => !v)} aria-label="Menu"
-              style={{ background: menuOpen ? `${B.gold}22` : "none", border:`1.5px solid ${menuOpen ? B.gold : B.border}`,
+              style={{ background: menuOpen ? `${B.gold}22` : "none", border:`1.5px solid ${menuOpen ? B.gold : B.chromeBorder}`,
                 borderRadius:8, padding:"6px 9px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <span style={{ fontSize:17, lineHeight:1, color: menuOpen ? B.gold : B.text }}>☰</span>
+              <span style={{ fontSize:17, lineHeight:1, color: menuOpen ? B.gold : B.onChrome }}>☰</span>
             </button>
           )}
           {wlOrg ? <OrgLogo org={wlOrg} size={30}/> : <HoneycombLogo size={30}/>}
           <div>
-            <p style={{ fontSize:13, fontWeight:700, color:B.text, margin:0 }}>{wlOrg ? wlOrg.name : "Eden Communications"}</p>
-            {!isMobile && <p style={{ fontSize:9, color:B.muted, margin:0, letterSpacing:0.5 }}>{wlOrg ? "🔒 Encrypted" : "🔒 Encrypted · edencommunications.io"}</p>}
+            <p style={{ fontSize:13, fontWeight:700, color:B.onChrome, margin:0 }}>{wlOrg ? wlOrg.name : "Eden Communications"}</p>
+            {!isMobile && <p style={{ fontSize:9, color:B.chromeMuted, margin:0, letterSpacing:0.5 }}>{wlOrg ? "🔒 Encrypted" : "🔒 Encrypted · edencommunications.io"}</p>}
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?6:12, flexWrap: isMobile ? "wrap" : "nowrap", justifyContent:"flex-end", rowGap:6, minWidth:0 }}>
@@ -5916,12 +5916,12 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
             <button onClick={onOpenDba}
               title={myDbas.length === 1 ? `Switch to ${myDbas[0]?.name}` : "Switch to one of your DBA spaces"}
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
-                background:"transparent", border:`1.5px solid ${B.border}`,
+                background:"transparent", border:`1.5px solid ${B.chromeBorder}`,
                 borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={B.text} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={B.onChrome} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>
               </svg>
-              <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase", color:B.muted }}>
+              <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase", color:B.chromeMuted }}>
                 {myDbas.length === 1 ? "DBA" : "DBAs"}
               </span>
             </button>
@@ -5938,13 +5938,13 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
               title={splitView ? "Exit Split View" : "Split View — see two panels side by side"}
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
                 background: splitView ? `${B.gold}22` : "transparent",
-                border:`1.5px solid ${splitView ? B.gold : B.border}`,
+                border:`1.5px solid ${splitView ? B.gold : B.chromeBorder}`,
                 borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={splitView ? B.gold : B.text} strokeWidth="2.2" strokeLinecap="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={splitView ? B.gold : B.onChrome} strokeWidth="2.2" strokeLinecap="round">
                 <rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/>
               </svg>
               <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase",
-                color: splitView ? B.gold : B.muted }}>
+                color: splitView ? B.gold : B.chromeMuted }}>
                 {splitView ? "Split ON" : "Split"}
               </span>
             </button>
@@ -5963,12 +5963,12 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
               title={loomMode ? "Exit Loom Mode" : "Enable Loom Mode — hides other client names"}
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2,
                 background: loomMode ? "#ff525222" : "transparent",
-                border:`1.5px solid ${loomMode ? "#ff5252" : B.border}`,
+                border:`1.5px solid ${loomMode ? "#ff5252" : B.chromeBorder}`,
                 borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>
               <span style={{ fontSize:15 }}>{loomMode ? "🔴" : "🎥"}</span>
               {!isMobile && (
                 <span style={{ fontSize:8, fontWeight:700, letterSpacing:.6, textTransform:"uppercase",
-                  color: loomMode ? "#ff5252" : B.muted }}>
+                  color: loomMode ? "#ff5252" : B.chromeMuted }}>
                   {loomMode ? "Loom ON" : "Loom"}
                 </span>
               )}
@@ -5988,17 +5988,17 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
           <ThemeToggle compact={isMobile}/>
           {hasAuthSession && (
             <button onClick={() => setShowChangePw(true)} title="Change password"
-              style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
-              <Ic n="lock" size={14} c={B.muted}/>
-              {!isMobile && <span style={{ fontSize:11, color:B.muted }}>Password</span>}
+              style={{ background:"none", border:`1px solid ${B.chromeBorder}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
+              <Ic n="lock" size={14} c={B.chromeMuted}/>
+              {!isMobile && <span style={{ fontSize:11, color:B.chromeMuted }}>Password</span>}
             </button>
           )}
           <div style={{ width:30, height:30, borderRadius:15, background:`linear-gradient(135deg, ${shellPrimary}, ${shellSecondary})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <span style={{ fontSize:13, fontWeight:800, color:B.onAccent }}>{user.name[0]}</span>
           </div>
-          <button onClick={onLogout} style={{ background:"none", border:`1px solid ${B.border}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
-            <Ic n="logout" size={14} c={B.muted}/>
-            {!isMobile && <span style={{ fontSize:11, color:B.muted }}>Sign out</span>}
+          <button onClick={onLogout} style={{ background:"none", border:`1px solid ${B.chromeBorder}`, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"5px 10px" }}>
+            <Ic n="logout" size={14} c={B.chromeMuted}/>
+            {!isMobile && <span style={{ fontSize:11, color:B.chromeMuted }}>Sign out</span>}
           </button>
         </div>
       </div>
@@ -6009,17 +6009,17 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
           <div onClick={() => setMenuOpen(false)}
             style={{ position:"fixed", inset:0, zIndex:998, background:"rgba(0,0,0,0.6)" }}/>
           <div style={{ position:"absolute", top:54, left:8, zIndex:999, width:230,
-            background:B.surface, border:`1px solid ${B.border}`, borderRadius:14,
+            background:B.chrome, border:`1px solid ${B.chromeBorder}`, borderRadius:14,
             boxShadow:"0 12px 40px rgba(0,0,0,0.7)", overflow:"hidden", paddingBottom:6 }}>
-            <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.border}`, marginBottom:4 }}>
-              <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
+            <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${B.chromeBorder}`, marginBottom:4 }}>
+              <p style={{ fontSize:10, fontWeight:700, color:B.chromeMuted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
                 {(user.email || "").toLowerCase() === OWNER_EMAIL ? "Owner" : user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
               </p>
-              <p style={{ fontSize:13, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
+              <p style={{ fontSize:13, color: (shellSecondary === B.chrome ? B.onChrome : shellSecondary), margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {visibleTabs.map((t, ti) => {
               // White-label orgs: tabs use the single primary brand color
-              const tc = shellPrimary;
+              const tc = shellPrimary === B.chrome ? B.onChrome : shellPrimary;
               return (
               <button key={t.key}
                 onClick={() => { navTab(t.key); setMenuOpen(false); }}
@@ -6027,8 +6027,8 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
                   background:tab===t.key?`${tc}15`:"none", border:"none",
                   borderLeft:`3px solid ${tab===t.key?tc:"transparent"}`,
                   cursor:"pointer", textAlign:"left", width:"100%" }}>
-                <Ic n={t.icon} size={19} c={tab===t.key?tc:B.muted}/>
-                <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?tc:B.text }}>{t.label}</span>
+                <Ic n={t.icon} size={19} c={tab===t.key?tc:B.chromeMuted}/>
+                <span style={{ fontSize:14, fontWeight:tab===t.key?700:500, color:tab===t.key?tc:B.onChrome }}>{t.label}</span>
                 {((t.key==="team" && teamHubUnread && tab!=="team") || (t.key==="msgs" && messagesUnread && tab!=="msgs")) && (
                   <span style={{ width:8, height:8, borderRadius:4, background:shellPrimary, marginLeft:"auto", flexShrink:0 }}/>
                 )}
@@ -6043,30 +6043,30 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
 
         {/* Sidebar — desktop only */}
         {!isMobile && (
-          <div style={{ width:200, background:B.surface, borderRight:`1px solid ${B.border}`, flexShrink:0, display:"flex", flexDirection:"column", padding:"12px 0" }}>
-            <div style={{ padding:"0 14px 16px", borderBottom:`1px solid ${B.border}`, marginBottom:8 }}>
-              <p style={{ fontSize:10, fontWeight:700, color:B.muted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
+          <div style={{ width:200, background:B.chrome, borderRight:`1px solid ${B.chromeBorder}`, flexShrink:0, display:"flex", flexDirection:"column", padding:"12px 0" }}>
+            <div style={{ padding:"0 14px 16px", borderBottom:`1px solid ${B.chromeBorder}`, marginBottom:8 }}>
+              <p style={{ fontSize:10, fontWeight:700, color:B.chromeMuted, letterSpacing:1, margin:0, textTransform:"uppercase" }}>
                 {(user.email || "").toLowerCase() === OWNER_EMAIL ? "Owner" : user.role === "super_admin" ? "Super Admin" : user.role === "coach" ? "Coach Portal" : "My Dashboard"}
               </p>
-              <p style={{ fontSize:12, color:shellSecondary, margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
+              <p style={{ fontSize:12, color: (shellSecondary === B.chrome ? B.onChrome : shellSecondary), margin:"3px 0 0", fontWeight:600 }}>{user.name}</p>
             </div>
             {visibleTabs.map((t, ti) => {
               // White-label orgs: tabs use the single primary brand color
-              const tc = shellPrimary;
+              const tc = shellPrimary === B.chrome ? B.onChrome : shellPrimary;
               return (
               <button key={t.key} onClick={() => navTab(t.key)}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:tab===t.key?`${tc}15`:"none", border:"none", borderLeft:`3px solid ${tab===t.key?tc:"transparent"}`, cursor:"pointer", textAlign:"left", width:"100%" }}>
-                <Ic n={t.icon} size={17} c={tab===t.key?tc:B.muted}/>
-                <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?tc:B.muted }}>{t.label}</span>
+                <Ic n={t.icon} size={17} c={tab===t.key?tc:B.chromeMuted}/>
+                <span style={{ fontSize:13, fontWeight:tab===t.key?700:400, color:tab===t.key?tc:B.chromeMuted }}>{t.label}</span>
                 {((t.key==="team" && teamHubUnread && tab!=="team") || (t.key==="msgs" && messagesUnread && tab!=="msgs")) && (
                   <span style={{ width:8, height:8, borderRadius:4, background:shellPrimary, marginLeft:"auto", flexShrink:0 }}/>
                 )}
               </button>
             );})}
-            <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.border}` }}>
+            <div style={{ marginTop:"auto", padding:"12px 14px", borderTop:`1px solid ${B.chromeBorder}` }}>
               <div style={{ padding:"8px 10px", background: wlOrg ? `linear-gradient(135deg, ${shellPrimary}18, ${shellSecondary}18)` : B.goldDim, border:`1px solid ${wlOrg ? `${shellAccent}44` : B.goldMid}`, borderRadius:8 }}>
-                <p style={{ fontSize:9, color: shellPrimary, margin:0, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase" }}>{wlOrg ? wlOrg.name : "LIFESTYLE OF EDEN"}</p>
-                {!wlOrg && <p style={{ fontSize:10, color:B.muted, margin:"2px 0 0" }}>Powered by Eden Comms</p>}
+                <p style={{ fontSize:9, color: (shellPrimary === B.chrome ? B.onChrome : shellPrimary), margin:0, fontWeight:700, letterSpacing:0.8, textTransform:"uppercase" }}>{wlOrg ? wlOrg.name : "LIFESTYLE OF EDEN"}</p>
+                {!wlOrg && <p style={{ fontSize:10, color:B.chromeMuted, margin:"2px 0 0" }}>Powered by Eden Comms</p>}
                 {wlOrg && wp.extra.length > 0 && (
                   <div style={{ display:"flex", gap:4, marginTop:5 }}>
                     {wp.all.slice(0,6).map((c,i)=>(
@@ -6955,45 +6955,45 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
 
   return (
     <div style={{ height: "100vh", width: "100%", background: B.black, display: "flex", flexDirection: "column" }}>
-      <div style={{ background: B.surface, borderBottom: `1px solid ${B.border}`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", position: "relative" }}>
+      <div style={{ background: B.chrome, borderBottom: `1px solid ${B.chromeBorder}`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           {isMobile && (
             <button onClick={() => setMenuOpen(v => !v)} aria-label="Menu"
-              style={{ background: menuOpen ? `${primary}22` : "none", border: `1px solid ${menuOpen ? primary + "55" : B.border}`, borderRadius: 8, padding: "6px 10px", color: menuOpen ? primary : B.text, fontSize: 16, cursor: "pointer", lineHeight: 1 }}>
+              style={{ background: menuOpen ? `${primary}22` : "none", border: `1px solid ${menuOpen ? primary + "55" : B.chromeBorder}`, borderRadius: 8, padding: "6px 10px", color: menuOpen ? primary : B.onChrome, fontSize: 16, cursor: "pointer", lineHeight: 1 }}>
               ☰
             </button>
           )}
           <OrgLogo org={dba} size={32} />
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: B.text, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
-            {dba?.org?.name && <p style={{ fontSize: 9, color: B.muted, margin: 0 }}>part of {dba.org.name}</p>}
+            <p style={{ fontSize: 14, fontWeight: 800, color: B.onChrome, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
+            {dba?.org?.name && <p style={{ fontSize: 9, color: B.chromeMuted, margin: 0 }}>part of {dba.org.name}</p>}
           </div>
           {content?.can_manage && <span style={{ fontSize: 9, fontWeight: 800, color: accent, border: `1px solid ${accent}55`, borderRadius: 20, padding: "2px 8px", letterSpacing: 0.6 }}>MANAGER VIEW</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {!isMobile && TABS.map((t) => {
-            const tc = primary; // one brand color for every active tab
+            const tc = primary === B.chrome ? B.onChrome : primary; // one brand color for every active tab
             return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ background: tab === t.id ? `${tc}22` : "none", color: tab === t.id ? tc : B.muted, border: `1px solid ${tab === t.id ? tc + "55" : "transparent"}`, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              style={{ background: tab === t.id ? `${tc}22` : "none", color: tab === t.id ? tc : B.chromeMuted, border: `1px solid ${tab === t.id ? tc + "55" : "transparent"}`, borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
               {t.label}
             </button>
           );})}
           {dbas.length > 1 && (
             <select value={activeId} onChange={(e) => setActiveId(e.target.value)}
-              style={{ background: B.dim, color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none" }}>
+              style={{ background: B.dim, color: B.onChrome, border: `1px solid ${B.chromeBorder}`, borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none" }}>
               {dbas.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
           {onEnterApp && (
             <button onClick={onEnterApp}
-              style={{ background: "none", color: B.text, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              style={{ background: "none", color: B.onChrome, border: `1px solid ${B.chromeBorder}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
               Open the full app →
             </button>
           )}
           <ThemeToggle compact/>
           <button onClick={onLogout}
-            style={{ background: "none", color: B.muted, border: `1px solid ${B.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
+            style={{ background: "none", color: B.chromeMuted, border: `1px solid ${B.chromeBorder}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
             Log out
           </button>
         </div>

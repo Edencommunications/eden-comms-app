@@ -37,6 +37,12 @@ const DARK = {
   goldDim: '#ffa60022',
   goldMid: '#ffa60044',
   onAccent:'#000000',
+  // "Chrome" = top bar / side menu / app headers. Same family as surface in
+  // dark/light; Brand mode paints it with the true brand color.
+  chrome:      '#111111',
+  onChrome:    '#ffffff',
+  chromeMuted: '#888888',
+  chromeBorder:'#2a2a2a',
 };
 
 const LIGHT = {
@@ -55,6 +61,10 @@ const LIGHT = {
   goldDim: '#b0750018',
   goldMid: '#b0750040',
   onAccent:'#000000',
+  chrome:      '#ffffff',
+  onChrome:    '#17171a',
+  chromeMuted: '#6d6d76',
+  chromeBorder:'#d8d8de',
 };
 
 // Darken a hex color while KEEPING its hue and saturation (no black mud):
@@ -86,25 +96,18 @@ const shade = (hex: string, lightness: number, satCap = 0.85) => {
 // Brand-heavy: the whole chrome is washed in a deep shade of the org's brand
 // color (dark-based so text stays readable), with the bright brand color as
 // the accent. The accent comes from the active org/DBA via setBrandAccent().
-// BOLD variant: the page itself is the TRUE brand color (full strength),
-// with dark panels/cards on top for readable content and the true brand
-// color on buttons/accents (black text on them via onAccent).
+// GOLD FRAME variant: pages stay dark like the normal theme, but the app
+// "chrome" (top bar, side menu, headers) is painted with the TRUE brand
+// color at full strength, with dark text on it (onChrome).
 const brandTokens = (accent: string) => ({
+  ...DARK,
   gold:    accent,
-  black:   accent,                       // page background = true brand gold
-  white:   '#ffffff',
-  surface: '#141414',
-  bg:      '#141414',
-  card:    '#1c1c1c',
-  border:  shade(accent, 0.30, 0.60),    // warm brand-tinted dividers
-  muted:   '#9a9a9a',
-  dim:     '#2c2c2c',
-  danger:  '#ff5b5b',
-  success: '#4FD89A',
-  text:    '#ffffff',
   goldDim: accent + '22',
   goldMid: accent + '44',
-  onAccent:'#000000',
+  chrome:       accent,        // header/menu backgrounds = true brand color
+  onChrome:     '#000000',     // primary text on the brand chrome
+  chromeMuted:  '#000000b0',   // secondary text on the brand chrome
+  chromeBorder: '#00000033',   // dividers on the brand chrome
 });
 
 export const T: any = { ...DARK };
