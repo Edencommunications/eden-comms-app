@@ -339,6 +339,11 @@ router.post("/auth/create-account", async (req: Request, res: Response) => {
   if (!["client", "coach", "head_coach", "va", "staff", "super_admin"].includes(role)) {
     return res.status(400).json({ ok: false, error: "Unknown role" });
   }
+  // The live user_profiles role CHECK constraint (frozen schema, no DDL) only
+  // accepts client/coach/super_admin/va/head_coach/admin — NOT "staff".
+  // Team members added as "staff" are stored as "va" (same app treatment:
+  // isStaff + staff_meta tab gating); their visible title comes from staff_meta.
+  const dbRole = role === "staff" ? "va" : role;
   // Tenant scoping: admins create accounts in their own org; only Eden
   // admins may target another org (white-label org admin creation).
   let companyId = admin.company_id || null;
@@ -364,7 +369,7 @@ router.post("/auth/create-account", async (req: Request, res: Response) => {
       id: randomUUID(),
       name,
       email,
-      role,
+      role: dbRole,
       initials,
       company_id: companyId,
       coach_id: b.coach_id ? String(b.coach_id) : null,
