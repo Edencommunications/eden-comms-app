@@ -86,16 +86,19 @@ const shade = (hex: string, lightness: number, satCap = 0.85) => {
 // Brand-heavy: the whole chrome is washed in a deep shade of the org's brand
 // color (dark-based so text stays readable), with the bright brand color as
 // the accent. The accent comes from the active org/DBA via setBrandAccent().
+// BOLD variant: the page itself is the TRUE brand color (full strength),
+// with dark panels/cards on top for readable content and the true brand
+// color on buttons/accents (black text on them via onAccent).
 const brandTokens = (accent: string) => ({
   gold:    accent,
-  black:   shade(accent, 0.07),
+  black:   accent,                       // page background = true brand gold
   white:   '#ffffff',
-  surface: shade(accent, 0.10),
-  bg:      shade(accent, 0.10),
-  card:    shade(accent, 0.13),
-  border:  shade(accent, 0.22, 0.55),
-  muted:   shade(accent, 0.62, 0.25),
-  dim:     shade(accent, 0.17, 0.55),
+  surface: '#141414',
+  bg:      '#141414',
+  card:    '#1c1c1c',
+  border:  shade(accent, 0.30, 0.60),    // warm brand-tinted dividers
+  muted:   '#9a9a9a',
+  dim:     '#2c2c2c',
   danger:  '#ff5b5b',
   success: '#4FD89A',
   text:    '#ffffff',
