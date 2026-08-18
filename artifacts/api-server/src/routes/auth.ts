@@ -130,21 +130,35 @@ export async function provisionNewAuthUser(
 ): Promise<ProvisionNewResult> {
   const emailNorm = email.trim().toLowerCase();
   const dupMsg = "This email already has an account — no new account was created.";
+  // Says WHERE the duplicate lives so admins aren't left guessing when the
+  // user isn't visible in their lists (deactivated profiles are hidden there).
+  const dupDetail = async (): Promise<string> => {
+    try {
+      const rows = await dbGet(
+        "user_profiles",
+        `email=ilike.${encodeURIComponent(emailNorm.replace(/[%_\\]/g, ""))}&select=id,is_active,name`,
+      );
+      if (rows.length && rows.every((r: any) => r.is_active === false)) {
+        return "This email belongs to a deactivated account — reactivate that user instead of creating a new one. No new account was created.";
+      }
+    } catch { /* fall through to the generic message */ }
+    return dupMsg;
+  };
   // Pre-check (case-insensitive) — catches the common non-race duplicate cheaply.
-  if (await profileEmailExists(emailNorm)) return { ok: false, duplicate: true, error: dupMsg };
+  if (await profileEmailExists(emailNorm)) return { ok: false, duplicate: true, error: await dupDetail() };
   const prov = await provisionAuthUser(emailNorm, password, name, true, extraMeta);
   if (!prov.ok) return { ok: false, error: prov.error };
   if (!prov.existed) return { ok: true, repairedOrphan: false, authUserId: prov.authUserId };
   // Auth login already exists. Post-check the profile: if one landed (we lost
   // a race, or the pre-check raced a concurrent insert), it's a duplicate.
-  if (await profileEmailExists(emailNorm)) return { ok: false, duplicate: true, error: dupMsg };
+  if (await profileEmailExists(emailNorm)) return { ok: false, duplicate: true, error: await dupDetail() };
   // No profile → orphan candidate. Only repair OLD logins; a fresh one is a
   // concurrent creation whose profile is still in flight.
   const user = await findAuthUserByEmail(emailNorm);
   if (!user) return { ok: false, error: "A login for this email already exists but couldn't be looked up — try again" };
   const createdAt = Date.parse(String(user.created_at || "")) || 0;
   if (!createdAt || Date.now() - createdAt < ORPHAN_MIN_AGE_MS) {
-    return { ok: false, duplicate: true, error: dupMsg };
+    return { ok: false, duplicate: true, error: "A login for this email was just created — likely an earlier attempt that didn't finish. Wait 10 minutes and try again; it will be repaired automatically." };
   }
   const reset = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
     method: "PUT",

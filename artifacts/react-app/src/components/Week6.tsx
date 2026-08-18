@@ -1685,9 +1685,12 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     try {
       // ilike with no wildcards = exact case-insensitive match, so Bob@x.com
       // is caught even if the row was saved as bob@x.com
-      const existing = await dbGet('user_profiles', `email=ilike.${encodeURIComponent(emailNorm.replace(/[%_\\]/g,''))}&select=id`)
+      const existing = await dbGet('user_profiles', `email=ilike.${encodeURIComponent(emailNorm.replace(/[%_\\]/g,''))}&select=id,is_active,name`)
       if (Array.isArray(existing) && existing.length > 0) {
-        alert('This email already has an account. Use a different email, or find the existing user instead of adding a new one.')
+        const allInactive = existing.every((r: any)=>r.is_active===false)
+        alert(allInactive
+          ? `This email belongs to a deactivated account (${existing[0].name || emailNorm}) — it won't show in your user lists. Reactivate that user instead of creating a new one.`
+          : 'This email already has an account. Use a different email, or find the existing user instead of adding a new one.')
         return
       }
     } catch(e) {

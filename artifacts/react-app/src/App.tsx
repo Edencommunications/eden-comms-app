@@ -6830,6 +6830,7 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
   const hasPalette = (wl?.extra || []).length > 0;
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<"home" | "community" | "huddles" | "calendar" | "connect" | "learn" | "hq">("home");
+  const [menuOpen, setMenuOpen] = useState(false);
   // Light poll so the join banner shows on any tab when a huddle we're
   // allowed into goes live (the Huddles tab does its own full loading).
   const [liveHuddleCount, setLiveHuddleCount] = useState(0);
@@ -6904,8 +6905,14 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
 
   return (
     <div style={{ height: "100vh", width: "100%", background: B.black, display: "flex", flexDirection: "column" }}>
-      <div style={{ background: B.surface, borderBottom: `1px solid ${B.border}`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ background: B.surface, borderBottom: `1px solid ${B.border}`, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          {isMobile && (
+            <button onClick={() => setMenuOpen(v => !v)} aria-label="Menu"
+              style={{ background: menuOpen ? `${primary}22` : "none", border: `1px solid ${menuOpen ? primary + "55" : B.border}`, borderRadius: 8, padding: "6px 10px", color: menuOpen ? primary : B.text, fontSize: 16, cursor: "pointer", lineHeight: 1 }}>
+              ☰
+            </button>
+          )}
           <OrgLogo org={dba} size={32} />
           <div style={{ minWidth: 0 }}>
             <p style={{ fontSize: 14, fontWeight: 800, color: B.text, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
@@ -7007,17 +7014,24 @@ const DbaHome = ({ user, dbas, initialSlug, onEnterApp, onLogout }: any) => {
       {/* Always mounted so an active DBA call survives switching tabs (Learn, Community, etc.) */}
       <DbaHuddles dba={dba} primary={primary} isMobile={isMobile} visible={tab === "huddles"} />
 
-      {isMobile && (
-        <div style={{ display: "flex", background: B.surface, borderTop: `1px solid ${B.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
-          {TABS.map((t) => {
-            const tc = primary; // one brand color for every active tab (matches desktop)
-            return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "8px 0 10px" }}>
-              <Ic n={t.icon} size={20} c={tab === t.id ? tc : B.muted} />
-              <span style={{ fontSize: 9, fontWeight: 600, color: tab === t.id ? tc : B.muted, letterSpacing: 0.5, textTransform: "uppercase" }}>{t.label}</span>
-            </button>
-          );})}
-        </div>
+      {/* Mobile menu — same hamburger/dropdown pattern as the main app */}
+      {isMobile && menuOpen && (
+        <>
+          <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 998 }} />
+          <div style={{ position: "fixed", top: 56, left: 8, width: 230, background: B.surface, border: `1px solid ${B.border}`, borderRadius: 12, boxShadow: "0 8px 30px rgba(0,0,0,0.6)", zIndex: 999, overflow: "hidden" }}>
+            <div style={{ padding: "10px 14px", borderBottom: `1px solid ${B.border}` }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: B.text, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dba?.name}</p>
+              {dba?.org?.name && <p style={{ fontSize: 9, color: B.muted, margin: 0 }}>part of {dba.org.name}</p>}
+            </div>
+            {TABS.map((t) => (
+              <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: tab === t.id ? `${primary}15` : "none", border: "none", borderLeft: `3px solid ${tab === t.id ? primary : "transparent"}`, padding: "11px 14px", cursor: "pointer", textAlign: "left" }}>
+                <Ic n={t.icon} size={18} c={tab === t.id ? primary : B.muted} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: tab === t.id ? primary : B.text }}>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Same install nudge as the main app, branded for this DBA */}
