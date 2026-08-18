@@ -215,14 +215,14 @@ function LoginHealthCard({orgs=[], isEden=false}: any) {
             : isEden && (
               <select value={fixOrg[m.email]||EDEN_ORG_ID} onChange={e=>setFixOrg((p: any)=>({...p,[m.email]:e.target.value}))}
                 title="Which company does this person belong to?"
-                style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:'#D4A8F0',fontSize:11,outline:'none',cursor:'pointer',maxWidth:150}}>
+                style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:'#D4A8F0',fontSize:11,outline:'none',cursor:'pointer',maxWidth:150}}>
                 {(orgs.length?orgs:[{id:EDEN_ORG_ID,name:'Lifestyle of Eden'}]).map((o: any)=>
                   <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             )}
           <select value={fixRole[m.email]||m.intended_role||'client'} onChange={e=>setFixRole((p: any)=>({...p,[m.email]:e.target.value}))}
             title="What role should this person have?"
-            style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
+            style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
             <option value="client">Client</option>
             <option value="coach">Coach</option>
             <option value="head_coach">Head Coach</option>
@@ -1971,11 +1971,11 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                         <input type="time" value={dl.time||DEFAULT_TIME}
                           onChange={e=>saveCoachDeadline(coach.uuid,{deadline_time:e.target.value||null},{time:e.target.value})}
                           title={`${coach.name}'s check-in deadline time`}
-                          style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.gold,fontSize:11,outline:'none',colorScheme:'dark'}}/>
+                          style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.gold,fontSize:11,outline:'none'}}/>
                         <select value={dl.tz||DEFAULT_TZ}
                           onChange={e=>saveCoachDeadline(coach.uuid,{timezone:e.target.value},{tz:e.target.value})}
                           title={`${coach.name}'s check-in timezone`}
-                          style={{background:'#111',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
+                          style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',color:C.gold,fontSize:11,outline:'none',cursor:'pointer'}}>
                           {TZ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.short}</option>)}
                         </select>
                       </>)}

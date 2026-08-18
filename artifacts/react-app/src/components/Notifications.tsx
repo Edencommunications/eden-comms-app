@@ -55,18 +55,18 @@ function timeAgo(ts: any) {
 
 // ── Notification type config ──────────────────────────────────
 const NOTIF_CONFIG = {
-  message:      { icon:'💬', label:'New Message',          color: C.gold },
-  dm_thread_reply: { icon:'↩️', label:'Thread Reply',       color: C.gold },
-  diet_update:  { icon:'🥗', label:'Diet Plan Updated',    color: C.success },
+  message:      { icon:'💬', label:'New Message',          get color(){ return C.gold } },
+  dm_thread_reply: { icon:'↩️', label:'Thread Reply',       get color(){ return C.gold } },
+  diet_update:  { icon:'🥗', label:'Diet Plan Updated',    get color(){ return C.success } },
   supp_update:  { icon:'💊', label:'Supplement Updated',   color:'#D4A8F0' },
   workout_update: { icon:'💪', label:'Workout Plan Updated', color:'#6FE8A8' },
-  checkin_received: { icon:'📋', label:'Check-In Received',color: C.gold },
+  checkin_received: { icon:'📋', label:'Check-In Received',get color(){ return C.gold } },
   lab_uploaded: { icon:'🧪', label:'Lab Uploaded',         color:'#6FB8E8' },
-  update_note:  { icon:'📝', label:'Coach Update',         color: C.gold },
-  loom_posted:  { icon:'🎥', label:'Video Update Posted',  color: C.gold },
-  start_reminder_7: { icon:'🚀', label:'Program Starts Soon', color: C.gold },
+  update_note:  { icon:'📝', label:'Coach Update',         get color(){ return C.gold } },
+  loom_posted:  { icon:'🎥', label:'Video Update Posted',  get color(){ return C.gold } },
+  start_reminder_7: { icon:'🚀', label:'Program Starts Soon', get color(){ return C.gold } },
   start_reminder_1: { icon:'⏰', label:'Starts Tomorrow',     color:'#ffa600' },
-  start_reminder_0: { icon:'🎉', label:'Starts Today',        color: C.success },
+  start_reminder_0: { icon:'🎉', label:'Starts Today',        get color(){ return C.success } },
 }
 
 // ════════════════════════════════════════════════════════════════

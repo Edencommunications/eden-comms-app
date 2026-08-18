@@ -1865,12 +1865,12 @@ export function RecipePicker({onSelect, onClose}: any) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000,padding:16}}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div style={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:16,width:'100%',maxWidth:480,maxHeight:'82vh',display:'flex',flexDirection:'column'}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:480,maxHeight:'82vh',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'14px 16px 10px',borderBottom:'1px solid #2a2a2a'}}>
           <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:6}}>🍽 Pull Recipe into Meal</div>
           <div style={{fontSize:11,color:'#888',marginBottom:8}}>{loading?'Loading from Google Sheets…':`${recipes.length} recipes available`}</div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search recipes…" autoFocus
-            style={{width:'100%',background:'#111',border:'1px solid #2a2a2a',borderRadius:8,padding:'9px 12px',color:'#fff',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+            style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 12px',color:C.text,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
         </div>
         <div style={{flex:1,overflowY:'auto',padding:'4px 0'}}>
           {filtered.map((r,i)=>(
@@ -1887,7 +1887,7 @@ export function RecipePicker({onSelect, onClose}: any) {
           ))}
         </div>
         <div style={{padding:'10px 16px',borderTop:'1px solid #2a2a2a'}}>
-          <button onClick={onClose} style={{width:'100%',background:'#111',border:'1px solid #2a2a2a',borderRadius:8,padding:10,color:'#888',fontSize:13,cursor:'pointer'}}>Cancel</button>
+          <button onClick={onClose} style={{width:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.muted,fontSize:13,cursor:'pointer'}}>Cancel</button>
         </div>
       </div>
     </div>

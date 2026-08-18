@@ -86,12 +86,15 @@ export function loadLocalTheme(forUser?: string): ThemeMode {
 // Called once after login: remember whose preference we're tracking, apply
 // the locally cached choice immediately, then ask the server for the synced
 // one (it wins if different, so preferences follow the person across devices).
+let generation = 0;         // invalidates in-flight preference fetches on logout/user switch
 export function initThemeForUser(id: string) {
   userKey = String(id || '');
+  const gen = ++generation;
   applyTheme(loadLocalTheme());
   fetch('/api/prefs/theme', { headers: { Authorization: sbBearer() } })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
+      if (gen !== generation) return;   // logged out / switched accounts meanwhile
       const m = d?.mode === 'light' ? 'light' : d?.mode === 'dark' ? 'dark' : null;
       if (m && m !== mode) { try { localStorage.setItem(lsKey(), m); } catch {} applyTheme(m); }
     })
@@ -100,6 +103,7 @@ export function initThemeForUser(id: string) {
 
 export function resetThemeOnLogout() {
   userKey = '';
+  generation++;             // drop any in-flight preference fetch
   applyTheme('dark');
 }
 
