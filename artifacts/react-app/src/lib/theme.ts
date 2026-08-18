@@ -130,8 +130,10 @@ export const themeMode = (): ThemeMode => mode;
 export const onThemeChange = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
 export function applyTheme(m: ThemeMode) {
-  mode = m === 'light' ? 'light' : m === 'brand' ? 'brand' : 'dark';
-  Object.assign(T, mode === 'light' ? LIGHT : mode === 'brand' ? brandTokens(brandAccent) : DARK);
+  // Brand (gold-frame) mode is shelved for now — any stored 'brand' choice
+  // falls back to dark. brandTokens/setBrandAccent are kept for easy revival.
+  mode = m === 'light' ? 'light' : 'dark';
+  Object.assign(T, mode === 'light' ? LIGHT : (mode as ThemeMode) === 'brand' ? brandTokens(brandAccent) : DARK);
   try {
     document.body.style.background = T.black;
     document.body.style.color = T.text;
@@ -150,7 +152,7 @@ export function loadLocalTheme(forUser?: string): ThemeMode {
   try {
     const k = forUser ? `eden_theme:${forUser}` : lsKey();
     const v = localStorage.getItem(k) || localStorage.getItem('eden_theme');
-    return v === 'light' ? 'light' : v === 'brand' ? 'brand' : 'dark';
+    return v === 'light' ? 'light' : 'dark';
   } catch { return 'dark'; }
 }
 
@@ -166,7 +168,7 @@ export function initThemeForUser(id: string) {
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       if (gen !== generation) return;   // logged out / switched accounts meanwhile
-      const m = d?.mode === 'light' || d?.mode === 'brand' || d?.mode === 'dark' ? d.mode : null;
+      const m = d?.mode === 'light' || d?.mode === 'dark' ? d.mode : null;
       if (m && m !== mode) { try { localStorage.setItem(lsKey(), m); } catch {} applyTheme(m); }
     })
     .catch(() => {});

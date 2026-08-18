@@ -77,8 +77,8 @@ const wlPalette = (org: any) => {
 // ─── THEME TOGGLE ─────────────────────────────────────────────────────────────
 // Dark ↔ Light switch shown in every logged-in header. chooseTheme() applies
 // instantly, caches on the device, and syncs to the server per login.
-const THEME_CYCLE: any = { dark: "light", light: "brand", brand: "dark" };
-const THEME_FACE: any = { dark: { icon: "🌙", label: "Dark" }, light: { icon: "☀️", label: "Light" }, brand: { icon: "🎨", label: "Brand" } };
+const THEME_CYCLE: any = { dark: "light", light: "dark", brand: "dark" };
+const THEME_FACE: any = { dark: { icon: "🌙", label: "Dark" }, light: { icon: "☀️", label: "Light" }, brand: { icon: "🌙", label: "Dark" } };
 const ThemeToggle = ({ compact }: any) => {
   const m = themeMode();
   const next = THEME_CYCLE[m] || "dark";
