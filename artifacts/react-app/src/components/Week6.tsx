@@ -438,7 +438,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [showNewUser,  setShowNewUser]  = useState(false)
   const [newUser, setNewUser] = useState<any>({
     name:'', email:'', role:'client', coachId:'', checkInDay:'Wednesday',
-    title:'', accessHome:true, accessMsgs:true, accessTeam:true,
+    title:'', accessHome:true, accessMsgs:true, accessTeam:true, accessLearn:false, accessConnect:false,
   })
   const setNU = (k: any)=>(v: any)=>setNewUser((p: any)=>({...p,[k]:v}))
 
@@ -1640,7 +1640,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   const [editStaff, setEditStaff] = useState<any>(null) // {id, name, label, tabs:{home,msgs,team}, saving}
   async function openEditStaff(s: any) {
     // Load their current staff_meta (may not exist yet — defaults to all tabs)
-    let label = '', tabs = { home:true, msgs:true, team:true }
+    let label = '', tabs: any = { home:true, msgs:true, team:true, learn:false, community:false }
     try {
       const rows = await dbGet('admin_settings', `key=eq.${encodeURIComponent('staff_meta:'+s.id)}&select=value`)
       const v = rows?.[0]?.value
@@ -1648,14 +1648,15 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
         const meta = typeof v === 'string' ? JSON.parse(v) : v
         label = meta?.label || ''
         if (Array.isArray(meta?.tabs) && meta.tabs.length)
-          tabs = { home:meta.tabs.includes('home'), msgs:meta.tabs.includes('msgs'), team:meta.tabs.includes('team') }
+          tabs = { home:meta.tabs.includes('home'), msgs:meta.tabs.includes('msgs'), team:meta.tabs.includes('team'),
+                   learn:meta.tabs.includes('learn'), community:meta.tabs.includes('community') }
       }
     } catch(e) {}
     setEditStaff({ id:s.id, name:s.name||s.full_name||s.email, label, tabs, saving:false })
   }
   async function saveEditStaff() {
     if (!editStaff) return
-    const tabList = ['home','msgs','team'].filter(k=>editStaff.tabs[k])
+    const tabList = ['home','msgs','team','learn','community'].filter(k=>editStaff.tabs[k])
     const meta = { label: editStaff.label.trim() || null, tabs: tabList.length ? tabList : ['team'] }
     setEditStaff((p: any)=>({ ...p, saving:true }))
     try {
@@ -1711,6 +1712,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       if (newUser.accessHome) tabs.push('home')
       if (newUser.accessMsgs) tabs.push('msgs')
       if (newUser.accessTeam) tabs.push('team')
+      if (newUser.accessLearn) tabs.push('learn')
+      if (newUser.accessConnect) tabs.push('community')
       staffMeta = { label: newUser.title.trim() || null, tabs: tabs.length ? tabs : ['team'] }
     }
 
@@ -1773,7 +1776,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
     dbInsert('audit_logs',{ action:'user_added', actor_id:myUUID, actor_name:info.name, actor_role:info.role,
       target_type:'user_profile', target_id:localUser.uuid||null,
       details:{ name:newUser.name.trim(), email:newUser.email.trim().toLowerCase(), role:newUser.role } }).catch(()=>{})
-    setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday',title:'',accessHome:true,accessMsgs:true,accessTeam:true})
+    setNewUser({name:'',email:'',role:'client',coachId:'',checkInDay:'Wednesday',title:'',accessHome:true,accessMsgs:true,accessTeam:true,accessLearn:false,accessConnect:false})
     setShowNewUser(false)
   }
 
@@ -2560,7 +2563,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',marginBottom:10}}/>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Access</div>
                   <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:12}}>
-                    {[['home','Dashboard'],['msgs','Messages'],['team','Team Hub']].map(([k,lbl])=>(
+                    {[['home','Dashboard'],['msgs','Messages'],['team','Team Hub'],['learn','Learn'],['community','Connect']].map(([k,lbl])=>(
                       <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
                         <input type="checkbox" checked={!!editStaff.tabs[k]}
                           onChange={e=>setEditStaff((p: any)=>({...p,tabs:{...p.tabs,[k]:e.target.checked}}))}/>
@@ -3300,7 +3303,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>They can access</div>
                   <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
-                    {[['accessTeam','Team Hub & Communities'],['accessMsgs','Messages'],['accessHome','My Clients']].map(([k,lbl])=>(
+                    {[['accessTeam','Team Hub & Communities'],['accessMsgs','Messages'],['accessHome','My Clients'],['accessLearn','Learn'],['accessConnect','Connect']].map(([k,lbl])=>(
                       <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
                         <input type="checkbox" checked={!!newUser[k]} onChange={e=>setNU(k)(e.target.checked)} style={{accentColor:C.gold}}/>
                         {lbl}

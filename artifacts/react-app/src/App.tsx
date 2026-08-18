@@ -5644,9 +5644,11 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
   // Staff roles (VA, head coach, etc.) — 2 tabs: their client view + messages
   const isStaff = !["super_admin","coach","client"].includes(user.role);
   const staffTabs = [
-    { key:"home", icon:"home", label:"My Clients" },
-    { key:"msgs", icon:"msg",  label:"Messages"   },
-    { key:"team", icon:"team", label:"Team Hub"   },
+    { key:"home",      icon:"home",      label:"My Clients" },
+    { key:"msgs",      icon:"msg",       label:"Messages"   },
+    { key:"team",      icon:"team",      label:"Team Hub"   },
+    { key:"learn",     icon:"learn",     label:"Learn"      },
+    { key:"community", icon:"community", label:"Connect"    },
   ];
 
   // Offboarded clients with community-only access: Messages/Communities is all they get
@@ -5726,7 +5728,11 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
     })();
     return () => { cancelled = true; if (cleanup) cleanup(); };
   }, [isStaff, user.email]);
-  const visibleTabs = (isStaff && staffAllowedTabs) ? tabs.filter(t => staffAllowedTabs.includes(t.key)) : tabs;
+  // Staff with no staff_meta saved keep the classic 3 tabs — Learn/Connect are
+  // opt-in via the admin's access checkboxes, never granted by default.
+  const visibleTabs = isStaff
+    ? tabs.filter(t => (staffAllowedTabs ?? ['home','msgs','team']).includes(t.key))
+    : tabs;
 
   // Team Hub chat unread dot — lights up on the sidebar tab when #general or a DM
   // has messages newer than last viewed (tracked in localStorage by Week7).
@@ -5809,6 +5815,8 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
       if (tab === "home") return <StaffClientPanel user={user}/>;
       if (tab === "msgs") return <Messaging currentUser={{ email: user.email, name: user.name, role: user.role }} loomMode={loomMode} loomFeatured={loomFeatured}/>;
       if (tab === "team") return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }} initialDm={coachClient}/>;
+      if (tab === "learn") return learnAllowed === true ? <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/> : null;
+      if (tab === "community") return <CommunityScreen user={user}/>;
       return <StaffClientPanel user={user}/>;
     }
     // Shared screens
