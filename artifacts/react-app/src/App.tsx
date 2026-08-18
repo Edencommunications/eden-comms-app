@@ -5756,8 +5756,12 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
   // Staff with no staff_meta saved keep the classic 3 tabs — Learn/Connect are
   // opt-in via the admin's access checkboxes, never granted by default.
   // While the meta is still loading (undefined), stay on the conservative trio.
-  const staffAllowed: string[] | null = !isStaff ? null
+  // Learn is standard for ALL staff — its content is gated per-person by course
+  // grants (course_access), so an ungranted staff member just sees an empty tab.
+  const staffAllowedBase: string[] | null = !isStaff ? null
     : (staffAllowedTabs === undefined ? ['home','msgs','team'] : (staffAllowedTabs ?? ['home','msgs','team']));
+  const staffAllowed = staffAllowedBase && !staffAllowedBase.includes('learn')
+    ? [...staffAllowedBase, 'learn'] : staffAllowedBase;
   const visibleTabs = isStaff && staffAllowed ? tabs.filter(t => staffAllowed.includes(t.key)) : tabs;
 
   // Team Hub chat unread dot — lights up on the sidebar tab when #general or a DM
@@ -5843,7 +5847,7 @@ const AppShell = ({ user, onLogout, myDbas = [], onOpenDba = null }: any) => {
       if (tab === "team") return <Week7 currentUser={{ email: user.email, name: user.name, role: user.role }} initialDm={coachClient}/>;
       // Render-level enforcement (not just hidden nav): Learn/Connect require an
       // explicit staff_meta grant — direct navigation (?goto=…) must not bypass it.
-      if (tab === "learn") return (learnAllowed === true && staffAllowed?.includes('learn')) ? <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/> : null;
+      if (tab === "learn") return learnAllowed === true ? <Week5 currentUser={{ email: user.email, name: user.name, role: user.role }}/> : null;
       if (tab === "community") return staffAllowed?.includes('community') ? <CommunityScreen user={user}/> : null;
       return <StaffClientPanel user={user}/>;
     }

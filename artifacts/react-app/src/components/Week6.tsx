@@ -1657,7 +1657,8 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
   }
   async function saveEditStaff() {
     if (!editStaff) return
-    const tabList = ['home','msgs','team','learn','community'].filter(k=>editStaff.tabs[k])
+    const tabList = ['home','msgs','team','community'].filter(k=>editStaff.tabs[k])
+    tabList.push('learn') // Learn is standard for all staff — content gated per-course
     const meta = { label: editStaff.label.trim() || null, tabs: tabList.length ? tabList : ['team'],
                    connect_coach: (editStaff.tabs.community && editStaff.connectCoach) ? editStaff.connectCoach : null }
     setEditStaff((p: any)=>({ ...p, saving:true }))
@@ -1714,7 +1715,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
       if (newUser.accessHome) tabs.push('home')
       if (newUser.accessMsgs) tabs.push('msgs')
       if (newUser.accessTeam) tabs.push('team')
-      if (newUser.accessLearn) tabs.push('learn')
+      tabs.push('learn') // Learn is standard for all staff — content gated per-course
       if (newUser.accessConnect) tabs.push('community')
       staffMeta = { label: newUser.title.trim() || null, tabs: tabs.length ? tabs : ['team'],
                     connect_coach: (newUser.accessConnect && newUser.connectCoachId) ? newUser.connectCoachId : null }
@@ -2566,7 +2567,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',marginBottom:10}}/>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Access</div>
                   <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:12}}>
-                    {[['home','Dashboard'],['msgs','Messages'],['team','Team Hub'],['learn','Learn'],['community','Connect']].map(([k,lbl])=>(
+                    {[['home','Dashboard'],['msgs','Messages'],['team','Team Hub'],['community','Connect']].map(([k,lbl])=>(
                       <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
                         <input type="checkbox" checked={!!editStaff.tabs[k]}
                           onChange={e=>setEditStaff((p: any)=>({...p,tabs:{...p.tabs,[k]:e.target.checked}}))}/>
@@ -3311,7 +3312,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>They can access</div>
                   <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
-                    {[['accessTeam','Team Hub & Communities'],['accessMsgs','Messages'],['accessHome','My Clients'],['accessLearn','Learn'],['accessConnect','Connect']].map(([k,lbl])=>(
+                    {[['accessTeam','Team Hub & Communities'],['accessMsgs','Messages'],['accessHome','My Clients'],['accessConnect','Connect']].map(([k,lbl])=>(
                       <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
                         <input type="checkbox" checked={!!newUser[k]} onChange={e=>setNU(k)(e.target.checked)} style={{accentColor:C.gold}}/>
                         {lbl}
