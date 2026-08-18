@@ -57,19 +57,45 @@ const LIGHT = {
   onAccent:'#000000',
 };
 
+// Darken a hex color while KEEPING its hue and saturation (no black mud):
+// converts to HSL and pins lightness at the requested level.
+const shade = (hex: string, lightness: number, satCap = 0.85) => {
+  const [r, g, b] = hex.match(/\w\w/g)!.map((h) => parseInt(h, 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
+  s = Math.min(s, satCap);
+  const L = lightness;
+  const q = L < 0.5 ? L * (1 + s) : L + s - L * s, p = 2 * L - q;
+  const f = (t: number) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const to = (v: number) => Math.round(f(v) * 255).toString(16).padStart(2, '0');
+  return '#' + to(h + 1 / 3) + to(h) + to(h - 1 / 3);
+};
+
 // Brand-heavy: the whole chrome is washed in a deep shade of the org's brand
 // color (dark-based so text stays readable), with the bright brand color as
 // the accent. The accent comes from the active org/DBA via setBrandAccent().
 const brandTokens = (accent: string) => ({
   gold:    accent,
-  black:   mix(accent, '#000000', 0.09),
+  black:   shade(accent, 0.07),
   white:   '#ffffff',
-  surface: mix(accent, '#0c0c0c', 0.12),
-  bg:      mix(accent, '#0c0c0c', 0.12),
-  card:    mix(accent, '#161616', 0.15),
-  border:  mix(accent, '#242424', 0.30),
-  muted:   mix(accent, '#9c9c9c', 0.22),
-  dim:     mix(accent, '#2c2c2c', 0.20),
+  surface: shade(accent, 0.10),
+  bg:      shade(accent, 0.10),
+  card:    shade(accent, 0.13),
+  border:  shade(accent, 0.22, 0.55),
+  muted:   shade(accent, 0.62, 0.25),
+  dim:     shade(accent, 0.17, 0.55),
   danger:  '#ff5b5b',
   success: '#4FD89A',
   text:    '#ffffff',
