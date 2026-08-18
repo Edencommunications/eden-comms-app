@@ -2567,7 +2567,7 @@ export default function Week6({currentUser, onNavigate, initialClient, loomMode 
                     style={{width:'100%',boxSizing:'border-box',background:C.surface,border:`1px solid ${C.gold}66`,borderRadius:6,padding:'8px 10px',color:C.white,fontSize:12,outline:'none',marginBottom:10}}/>
                   <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Access</div>
                   <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:12}}>
-                    {[['home','Dashboard'],['msgs','Messages'],['team','Team Hub'],['community','Connect']].map(([k,lbl])=>(
+                    {[['home','My Clients'],['msgs','Messages'],['team','Team Hub'],['community','Connect']].map(([k,lbl])=>(
                       <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.white,cursor:'pointer'}}>
                         <input type="checkbox" checked={!!editStaff.tabs[k]}
                           onChange={e=>setEditStaff((p: any)=>({...p,tabs:{...p.tabs,[k]:e.target.checked}}))}/>
